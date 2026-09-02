@@ -152,4 +152,220 @@ void main() {
     expect(rows.single.productName, '中石油100');
     expect(rows.single.channelRef?.name, '银联商务');
   });
+
+  test('fetchChannelProductSettlement maps settlement rows', () async {
+    Uri? seen;
+    final client = MockClient((request) async {
+      seen = request.url;
+      return http.Response(
+        jsonEncode({
+          'code': 200,
+          'msg': '操作成功',
+          'data': {
+            'id': 10,
+            'productCode': 'CP001',
+            'productName': '中石油100',
+            'channelId': 1,
+            'channelName': '银联商务',
+            'syncSource': 'DIGITALG',
+            'submitStatus': 'EFFECTIVE',
+            'settlementItems': [
+              {
+                'billTypeL1Code': 'AR',
+                'billTypeL1Name': '应收账单',
+                'billTypeL2Code': 'SALES',
+                'billTypeL2Name': '销售款',
+                'billTypeL3Code': 'E_COUPON_SALES',
+                'billTypeL3Name': '电子券销售款',
+                'settleMethod': 1,
+                'formulaContent': 1,
+                'settlementRatio': 98.5,
+                'unitPrice': null,
+                'invoiceTypeCode': '专票',
+                'invoiceTypeName': '专票',
+                'taxRateCode': '13%',
+                'taxRateName': '13%',
+                'ourEntity': '荷叶',
+                'counterpartyEntity': '某某渠道',
+                'effectiveTime': '2026-09-01 00:00:00',
+                'expireTime': null,
+                'sortNo': 1,
+              },
+            ],
+          },
+        }),
+        200,
+        headers: const {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final catalog = SettlementCatalogService(client: client);
+    addTearDown(catalog.dispose);
+    expect(await catalog.fetchChannelProductSettlement(0), isNull);
+    final data = await catalog.fetchChannelProductSettlement(10);
+    expect(seen?.path, contains('/out/shaqiu/catalog/channel-product/settlement'));
+    expect(seen?.queryParameters['id'], '10');
+    expect(data?.product.productName, '中石油100');
+    expect(data?.items, hasLength(1));
+    expect(data?.items.single.settleMethod, 1);
+    expect(data?.items.single.billTypeRef?.displayPath, '应收账单 / 销售款 / 电子券销售款');
+  });
+
+  test('missing settlement payload returns null', () async {
+    final catalog = SettlementCatalogService(
+      client: MockClient((request) async {
+        return http.Response(
+          jsonEncode({'code': 200, 'msg': '操作成功', 'data': null}),
+          200,
+          headers: const {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+    addTearDown(catalog.dispose);
+    expect(await catalog.fetchChannelProductSettlement(10), isNull);
+  });
+
+  test('supplier json maps supplierCode to CatalogRef.code', () {
+    final ref = CatalogRef.fromSupplier({
+      'id': 8,
+      'supplierCode': 'S001',
+      'supplierName': '中石油',
+      'shortName': '石油',
+      'entityKind': 'SUPPLIER',
+    });
+    expect(ref.toJson(), {'id': 8, 'code': 'S001', 'name': '中石油'});
+  });
+
+  test('fetchSuppliers sends entityKind=SUPPLIER', () async {
+    Uri? seen;
+    final client = MockClient((request) async {
+      seen = request.url;
+      return http.Response(
+        jsonEncode({
+          'code': 200,
+          'msg': '操作成功',
+          'data': [
+            {
+              'id': 1,
+              'supplierCode': 'S001',
+              'supplierName': '中石油',
+              'shortName': '石油',
+              'syncSource': 'DIGITALG',
+              'status': '0',
+              'entityKind': 'SUPPLIER',
+            },
+          ],
+        }),
+        200,
+        headers: const {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final catalog = SettlementCatalogService(client: client);
+    addTearDown(catalog.dispose);
+    final rows = await catalog.fetchSuppliers(
+      syncSource: 'DIGITALG',
+      keyword: '中石油',
+    );
+    expect(seen?.path, contains('/out/shaqiu/catalog/supplier'));
+    expect(seen?.queryParameters['syncSource'], 'DIGITALG');
+    expect(seen?.queryParameters['keyword'], '中石油');
+    expect(seen?.queryParameters['entityKind'], 'SUPPLIER');
+    expect(rows, hasLength(1));
+    expect(rows.single.code, 'S001');
+    expect(rows.single.name, '中石油');
+  });
+
+  test('fetchSupplierProducts maps keyword hits', () async {
+    Uri? seen;
+    final client = MockClient((request) async {
+      seen = request.url;
+      return http.Response(
+        jsonEncode({
+          'code': 200,
+          'msg': '操作成功',
+          'data': [
+            {
+              'id': 20,
+              'productCode': 'SP001',
+              'productName': '中石油供给100',
+              'supplierId': 8,
+              'supplierCode': 'SUP-1',
+              'supplierName': '中石油',
+              'syncSource': 'DIGITALG',
+              'submitStatus': 'EFFECTIVE',
+            },
+          ],
+        }),
+        200,
+        headers: const {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final catalog = SettlementCatalogService(client: client);
+    addTearDown(catalog.dispose);
+    expect(
+      await catalog.fetchSupplierProducts(syncSource: '', keyword: '中石油'),
+      isEmpty,
+    );
+    final rows = await catalog.fetchSupplierProducts(
+      syncSource: 'DIGITALG',
+      keyword: '中石油',
+    );
+    expect(seen?.path, contains('/out/shaqiu/catalog/supplier-product'));
+    expect(seen?.queryParameters['syncSource'], 'DIGITALG');
+    expect(seen?.queryParameters['keyword'], '中石油');
+    expect(rows, hasLength(1));
+    expect(rows.single.productName, '中石油供给100');
+    expect(rows.single.supplierRef?.code, 'SUP-1');
+    expect(rows.single.supplierRef?.name, '中石油');
+  });
+
+  test('fetchSupplierProductSettlement maps settlement rows', () async {
+    Uri? seen;
+    final client = MockClient((request) async {
+      seen = request.url;
+      return http.Response(
+        jsonEncode({
+          'code': 200,
+          'msg': '操作成功',
+          'data': {
+            'id': 20,
+            'productCode': 'SP001',
+            'productName': '中石油供给100',
+            'supplierId': 8,
+            'supplierName': '中石油',
+            'syncSource': 'DIGITALG',
+            'settlementItems': [
+              {
+                'billTypeL1Code': 'AP',
+                'billTypeL1Name': '应付账单',
+                'billTypeL2Code': 'PURCHASE',
+                'billTypeL2Name': '采购款',
+                'billTypeL3Code': 'E_COUPON_PURCHASE',
+                'billTypeL3Name': '电子券采购款',
+                'settleMethod': 1,
+                'formulaContent': 1,
+                'settlementRatio': 97,
+                'invoiceTypeCode': '专票',
+                'taxRateCode': '13%',
+                'sortNo': 1,
+              },
+            ],
+          },
+        }),
+        200,
+        headers: const {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final catalog = SettlementCatalogService(client: client);
+    addTearDown(catalog.dispose);
+    final data = await catalog.fetchSupplierProductSettlement(20);
+    expect(
+      seen?.path,
+      contains('/out/shaqiu/catalog/supplier-product/settlement'),
+    );
+    expect(seen?.queryParameters['id'], '20');
+    expect(data?.product.productName, '中石油供给100');
+    expect(data?.product.supplierRef?.name, '中石油');
+    expect(data?.items, hasLength(1));
+    expect(data?.items.single.billTypeRef?.displayPath, '应付账单 / 采购款 / 电子券采购款');
+  });
 }

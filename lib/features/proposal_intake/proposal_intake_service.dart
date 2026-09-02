@@ -72,6 +72,31 @@ class ProposalIntakeService {
         .toList(growable: false);
   }
 
+  Future<List<ProposalApprovedPurchaseHit>> fetchApprovedPurchases({
+    String keyword = '',
+  }) async {
+    final needle = keyword.trim();
+    if (needle.isEmpty) return const [];
+    final data = _unwrap(
+      await http.get(
+        _uri('/proposal-intakes/approved-purchases', {'q': needle}),
+        headers: _headers,
+      ),
+    );
+    final rows = data is List
+        ? data
+        : (data is Map ? (data['items'] as List? ?? const []) : const []);
+    return rows
+        .whereType<Map>()
+        .map(
+          (item) => ProposalApprovedPurchaseHit.fromJson(
+            Map<String, dynamic>.from(item),
+          ),
+        )
+        .where((item) => item.id > 0)
+        .toList(growable: false);
+  }
+
   Future<Map<String, dynamic>> fetchContractDetail(int id) async {
     final data = _unwrap(
       await http.get(

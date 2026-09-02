@@ -120,6 +120,15 @@ String _conversationFolderPath(Directory dir, int conversationId) {
   return '${dir.path}${Platform.pathSeparator}${_safeFolderName('$conversationId')}';
 }
 
+/// 现行布局：`{会话文件夹}/{fileName}`，不再为每个文件建 hash 子目录。
+String _conversationCachedFilePath(
+  Directory dir,
+  int conversationId,
+  String fileName,
+) {
+  return '${_conversationFolderPath(dir, conversationId)}${Platform.pathSeparator}${_safeFileName(fileName)}';
+}
+
 /// 微盘本地下载目录：`{根目录}/企业微盘/{fileName}`（无 hash 子目录）。
 const _driveLocalFolderName = '企业微盘';
 
@@ -154,15 +163,22 @@ Future<String?> _findInDir(
   required String fileName,
   int? conversationId,
 }) async {
-  if (conversationId != null && conversationId > 0 && cacheKey.isNotEmpty) {
-    final path = _hashedConversationCachedFilePath(
-      dir,
-      conversationId,
-      cacheKey,
-      fileName,
-    );
-    final file = File(path);
-    if (await file.exists() && await file.length() > 0) return path;
+  if (conversationId != null && conversationId > 0) {
+    if (cacheKey.isNotEmpty) {
+      final hashed = _hashedConversationCachedFilePath(
+        dir,
+        conversationId,
+        cacheKey,
+        fileName,
+      );
+      final hashedFile = File(hashed);
+      if (await hashedFile.exists() && await hashedFile.length() > 0) {
+        return hashed;
+      }
+    }
+    final flat = _conversationCachedFilePath(dir, conversationId, fileName);
+    final flatFile = File(flat);
+    if (await flatFile.exists() && await flatFile.length() > 0) return flat;
   }
   if (cacheKey.isNotEmpty) {
     final legacy = _legacyCachedFilePath(dir, cacheKey, fileName);
@@ -203,8 +219,8 @@ Future<String> saveBytesAsCachedFileImpl(
   }
   final dir = await _resolveSaveDir();
   final String path;
-  if (conversationId != null && conversationId > 0 && key.isNotEmpty) {
-    path = _hashedConversationCachedFilePath(dir, conversationId, key, fileName);
+  if (conversationId != null && conversationId > 0) {
+    path = _conversationCachedFilePath(dir, conversationId, fileName);
   } else if (key.isNotEmpty) {
     path = _legacyCachedFilePath(dir, key, fileName);
   } else {
@@ -212,7 +228,36 @@ Future<String> saveBytesAsCachedFileImpl(
   }
   await Directory(File(path).parent.path).create(recursive: true);
   await File(path).writeAsBytes(bytes, flush: true);
+  await _deleteLegacyHashedCopy(
+    dir,
+    cacheKey: key,
+    fileName: fileName,
+    conversationId: conversationId,
+    keepPath: path,
+  );
   return path;
+}
+
+/// 新文件已落到会话文件夹后，清掉旧版「一文件一 hash 子目录」。
+Future<void> _deleteLegacyHashedCopy(
+  Directory dir, {
+  required String cacheKey,
+  required String fileName,
+  int? conversationId,
+  required String keepPath,
+}) async {
+  if (conversationId == null || conversationId <= 0 || cacheKey.isEmpty) return;
+  final old = File(
+    _hashedConversationCachedFilePath(dir, conversationId, cacheKey, fileName),
+  );
+  if (old.path == keepPath) return;
+  try {
+    if (await old.exists()) await old.delete();
+    final parent = old.parent;
+    if (await parent.exists() && await parent.list().isEmpty) {
+      await parent.delete();
+    }
+  } catch (_) {}
 }
 
 Future<String> saveBytesAsFileImpl(Uint8List bytes, String fileName) async {

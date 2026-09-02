@@ -31,6 +31,7 @@ class NativeQianjiHubPage extends StatefulWidget {
     this.onOpenSessionSupervise,
     this.onOpenKbSupervise,
     this.onOpenFundSecondment,
+    this.onOpenCashFlow,
     this.onOpenTravel,
     this.onOpenRobotHome,
     this.onOpenRobot,
@@ -44,6 +45,7 @@ class NativeQianjiHubPage extends StatefulWidget {
   final VoidCallback? onOpenSessionSupervise;
   final VoidCallback? onOpenKbSupervise;
   final VoidCallback? onOpenFundSecondment;
+  final VoidCallback? onOpenCashFlow;
   final VoidCallback? onOpenTravel;
   final VoidCallback? onOpenRobotHome;
 
@@ -245,6 +247,14 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                           icon: Icons.account_balance_wallet_outlined,
                           color: _themePurple,
                           onTap: widget.onOpenFundSecondment,
+                        ),
+                      if (widget.onOpenCashFlow != null)
+                        _NovaHubTile(
+                          title: '资金流向',
+                          subtitle: '公司账户 · 由大到小',
+                          icon: Icons.account_balance_outlined,
+                          color: _themePurple,
+                          onTap: widget.onOpenCashFlow,
                         ),
                       _NovaHubTile(
                         title: '差旅管理',

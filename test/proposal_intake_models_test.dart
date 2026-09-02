@@ -74,6 +74,17 @@ void main() {
     expect(options.institutions.first.name, '卓悦C');
   });
 
+  test('purchase options parse supply brands and rebate modes', () {
+    final options = ProposalIntakeOptions.fromJson({
+      'market': {
+        'supplyBrands': ['中石油', '中石化'],
+        'rebateModes': ['消费返', '核销返'],
+      },
+    });
+    expect(options.supplyBrands, ['中石油', '中石化']);
+    expect(options.rebateModes, ['消费返', '核销返']);
+  });
+
   test('sku and pack keep institution snapshot', () {
     final sku = ProposalSkuDetailRow.fromJson({
       'id': 'sku-1',
@@ -154,6 +165,88 @@ void main() {
 
     expect(
       proposalIntakeSkuSettleIssues({
+        'isExistingBuilt': true,
+        'skuDetails': [
+          {'id': 'sku-1'},
+        ],
+      }),
+      containsAll([
+        '渠道产品第1条请选择业务平台',
+        '渠道产品第1条请搜索并选择已建产品',
+      ]),
+    );
+
+    final synced = proposalIntakeSettlementsFromChannelCatalog(
+      ChannelProductSettlement.fromJson({
+        'id': 10,
+        'productName': '中石油100',
+        'channelId': 1,
+        'channelName': '银联商务',
+        'settlementItems': [
+          {
+            'billTypeL1Name': '应收账单',
+            'billTypeL2Name': '销售款',
+            'billTypeL3Code': 'E_COUPON_SALES',
+            'billTypeL3Name': '电子券销售款',
+            'settleMethod': 1,
+            'formulaContent': 1,
+            'settlementRatio': 98.5,
+            'invoiceTypeCode': '专票',
+            'taxRateCode': '13%',
+            'ourEntity': '荷叶',
+            'counterpartyEntity': '某某渠道',
+            'effectiveTime': '2026-09-01 00:00:00',
+            'sortNo': 1,
+          },
+        ],
+      }),
+    );
+    expect(synced, hasLength(1));
+    expect(synced.single.terms.settleModeRef?.code, '1');
+    expect(synced.single.terms.settleRatio, '98.5%');
+    expect(synced.single.terms.taxRate, '13%');
+    expect(synced.single.terms.invoiceType, '专票');
+    expect(synced.single.terms.ourParty, '荷叶');
+    expect(synced.single.terms.billTypeRef?.name, '电子券销售款');
+    expect(synced.single.terms.effectiveTime, '2026-09-01');
+    expect(proposalIntakeSettleUsesRatio(synced.single.terms), isTrue);
+    expect(synced.single.terms.formulaRef?.name, '1');
+
+    final named = proposalIntakeSettlementsFromChannelCatalog(
+      ChannelProductSettlement.fromJson({
+        'id': 10,
+        'settlementItems': [
+          {
+            'billTypeL3Code': 'E_COUPON_SALES',
+            'billTypeL3Name': '电子券销售款',
+            'settleMethod': 1,
+            'formulaContent': 1,
+            'settlementRatio': 98.5,
+            'taxRateCode': '13%',
+          },
+        ],
+      }),
+      formulas: const [
+        CatalogRef(
+          code: '1',
+          name: '销售额×结算比例',
+          formulaExpression: 'amount * ratio',
+          settleMethod: '1',
+          productSource: 'CHANNEL',
+        ),
+      ],
+    );
+    expect(named.single.terms.formula, '销售额×结算比例');
+
+    final applied = const ProposalSkuDetailRow(id: 'sku-1').applyAssetProduct(
+      const ChannelProductHit(id: 10, productName: '中石油100'),
+      settlements: synced,
+    );
+    expect(applied.productName, '中石油100');
+    expect(applied.settlements.single.terms.taxRate, '13%');
+
+    expect(
+      proposalIntakeSkuSettleIssues({
         'isCouponPack': true,
         'skuDetails': [
           {'id': 'sku-1', 'productName': '中石油100元'},
@@ -175,6 +268,7 @@ void main() {
             'id': 'pack-1',
             'existingBuilt': '是',
             'name': '中石油加油券包',
+            'syncSourceRef': {'code': 'DIGITALG', 'name': '能源'},
             'assetProduct': {'id': 9, 'productName': '中石油加油券包'},
             'settlements': [
               {
@@ -499,6 +593,8 @@ void main() {
     expect(row.myAction, 'review_market');
     expect(proposalIntakeActionLabel('submit_president'), '待通知最终人');
     expect(proposalIntakeActionLabel('fill'), '待填写');
+    expect(proposalIntakeActionLabel('fill_finance_interface'), '待填写财务技术接口');
+    expect(proposalIntakeActionLabel('review_finance_interface'), '待复核财务技术接口');
     expect(proposalIntakeActionLabel('revise'), '最终人已驳回请从头填写');
     expect(proposalIntakeActionLabel('revise_module'), '板块已驳回请修改');
   });
@@ -646,6 +742,31 @@ void main() {
     expect(patch['supplySettleCycle'], '');
     expect(patch['supplyPayAccount'], '');
     expect(patch.containsKey('channelPolicy'), isFalse);
+    expect(patch['purchaseFileName'], '');
+    expect(patch['purchaseObjectKey'], '');
+  });
+
+  test('selecting a signed contract copies the register source file', () {
+    final patch = proposalIntakePatchFromContract(
+      prefix: 'sales',
+      detail: {
+        'id': 22,
+        'contractNo': 'XS-1',
+        'contractName': '销售框架合同',
+        'partyA': '沙丘科技',
+        'partyB': '渠道甲',
+        'files': [
+          {
+            'fileName': '已签销售合同.pdf',
+            'objectKey': 'contracts/sales.pdf',
+            'url': 'https://files/sales.pdf',
+          },
+        ],
+      },
+    );
+    expect(patch['salesFileName'], '已签销售合同.pdf');
+    expect(patch['salesObjectKey'], 'contracts/sales.pdf');
+    expect(patch['salesFileUrl'], 'https://files/sales.pdf');
   });
 
   test(
@@ -737,6 +858,49 @@ void main() {
     expect(proposalIntakeContractEdit(confirmed, 'purchaseNo'), isNull);
   });
 
+  test('sales can fill purchase contract from an approved purchase proposal', () {
+    expect(
+      proposalIntakeHasExistingPurchaseProposal({
+        'hasExistingPurchaseProposal': true,
+      }),
+      isTrue,
+    );
+    expect(
+      proposalIntakeSalesMarketIssues({
+        'hasExistingPurchaseProposal': true,
+      }),
+      contains('请搜索并选择已审核通过的采购提案'),
+    );
+    expect(
+      proposalIntakeSalesMarketIssues({
+        'hasExistingPurchaseProposal': true,
+      }),
+      isNot(contains('请选择采购合同状态')),
+    );
+
+    final patch = proposalIntakePatchFromApprovedPurchase(
+      const ProposalApprovedPurchaseHit(
+        id: 8,
+        code: 'CG-2026-0008',
+        title: '中石油供给采购',
+        purchaseMode: '已签署合同',
+        purchaseNo: 'CG-9',
+        purchaseName: '中石油采购合同',
+        purchaseSignDate: '2026-01-01',
+        purchaseOurParty: '我方',
+        purchaseCounterparty: '中石油',
+        purchaseValidPeriod: '1年',
+        purchaseCoreTerms: '月结',
+        supplierPolicy: '预付后供货',
+      ),
+    );
+    expect(patch['linkedPurchaseProposalId'], 8);
+    expect(patch['purchaseName'], '中石油采购合同');
+    expect(patch['purchaseNo'], 'CG-9');
+    expect(patch['supplierPolicy'], '预付后供货');
+    expect(patch['hasExistingPurchaseProposal'], isTrue);
+  });
+
   test('resetting contract fields clears grabbed values but keeps mode', () {
     final filled = proposalIntakePatchFromContract(
       prefix: 'purchase',
@@ -816,6 +980,7 @@ void main() {
       '市场部负责人一',
       '财务部负责人一',
       '财务部负责人二',
+      '运营',
     ]);
     expect(
       missingProposalReviewAssignees({
@@ -824,6 +989,7 @@ void main() {
         'marketOwner1UserId': '4',
         'financeOwner1UserId': '6',
         'financeOwner2UserId': '5',
+        'operatorUserId': '7',
       }),
       isEmpty,
     );
@@ -831,7 +997,32 @@ void main() {
       missingProposalReviewAssignees({
         'technologyOwnerUserId': '3',
       }, includeTech: false),
-      ['市场部负责人二', '市场部负责人一', '财务部负责人一', '财务部负责人二'],
+      ['市场部负责人二', '市场部负责人一', '财务部负责人一', '财务部负责人二', '运营'],
+    );
+    expect(
+      missingProposalReviewAssignees({
+        'technologyOwnerUserId': '3',
+        'marketOwner2UserId': '2',
+        'marketOwner1UserId': '4',
+        'financeOwner1UserId': '6',
+        'financeOwner2UserId': '5',
+      }, purchase: true),
+      ['运营'],
+    );
+    expect(
+      missingProposalReviewAssignees({
+        'technologyOwnerUserId': '3',
+        'marketOwner2UserId': '2',
+        'marketOwner1UserId': '4',
+        'financeOwner1UserId': '6',
+        'financeOwner2UserId': '5',
+        'operatorUserId': '8',
+      }, purchase: true),
+      isEmpty,
+    );
+    expect(
+      missingProposalReviewAssignees({}, purchase: true),
+      ['科技部负责人', '市场部负责人二', '市场部负责人一', '财务部负责人一', '财务部负责人二', '运营'],
     );
   });
 
@@ -972,6 +1163,8 @@ void main() {
   test('tech revision action labels', () {
     expect(proposalIntakeActionLabel('start_tech_revision'), '待发起科技变更');
     expect(proposalIntakeActionLabel('fill_tech'), '待填写科技');
+    expect(proposalIntakeActionLabel('fill_finance_interface'), '待填写财务技术接口');
+    expect(proposalIntakeActionLabel('review_finance_interface'), '待复核财务技术接口');
   });
 
   test('launch row without channel links or reuses finance module', () {
@@ -1066,7 +1259,13 @@ void main() {
           {'id': 'sku-1', 'productName': ''},
         ],
       }),
-      contains('渠道产品第1条请填写产品名称'),
+      isEmpty,
+    );
+    expect(
+      proposalIntakeSkuSettleIssues({
+        'isExistingBuilt': true,
+      }),
+      contains('已勾选已建产品，请至少添加一条渠道产品并搜索选择已建产品'),
     );
     expect(
       proposalIntakeSkuSettleIssues({
@@ -1163,7 +1362,27 @@ void main() {
           {'id': 'sku-1', 'productName': '中石油100元'},
         ],
       }),
-      contains('已勾选券包，请至少创建一个券包'),
+      isEmpty,
+    );
+    expect(
+      proposalIntakeSkuSettleIssues({
+        'isExistingBuilt': true,
+        'isCouponPack': true,
+      }),
+      contains('已勾选已建产品，请至少添加一条券包并搜索选择已建券包'),
+    );
+    expect(
+      proposalIntakeSkuSettleIssues({
+        'isExistingBuilt': true,
+        'isCouponPack': true,
+        'couponPacks': [
+          {'id': 'pack-1'},
+        ],
+      }),
+      containsAll([
+        '券包第1条请选择业务平台',
+        '券包第1条请搜索并选择已建券包',
+      ]),
     );
     expect(
       proposalIntakeSkuSettleIssues({
@@ -1175,10 +1394,19 @@ void main() {
           {'id': 'pack-1', 'name': '', 'skuIds': <String>[]},
         ],
       }),
-      allOf(
-        contains('券包第1条请填写券包名称'),
-        contains('券包「第1条」请选择包含的渠道产品'),
-      ),
+      isEmpty,
+    );
+    expect(
+      proposalIntakeSkuSettleIssues({
+        'isCouponPack': true,
+        'skuDetails': [
+          {'id': 'sku-1', 'productName': '中石油100元'},
+        ],
+        'couponPacks': [
+          {'id': 'pack-1', 'name': '加油券包', 'skuIds': <String>[]},
+        ],
+      }),
+      contains('券包「加油券包」请选择包含的渠道产品'),
     );
   });
 
@@ -1346,5 +1574,249 @@ void main() {
     expect(sku.toJson()['syncSource'], 'DIGITALG');
     expect(sku.toJson()['syncSourceRef']['name'], '能源');
     expect(sector.toJson()['code'], 'NY');
+  });
+
+  test('purchase supply product maps productId to supplierCode and default settlements', () {
+    final created = proposalIntakeNewSupplyProduct();
+    expect(created.supplierCode, isEmpty);
+    expect(created.settlements, hasLength(1));
+    expect(created.settlements.single.terms.billType, isEmpty);
+
+    final restored = ProposalSupplyProductRow.fromJson({
+      'id': 'supply-1',
+      'productId': 'SP-001',
+      'thresholdAmount': '100',
+      'supplierRef': {'id': 8, 'code': 'SUP-1', 'name': '中石油'},
+      'assetProduct': {
+        'id': 20,
+        'productName': '中石油供给100',
+        'supplierCode': 'SUP-1',
+        'supplierName': '中石油',
+      },
+      'settlements': [
+        {'id': 'st-1', 'billType': '电子券采购款'},
+      ],
+    });
+    expect(restored.supplierCode, 'SP-001');
+    expect(restored.supplierRef?.name, '中石油');
+    expect(restored.assetProduct?.productName, '中石油供给100');
+    expect(
+      proposalIntakeSupplyProducts({
+        'supplyProducts': [restored.toJson()],
+      }),
+      hasLength(1),
+    );
+  });
+
+  test('purchase required fields fail until filled', () {
+    expect(proposalIntakePurchaseMarketIssues({}), isNotEmpty);
+    expect(proposalIntakePurchaseTechIssues({}), contains('请填写τ-标签一'));
+    expect(proposalIntakePurchaseHunIssue({}), '请填写 HUN ID');
+    final form = <String, dynamic>{
+      'proposalType': '新增',
+      'supplies': ['头部媒体供给'],
+      'supplyBrand': '中石油',
+      'bizContact': '张三',
+      'financeContact': '李四',
+      'invoiceTypes': ['增值税专用发票'],
+      'supplierPolicy': '供货政策',
+      'salesPolicy': '销售政策',
+      'executionPlan': '执行计划',
+      'riskPoints': '风险点',
+      'financeRemark': '财务备注',
+      'hunId': 'HUN-1',
+      'purchaseMode': '已签署合同',
+      'purchaseNo': 'CG-1',
+      'purchaseName': '采购合同',
+      'purchaseSignDate': '2026-01-01',
+      'purchaseOurParty': '我方',
+      'purchaseCounterparty': '对方',
+      'purchaseValidPeriod': '1年',
+      'purchaseCoreTerms': '条款',
+      'technologyPlatform': '数据智能平台',
+      'technologyCapabilities': ['人群圈选能力'],
+      'outputForms': ['API接口'],
+      'developmentTypes': ['运营配置'],
+      'hasRdCost': '否',
+      'deliveryDate': '2026-12-01',
+      'supplyProducts': [
+        {
+          'id': 's1',
+          'supplierCode': 'SUP-1',
+          'syncSource': 'P1',
+          'thresholdAmount': '100',
+          'isYuantongCoupon': '否',
+          'isStandaloneRebate': '否',
+          'isLowDiscountCoupon': '否',
+          'rebateMode': '消费返',
+          'oilCategory': '汽油',
+          'effectiveDate': '2026-01-01',
+          'expireDate': '2026-12-31',
+          'settlements': [
+            {
+              'id': 'st-1',
+              'billType': '电子券采购款',
+              'settleMode': '比例',
+              'settleRatio': '3%',
+              'formula': '销售额*比例',
+              'invoiceType': '增值税专用发票',
+              'taxRate': '6%',
+              'effectiveTime': '2026-01-01',
+              'expireTime': '2026-12-31',
+            },
+          ],
+        },
+      ],
+    };
+    expect(proposalIntakePurchaseMarketIssues(form), isEmpty);
+    expect(proposalIntakePurchaseTechIssues(form), isEmpty);
+    expect(proposalIntakePurchaseHunIssue(form), isNull);
+  });
+
+  test('purchase supply products skip empty cards unless existing or started', () {
+    expect(
+      proposalIntakePurchaseSupplyIssues({
+        'supplyProducts': [
+          {'id': 's1'},
+        ],
+      }),
+      isEmpty,
+    );
+    expect(
+      proposalIntakePurchaseSupplyIssues({
+        'isExistingSupplyProduct': true,
+      }),
+      contains('已勾选已有供给产品，请至少添加一条并搜索选择已建供给产品'),
+    );
+    expect(
+      proposalIntakePurchaseSupplyIssues({
+        'isExistingSupplyProduct': true,
+        'supplyProducts': [
+          {'id': 's1', 'syncSource': 'P1'},
+        ],
+      }),
+      contains('供给产品 1 请搜索并选择已建供给产品'),
+    );
+    expect(
+      proposalIntakePurchaseSupplyIssues({
+        'supplyProducts': [
+          {
+            'id': 's1',
+            'syncSource': 'P1',
+            'supplierRef': {'id': 8, 'code': 'SUP-1', 'name': '中石油'},
+          },
+        ],
+      }),
+      contains('供给产品 1 请填写门槛金额'),
+    );
+    expect(
+      proposalIntakePurchaseSupplyIssues({
+        'isExistingSupplyProduct': true,
+        'supplyProducts': [
+          {
+            'id': 's1',
+            'syncSource': 'P1',
+            'assetProduct': {
+              'id': 10,
+              'productName': '中石油供给',
+              'supplierCode': 'SUP-1',
+              'supplierName': '中石油',
+            },
+            'settlements': [
+              {
+                'id': 'st-1',
+                'billType': '电子券采购款',
+                'settleMode': '比例',
+                'settleRatio': '3%',
+                'formula': '销售额*比例',
+                'invoiceType': '增值税专用发票',
+                'taxRate': '6%',
+                'effectiveTime': '2026-01-01',
+                'expireTime': '2026-12-31',
+              },
+            ],
+          },
+        ],
+      }),
+      isEmpty,
+    );
+  });
+
+  test('sales fill fields are required except optional products and packs', () {
+    final empty = proposalIntakeSalesMarketIssues({});
+    expect(empty, contains('请选择业务板块'));
+    expect(empty, contains('请选择产品（标签一）'));
+    expect(empty, contains('请选择供给（标签二）'));
+    expect(empty, contains('请填写盈利计算说明'));
+    expect(empty, contains('请选择采购合同状态'));
+    expect(empty, contains('请选择销售合同状态'));
+    expect(proposalIntakeTechFillIssues({}, purchase: false), contains('请填写τ-标签一'));
+    expect(
+      proposalIntakeSalesFinanceFillIssues({}),
+      contains('请填写销售规模目标（万元）'),
+    );
+    expect(proposalIntakeSkuSettleIssues({}), isEmpty);
+
+    final form = <String, dynamic>{
+      'sector': '数字营销事业部',
+      'proposalName': '销售提案',
+      'proposalType': '新增业务提案',
+      'product': '智能投放平台',
+      'projectName': '华东区域智能投放项目',
+      'supplies': ['头部媒体供给'],
+      'channels': ['直客渠道'],
+      'supplierPolicy': '供货政策',
+      'channelPolicy': '渠道政策',
+      'executionPlan': '执行计划',
+      'riskPoints': '风险点',
+      'profitModes': ['返点差价'],
+      'profitFormula': '按核销结算',
+      'purchaseMode': '已签署合同',
+      'purchaseNo': 'CG-1',
+      'purchaseName': '采购合同',
+      'purchaseSignDate': '2026-01-01',
+      'purchaseOurParty': '我方',
+      'purchaseCounterparty': '对方',
+      'purchaseValidPeriod': '1年',
+      'purchaseCoreTerms': '条款',
+      'salesMode': '已签署合同',
+      'salesNo': 'XS-1',
+      'salesName': '销售合同',
+      'salesSignDate': '2026-01-01',
+      'salesOurParty': '我方',
+      'salesCounterparty': '对方',
+      'salesValidPeriod': '1年',
+      'salesCoreTerms': '条款',
+      'technologyPlatform': '数据智能平台',
+      'technologyCapabilities': ['人群圈选能力'],
+      'outputForms': ['API 接口'],
+      'developmentTypes': ['全新开发'],
+      'hasRdCost': '否',
+      'deliveryDate': '2026-12-01',
+      'salesScale': '100',
+      'revenue': '80',
+      'invoiceAmount': '80',
+      'profit': '10',
+      'margin': '12',
+      'turnoverCash': '20',
+      'turnoverTimes': '2',
+      'supplySettleMode': '月结',
+      'supplySettleCycle': 'T+15',
+      'supplyPayer': '荷叶',
+      'supplyPayAccount': '账户A',
+      'channelSettleMode': '月结',
+      'channelSettleCycle': 'T+15',
+      'channelPayee': '渠道',
+      'channelReceiveAccount': '账户B',
+      'generalBusinessAccount': '普通账',
+      'prepaidAccount': '预收账',
+      'profitAccrualAccount': '计提账',
+      'financeRemark': '备注',
+      'rollback': '不回滚',
+    };
+    expect(proposalIntakeSalesMarketIssues(form), isEmpty);
+    expect(proposalIntakeTechFillIssues(form, purchase: false), isEmpty);
+    expect(proposalIntakeSalesFinanceFillIssues(form), isEmpty);
+    expect(proposalIntakeSkuSettleIssues(form), isEmpty);
   });
 }

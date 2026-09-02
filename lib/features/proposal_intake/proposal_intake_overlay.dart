@@ -214,7 +214,9 @@ class _ProposalIntakeOverlayHostState
           const Expanded(
             child: Text('协作提案', style: TextStyle(fontWeight: FontWeight.w700)),
           ),
-          const ProposalIntakeProcessHelpButton(),
+          ProposalIntakeProcessHelpButton(
+            purchase: _row != null && proposalIntakeIsPurchase(_row!.kind),
+          ),
         ],
       ),
     );

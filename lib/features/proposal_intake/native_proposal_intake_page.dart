@@ -14,6 +14,7 @@ import '../xflow/approval_chat_forward.dart';
 import '../xflow/approval_chat_share.dart';
 import '../xflow/proposal_import_template.dart';
 import '../xflow/xflow_detail_comments.dart';
+import '../contract_register/contract_kb_pdf_preview.dart';
 import '../xflow/xflow_file_open.dart';
 import '../xflow/xflow_models.dart';
 import '../xflow/xflow_service.dart';
@@ -370,7 +371,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     'marketCompleted': false,
     'technologyCompleted': false,
     'financeInterfaceCompleted': false,
-    'financeCompleted': false,
+    'financeCompleted': purchase,
     'purchaseContractCompleted': false,
     'salesContractCompleted': purchase,
     'contractsCompleted': false,
@@ -1006,6 +1007,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   bool _forwarding = false;
   List<ProposalContractChoice> _contractHits = const [];
   int _contractSearchSeq = 0;
+  List<ProposalApprovedPurchaseHit> _purchaseProposalHits = const [];
+  int _purchaseProposalSearchSeq = 0;
   String? _uploadingContractPrefix;
   String? _openingContractPrefix;
   List<ProposalImportTemplateItem> _importTemplates =
@@ -1017,7 +1020,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   String? _draggingUnsignedPrefix;
   String? _openingProductFile;
   String? _downloadingProductFile;
-  String? _downloadingContractPrefix;
   late final SettlementCatalogService _catalog;
   bool _ownsCatalog = false;
   List<CatalogRef> _sectorCatalog = const [];
@@ -1026,12 +1028,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   List<CatalogRef> _syncSourceCatalog = const [];
   final Map<String, _SettleCatalogBundle> _settleBundles = {};
   final Set<String> _settleLoading = {};
+  final Map<String, Future<_SettleCatalogBundle>> _settleBundleLoads = {};
   final Map<String, List<ChannelProductHit>> _assetProductHits = {};
   final Map<String, int> _assetProductSearchSeq = {};
   final Set<String> _assetProductSearching = {};
+  final Map<String, int> _assetProductSyncSeq = {};
+  final Set<String> _assetProductSyncing = {};
+  final Map<String, String> _assetProductSyncHint = {};
   int _productCatalogSeq = 0;
 
-  static const _financeFields = <(String, String)>[
+  static const _financeMetricFields = <(String, String)>[
     ('salesScale', '销售规模目标（万元）'),
     ('revenue', '收入（万元）'),
     ('invoiceAmount', '发票（万元）'),
@@ -1039,19 +1045,31 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     ('margin', '毛利率（%）'),
     ('turnoverCash', '预计周转资金（万元）'),
     ('turnoverTimes', '月周转次数'),
-    ('supplySettleMode', '供给侧 · 结算模式'),
-    ('supplySettleCycle', '供给侧 · 结算周期'),
-    ('supplyPayer', '供给侧 · 付款主体'),
-    ('supplyPayAccount', '供给侧 · 付款账户'),
-    ('channelSettleMode', '渠道侧 · 结算模式'),
-    ('channelSettleCycle', '渠道侧 · 结算周期'),
-    ('channelPayee', '渠道侧 · 收款主体'),
-    ('channelReceiveAccount', '渠道侧 · 收款账户'),
+  ];
+
+  static const _financeSupplyFields = <(String, String)>[
+    ('supplySettleMode', '结算模式'),
+    ('supplySettleCycle', '结算周期'),
+    ('supplyPayer', '付款主体'),
+    ('supplyPayAccount', '付款账户'),
+  ];
+
+  static const _financeChannelFields = <(String, String)>[
+    ('channelSettleMode', '结算模式'),
+    ('channelSettleCycle', '结算周期'),
+    ('channelPayee', '收款主体'),
+    ('channelReceiveAccount', '收款账户'),
+  ];
+
+  static const _financeAccountFields = <(String, String)>[
+    ('generalBusinessAccount', '普通业务账'),
+    ('prepaidAccount', '预收账户'),
+    ('profitAccrualAccount', '利润计提账户'),
     ('financeRemark', '备注'),
   ];
 
   /// 与后端 proposalTechnologyReviewFields 保持一致。
-  static const _technologyReviewFields = <String>[
+  static const _kTechnologyReviewFields = <String>[
     'technologyPlatform',
     'technologyCapabilities',
     'outputForms',
@@ -1060,6 +1078,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     'rdAmount',
     'deliveryDate',
   ];
+
+  List<String> get _technologyReviewFields => _kTechnologyReviewFields;
 
   /// 与后端 proposalContractReviewFields 保持一致（复核键为 prefix.字段）。
   static const _contractReviewFields = <String>[
@@ -1103,6 +1123,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     'channelSettleCycle',
     'channelPayee',
     'channelReceiveAccount',
+    'generalBusinessAccount',
+    'prepaidAccount',
+    'profitAccrualAccount',
     'financeRemark',
     'costItems',
     'operatingCost',
@@ -1183,6 +1206,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   bool get _canEditTech =>
       _isTechFiller && (!_isContentFrozen || _row.isTechRevising);
 
+  bool get _canEditFinanceInterface =>
+      _isOwner('financeOwner2') && (!_isContentFrozen || _row.isTechRevising);
+
   bool get _canEditProductFiles =>
       _canEditMarket ||
       (_row.isTechRevising && (_isTechFiller || _isSubmitter));
@@ -1196,11 +1222,25 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   bool get _canEditSkuSettlements =>
       !_showSelectedAsText && (_canEditMarket || _canEditFinanceModules);
 
-  List<String> get _financeReviewKeys => [
-    ..._kFinanceReviewKeys,
-    ...proposalIntakeLaunchModuleReviewKeys(_form),
-    ...proposalIntakeSkuSettleReviewKeys(_form),
-  ];
+  List<String> get _financeReviewKeys => _isPurchase
+      ? const []
+      : [
+          ..._kFinanceReviewKeys,
+          ...proposalIntakeLaunchModuleReviewKeys(_form),
+          ...proposalIntakeSkuSettleReviewKeys(_form),
+        ];
+
+  bool get _canSeeHun => _isMarketOwner1;
+
+  bool get _canEditHun =>
+      _canSeeHun && !_isLocked && !_showSelectedAsText && !_row.techRevisionOpen;
+
+  String get _submitterName {
+    final named = _personNameById(_row.createdBy);
+    if (named.isNotEmpty) return named;
+    if (_isSubmitter) return (widget.session.displayName ?? '').trim();
+    return _row.createdBy > 0 ? '用户${_row.createdBy}' : '';
+  }
 
   bool get _isMarketOwner1 => _isOwner('marketOwner1');
 
@@ -1217,7 +1257,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   bool get _canSave =>
       (_row.isTechRevising && _isTechFiller) ||
       _canEditBusinessCost ||
+      _canEditHun ||
       _canEditFinanceModules ||
+      _canEditFinanceInterface ||
       (!_isContentFrozen &&
           !_row.techRevisionOpen &&
           (_isSubmitter || _isTechFiller));
@@ -1317,14 +1359,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         'marketCompleted' => _isOwner('marketOwner1'),
         'technologyCompleted' => _isMarketOwner2,
         'financeInterfaceCompleted' =>
-          _isOwner('financeOwner2') && _financeInterfaceNeedsReview,
+          _isTechFiller && _financeInterfaceNeedsReview,
         _ => false,
       };
     }
     return switch (keyName) {
       'marketCompleted' => _isOwner('marketOwner1'),
       'technologyCompleted' => _isMarketOwner2,
-      'financeInterfaceCompleted' => _isOwner('financeOwner2'),
+      'financeInterfaceCompleted' => _isTechFiller,
       'financeCompleted' => _isOwner('financeOwner1'),
       'purchaseContractCompleted' ||
       'salesContractCompleted' => _isOwner('financeOwner2'),
@@ -1356,7 +1398,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return switch (section) {
       'market' || 'marketCompleted' => '市场部负责人一',
       'technology' || 'technologyCompleted' => '市场部负责人二',
-      'financeInterface' || 'financeInterfaceCompleted' => '财务部负责人二',
+      'financeInterface' || 'financeInterfaceCompleted' => '科技部负责人',
       'finance' || 'financeCompleted' => '财务部负责人一',
       'purchaseContract' ||
       'purchaseContractCompleted' ||
@@ -1427,6 +1469,81 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     widget.onChanged(_row);
   }
 
+  void _setHasExistingPurchaseProposal(bool enabled) {
+    if (!_canEditMarket) return;
+    final form = Map<String, dynamic>.from(_form)
+      ..addAll(proposalIntakeResetContractFields('purchase'))
+      ..['purchaseMode'] = ''
+      ..['hasExistingPurchaseProposal'] = enabled
+      ..['linkedPurchaseProposalId'] = null
+      ..['linkedPurchaseProposalCode'] = ''
+      ..['linkedPurchaseProposalTitle'] = '';
+    setState(() {
+      _dirty = true;
+      _fieldEpoch++;
+      _purchaseProposalHits = const [];
+      _row = _row.copyWith(
+        form: form,
+        review: proposalIntakeClearContractReview(_review, prefix: 'purchase'),
+        status: _statusAfterEdit,
+      );
+    });
+    widget.onChanged(_row);
+  }
+
+  Future<void> _searchApprovedPurchases(String keyword) async {
+    final seq = ++_purchaseProposalSearchSeq;
+    final needle = keyword.trim();
+    if (needle.isEmpty) {
+      if (mounted) setState(() => _purchaseProposalHits = const []);
+      return;
+    }
+    try {
+      final rows = await widget.service.fetchApprovedPurchases(keyword: needle);
+      if (!mounted || seq != _purchaseProposalSearchSeq) return;
+      setState(() => _purchaseProposalHits = rows);
+    } catch (error) {
+      if (!mounted || seq != _purchaseProposalSearchSeq) return;
+      setState(() => _purchaseProposalHits = const []);
+      widget.onError(friendlyErrorText(error));
+    }
+  }
+
+  Future<void> _applyApprovedPurchase(ProposalApprovedPurchaseHit hit) async {
+    if (!_canEditMarket) return;
+    final form = Map<String, dynamic>.from(_form)
+      ..addAll(proposalIntakePatchFromApprovedPurchase(hit));
+    final hasFile =
+        '${form['purchaseFileName'] ?? ''}'.trim().isNotEmpty ||
+        '${form['purchaseObjectKey'] ?? ''}'.trim().isNotEmpty;
+    final contractId = hit.purchaseContractId;
+    if (!hasFile && contractId != null && contractId > 0) {
+      try {
+        final detail = await widget.service.fetchContractDetail(contractId);
+        form.addAll(
+          proposalIntakeFilePatchFromContractDetail('purchase', detail),
+        );
+      } catch (_) {
+        // 合同字段仍可带入；源文件缺失时不阻断。
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _dirty = true;
+      _fieldEpoch++;
+      _row = _row.copyWith(
+        form: proposalIntakeRememberContractSnapshot(
+          form: form,
+          prefix: 'purchase',
+        ),
+        review: proposalIntakeClearContractReview(_review, prefix: 'purchase'),
+        status: _statusAfterEdit,
+      );
+    });
+    widget.onChanged(_row);
+    showProposalCenterToast(context, '已从采购提案带入合同内容，可再修改');
+  }
+
   String _reviewSectionForFlag(String key) => switch (key) {
     'marketCompleted' => 'market',
     'technologyCompleted' => 'technology',
@@ -1470,6 +1587,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (_dirty) {
       widget.onError('请先保存最新修改后再复核');
       return;
+    }
+    if (_isPurchase && key == 'marketCompleted') {
+      final hun = proposalIntakePurchaseHunIssue(_form);
+      if (hun != null) {
+        widget.onError(hun);
+        return;
+      }
     }
     final confirmed = await _confirmFinal(
       title: '确认本板块复核完成',
@@ -1852,8 +1976,164 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     });
   }
 
+  Future<void> _searchSupplierProducts(
+    String rowId,
+    String syncSource,
+    String keyword,
+  ) async {
+    final source = syncSource.trim();
+    final query = keyword.trim();
+    final seq = (_assetProductSearchSeq[rowId] ?? 0) + 1;
+    _assetProductSearchSeq[rowId] = seq;
+    if (source.isEmpty || query.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _assetProductHits[rowId] = const [];
+          _assetProductSearching.remove(rowId);
+        });
+      }
+      return;
+    }
+    _assetProductSearching.add(rowId);
+    if (mounted) setState(() {});
+    final rows = await _catalog.fetchSupplierProducts(
+      syncSource: source,
+      keyword: query,
+    );
+    if (!mounted || _assetProductSearchSeq[rowId] != seq) return;
+    setState(() {
+      _assetProductSearching.remove(rowId);
+      _assetProductHits[rowId] = rows;
+    });
+  }
+
+  Future<void> _syncSupplierProductSettlement({
+    required String rowId,
+    required ChannelProductHit? hit,
+  }) async {
+    final seq = (_assetProductSyncSeq[rowId] ?? 0) + 1;
+    _assetProductSyncSeq[rowId] = seq;
+    if (hit == null || hit.id == null || hit.id! <= 0) {
+      _assetProductSyncing.remove(rowId);
+      _assetProductSyncHint.remove(rowId);
+      if (mounted) setState(() {});
+      return;
+    }
+    _assetProductSyncing.add(rowId);
+    _assetProductSyncHint[rowId] = '正在同步结算规则…';
+    if (mounted) setState(() {});
+    final data = await _catalog.fetchSupplierProductSettlement(hit.id!);
+    if (!mounted || _assetProductSyncSeq[rowId] != seq) return;
+    if (data == null) {
+      _assetProductSyncing.remove(rowId);
+      _assetProductSyncHint[rowId] = '未查到该产品的结算规则，请手工填写';
+      if (mounted) setState(() {});
+      return;
+    }
+    final source = hit.syncSource.trim().isNotEmpty
+        ? hit.syncSource.trim()
+        : (proposalIntakeSupplyProducts(_form)
+                .where((item) => item.id == rowId)
+                .firstOrNull
+                ?.syncSourceCode ??
+            '');
+    final bundle = source.isEmpty
+        ? const _SettleCatalogBundle()
+        : await _ensureSettleBundle(
+            syncSource: source,
+            productSource: 'SUPPLIER',
+          );
+    if (!mounted || _assetProductSyncSeq[rowId] != seq) return;
+    _assetProductSyncing.remove(rowId);
+    final rows = proposalIntakeSettlementsFromChannelCatalog(
+      data,
+      fallbackChannel: hit.supplierRef,
+      formulas: bundle.formulas,
+      billTypes: bundle.billTypes,
+    );
+    _assetProductSyncHint[rowId] = data.items.isEmpty
+        ? '该产品暂无结算行，请手工填写'
+        : '已从资管同步 ${data.items.length} 条结算规则';
+    _patchSupplyProduct(rowId, (current) {
+      if (current.assetProduct?.id != hit.id) return current;
+      return current.applyAssetProduct(hit, settlements: rows);
+    });
+  }
+
+  Future<void> _syncAssetProductSettlement({
+    required String rowId,
+    required ChannelProductHit? hit,
+    required bool pack,
+  }) async {
+    final seq = (_assetProductSyncSeq[rowId] ?? 0) + 1;
+    _assetProductSyncSeq[rowId] = seq;
+    if (hit == null || hit.id == null || hit.id! <= 0) {
+      _assetProductSyncing.remove(rowId);
+      _assetProductSyncHint.remove(rowId);
+      if (mounted) setState(() {});
+      return;
+    }
+    _assetProductSyncing.add(rowId);
+    _assetProductSyncHint[rowId] = '正在同步结算规则…';
+    if (mounted) setState(() {});
+    final data = await _catalog.fetchChannelProductSettlement(hit.id!);
+    if (!mounted || _assetProductSyncSeq[rowId] != seq) return;
+    if (data == null) {
+      _assetProductSyncing.remove(rowId);
+      _assetProductSyncHint[rowId] = '未查到该产品的结算规则，请财务手工填写';
+      if (mounted) setState(() {});
+      return;
+    }
+    final source = hit.syncSource.trim().isNotEmpty
+        ? hit.syncSource.trim()
+        : _assetRowSyncSource(rowId: rowId, pack: pack);
+    final bundle = source.isEmpty
+        ? const _SettleCatalogBundle()
+        : await _ensureSettleBundle(
+            syncSource: source,
+            productSource: 'CHANNEL',
+          );
+    if (!mounted || _assetProductSyncSeq[rowId] != seq) return;
+    _assetProductSyncing.remove(rowId);
+    final rows = proposalIntakeSettlementsFromChannelCatalog(
+      data,
+      fallbackChannel: hit.channelRef,
+      formulas: bundle.formulas,
+      billTypes: bundle.billTypes,
+    );
+    _assetProductSyncHint[rowId] = data.items.isEmpty
+        ? '该产品暂无结算行，请财务手工填写'
+        : '已从资管同步 ${data.items.length} 条结算规则';
+    if (pack) {
+      _patchCouponPack(rowId, (current) {
+        if (current.assetProduct?.id != hit.id) return current;
+        return current.applyAssetProduct(hit, settlements: rows);
+      });
+    } else {
+      _patchSkuDetail(rowId, (current) {
+        if (current.assetProduct?.id != hit.id) return current;
+        return current.applyAssetProduct(hit, settlements: rows);
+      });
+    }
+  }
+
   String _settleCacheKey(String syncSource, String productSource) =>
       '${syncSource.trim()}|${productSource.trim().toUpperCase()}';
+
+  String _assetRowSyncSource({required String rowId, required bool pack}) {
+    if (pack) {
+      return proposalIntakeCouponPacks(_form)
+              .where((item) => item.id == rowId)
+              .firstOrNull
+              ?.syncSourceCode ??
+          '';
+    }
+    return proposalIntakeSkuDetails(_form)
+            .where((item) => item.id == rowId)
+            .firstOrNull
+            ?.syncSourceCode ??
+        '';
+  }
 
   Future<_SettleCatalogBundle> _ensureSettleBundle({
     required String syncSource,
@@ -1864,19 +2144,36 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final key = _settleCacheKey(source, side);
     final cached = _settleBundles[key];
     if (cached != null) return cached;
-    if (source.isEmpty || _settleLoading.contains(key)) {
-      return cached ?? const _SettleCatalogBundle();
+    if (source.isEmpty) return const _SettleCatalogBundle();
+    final inflight = _settleBundleLoads[key];
+    if (inflight != null) return inflight;
+    final future = _loadSettleBundle(key: key, source: source, side: side);
+    _settleBundleLoads[key] = future;
+    try {
+      return await future;
+    } finally {
+      _settleBundleLoads.remove(key);
     }
+  }
+
+  Future<_SettleCatalogBundle> _loadSettleBundle({
+    required String key,
+    required String source,
+    required String side,
+  }) async {
     _settleLoading.add(key);
     try {
       final results = await Future.wait([
-        _catalog.fetchChannels(syncSource: source),
+        side == 'SUPPLIER'
+            ? _catalog.fetchSuppliers(syncSource: source)
+            : _catalog.fetchChannels(syncSource: source),
         _catalog.fetchBillTypes(syncSource: source, productSource: side),
         _catalog.fetchSettleMethods(syncSource: source, productSource: side),
         _catalog.fetchFormulas(syncSource: source, productSource: side),
       ]);
       final bundle = _SettleCatalogBundle(
-        channels: results[0],
+        channels: side == 'SUPPLIER' ? const [] : results[0],
+        suppliers: side == 'SUPPLIER' ? results[0] : const [],
         billTypes: results[1],
         settleMethods: results[2],
         formulas: results[3],
@@ -1884,7 +2181,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _settleBundles[key] = bundle;
       return bundle;
     } catch (_) {
-      return cached ?? const _SettleCatalogBundle();
+      return _settleBundles[key] ?? const _SettleCatalogBundle();
     } finally {
       _settleLoading.remove(key);
       if (mounted) setState(() {});
@@ -2071,50 +2368,66 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   List<String> _validate() {
     final issues = <String>[];
     if (_row.title.trim().isEmpty) issues.add('产品提案名称不能为空');
-    if (_number('salesScale') < widget.options.minimumScale) {
-      issues.add('销售规模低于 ${_money(widget.options.minimumScale)}');
+    if (!_isPurchase) {
+      if (proposalIntakeFormHasText(_form, 'salesScale') &&
+          _number('salesScale') < widget.options.minimumScale) {
+        issues.add('销售规模低于 ${_money(widget.options.minimumScale)}');
+      }
+      if (proposalIntakeFormHasText(_form, 'margin') &&
+          _number('margin') < widget.options.minimumMargin) {
+        issues.add('毛利率低于 ${widget.options.minimumMargin}%');
+      }
     }
-    if (_number('margin') < widget.options.minimumMargin) {
-      issues.add('毛利率低于 ${widget.options.minimumMargin}%');
-    }
-    final interfaceValues = _form['financeInterfaces'] is Map
-        ? Map<String, dynamic>.from(_form['financeInterfaces'])
-        : <String, dynamic>{};
-    final missing = widget.options.financeInterfaces
-        .where((item) => item.required && interfaceValues[item.key] != true)
-        .map((item) => item.label)
-        .toList();
+    final missing = _missingRequiredFinanceInterfaces();
     if (missing.isNotEmpty) issues.add('财务技术接口缺少：${missing.join('、')}');
     if (_text('hasRdCost') == '是' && _number('rdAmount') <= 0) {
       issues.add('已选择涉及研发费用，金额必须大于 0');
     }
-    if (_text('purchaseMode') == '未签署合同' &&
-        _text('purchaseFileName').trim().isEmpty) {
-      issues.add('请上传未签署的采购合同文件');
-    }
-    if (_text('salesMode') == '未签署合同' &&
-        _text('salesFileName').trim().isEmpty) {
-      issues.add('请上传未签署的销售合同文件');
-    }
     if (widget.options.presidentUserIds.isEmpty && _ownerId('president') <= 0) {
       issues.add('请在管理后台「提案录入选项」中配置最终确认人');
     }
-    for (final name in missingProposalReviewAssignees(_form)) {
+    for (final name in missingProposalReviewAssignees(
+      _form,
+      purchase: _isPurchase,
+    )) {
       issues.add('请指定$name');
     }
-    issues.addAll(proposalIntakeLaunchFinanceIssues(_form));
-    issues.addAll(proposalIntakeSkuSettleIssues(_form));
-    for (final entry in const {
+    if (_isPurchase) {
+      issues.addAll(proposalIntakePurchaseMarketIssues(_form));
+      issues.addAll(proposalIntakePurchaseTechIssues(_form));
+      if (_canSeeHun) {
+        final hun = proposalIntakePurchaseHunIssue(_form);
+        if (hun != null) issues.add(hun);
+      }
+    } else {
+      issues.addAll(proposalIntakeSalesMarketIssues(_form));
+      issues.addAll(proposalIntakeTechFillIssues(_form, purchase: false));
+      issues.addAll(proposalIntakeSalesFinanceFillIssues(_form));
+      issues.addAll(proposalIntakeLaunchFinanceIssues(_form));
+      issues.addAll(proposalIntakeSkuSettleIssues(_form));
+    }
+    final reviewFlags = <String, String>{
       'marketCompleted': '市场部',
       'technologyCompleted': '科技部',
       'financeInterfaceCompleted': '财务技术接口',
-      'financeCompleted': '财务部',
+      if (!_isPurchase) 'financeCompleted': '财务部',
       'purchaseContractCompleted': '采购合同',
-      'salesContractCompleted': '销售合同',
-    }.entries) {
+      if (!_isPurchase) 'salesContractCompleted': '销售合同',
+    };
+    for (final entry in reviewFlags.entries) {
       if (_review[entry.key] != true) issues.add('${entry.value}尚未完成复核');
     }
     return issues;
+  }
+
+  List<String> _missingRequiredFinanceInterfaces() {
+    final interfaceValues = _form['financeInterfaces'] is Map
+        ? Map<String, dynamic>.from(_form['financeInterfaces'])
+        : <String, dynamic>{};
+    return widget.options.financeInterfaces
+        .where((item) => item.required && interfaceValues[item.key] != true)
+        .map((item) => item.label)
+        .toList();
   }
 
   Future<void> _submit() async {
@@ -2152,6 +2465,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final missing = missingProposalReviewAssignees(
       _form,
       includeTech: action == 'notify_tech',
+      purchase: _isPurchase,
     );
     if (missing.isNotEmpty) {
       final issues = [for (final name in missing) '请指定$name'];
@@ -2160,8 +2474,60 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       widget.onError('请先指定：${missing.join('、')}');
       return;
     }
+    if (_isPurchase && action == 'notify_tech') {
+      final issues = proposalIntakePurchaseMarketIssues(_form);
+      if (issues.isNotEmpty) {
+        setState(() => _issues = issues);
+        _scrollToTop();
+        widget.onError(issues.first);
+        return;
+      }
+    }
+    if (!_isPurchase && action == 'notify_tech') {
+      final issues = [
+        ...proposalIntakeSalesMarketIssues(_form),
+        ...proposalIntakeSkuSettleIssues(_form, includeSettlements: false),
+      ];
+      if (issues.isNotEmpty) {
+        setState(() => _issues = issues);
+        _scrollToTop();
+        widget.onError(issues.first);
+        return;
+      }
+    }
+    if (action == 'notify_market2') {
+      final missingInterfaces = _missingRequiredFinanceInterfaces();
+      if (missingInterfaces.isNotEmpty) {
+        final issues = ['财务技术接口缺少：${missingInterfaces.join('、')}'];
+        setState(() => _issues = issues);
+        _scrollToTop();
+        widget.onError(issues.first);
+        return;
+      }
+      if (_isPurchase) {
+        final issues = proposalIntakePurchaseTechIssues(_form);
+        if (issues.isNotEmpty) {
+          setState(() => _issues = issues);
+          _scrollToTop();
+          widget.onError(issues.first);
+          return;
+        }
+      } else {
+        final issues = proposalIntakeTechFillIssues(_form, purchase: false);
+        if (issues.isNotEmpty) {
+          setState(() => _issues = issues);
+          _scrollToTop();
+          widget.onError(issues.first);
+          return;
+        }
+      }
+    }
     final (title, message, confirmLabel) = switch (action) {
-      'notify_tech' => ('确认通知科技负责人', '确认后科技负责人将填写科技部内容。这是本步骤的最终确认。', '确认通知'),
+      'notify_tech' => (
+        '确认通知科技负责人',
+        '确认后将通知科技部负责人填写科技部内容，并通知财务部负责人二填写财务技术接口。这是本步骤的最终确认。',
+        '确认通知',
+      ),
       'notify_market2' => (
         '确认提交复核',
         '确认后将通知全部复核人，提案内容锁定。这是科技填写完成的最终确认。',
@@ -2174,12 +2540,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ),
       'start_tech_revision' => (
         '确认发起科技变更',
-        '确认后可修改科技部内容。市场将按先科技后市场重新打勾。财务接口没变则不重审财务。',
+        '确认后可修改科技部内容。市场将按先科技后市场重新打勾。财务技术接口由财务部负责人二填写，没变则不重审。',
         '确认发起',
       ),
       'confirm_tech_revision' => (
         '确认提交本轮科技变更',
-        '确认后由市场部负责人二复核科技，再由市场部负责人一复核市场。',
+        '确认后由市场部负责人二复核科技，再由市场部负责人一复核市场。财务技术接口有变则由科技部负责人复核。',
         '确认提交',
       ),
       _ => ('', '', ''),
@@ -2256,6 +2622,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       final saved = confirmed.id <= 0
           ? await widget.service.create(
               title: confirmed.title,
+              kind: confirmed.kind,
               form: confirmed.form,
               review: confirmed.review,
             )
@@ -2379,7 +2746,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                                 _marketSection(wide),
                                 _techSection(wide),
                                 _financeSection(wide),
-                                _flowSection(wide),
+                                if (!_isPurchase) _flowSection(wide),
                                 if (widget.enableComments && _row.id > 0)
                                   _commentsSection(),
                               ],
@@ -2444,11 +2811,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               kind: ProposalChipKind.purple,
             ),
           ],
-          const SizedBox(width: 7),
-          ProposalStatusChip(
-            label: '评级 $_rating',
-            kind: ProposalChipKind.purple,
-          ),
+          if (!_isPurchase) ...[
+            const SizedBox(width: 7),
+            ProposalStatusChip(
+              label: '评级 $_rating',
+              kind: ProposalChipKind.purple,
+            ),
+          ],
         ],
       ),
     );
@@ -2480,7 +2849,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ),
                   ),
                 ),
-                const ProposalIntakeProcessHelpButton(compact: true),
+                ProposalIntakeProcessHelpButton(
+                  compact: true,
+                  purchase: _isPurchase,
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -2551,7 +2923,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               child: actions,
             ),
           ),
-          const ProposalIntakeProcessHelpButton(),
+          ProposalIntakeProcessHelpButton(purchase: _isPurchase),
         ],
       ),
     );
@@ -2633,7 +3005,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   chip('市场部', _marketKey),
                   chip('科技部', _techKey),
                   chip('财务部', _financeKey),
-                  chip('四流', _flowKey),
+                  if (!_isPurchase) chip('四流', _flowKey),
                 ],
               ),
             ),
@@ -3060,7 +3432,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
-  Widget _marketSection(bool wide) => Column(
+  Widget _marketSection(bool wide) {
+    if (_isPurchase) return _purchaseMarketSection(wide);
+    return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       KeyedSubtree(
@@ -3147,6 +3521,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 current: _formRef('productRef') ??
                     CatalogRef.fromName(_text('product')),
                 options: _productOptions(),
+                required: true,
                 resetReview: 'marketCompleted',
                 enabled: (_formRef('sectorRef') ??
                             CatalogRef.fromName(_text('sector')))
@@ -3167,6 +3542,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 current: _formRef('projectRef') ??
                     CatalogRef.fromName(_text('projectName')),
                 options: _projectOptions(),
+                required: true,
                 resetReview: 'marketCompleted',
                 searchable: true,
                 remoteSearch: true,
@@ -3182,6 +3558,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 'supplies',
                 widget.options.supplies,
                 '新增供给',
+                required: true,
                 resetReview: 'marketCompleted',
                 single: true,
               ),
@@ -3190,6 +3567,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 'channels',
                 widget.options.channels,
                 '新增渠道',
+                required: true,
                 resetReview: 'marketCompleted',
               ),
               _personField(
@@ -3199,7 +3577,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 required: true,
               ),
               _configuredPresidentsField(),
-              _personField('运营', 'operator', positionIncludes: '运营'),
+              _personField(
+                '运营',
+                'operator',
+                positionIncludes: '运营',
+                required: true,
+              ),
             ]),
             const SizedBox(height: 14),
             _skuDetailsBlock(wide),
@@ -3222,6 +3605,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 '供货商政策',
                 'supplierPolicy',
                 maxLines: 3,
+                required: true,
                 source: '合同抓取 · 可修改',
                 resetReview: 'marketCompleted',
               ),
@@ -3230,6 +3614,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   '渠道政策',
                   'channelPolicy',
                   maxLines: 3,
+                  required: true,
                   source: '合同抓取 · 可修改',
                   resetReview: 'marketCompleted',
                 ),
@@ -3244,12 +3629,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 '提案执行计划',
                 'executionPlan',
                 maxLines: 4,
+                required: true,
                 resetReview: 'marketCompleted',
               ),
               _textField(
                 '合作风险点',
                 'riskPoints',
                 maxLines: 4,
+                required: true,
                 resetReview: 'marketCompleted',
               ),
               if (!_isPurchase) ...[
@@ -3258,12 +3645,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   'profitModes',
                   widget.options.profitModes,
                   '新增盈利模式',
+                  required: true,
                   resetReview: 'marketCompleted',
                 ),
                 _textField(
                   '盈利计算说明',
                   'profitFormula',
                   maxLines: 3,
+                  required: true,
                   resetReview: 'marketCompleted',
                 ),
               ],
@@ -3281,7 +3670,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         locked: proposalIntakeMarketReviewBlocked(_review),
       ),
     ],
-  );
+    );
+  }
 
   void _appendTechnologyRecord() {
     if (!_canEditTech) return;
@@ -3439,12 +3829,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             description: _canStartTechRevision
                 ? '提案已通过。点右上角「发起科技变更」后，可覆盖当前字段或新增对接记录。'
                 : _row.isTechRevising
-                ? '本轮科技变更可覆盖当前字段，或新增一条对接记录。改完后提交，由市场部先科技后市场重新打勾。'
+                ? '本轮科技变更可覆盖当前字段，或新增一条对接记录。改完后提交，由市场部先科技后市场重新打勾。财务技术接口由财务部负责人二填写。'
+                : _canEditFinanceInterface
+                ? '请勾选财务技术接口；科技部其他字段由科技部负责人填写，市场部负责人二逐条复核。'
                 : _canEditTech
-                ? '请填写科技部内容；完成后由市场部负责人二逐条复核。'
+                ? '请填写科技部内容；财务技术接口由财务部负责人二填写。完成后由市场部负责人二逐条复核。'
                 : _canEditMarket
-                ? '请指定科技部负责人。技术字段由对方填写，市场部负责人二做逐条复核。'
-                : '科技部负责人填写；市场部负责人二做逐条复核。',
+                ? '请指定科技部负责人。技术字段由对方填写，财务技术接口由财务部负责人二填写，市场部负责人二做逐条复核。'
+                : '科技部负责人填写；财务技术接口由财务部负责人二填写；市场部负责人二做逐条复核。',
           ),
         ),
         ProposalCard(
@@ -3461,6 +3853,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   'τ-标签一',
                   'technologyPlatform',
                   widget.options.platforms.map((item) => item.value).toList(),
+                  required: true,
                   writable: _canEditTech,
                   resetReview: 'technologyCompleted',
                   reviewSection: 'technologyItem:technologyPlatform',
@@ -3472,16 +3865,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   'technologyCapabilities',
                   platform?.children ?? const [],
                   '新增能力',
+                  required: true,
                   writable: _canEditTech,
                   resetReview: 'technologyCompleted',
                   reviewSection: 'technologyItem:technologyCapabilities',
                   reviewLabel: _techReviewLabel,
                 ),
                 _multiField(
-                  '能力输出形式',
+                  _isPurchase ? '能力输入形式' : '能力输出形式',
                   'outputForms',
-                  widget.options.outputForms,
-                  null,
+                  _isPurchase
+                      ? kPurchaseCapabilityInputForms
+                      : widget.options.outputForms,
+                  _isPurchase ? '新增形式' : null,
+                  required: true,
                   writable: _canEditTech,
                   resetReview: 'technologyCompleted',
                   reviewSection: 'technologyItem:outputForms',
@@ -3508,6 +3905,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                         fontSize: 13,
                       ),
                     ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      '由财务部负责人二填写，科技部负责人复核',
+                      style: TextStyle(
+                        color: ProposalPalette.text3,
+                        fontSize: 12,
+                      ),
+                    ),
                     const SizedBox(height: 10),
                     if (_showSelectedAsText)
                       _readonlySelectedText(
@@ -3518,7 +3923,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       )
                     else
                       IgnorePointer(
-                        ignoring: !_canEditTech,
+                        ignoring: !_canEditFinanceInterface,
                         child: Wrap(
                           spacing: 8,
                           runSpacing: 8,
@@ -3528,9 +3933,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                                 label:
                                     '${item.label}${item.required ? ' *' : ''}',
                                 selected: interfaces[item.key] == true,
-                                enabled: _canEditTech,
+                                enabled: _canEditFinanceInterface,
                                 onSelected: (selected) {
-                                  if (!_canEditTech) return;
+                                  if (!_canEditFinanceInterface) return;
                                   final next = Map<String, dynamic>.from(
                                     interfaces,
                                   )..[item.key] = selected;
@@ -3552,8 +3957,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 _multiField(
                   '研发类型',
                   'developmentTypes',
-                  widget.options.developmentTypes,
-                  null,
+                  _isPurchase
+                      ? kPurchaseDevelopmentTypes
+                      : widget.options.developmentTypes,
+                  _isPurchase ? '新增类型' : null,
+                  required: true,
                   writable: _canEditTech,
                   resetReview: 'technologyCompleted',
                   reviewSection: 'technologyItem:developmentTypes',
@@ -3563,6 +3971,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   '是否涉及研发费用',
                   'hasRdCost',
                   const ['是', '否'],
+                  required: true,
                   writable: _canEditTech,
                   resetReview: 'technologyCompleted',
                   reviewSection: 'technologyItem:hasRdCost',
@@ -3579,6 +3988,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 _dateField(
                   '交付时间',
                   'deliveryDate',
+                  required: true,
                   writable: _canEditTech,
                   resetReview: 'technologyCompleted',
                   reviewSection: 'technologyItem:deliveryDate',
@@ -3613,7 +4023,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         if (!_row.techRevisionOpen || _financeInterfaceNeedsReview)
           _moduleReview(
             title: '财务技术接口复核',
-            description: '由本单财务部负责人二确认科技填写的财务技术接口，不是财务整板块复核。',
+            description: '由本单财务部负责人二填写，科技部负责人确认。不是财务整板块复核。',
             keyName: 'financeInterfaceCompleted',
             buttonLabel: '确认财务技术接口',
           ),
@@ -3621,7 +4031,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
-  Widget _financeSection(bool wide) => Column(
+  Widget _financeSection(bool wide) {
+    if (_isPurchase) return _purchaseFinanceSection(wide);
+    return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       KeyedSubtree(
@@ -3702,20 +4114,23 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             const SizedBox(height: 10),
             LayoutBuilder(
               builder: (_, box) {
-                final columns = !wide
-                    ? 1
-                    : box.maxWidth >= 1180
-                    ? 3
-                    : box.maxWidth >= 760
-                    ? 2
-                    : 1;
-                final itemWidth =
-                    (box.maxWidth - (columns - 1) * 14 - 0.5) / columns;
-                return Wrap(
-                  spacing: 14,
+                final columns = box.maxWidth >= 640 ? 2 : 1;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    for (final field in _financeFields)
-                      SizedBox(width: itemWidth, child: _financeItem(field)),
+                    _financeFieldRows(_financeMetricFields, columns),
+                    const SizedBox(height: 10),
+                    _financeSideGroup(
+                      title: '供给侧',
+                      child: _financeFieldRows(_financeSupplyFields, columns),
+                    ),
+                    const SizedBox(height: 10),
+                    _financeSideGroup(
+                      title: '渠道侧',
+                      child: _financeFieldRows(_financeChannelFields, columns),
+                    ),
+                    const SizedBox(height: 10),
+                    _financeFieldRows(_financeAccountFields, columns),
                   ],
                 );
               },
@@ -3763,6 +4178,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               '是否回滚',
               'rollback',
               widget.options.rollbackOptions,
+              required: true,
               resetReview: 'financeCompleted',
               reviewSection: 'financeItem:rollback',
               reviewLabel: _financeReviewLabel,
@@ -3791,7 +4207,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         locked: !_allFinanceItemsReviewed,
       ),
     ],
-  );
+    );
+  }
 
   bool get _allFinanceItemsReviewed =>
       _itemsReviewed('financeItem', _financeReviewKeys);
@@ -4072,94 +4489,132 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final flag = '${prefix}ContractCompleted';
     final keys = _contractItemKeys(prefix);
     final pending = _pendingContractReviewLabels(prefix);
+    final usePurchaseProposal =
+        !_isPurchase &&
+        prefix == 'purchase' &&
+        proposalIntakeHasExistingPurchaseProposal(_form);
+    final linkedPurchaseId = proposalIntakeLinkedPurchaseProposalId(_form);
+    final fromProposal = usePurchaseProposal && linkedPurchaseId > 0;
+    final grabSource = fromProposal
+        ? '采购提案带入 · 可修改'
+        : '合同抓取 · 可修改';
     return _stepCard(
       step,
       title,
-      '已签自动抓取 · 未签上传后解析',
+      usePurchaseProposal
+          ? '选中已通过的采购提案后，合同编号、名称、主体、源文件等内容会自动带出'
+          : '已签自动抓取 · 未签上传后解析',
       Column(
         children: [
+          if (!_isPurchase && prefix == 'purchase') ...[
+            _existingPurchaseProposalToggle(),
+            const SizedBox(height: 8),
+          ],
+          if (usePurchaseProposal) ...[
+            _approvedPurchaseSelector(),
+            const SizedBox(height: 8),
+          ],
           _fieldGrid(wide, [
-            _dropdownField(
-              '合同状态',
-              '${prefix}Mode',
-              const ['已签署合同', '未签署合同'],
-              resetReview: flag,
-              reviewSection: 'contractItem:$prefix.Mode',
-              reviewLabel: _financeReviewLabel,
-              onSelected: (value) => _setContractMode(prefix, value),
-            ),
-            if (signed) _contractSelector(prefix),
-            _textField(
-              '合同编号',
-              '${prefix}No',
-              source: signed
-                  ? '合同抓取 · 可修改'
-                  : unsigned
-                  ? '未签合同'
-                  : null,
-              resetReview: flag,
-              reviewSection: 'contractItem:$prefix.No',
-              reviewLabel: _financeReviewLabel,
-            ),
-            if (unsigned) _unsignedFileField(prefix),
-            _textField(
-              '合同名称',
-              '${prefix}Name',
-              source: '合同抓取 · 可修改',
-              resetReview: flag,
-              reviewSection: 'contractItem:$prefix.Name',
-              reviewLabel: _financeReviewLabel,
-            ),
-            _textField(
-              '签署时间',
-              '${prefix}SignDate',
-              source: '合同抓取 · 可修改',
-              resetReview: flag,
-              reviewSection: 'contractItem:$prefix.SignDate',
-              reviewLabel: _financeReviewLabel,
-            ),
-            _textField(
-              '我方签约主体',
-              '${prefix}OurParty',
-              source: '合同抓取 · 可修改',
-              resetReview: flag,
-              reviewSection: 'contractItem:$prefix.OurParty',
-              reviewLabel: _financeReviewLabel,
-            ),
-            _textField(
-              '对方签约主体',
-              '${prefix}Counterparty',
-              source: '合同抓取 · 可修改',
-              resetReview: flag,
-              reviewSection: 'contractItem:$prefix.Counterparty',
-              reviewLabel: _financeReviewLabel,
-            ),
-            _textField(
-              '有效期',
-              '${prefix}ValidPeriod',
-              source: '合同抓取 · 可修改',
-              resetReview: flag,
-              reviewSection: 'contractItem:$prefix.ValidPeriod',
-              reviewLabel: _financeReviewLabel,
-            ),
-            _textField(
-              '核心条款',
-              '${prefix}CoreTerms',
-              maxLines: 3,
-              source: '合同抓取 · 可修改',
-              resetReview: flag,
-              reviewSection: 'contractItem:$prefix.CoreTerms',
-              reviewLabel: _financeReviewLabel,
-            ),
-            if (prefix == 'purchase')
-              _multiField(
-                '采购产品',
-                'purchaseProducts',
-                widget.options.products.map((e) => e.value).toList(),
-                '新增产品',
-                resetReview: 'marketCompleted',
+              _dropdownField(
+                '合同状态',
+                '${prefix}Mode',
+                const ['已签署合同', '未签署合同'],
+                required: true,
+                resetReview: flag,
+                reviewSection: 'contractItem:$prefix.Mode',
+                reviewLabel: _financeReviewLabel,
+                onSelected: fromProposal
+                    ? (value) => _set(
+                        '${prefix}Mode',
+                        value,
+                        resetReview: flag,
+                      )
+                    : (value) => _setContractMode(prefix, value),
               ),
-          ]),
+              if (signed && !usePurchaseProposal) _contractSelector(prefix),
+              _textField(
+                '合同编号',
+                '${prefix}No',
+                required: signed,
+                source: fromProposal
+                    ? grabSource
+                    : signed
+                    ? grabSource
+                    : unsigned
+                    ? '未签合同'
+                    : null,
+                resetReview: flag,
+                reviewSection: 'contractItem:$prefix.No',
+                reviewLabel: _financeReviewLabel,
+              ),
+              if (unsigned)
+                _contractSourceFileField(prefix, allowUpload: true)
+              else if (_hasContractSourceFile(prefix))
+                _contractSourceFileField(prefix, allowUpload: false),
+              _textField(
+                '合同名称',
+                '${prefix}Name',
+                required: true,
+                source: grabSource,
+                resetReview: flag,
+                reviewSection: 'contractItem:$prefix.Name',
+                reviewLabel: _financeReviewLabel,
+              ),
+              _textField(
+                '签署时间',
+                '${prefix}SignDate',
+                required: true,
+                source: grabSource,
+                resetReview: flag,
+                reviewSection: 'contractItem:$prefix.SignDate',
+                reviewLabel: _financeReviewLabel,
+              ),
+              _textField(
+                '我方签约主体',
+                '${prefix}OurParty',
+                required: true,
+                source: grabSource,
+                resetReview: flag,
+                reviewSection: 'contractItem:$prefix.OurParty',
+                reviewLabel: _financeReviewLabel,
+              ),
+              _textField(
+                '对方签约主体',
+                '${prefix}Counterparty',
+                required: true,
+                source: grabSource,
+                resetReview: flag,
+                reviewSection: 'contractItem:$prefix.Counterparty',
+                reviewLabel: _financeReviewLabel,
+              ),
+              _textField(
+                '有效期',
+                '${prefix}ValidPeriod',
+                required: true,
+                source: grabSource,
+                resetReview: flag,
+                reviewSection: 'contractItem:$prefix.ValidPeriod',
+                reviewLabel: _financeReviewLabel,
+              ),
+              _textField(
+                '核心条款',
+                '${prefix}CoreTerms',
+                maxLines: 3,
+                required: true,
+                source: grabSource,
+                resetReview: flag,
+                reviewSection: 'contractItem:$prefix.CoreTerms',
+                reviewLabel: _financeReviewLabel,
+              ),
+              if (prefix == 'purchase')
+                _multiField(
+                  '采购产品',
+                  'purchaseProducts',
+                  widget.options.products.map((e) => e.value).toList(),
+                  '新增产品',
+                  resetReview: 'marketCompleted',
+                ),
+            ]),
           const SizedBox(height: 8),
           _moduleReview(
             title: '$title复核',
@@ -4178,6 +4633,116 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _existingPurchaseProposalToggle() {
+    final enabled = proposalIntakeHasExistingPurchaseProposal(_form);
+    final locked = _showSelectedAsText || !_canEditMarket;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: locked ? null : () => _setHasExistingPurchaseProposal(!enabled),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 22,
+                height: 22,
+                child: Checkbox(
+                  value: enabled,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                  onChanged: locked
+                      ? null
+                      : (value) =>
+                          _setHasExistingPurchaseProposal(value == true),
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Text(
+                '是否已有采购提案',
+                style: TextStyle(
+                  color: ProposalPalette.text,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.only(top: 4),
+          child: Text(
+            '勾选后搜索并选择已审核通过的采购提案，合同状态、编号、名称、主体、源文件等内容会自动带出，可再修改。不勾选则按下方合同归集 / 上传填写。',
+            style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _approvedPurchaseSelector() {
+    final currentId = proposalIntakeLinkedPurchaseProposalId(_form);
+    final selectedTitle = _text('linkedPurchaseProposalTitle');
+    final selectedCode = _text('linkedPurchaseProposalCode');
+    final locked = _showSelectedAsText || !_canEditMarket;
+    return ProposalField(
+      label: '已通过的采购提案',
+      required: true,
+      source: '从采购提案带入合同',
+      tone: proposalFieldTone(enabled: !locked, source: '从采购提案带入合同'),
+      child: locked
+          ? _readonlySelectedText(
+              [
+                if (selectedCode.isNotEmpty) selectedCode,
+                if (selectedTitle.isNotEmpty) selectedTitle,
+              ].join(' · '),
+            )
+          : ProposalSelectField<int>(
+              key: ValueKey('linked-purchase-$currentId-$_fieldEpoch'),
+              value: currentId > 0 ? currentId : null,
+              title: '选择已审核通过的采购提案',
+              hint: '输入提案编号、名称或对方主体搜索',
+              searchable: true,
+              requireKeyword: true,
+              remoteOptions: true,
+              allowClear: false,
+              onQueryChanged: _searchApprovedPurchases,
+              options: [
+                if (currentId > 0 &&
+                    (selectedCode.isNotEmpty || selectedTitle.isNotEmpty))
+                  ProposalSelectOption(
+                    value: currentId,
+                    label: selectedTitle.isEmpty
+                        ? selectedCode
+                        : selectedCode.isEmpty
+                        ? selectedTitle
+                        : '$selectedCode · $selectedTitle',
+                    meta: _text('purchaseCounterparty'),
+                  ),
+                for (final hit in _purchaseProposalHits)
+                  if (hit.id != currentId)
+                    ProposalSelectOption(
+                      value: hit.id,
+                      label: hit.label,
+                      meta: [
+                        hit.purchaseNo,
+                        hit.purchaseName,
+                        hit.purchaseCounterparty,
+                      ].where((item) => item.isNotEmpty).join(' · '),
+                    ),
+              ],
+              onSelected: (id) {
+                if (id == null) return;
+                final hit = _purchaseProposalHits
+                    .where((item) => item.id == id)
+                    .firstOrNull;
+                if (hit != null) {
+                  unawaited(_applyApprovedPurchase(hit));
+                }
+              },
+            ),
     );
   }
 
@@ -4592,36 +5157,49 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     widget.onChanged(_row);
   }
 
-  ProposalSkuDetailRow _newSkuDetailRow() => ProposalSkuDetailRow(
-    id: proposalIntakeNewSkuId(),
-    existingBuilt: proposalIntakeIsExistingBuilt(_form) ? '是' : '否',
-    settlements: [ProposalSkuSettleRow(id: proposalIntakeNewSkuSettleId())],
-  );
+  ProposalSkuDetailRow _newSkuDetailRow({bool? existing}) =>
+      ProposalSkuDetailRow(
+        id: proposalIntakeNewSkuId(),
+        existingBuilt:
+            (existing ?? proposalIntakeIsExistingBuilt(_form)) ? '是' : '否',
+        settlements: [ProposalSkuSettleRow(id: proposalIntakeNewSkuSettleId())],
+      );
 
-  ProposalCouponPackRow _newCouponPackRow() => ProposalCouponPackRow(
-    id: proposalIntakeNewCouponPackId(),
-    existingBuilt: proposalIntakeIsExistingBuilt(_form) ? '是' : '否',
-    settlements: [ProposalSkuSettleRow(id: proposalIntakeNewSkuSettleId())],
-  );
+  ProposalCouponPackRow _newCouponPackRow({bool? existing}) =>
+      ProposalCouponPackRow(
+        id: proposalIntakeNewCouponPackId(),
+        existingBuilt:
+            (existing ?? proposalIntakeIsExistingBuilt(_form)) ? '是' : '否',
+        settlements: [ProposalSkuSettleRow(id: proposalIntakeNewSkuSettleId())],
+      );
 
   void _setExistingBuiltEnabled(bool enabled) {
     if (!_canEditMarket) return;
     final label = enabled ? '是' : '否';
+    var skus = [
+      for (final row in proposalIntakeSkuDetails(_form))
+        row.copyWith(
+          existingBuilt: label,
+          assetProduct: enabled ? row.assetProduct : null,
+        ),
+    ];
+    var packs = [
+      for (final pack in proposalIntakeCouponPacks(_form))
+        pack.copyWith(
+          existingBuilt: label,
+          assetProduct: enabled ? pack.assetProduct : null,
+        ),
+    ];
+    if (enabled) {
+      if (proposalIntakeIsCouponPack(_form)) {
+        if (packs.isEmpty) packs = [_newCouponPackRow(existing: true)];
+      } else if (skus.isEmpty) {
+        skus = [_newSkuDetailRow(existing: true)];
+      }
+    }
     _writeSkuDetails(
-      [
-        for (final row in proposalIntakeSkuDetails(_form))
-          row.copyWith(
-            existingBuilt: label,
-            assetProduct: enabled ? row.assetProduct : null,
-          ),
-      ],
-      packs: [
-        for (final pack in proposalIntakeCouponPacks(_form))
-          pack.copyWith(
-            existingBuilt: label,
-            assetProduct: enabled ? pack.assetProduct : null,
-          ),
-      ],
+      skus,
+      packs: packs,
       isExistingBuilt: enabled,
     );
   }
@@ -4869,7 +5447,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ],
         ),
         const Text(
-          '可添加多条渠道产品。结算条款在财务部按产品或券包填写。',
+          '渠道产品和券包默认可不填。勾选「是否已经建产品」后必须搜索选择已建产品，选中后同步资管结算规则。',
           style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
         ),
         const SizedBox(height: 8),
@@ -4930,7 +5508,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         const Padding(
           padding: EdgeInsets.only(top: 4),
           child: Text(
-            '勾选后只需选择业务平台，再输入产品名称关键字搜索已建产品。券包同样。',
+            '勾选后先选业务平台，再搜索并选择已建产品（必填）。选中后会按资管结算规则同步账单类型、结算方式、税率等。券包同样。',
             style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
           ),
         ),
@@ -5051,6 +5629,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               current: pack.syncSourceRef,
               options: _syncSourceCatalog,
               locked: locked,
+              required: existing,
               hint: _syncSourceCatalog.isEmpty ? '字典加载中或暂无平台' : '请选择业务平台',
               onSelected: (value) {
                 _patchCouponPack(pack.id, (current) {
@@ -5074,6 +5653,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   );
                   if (changed && existing) {
                     next = next.applyAssetProduct(null);
+                    _assetProductSyncSeq[pack.id] =
+                        (_assetProductSyncSeq[pack.id] ?? 0) + 1;
+                    _assetProductSyncHint.remove(pack.id);
                   }
                   return next;
                 });
@@ -5089,10 +5671,19 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 syncSource: pack.syncSourceCode,
                 locked: locked,
                 label: '已建券包',
-                onSelected: (value) => _patchCouponPack(
-                  pack.id,
-                  (current) => current.applyAssetProduct(value),
-                ),
+                onSelected: (value) {
+                  _patchCouponPack(
+                    pack.id,
+                    (current) => current.applyAssetProduct(value),
+                  );
+                  unawaited(
+                    _syncAssetProductSettlement(
+                      rowId: pack.id,
+                      hit: value,
+                      pack: true,
+                    ),
+                  );
+                },
               )
             else ...[
             _skuTextCell(
@@ -5225,6 +5816,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               current: row.syncSourceRef,
               options: _syncSourceCatalog,
               locked: locked,
+              required: existing,
               hint: _syncSourceCatalog.isEmpty ? '字典加载中或暂无平台' : '请选择业务平台',
               onSelected: (value) {
                 _patchSkuDetail(row.id, (current) {
@@ -5246,6 +5838,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   );
                   if (changed && existing) {
                     next = next.applyAssetProduct(null);
+                    _assetProductSyncSeq[row.id] =
+                        (_assetProductSyncSeq[row.id] ?? 0) + 1;
+                    _assetProductSyncHint.remove(row.id);
                   }
                   return next;
                 });
@@ -5261,10 +5856,19 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 syncSource: row.syncSourceCode,
                 locked: locked,
                 label: '已建产品',
-                onSelected: (value) => _patchSkuDetail(
-                  row.id,
-                  (current) => current.applyAssetProduct(value),
-                ),
+                onSelected: (value) {
+                  _patchSkuDetail(
+                    row.id,
+                    (current) => current.applyAssetProduct(value),
+                  );
+                  unawaited(
+                    _syncAssetProductSettlement(
+                      rowId: row.id,
+                      hit: value,
+                      pack: false,
+                    ),
+                  );
+                },
               )
             else ...[
             _skuTextCell(
@@ -5409,9 +6013,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     required bool locked,
     required String label,
     required ValueChanged<ChannelProductHit?> onSelected,
+    bool supplier = false,
   }) {
     final noPlatform = syncSource.trim().isEmpty;
     final searching = _assetProductSearching.contains(rowId);
+    final syncing = _assetProductSyncing.contains(rowId);
+    final hintText = _assetProductSyncHint[rowId] ?? '';
     final hits = _assetProductHits[rowId] ?? const <ChannelProductHit>[];
     final values = [
       if (current != null &&
@@ -5423,6 +6030,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return ProposalField(
       label: label,
       required: true,
+      footer: hintText.isEmpty
+          ? null
+          : Text(
+              hintText,
+              style: TextStyle(
+                fontSize: 11,
+                color: syncing ? ProposalPalette.amber : ProposalPalette.text3,
+              ),
+            ),
       child: locked
           ? _readonlySelectedText(current?.label ?? '')
           : ProposalSelectField<ChannelProductHit>(
@@ -5434,7 +6050,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               remoteOptions: true,
               emptyText: noPlatform
                   ? '请先选择业务平台'
-                  : (searching ? '搜索中…' : '未找到已建产品'),
+                  : (searching
+                      ? '搜索中…'
+                      : (supplier ? '未找到已建供给产品' : '未找到已建产品')),
               options: [
                 for (final item in values)
                   ProposalSelectOption(
@@ -5442,14 +6060,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     label: item.label,
                     meta: [
                       if (item.productCode.isNotEmpty) item.productCode,
-                      if (item.channelName.isNotEmpty) item.channelName,
+                      if (supplier) ...[
+                        if (item.supplierName.isNotEmpty) item.supplierName,
+                        if (item.supplierCode.isNotEmpty) item.supplierCode,
+                      ] else if (item.channelName.isNotEmpty)
+                        item.channelName,
                     ].join(' · '),
                   ),
               ],
               onQueryChanged: noPlatform
                   ? null
                   : (query) => unawaited(
-                      _searchAssetProducts(rowId, syncSource, query),
+                      supplier
+                          ? _searchSupplierProducts(rowId, syncSource, query)
+                          : _searchAssetProducts(rowId, syncSource, query),
                     ),
               onSelected: onSelected,
             ),
@@ -5512,11 +6136,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     required ValueChanged<CatalogRef?> onSelected,
     String? hint,
     String? emptyText,
+    bool required = false,
   }) {
     final selected = _selectedCatalog(current, options);
     final values = _withCurrent(options, selected);
     return ProposalField(
       label: label,
+      required: required,
       child: locked || _showSelectedAsText
           ? _readonlySelectedText(selected?.label ?? '')
           : ProposalSelectField<CatalogRef>(
@@ -5551,12 +6177,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String? source,
     int maxLines = 1,
     TextInputType? keyboardType,
+    bool required = false,
   }) {
     final tone = proposalFieldTone(enabled: !locked, source: source);
     final multiline = maxLines > 1;
     final field = ProposalField(
       label: label,
-      source: source,
+      required: required,
       tone: tone,
       child: locked
           ? _readonlySelectedText(value, maxLines: maxLines)
@@ -5584,6 +6211,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     required String fieldKey,
     required bool locked,
     required ValueChanged<String> onPicked,
+    bool required = false,
   }) {
     final parsed = _parseDate(value);
     return _datePickerField(
@@ -5592,6 +6220,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       display: parsed == null ? value : _fmtDate(parsed),
       empty: value.trim().isEmpty,
       enabled: !locked,
+      required: required,
       onTap: locked
           ? null
           : () async {
@@ -5608,9 +6237,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     required String fieldKey,
     required bool locked,
     required ValueChanged<String> onChanged,
+    bool required = false,
   }) {
     return ProposalField(
       label: label,
+      required: required,
       child: locked
           ? _readonlySelectedText(value)
           : ProposalSelectField<String>(
@@ -5625,6 +6256,79 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               onSelected: (next) => onChanged(next ?? ''),
             ),
     );
+  }
+
+  Widget _skuStringSelectCell({
+    required String rowId,
+    required String label,
+    required String value,
+    required String fieldKey,
+    required List<String> options,
+    required bool locked,
+    required ValueChanged<String> onChanged,
+    String? addLabel,
+    bool required = false,
+  }) {
+    final current = value.trim();
+    final values = [
+      if (current.isNotEmpty && !options.contains(current)) current,
+      ...options,
+    ];
+    return ProposalField(
+      label: label,
+      required: required,
+      child: locked
+          ? _readonlySelectedText(current)
+          : ProposalSelectField<String>(
+              key: ValueKey('sku-$rowId-$fieldKey-$_fieldEpoch'),
+              value: current.isEmpty ? null : current,
+              title: label,
+              hint: values.isEmpty && addLabel == null ? '请先在管理端配置选项' : '请选择',
+              searchable: true,
+              addLabel: addLabel,
+              onAdd: addLabel == null
+                  ? null
+                  : () async {
+                      final added = await _promptAddedOption(addLabel);
+                      if (added == null || added.isEmpty) return;
+                      onChanged(added);
+                    },
+              options: [
+                for (final item in values)
+                  ProposalSelectOption(value: item, label: item),
+              ],
+              onSelected: (next) => onChanged(next ?? ''),
+            ),
+    );
+  }
+
+  Future<String?> _promptAddedOption(String title) async {
+    final controller = TextEditingController();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+          decoration: proposalInputDecoration(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null || value.isEmpty) return null;
+    return value;
   }
 
   void _writeLaunchFinance({
@@ -5810,6 +6514,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     required ValueChanged<String> onRemove,
     required void Function(String settleId, ProposalFinanceSettleTerms terms)
         onPatch,
+    String reviewItemPrefix = 'financeItem',
+    String? itemReviewLabel,
+    bool showItemReview = true,
   }) {
     return Container(
       width: double.infinity,
@@ -5851,6 +6558,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               enabled: enabled,
               canRemove: enabled && settlements.length > 1,
               reviewPrefix: reviewPrefix,
+              reviewItemPrefix: reviewItemPrefix,
+              itemReviewLabel: itemReviewLabel,
+              showItemReview: showItemReview,
               syncSource: syncSource,
               productSource: productSource,
               onRemove: () => onRemove(settlements[i].id),
@@ -5870,6 +6580,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     required bool enabled,
     required bool canRemove,
     required String reviewPrefix,
+    String reviewItemPrefix = 'financeItem',
+    String? itemReviewLabel,
+    bool showItemReview = true,
     required String syncSource,
     required String productSource,
     required VoidCallback onRemove,
@@ -5921,15 +6634,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           Expanded(
             child: Column(
               children: [
-                Align(
-                  alignment: Alignment.centerRight,
-                  child:
-                      _rowReviewToggle(
-                        'financeItem:$reviewPrefix:$skuId:${settle.id}',
-                        _financeReviewLabel,
-                      ) ??
-                      const SizedBox.shrink(),
-                ),
+                if (showItemReview)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child:
+                        _rowReviewToggle(
+                          '$reviewItemPrefix:$reviewPrefix:$skuId:${settle.id}',
+                          itemReviewLabel ?? _financeReviewLabel,
+                        ) ??
+                        const SizedBox.shrink(),
+                  ),
                 _settleTermsGrid(
                   wide: wide,
                   keyPrefix: '$reviewPrefix-$skuId-${settle.id}',
@@ -6279,7 +6993,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final noPlatform = syncSource.trim().isEmpty;
     final catalogHint = noPlatform ? '请先选择业务平台' : '请选择';
     final catalogEmptyText = noPlatform
-        ? '请先在渠道产品上选择业务平台'
+        ? '请先选择业务平台'
         : (loading ? '字典加载中…' : '该业务平台暂无选项');
 
     Widget field(
@@ -6320,6 +7034,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 maxLines: 4,
               )
             : ProposalSelectField<CatalogRef>(
+                key: ValueKey('settle-$keyPrefix-$label'),
                 value: selected == null || selected.isEmpty ? null : selected,
                 title: label,
                 hint: catalogHint,
@@ -6430,6 +7145,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             value: terms.invoiceType,
             options: kProposalInvoiceTypes,
             enabled: enabled,
+            fieldKey: 'settle-$keyPrefix-invoice',
             onSelected: (value) =>
                 onChanged(terms.copyWith(invoiceType: value ?? '')),
           ),
@@ -6438,6 +7154,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             value: terms.taxRate,
             options: kProposalTaxRates,
             enabled: enabled,
+            fieldKey: 'settle-$keyPrefix-tax',
             onSelected: (value) =>
                 onChanged(terms.copyWith(taxRate: value ?? '')),
           ),
@@ -6454,6 +7171,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             (value) => terms.copyWith(expireTime: value),
           ),
         ], columns: 5),
+        if (proposalIntakeSettleIsTier(terms))
+          _fieldGrid(wide, [
+            field(
+              '阶梯价格',
+              terms.settleRule,
+              (value) => terms.copyWith(settleRule: value),
+              hint: '例如：0-100万 1.2%；100万以上 1.0%',
+            ),
+          ], columns: 1),
         if (includeParties)
           _fieldGrid(wide, [
             field(
@@ -6477,6 +7203,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     required List<String> options,
     required bool enabled,
     required ValueChanged<String?> onSelected,
+    String? fieldKey,
   }) {
     final current = value.trim();
     final values = [
@@ -6488,6 +7215,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       child: !enabled
           ? _readonlySelectedText(current, maxLines: 3)
           : ProposalSelectField<String>(
+              key: ValueKey(fieldKey ?? 'settle-$label'),
               value: current.isEmpty ? null : current,
               title: label,
               hint: '请选择',
@@ -6811,6 +7539,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return _unsignedFileExts.contains(name.substring(dot + 1).toLowerCase());
   }
 
+  bool _isPdfContractFile(String name) =>
+      name.trim().toLowerCase().endsWith('.pdf');
+
+  bool _hasContractSourceFile(String prefix) =>
+      _text('${prefix}FileName').isNotEmpty ||
+      _text('${prefix}ObjectKey').isNotEmpty ||
+      _text('${prefix}FileUrl').isNotEmpty;
+
   String _unsignedFileMime(String name) {
     final ext = name.split('.').last.toLowerCase();
     return switch (ext) {
@@ -6926,76 +7662,67 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     widget.onChanged(_row);
   }
 
-  Future<void> _openUnsignedFile(String prefix) async {
+  Future<void> _openContractSourceFile(String prefix) async {
     final name = _text('${prefix}FileName').trim();
     final objectKey = _text('${prefix}ObjectKey').trim();
     final url = _text('${prefix}FileUrl').trim();
     if (name.isEmpty && objectKey.isEmpty && url.isEmpty) {
-      widget.onError('还没有上传合同文件');
+      widget.onError('还没有合同源文件');
       return;
     }
-    if (_openingContractPrefix != null || _downloadingContractPrefix != null) {
+    if (_openingContractPrefix != null) return;
+    if (name.isNotEmpty && !_isPdfContractFile(name)) {
+      widget.onError('内部预览仅支持 PDF。当前是 $name，已保存但无法在页面内打开。');
       return;
     }
     setState(() => _openingContractPrefix = prefix);
     try {
-      await openXflowAttachment(
-        context: context,
+      final bytes = await fetchXflowAttachmentBytes(
         service: XflowService(session: widget.session),
         item: {
-          'fileName': name.isEmpty ? '合同文件' : name,
+          'fileName': name.isEmpty ? '合同文件.pdf' : name,
           'objectKey': objectKey,
           'url': url,
           'mimeType': _unsignedFileMime(name),
         },
-        preferPreview: true,
+      );
+      if (!mounted) return;
+      final viewer = (widget.session.displayName ?? '').trim();
+      final watermark = [
+        if (viewer.isNotEmpty) viewer,
+        if (_row.code.trim().isNotEmpty) _row.code.trim(),
+        '仅供内部查阅',
+      ].join(' · ');
+      await showContractKbPdfPreview(
+        context: context,
+        fileName: name.isEmpty ? '合同文件.pdf' : name,
+        bytes: bytes,
+        watermark: watermark,
       );
     } catch (error) {
-      widget.onError(friendlyErrorText(error, fallback: '无法打开合同文件'));
+      widget.onError(friendlyErrorText(error, fallback: '无法预览合同文件'));
     } finally {
       if (mounted) setState(() => _openingContractPrefix = null);
     }
   }
 
-  Future<void> _downloadUnsignedFile(String prefix) async {
-    final name = _text('${prefix}FileName').trim();
-    final objectKey = _text('${prefix}ObjectKey').trim();
-    final url = _text('${prefix}FileUrl').trim();
-    if (name.isEmpty && objectKey.isEmpty && url.isEmpty) {
-      widget.onError('还没有上传合同文件');
-      return;
-    }
-    if (_openingContractPrefix != null || _downloadingContractPrefix != null) {
-      return;
-    }
-    setState(() => _downloadingContractPrefix = prefix);
-    try {
-      await downloadXflowAttachment(
-        context: context,
-        service: XflowService(session: widget.session),
-        item: {
-          'fileName': name.isEmpty ? '合同文件' : name,
-          'objectKey': objectKey,
-          'url': url,
-          'mimeType': _unsignedFileMime(name),
-        },
-      );
-    } catch (error) {
-      widget.onError(friendlyErrorText(error, fallback: '下载失败'));
-    } finally {
-      if (mounted) setState(() => _downloadingContractPrefix = null);
-    }
-  }
-
-  Widget _unsignedFileField(String prefix) {
-    final enabled = _canEditMarket;
+  Widget _contractSourceFileField(String prefix, {required bool allowUpload}) {
+    final enabled = _canEditMarket && allowUpload;
     final uploading = _uploadingContractPrefix == prefix;
     final opening = _openingContractPrefix == prefix;
-    final downloading = _downloadingContractPrefix == prefix;
     final dragging = _draggingUnsignedPrefix == prefix;
     final name = _text('${prefix}FileName');
-    final canOpen = name.isNotEmpty;
-    final picker = name.isEmpty
+    final canOpen = name.isNotEmpty || _hasContractSourceFile(prefix);
+    final canPreview = name.isEmpty || _isPdfContractFile(name);
+    final signed = !allowUpload;
+    final source = !canOpen
+        ? '未签合同 · 可上传 PDF / Word'
+        : canPreview
+        ? (signed ? '已签合同 · 仅内部 PDF 预览' : '未签合同 · 仅内部 PDF 预览')
+        : (signed
+              ? '已签合同 · Word 已保存 · 内部仅预览 PDF'
+              : '未签合同 · Word 已保存 · 内部仅预览 PDF');
+    final picker = name.isEmpty && allowUpload
         ? InkWell(
             onTap: enabled && !uploading
                 ? () => unawaited(_pickUnsignedFile(prefix))
@@ -7032,21 +7759,25 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ),
           )
         : InkWell(
-            onTap: opening ? null : () => unawaited(_openUnsignedFile(prefix)),
+            onTap: opening || !canOpen
+                ? null
+                : () => unawaited(_openContractSourceFile(prefix)),
             borderRadius: BorderRadius.circular(8),
             child: InputDecorator(
               decoration: proposalInputDecoration(readOnly: true),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.insert_drive_file_outlined,
+                  Icon(
+                    canPreview
+                        ? Icons.picture_as_pdf_outlined
+                        : Icons.description_outlined,
                     size: 16,
                     color: ProposalPalette.purple,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      name,
+                      name.isEmpty ? '合同源文件' : name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -7075,52 +7806,27 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           );
     return _FullWidthField(
       child: ProposalField(
-        label: '上传合同文件',
-        required: true,
-        source: canOpen ? '未签合同 · 可查看下载' : '未签合同',
-        tone: proposalFieldTone(
-          enabled: enabled,
-          source: canOpen ? '未签合同 · 可查看下载' : '未签合同',
-        ),
-        trailing: canOpen
-            ? Wrap(
-                spacing: 4,
-                children: [
-                  TextButton.icon(
-                    onPressed: opening || downloading
-                        ? null
-                        : () => unawaited(_openUnsignedFile(prefix)),
-                    icon: Icon(
-                      opening
-                          ? Icons.hourglass_top_rounded
-                          : Icons.visibility_outlined,
-                      size: 16,
-                    ),
-                    label: Text(opening ? '打开中…' : '查看合同'),
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      foregroundColor: ProposalPalette.purpleDeep,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: opening || downloading
-                        ? null
-                        : () => unawaited(_downloadUnsignedFile(prefix)),
-                    icon: Icon(
-                      downloading
-                          ? Icons.hourglass_top_rounded
-                          : Icons.download_outlined,
-                      size: 16,
-                    ),
-                    label: Text(downloading ? '下载中…' : '下载合同'),
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      foregroundColor: ProposalPalette.purpleDeep,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                  ),
-                ],
+        label: allowUpload ? '上传合同文件' : '合同源文件',
+        required: allowUpload,
+        source: source,
+        tone: proposalFieldTone(enabled: enabled || canOpen, source: source),
+        trailing: canOpen && canPreview
+            ? TextButton.icon(
+                onPressed: opening
+                    ? null
+                    : () => unawaited(_openContractSourceFile(prefix)),
+                icon: Icon(
+                  opening
+                      ? Icons.hourglass_top_rounded
+                      : Icons.visibility_outlined,
+                  size: 16,
+                ),
+                label: Text(opening ? '打开中…' : '查看合同'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  foregroundColor: ProposalPalette.purpleDeep,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
               )
             : null,
         child: _dropTarget(
@@ -7302,6 +8008,60 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
+  Widget _financeFieldRows(List<(String, String)> fields, int columns) {
+    final rows = <List<(String, String)>>[];
+    for (var i = 0; i < fields.length; i += columns) {
+      final end = i + columns > fields.length ? fields.length : i + columns;
+      rows.add(fields.sublist(i, end));
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final row in rows)
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var index = 0; index < row.length; index++) ...[
+                  if (index > 0) const SizedBox(width: 12),
+                  Expanded(child: _financeItem(row[index])),
+                ],
+                if (row.length < columns)
+                  const Expanded(child: SizedBox.shrink()),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _financeSideGroup({required String title, required Widget child}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAF8FC),
+        border: Border.all(color: const Color(0xFFE2D8EC)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: ProposalPalette.text,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 10),
+          child,
+        ],
+      ),
+    );
+  }
+
   Widget _financeItem((String, String) field) {
     final key = field.$1;
     final textual =
@@ -7325,6 +8085,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ? _textField(
               field.$2,
               key,
+              required: true,
               resetReview: 'financeCompleted',
               reviewSection: 'financeItem:$key',
               reviewLabel: _financeReviewLabel,
@@ -7332,6 +8093,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           : _numberField(
               field.$2,
               key,
+              required: true,
               source: source,
               resetReview: 'financeCompleted',
               reviewSection: 'financeItem:$key',
@@ -7572,11 +8334,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String? reviewSection,
     String reviewLabel = '复核',
     String hint = '请选择日期',
+    bool required = false,
   }) {
     final tone = proposalFieldTone(enabled: enabled, source: source);
     if (_showSelectedAsText) {
       return ProposalField(
         label: label,
+        required: required,
         source: source,
         tone: tone,
         footer: _contractEditFooter(fieldKey),
@@ -7586,6 +8350,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     }
     return ProposalField(
       label: label,
+      required: required,
       source: source,
       tone: tone,
       footer: _contractEditFooter(fieldKey),
@@ -7632,6 +8397,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String? reviewSection,
     String reviewLabel = '复核',
     bool? writable,
+    bool required = false,
   }) {
     final enabled = _fillEnabled(writable);
     final raw = _text(key).trim();
@@ -7643,6 +8409,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       empty: raw.isEmpty,
       enabled: enabled,
       source: source,
+      required: required,
       reviewSection: reviewSection,
       reviewLabel: reviewLabel,
       onTap: enabled
@@ -7661,6 +8428,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String key, {
     bool required = false,
     int maxLines = 1,
+    int? minLines,
     String? source,
     String? hint,
     String? resetReview,
@@ -7677,7 +8445,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         : TextFormField(
             key: ValueKey('$key-${_row.id}-$_fieldEpoch'),
             initialValue: _text(key),
-            minLines: multiline ? 3 : 1,
+            minLines: multiline ? (minLines ?? 3) : 1,
             maxLines: multiline ? null : 1,
             keyboardType: multiline ? TextInputType.multiline : null,
             enabled: enabled,
@@ -7722,6 +8490,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String reviewLabel = '复核',
     String? source,
     bool? writable,
+    bool required = false,
   }) {
     final enabled = _fillEnabled(writable);
     final tone = proposalFieldTone(enabled: enabled, source: source);
@@ -7729,6 +8498,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (_showSelectedAsText) {
       return ProposalField(
         label: label,
+        required: required,
         source: source,
         tone: tone,
         footer: footer,
@@ -7738,6 +8508,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     }
     return ProposalField(
       label: label,
+      required: required,
       source: source,
       tone: tone,
       footer: footer,
@@ -8306,6 +9077,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String reviewLabel = '复核',
     bool? writable,
     bool single = false,
+    bool required = false,
   }) {
     final enabled = _fillEnabled(writable);
     final tone = proposalFieldTone(enabled: enabled, source: source);
@@ -8314,6 +9086,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       return _FullWidthField(
         child: ProposalField(
           label: label,
+          required: required,
           source: source,
           tone: tone,
           trailing: _rowReviewToggle(reviewSection, reviewLabel),
@@ -8324,6 +9097,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return _FullWidthField(
       child: ProposalField(
         label: label,
+        required: required,
         source: source,
         tone: tone,
         trailing: _rowReviewToggle(reviewSection, reviewLabel),
@@ -8356,6 +9130,759 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ),
       ),
     );
+  }
+
+  Widget _purchaseMarketSection(bool wide) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        KeyedSubtree(
+          key: _marketKey,
+          child: const ProposalSectionTitle(
+            title: '一、市场部内容',
+            tag: 'Market',
+            description:
+                '提交人填写供给侧信息；市场部负责人一复核市场整板块，采购合同由财务部负责人二复核。',
+          ),
+        ),
+        _stepCard(
+          '01',
+          '基础信息',
+          '提案身份与类型',
+          _fieldGrid(wide, [
+            ProposalField(
+              label: '提案编号',
+              source: '系统自动生成',
+              tone: ProposalFieldTone.auto,
+              child: TextFormField(
+                readOnly: true,
+                initialValue: _row.code,
+                onTapOutside: (_) =>
+                    FocusManager.instance.primaryFocus?.unfocus(),
+                decoration: proposalInputDecoration(
+                  readOnly: true,
+                  tone: ProposalFieldTone.auto,
+                ),
+              ),
+            ),
+            ProposalField(
+              label: '提报人',
+              tone: ProposalFieldTone.auto,
+              child: Text(
+                _submitterName.isEmpty ? '—' : _submitterName,
+                style: const TextStyle(
+                  color: ProposalPalette.text,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            _textField(
+              '产品提案名称',
+              'proposalName',
+              required: true,
+              resetReview: 'marketCompleted',
+            ),
+            _dropdownField(
+              '提案类型',
+              'proposalType',
+              kPurchaseProposalTypes,
+              required: true,
+              resetReview: 'marketCompleted',
+            ),
+          ]),
+        ),
+        _stepCard(
+          '02',
+          '供给基础与人员',
+          '供给标签、品牌与责任人',
+          _fieldGrid(wide, [
+            _multiField(
+              '供给（标签二）',
+              'supplies',
+              widget.options.supplies,
+              '新增供给',
+              resetReview: 'marketCompleted',
+              single: true,
+              required: true,
+            ),
+            _dropdownField(
+              '供给侧品牌',
+              'supplyBrand',
+              widget.options.supplyBrands,
+              addLabel: '新增品牌',
+              required: true,
+              resetReview: 'marketCompleted',
+            ),
+            _personField(
+              '市场部负责人一（整板块复核）',
+              'marketOwner1',
+              positionIncludes: '市场部负责人一',
+              required: true,
+            ),
+            _personField(
+              '市场部负责人二（科技审核）',
+              'marketOwner2',
+              positionIncludes: '市场部负责人二',
+              required: true,
+            ),
+            _personField(
+              '运营',
+              'operator',
+              positionIncludes: '运营',
+              required: true,
+            ),
+            _configuredPresidentsField(),
+          ]),
+        ),
+        _contractCard('03', '采购合同', 'purchase', wide),
+        _stepCard(
+          '04',
+          '对接与合规',
+          '对接人、HUN 与发票',
+          _fieldGrid(wide, [
+            _textField(
+              '采购对接人（业务）',
+              'bizContact',
+              required: true,
+              resetReview: 'marketCompleted',
+            ),
+            _textField(
+              '采购对接人（财务）',
+              'financeContact',
+              required: true,
+              resetReview: 'marketCompleted',
+            ),
+            if (_canSeeHun)
+              _textField(
+                'HUN ID',
+                'hunId',
+                source: '加密处理，仅市场部负责人一填写、可见',
+                hint: '由市场部负责人一在复核时填写',
+                required: true,
+                writable: _canEditHun,
+                resetReview: 'marketCompleted',
+              )
+            else
+              const ProposalField(
+                label: 'HUN ID',
+                source: '加密处理，仅市场部负责人一填写、可见',
+                child: Text(
+                  '已加密',
+                  style: TextStyle(
+                    color: ProposalPalette.text3,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            _multiField(
+              '发票种类',
+              'invoiceTypes',
+              kProposalInvoiceTypes,
+              null,
+              required: true,
+              resetReview: 'marketCompleted',
+            ),
+          ]),
+        ),
+        _stepCard(
+          '05',
+          '供给产品',
+          '默认一条结算，可再新增明细。无需科技复核',
+          _purchaseSupplyProductsBlock(wide),
+        ),
+        _stepCard(
+          '06',
+          '政策与执行',
+          '供给政策可从采购合同供货商政策带入',
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _fieldGrid(wide, [
+                _textField(
+                  '供给政策',
+                  'supplierPolicy',
+                  maxLines: 6,
+                  minLines: 6,
+                  required: true,
+                  source: '合同抓取 · 可修改',
+                  hint: '选择已签署采购合同后自动带入供货商政策，也可手改',
+                  resetReview: 'marketCompleted',
+                ),
+                _textField(
+                  '销售政策',
+                  'salesPolicy',
+                  maxLines: 6,
+                  minLines: 6,
+                  required: true,
+                  resetReview: 'marketCompleted',
+                ),
+                _textField(
+                  '提案执行计划',
+                  'executionPlan',
+                  maxLines: 4,
+                  required: true,
+                  hint: '合作思路与合作逻辑，不涉及财务数据',
+                  resetReview: 'marketCompleted',
+                ),
+                _textField(
+                  '合作风险点',
+                  'riskPoints',
+                  maxLines: 4,
+                  required: true,
+                  resetReview: 'marketCompleted',
+                ),
+              ]),
+            ],
+          ),
+        ),
+        _moduleReview(
+          title: '市场部板块统一复核',
+          description: proposalIntakeMarketReviewBlocked(_review)
+              ? '请先完成科技部复核，再复核市场（先科技后市场）。'
+              : '市场部负责人一确认提交人填写的全部业务内容',
+          keyName: 'marketCompleted',
+          buttonLabel: '整个板块复核通过',
+          locked: proposalIntakeMarketReviewBlocked(_review),
+        ),
+      ],
+    );
+  }
+
+  Widget _purchaseFinanceSection(bool wide) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        KeyedSubtree(
+          key: _financeKey,
+          child: const ProposalSectionTitle(
+            title: '三、财务部内容',
+            tag: 'Finance',
+            description: '财务板块暂不复核。请指定财务部负责人一、二；负责人二仍复核采购合同。',
+          ),
+        ),
+        ProposalCard(
+          child: Column(
+            children: [
+              _fieldGrid(wide, [
+                _personField(
+                  '财务部负责人一',
+                  'financeOwner1',
+                  positionIncludes: '财务部负责人一',
+                  required: true,
+                ),
+                _personField(
+                  '财务部负责人二（采购合同复核）',
+                  'financeOwner2',
+                  positionIncludes: '财务部负责人二',
+                  required: true,
+                ),
+                _textField(
+                  '备注',
+                  'financeRemark',
+                  maxLines: 3,
+                  required: true,
+                  resetReview: 'marketCompleted',
+                ),
+              ]),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _purchaseSupplyProductsBlock(bool wide) {
+    final rows = proposalIntakeSupplyProducts(_form);
+    final locked = _showSelectedAsText || !_canEditMarket;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                '供给产品',
+                style: TextStyle(
+                  color: ProposalPalette.text,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            if (_canEditMarket)
+              TextButton.icon(
+                onPressed: _addSupplyProduct,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('新增供给产品'),
+              ),
+          ],
+        ),
+        const Text(
+          '只填供给侧。未开始填写的卡片可不填。勾选「是否已有供给产品」后必须搜索选择已建供应商产品，选中后同步资管结算规则。新建时请先选供应商。',
+          style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+        ),
+        const SizedBox(height: 8),
+        _existingSupplyToggle(locked: locked),
+        if (rows.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+              '尚未添加供给产品',
+              style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
+            ),
+          ),
+        for (var i = 0; i < rows.length; i++) ...[
+          const SizedBox(height: 10),
+          _purchaseSupplyProductCard(rows[i], i + 1, wide),
+        ],
+      ],
+    );
+  }
+
+  Widget _existingSupplyToggle({required bool locked}) {
+    final enabled = proposalIntakeIsExistingSupplyProduct(_form);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: locked ? null : () => _setExistingSupplyEnabled(!enabled),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 22,
+                height: 22,
+                child: Checkbox(
+                  value: enabled,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                  onChanged: locked
+                      ? null
+                      : (value) => _setExistingSupplyEnabled(value == true),
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Text(
+                '是否已有供给产品',
+                style: TextStyle(
+                  color: ProposalPalette.text,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.only(top: 4),
+          child: Text(
+            '勾选后先选业务平台，再搜索并选择已建供给产品（必填）。选中后会按资管供应商产品结算规则同步账单类型、结算方式、税率等。',
+            style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _supplySupplierCell({
+    required CatalogRef? current,
+    required bool locked,
+    required String syncSource,
+    required ValueChanged<CatalogRef?> onSelected,
+  }) {
+    if (syncSource.trim().isNotEmpty) {
+      _prefetchSettle(syncSource, 'SUPPLIER');
+    }
+    final settleKey = _settleCacheKey(syncSource, 'SUPPLIER');
+    final loading = _settleLoading.contains(settleKey);
+    final options =
+        (_settleBundles[settleKey] ?? const _SettleCatalogBundle()).suppliers;
+    final noPlatform = syncSource.trim().isEmpty;
+    return _skuCatalogCell(
+      label: '供应商',
+      current: current,
+      options: options,
+      locked: locked,
+      required: true,
+      hint: noPlatform
+          ? '请先选择业务平台'
+          : (options.isEmpty
+                ? (loading ? '字典加载中…' : '该业务平台暂无供应商')
+                : '请选择供应商'),
+      emptyText: noPlatform
+          ? '请先选择业务平台'
+          : (loading ? '字典加载中…' : '该业务平台暂无供应商'),
+      onSelected: onSelected,
+    );
+  }
+
+  Widget _purchaseSupplyProductCard(
+    ProposalSupplyProductRow row,
+    int index,
+    bool wide,
+  ) {
+    final locked = _showSelectedAsText || !_canEditMarket;
+    final existing =
+        proposalIntakeIsExistingSupplyProduct(_form) || row.isExistingBuilt;
+    final title = existing &&
+            row.assetProduct != null &&
+            row.assetProduct!.isNotEmpty
+        ? '供给产品 $index · ${row.assetProduct!.label}'
+        : (row.supplierLabel.isEmpty
+            ? '供给产品 $index'
+            : '供给产品 $index · ${row.supplierLabel}');
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAF8FC),
+        border: Border.all(color: const Color(0xFFE2D8EC)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: ProposalPalette.text,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              if (_canEditMarket)
+                TextButton(
+                  onPressed: () => _removeSupplyProduct(row.id),
+                  child: const Text('删除'),
+                ),
+            ],
+          ),
+          _fieldGrid(wide, [
+            _skuCatalogCell(
+              label: '业务平台',
+              current: row.syncSourceRef,
+              options: _syncSourceCatalog,
+              locked: locked,
+              required: existing,
+              hint: _syncSourceCatalog.isEmpty ? '字典加载中或暂无平台' : '请选择业务平台',
+              onSelected: (value) {
+                _patchSupplyProduct(row.id, (current) {
+                  final changed = current.syncSourceCode != (value?.code ?? '');
+                  var next = current.copyWith(
+                    syncSourceRef: value,
+                    supplierRef: changed ? null : current.supplierRef,
+                    supplierCode: changed ? '' : current.supplierCode,
+                    settlements: changed
+                        ? [
+                            for (final item
+                                in proposalIntakeSupplySettlements(current))
+                              item.copyWith(
+                                terms: item.terms.clearedCatalog(
+                                  keepManual: false,
+                                ),
+                              ),
+                          ]
+                        : current.settlements,
+                  );
+                  if (changed && existing) {
+                    next = next.applyAssetProduct(null);
+                    _assetProductSyncSeq[row.id] =
+                        (_assetProductSyncSeq[row.id] ?? 0) + 1;
+                    _assetProductSyncHint.remove(row.id);
+                  }
+                  return next;
+                });
+                if (value != null && value.isNotEmpty) {
+                  _prefetchSettle(value.code, 'SUPPLIER');
+                }
+              },
+            ),
+            if (existing)
+              _assetProductSearchCell(
+                rowId: row.id,
+                current: row.assetProduct,
+                syncSource: row.syncSourceCode,
+                locked: locked,
+                label: '已建供给产品',
+                supplier: true,
+                onSelected: (value) {
+                  _patchSupplyProduct(
+                    row.id,
+                    (current) => current.applyAssetProduct(value),
+                  );
+                  unawaited(
+                    _syncSupplierProductSettlement(rowId: row.id, hit: value),
+                  );
+                },
+              )
+            else
+              _supplySupplierCell(
+                current: row.supplierRef ??
+                    (row.supplierCode.trim().isEmpty
+                        ? null
+                        : CatalogRef(
+                            code: row.supplierCode,
+                            name: row.supplierCode,
+                          )),
+                locked: locked,
+                syncSource: row.syncSourceCode,
+                onSelected: (value) => _patchSupplyProduct(
+                  row.id,
+                  (current) => current.copyWith(
+                    supplierRef: value,
+                    supplierCode: value?.code ?? '',
+                  ),
+                ),
+              ),
+            if (!existing) ...[
+            _skuTextCell(
+              rowId: row.id,
+              label: '门槛金额',
+              value: row.thresholdAmount,
+              fieldKey: 'threshold',
+              hint: '数字',
+              locked: locked,
+              required: true,
+              keyboardType: TextInputType.number,
+              onChanged: (value) => _patchSupplyProduct(
+                row.id,
+                (current) => current.copyWith(thresholdAmount: value),
+                rebuild: false,
+              ),
+            ),
+            _skuYesNoCell(
+              rowId: row.id,
+              label: '是否元通券',
+              value: row.isYuantongCoupon,
+              fieldKey: 'yuantong',
+              locked: locked,
+              required: true,
+              onChanged: (value) => _patchSupplyProduct(
+                row.id,
+                (current) => current.copyWith(isYuantongCoupon: value),
+              ),
+            ),
+            _skuYesNoCell(
+              rowId: row.id,
+              label: '是否单独返利制券',
+              value: row.isStandaloneRebate,
+              fieldKey: 'standalone',
+              locked: locked,
+              required: true,
+              onChanged: (value) => _patchSupplyProduct(
+                row.id,
+                (current) => current.copyWith(isStandaloneRebate: value),
+              ),
+            ),
+            _skuYesNoCell(
+              rowId: row.id,
+              label: '是否低折扣券',
+              value: row.isLowDiscountCoupon,
+              fieldKey: 'lowDiscount',
+              locked: locked,
+              required: true,
+              onChanged: (value) => _patchSupplyProduct(
+                row.id,
+                (current) => current.copyWith(isLowDiscountCoupon: value),
+              ),
+            ),
+            _skuStringSelectCell(
+              rowId: row.id,
+              label: '返利模式',
+              value: row.rebateMode,
+              fieldKey: 'rebate',
+              options: widget.options.rebateModes,
+              locked: locked,
+              required: true,
+              addLabel: '新增返利模式',
+              onChanged: (value) => _patchSupplyProduct(
+                row.id,
+                (current) => current.copyWith(rebateMode: value),
+              ),
+            ),
+            _skuCatalogCell(
+              label: '油品分类',
+              current: row.oilCategoryRef ??
+                  CatalogRef.fromName(row.oilCategory),
+              options: _sectorCatalog,
+              locked: locked,
+              required: true,
+              hint: _sectorCatalog.isEmpty ? '请选择或稍后手填' : '请选择油品分类',
+              onSelected: (value) => _patchSupplyProduct(
+                row.id,
+                (current) => current.copyWith(
+                  oilCategory: value?.name ?? '',
+                  oilCategoryRef: value,
+                ),
+              ),
+            ),
+            ],
+          ]),
+          if (!existing) ...[
+          const SizedBox(height: 8),
+          _fieldGrid(wide, [
+            _skuDateCell(
+              rowId: row.id,
+              label: '产品生效日期',
+              value: row.effectiveDate,
+              fieldKey: 'effective',
+              locked: locked,
+              required: true,
+              onPicked: (value) => _patchSupplyProduct(
+                row.id,
+                (current) => current.copyWith(effectiveDate: value),
+              ),
+            ),
+            _skuDateCell(
+              rowId: row.id,
+              label: '产品失效日期',
+              value: row.expireDate,
+              fieldKey: 'expire',
+              locked: locked,
+              required: true,
+              onPicked: (value) => _patchSupplyProduct(
+                row.id,
+                (current) => current.copyWith(expireDate: value),
+              ),
+            ),
+          ], columns: 2),
+          ],
+          const SizedBox(height: 10),
+          _skuSettleProductCard(
+            skuId: row.id,
+            title: '供给规则',
+            emptyTitle: '尚未添加结算规则',
+            reviewPrefix: 'supplySettle',
+            reviewItemPrefix: 'technologyItem',
+            itemReviewLabel: _techReviewLabel,
+            showItemReview: false,
+            settlements: proposalIntakeSupplySettlements(row),
+            wide: wide,
+            enabled: _canEditMarket && !_showSelectedAsText,
+            syncSource: row.syncSourceCode,
+            productSource: 'SUPPLIER',
+            onAdd: () => _addSupplySettle(row.id),
+            onRemove: (settleId) => _removeSupplySettle(row.id, settleId),
+            onPatch: (settleId, terms) =>
+                _patchSupplySettle(row.id, settleId, terms),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _writeSupplyProducts(
+    List<ProposalSupplyProductRow> rows, {
+    bool rebuild = true,
+    bool? isExistingSupplyProduct,
+  }) {
+    final form = Map<String, dynamic>.from(_form)
+      ..['supplyProducts'] = [for (final row in rows) row.toJson()];
+    if (isExistingSupplyProduct != null) {
+      form['isExistingSupplyProduct'] = isExistingSupplyProduct;
+    }
+    final review = Map<String, dynamic>.from(_review)
+      ..['marketCompleted'] = false;
+    _dirty = true;
+    _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
+    if (rebuild && mounted) setState(() {});
+    widget.onChanged(_row);
+  }
+
+  void _setExistingSupplyEnabled(bool enabled) {
+    if (!_canEditMarket) return;
+    final label = enabled ? '是' : '否';
+    _writeSupplyProducts(
+      [
+        for (final row in proposalIntakeSupplyProducts(_form))
+          row.copyWith(
+            existingBuilt: label,
+            assetProduct: enabled ? row.assetProduct : null,
+          ),
+      ],
+      isExistingSupplyProduct: enabled,
+    );
+  }
+
+  void _addSupplyProduct() {
+    if (!_canEditMarket) return;
+    _writeSupplyProducts([
+      ...proposalIntakeSupplyProducts(_form),
+      proposalIntakeNewSupplyProduct(
+        existing: proposalIntakeIsExistingSupplyProduct(_form),
+      ),
+    ]);
+  }
+
+  void _removeSupplyProduct(String id) {
+    if (!_canEditMarket) return;
+    _writeSupplyProducts([
+      for (final row in proposalIntakeSupplyProducts(_form))
+        if (row.id != id) row,
+    ]);
+  }
+
+  void _patchSupplyProduct(
+    String id,
+    ProposalSupplyProductRow Function(ProposalSupplyProductRow row) update, {
+    bool rebuild = true,
+  }) {
+    if (!_canEditMarket) return;
+    _writeSupplyProducts(
+      [
+        for (final row in proposalIntakeSupplyProducts(_form))
+          if (row.id == id) update(row) else row,
+      ],
+      rebuild: rebuild,
+    );
+  }
+
+  void _addSupplySettle(String productId) {
+    if (!_canEditMarket) return;
+    _patchSupplyProduct(productId, (row) {
+      return row.copyWith(
+        settlements: [
+          ...proposalIntakeSupplySettlements(row),
+          ProposalSkuSettleRow(id: proposalIntakeNewSkuSettleId()),
+        ],
+      );
+    });
+  }
+
+  void _removeSupplySettle(String productId, String settleId) {
+    if (!_canEditMarket) return;
+    _patchSupplyProduct(productId, (row) {
+      final next = [
+        for (final item in proposalIntakeSupplySettlements(row))
+          if (item.id != settleId) item,
+      ];
+      return row.copyWith(
+        settlements: next.isEmpty
+            ? [ProposalSkuSettleRow(id: proposalIntakeNewSkuSettleId())]
+            : next,
+      );
+    });
+  }
+
+  void _patchSupplySettle(
+    String productId,
+    String settleId,
+    ProposalFinanceSettleTerms terms,
+  ) {
+    if (!_canEditMarket) return;
+    _patchSupplyProduct(productId, (row) {
+      return row.copyWith(
+        settlements: [
+          for (final item in proposalIntakeSupplySettlements(row))
+            if (item.id == settleId) item.copyWith(terms: terms) else item,
+        ],
+      );
+    }, rebuild: true);
   }
 }
 
@@ -8519,12 +10046,14 @@ class _OnlineProductFileTile extends StatelessWidget {
 class _SettleCatalogBundle {
   const _SettleCatalogBundle({
     this.channels = const [],
+    this.suppliers = const [],
     this.billTypes = const [],
     this.settleMethods = const [],
     this.formulas = const [],
   });
 
   final List<CatalogRef> channels;
+  final List<CatalogRef> suppliers;
   final List<CatalogRef> billTypes;
   final List<CatalogRef> settleMethods;
   final List<CatalogRef> formulas;

@@ -93,6 +93,134 @@ class ProposalPerson {
   }
 }
 
+class ProposalApprovedPurchaseHit {
+  const ProposalApprovedPurchaseHit({
+    required this.id,
+    required this.code,
+    required this.title,
+    this.purchaseMode = '',
+    this.purchaseContractId,
+    this.purchaseNo = '',
+    this.purchaseName = '',
+    this.purchaseSignDate = '',
+    this.purchaseOurParty = '',
+    this.purchaseCounterparty = '',
+    this.purchaseValidPeriod = '',
+    this.purchaseCoreTerms = '',
+    this.purchaseFileName = '',
+    this.purchaseObjectKey = '',
+    this.purchaseFileUrl = '',
+    this.supplierPolicy = '',
+    this.supplySettleMode = '',
+    this.supplySettleCycle = '',
+    this.supplyPayer = '',
+    this.supplyPayAccount = '',
+    this.purchaseProducts = const [],
+  });
+
+  final int id;
+  final String code;
+  final String title;
+  final String purchaseMode;
+  final int? purchaseContractId;
+  final String purchaseNo;
+  final String purchaseName;
+  final String purchaseSignDate;
+  final String purchaseOurParty;
+  final String purchaseCounterparty;
+  final String purchaseValidPeriod;
+  final String purchaseCoreTerms;
+  final String purchaseFileName;
+  final String purchaseObjectKey;
+  final String purchaseFileUrl;
+  final String supplierPolicy;
+  final String supplySettleMode;
+  final String supplySettleCycle;
+  final String supplyPayer;
+  final String supplyPayAccount;
+  final List<String> purchaseProducts;
+
+  String get label {
+    if (title.isNotEmpty && code.isNotEmpty) return '$code · $title';
+    if (title.isNotEmpty) return title;
+    return code;
+  }
+
+  factory ProposalApprovedPurchaseHit.fromJson(Map<String, dynamic> json) {
+    final products = json['purchaseProducts'];
+    return ProposalApprovedPurchaseHit(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      code: '${json['code'] ?? ''}'.trim(),
+      title: '${json['title'] ?? json['proposalName'] ?? ''}'.trim(),
+      purchaseMode: '${json['purchaseMode'] ?? ''}'.trim(),
+      purchaseContractId: (json['purchaseContractId'] as num?)?.toInt(),
+      purchaseNo: '${json['purchaseNo'] ?? ''}'.trim(),
+      purchaseName: '${json['purchaseName'] ?? ''}'.trim(),
+      purchaseSignDate: '${json['purchaseSignDate'] ?? ''}'.trim(),
+      purchaseOurParty: '${json['purchaseOurParty'] ?? ''}'.trim(),
+      purchaseCounterparty: '${json['purchaseCounterparty'] ?? ''}'.trim(),
+      purchaseValidPeriod: '${json['purchaseValidPeriod'] ?? ''}'.trim(),
+      purchaseCoreTerms: '${json['purchaseCoreTerms'] ?? ''}'.trim(),
+      purchaseFileName: '${json['purchaseFileName'] ?? ''}'.trim(),
+      purchaseObjectKey: '${json['purchaseObjectKey'] ?? ''}'.trim(),
+      purchaseFileUrl: '${json['purchaseFileUrl'] ?? ''}'.trim(),
+      supplierPolicy: '${json['supplierPolicy'] ?? ''}'.trim(),
+      supplySettleMode: '${json['supplySettleMode'] ?? ''}'.trim(),
+      supplySettleCycle: '${json['supplySettleCycle'] ?? ''}'.trim(),
+      supplyPayer: '${json['supplyPayer'] ?? ''}'.trim(),
+      supplyPayAccount: '${json['supplyPayAccount'] ?? ''}'.trim(),
+      purchaseProducts: products is List
+          ? [
+              for (final item in products)
+                '$item'.trim(),
+            ].where((item) => item.isNotEmpty).toList(growable: false)
+          : const [],
+    );
+  }
+}
+
+bool proposalIntakeHasExistingPurchaseProposal(Map<String, dynamic> form) {
+  final raw = form['hasExistingPurchaseProposal'];
+  if (raw is bool) return raw;
+  final text = '$raw'.trim().toLowerCase();
+  return text == 'true' || text == '1' || text == '是' || text == 'yes';
+}
+
+int proposalIntakeLinkedPurchaseProposalId(Map<String, dynamic> form) {
+  return int.tryParse('${form['linkedPurchaseProposalId'] ?? ''}'.trim()) ?? 0;
+}
+
+Map<String, dynamic> proposalIntakePatchFromApprovedPurchase(
+  ProposalApprovedPurchaseHit hit,
+) {
+  final patch = proposalIntakeResetContractFields('purchase');
+  patch['hasExistingPurchaseProposal'] = true;
+  patch['linkedPurchaseProposalId'] = hit.id;
+  patch['linkedPurchaseProposalCode'] = hit.code;
+  patch['linkedPurchaseProposalTitle'] = hit.title;
+  patch['purchaseMode'] = hit.purchaseMode;
+  patch['purchaseContractId'] = hit.purchaseContractId;
+  _putField(patch, 'purchaseNo', hit.purchaseNo);
+  _putField(patch, 'purchaseName', hit.purchaseName);
+  _putField(patch, 'purchaseSignDate', hit.purchaseSignDate);
+  _putField(patch, 'purchaseOurParty', hit.purchaseOurParty);
+  _putField(patch, 'purchaseCounterparty', hit.purchaseCounterparty);
+  _putField(patch, 'purchaseValidPeriod', hit.purchaseValidPeriod);
+  _putField(patch, 'purchaseCoreTerms', hit.purchaseCoreTerms);
+  _putField(patch, 'purchaseFileName', hit.purchaseFileName);
+  _putField(patch, 'purchaseObjectKey', hit.purchaseObjectKey);
+  _putField(patch, 'purchaseFileUrl', hit.purchaseFileUrl);
+  _putField(patch, 'supplierPolicy', hit.supplierPolicy);
+  _putField(patch, 'supplySettleMode', hit.supplySettleMode);
+  _putField(patch, 'supplySettleCycle', hit.supplySettleCycle);
+  _putField(patch, 'supplyPayer', hit.supplyPayer);
+  _putField(patch, 'supplyPayAccount', hit.supplyPayAccount);
+  if (hit.purchaseProducts.isNotEmpty) {
+    patch['purchaseProducts'] = hit.purchaseProducts;
+  }
+  return patch;
+}
+
 class ProposalContractChoice {
   const ProposalContractChoice({
     required this.id,
@@ -600,6 +728,8 @@ class ProposalIntakeOptions {
     required this.channels,
     this.institutions = const [],
     required this.profitModes,
+    this.supplyBrands = const [],
+    this.rebateModes = const [],
     required this.platforms,
     required this.outputForms,
     required this.developmentTypes,
@@ -628,6 +758,8 @@ class ProposalIntakeOptions {
   final List<String> channels;
   final List<CatalogRef> institutions;
   final List<String> profitModes;
+  final List<String> supplyBrands;
+  final List<String> rebateModes;
   final List<ProposalLinkedOption> platforms;
   final List<String> outputForms;
   final List<String> developmentTypes;
@@ -676,6 +808,8 @@ class ProposalIntakeOptions {
       channels: _strings(market['channels']),
       institutions: _catalogChoices(market['institutions']),
       profitModes: _strings(market['profitModes']),
+      supplyBrands: _strings(market['supplyBrands']),
+      rebateModes: _strings(market['rebateModes']),
       platforms: _list(technology['platforms'])
           .map(
             (item) =>
@@ -881,6 +1015,35 @@ Map<String, dynamic> proposalIntakeResetContractFields(String prefix) {
   };
 }
 
+/// 从合同归集详情取出第一个源文件，写入提案表单，供内部 PDF 预览。
+Map<String, dynamic> proposalIntakeFilePatchFromContractDetail(
+  String prefix,
+  Map<String, dynamic> detail,
+) {
+  final files = detail['files'];
+  if (files is! List || files.isEmpty) return <String, dynamic>{};
+  Map<String, dynamic>? first;
+  for (final item in files) {
+    if (item is Map) {
+      first = Map<String, dynamic>.from(item);
+      break;
+    }
+  }
+  if (first == null) return <String, dynamic>{};
+  final name = '${first['fileName'] ?? ''}'.trim();
+  final objectKey = '${first['objectKey'] ?? ''}'.trim();
+  final url = '${first['url'] ?? ''}'.trim();
+  if (name.isEmpty && objectKey.isEmpty && url.isEmpty) {
+    return <String, dynamic>{};
+  }
+  return <String, dynamic>{
+    '${prefix}FileName': name,
+    '${prefix}ObjectKey': objectKey,
+    '${prefix}FileUrl': url,
+    '${prefix}FileSize': first['sizeBytes'],
+  };
+}
+
 /// 把合同归集详情和提案相关字段写入提案表单。
 /// 新合同没有的抓取字段会写成空字符串，避免上一份合同的内容残留。
 Map<String, dynamic> proposalIntakePatchFromContract({
@@ -939,6 +1102,11 @@ Map<String, dynamic> proposalIntakePatchFromContract({
     _putField(patch, 'channelPayee', pick(['channelPayee']));
     _putField(patch, 'channelReceiveAccount', pick(['channelReceiveAccount']));
   }
+  patch['${prefix}FileName'] = '';
+  patch['${prefix}ObjectKey'] = '';
+  patch['${prefix}FileUrl'] = '';
+  patch['${prefix}FileSize'] = null;
+  patch.addAll(proposalIntakeFilePatchFromContractDetail(prefix, detail));
   return patch;
 }
 
@@ -1078,10 +1246,12 @@ String proposalIntakeActionLabel(String action) {
   return switch (action) {
     'fill' => '待填写',
     'fill_tech' => '待填写科技',
+    'fill_finance_interface' => '待填写财务技术接口',
     'start_review' => '待重新提交复核',
     'review_market' => '待复核市场部',
     'review_tech' => '待复核科技',
     'review_finance' => '待复核财务',
+    'review_finance_interface' => '待复核财务技术接口',
     'review_finance_module' => '待整板块复核财务',
     'review_contract' => '待审核合同',
     'submit_president' => '待通知最终人',
@@ -1280,10 +1450,12 @@ bool _proposalJsonEqual(Object? left, Object? right) {
       jsonEncode(right ?? <String, dynamic>{});
 }
 
-/// 复核相关负责人：没选就不能通知科技 / 提交复核。运营为可选项。
+/// 复核相关负责人：没选就不能通知科技 / 提交复核。
+/// 销售和采购填写环节都要指定运营。
 List<String> missingProposalReviewAssignees(
   Map<String, dynamic> form, {
   bool includeTech = true,
+  bool purchase = false,
 }) {
   int idOf(String key) => int.tryParse('${form[key] ?? ''}'.trim()) ?? 0;
   final missing = <String>[];
@@ -1296,6 +1468,7 @@ List<String> missingProposalReviewAssignees(
   require('marketOwner1UserId', '市场部负责人一');
   require('financeOwner1UserId', '财务部负责人一');
   require('financeOwner2UserId', '财务部负责人二');
+  require('operatorUserId', '运营');
   return missing;
 }
 
@@ -1896,6 +2069,75 @@ List<ProposalSkuSettleRow> proposalIntakeSkuSettlements(
   ProposalSkuDetailRow row,
 ) => proposalIntakeSettlementsOf(id: row.id, settlements: row.settlements);
 
+ProposalFinanceSettleTerms proposalIntakeTermsFromChannelSettlementItem(
+  ChannelProductSettlementItem item, {
+  CatalogRef? channelRef,
+  List<CatalogRef> formulas = const [],
+  List<CatalogRef> billTypes = const [],
+}) {
+  final settleModeRef = item.settleModeRef;
+  final billTypeRef = catalogMatchByCode(item.billTypeRef, billTypes);
+  final formulaRef = catalogMatchFormula(
+    formulaContent: item.formulaContent,
+    settleMethod: item.settleMethod,
+    formulas: formulas,
+  );
+  final invoice = item.invoiceTypeCode.isNotEmpty
+      ? item.invoiceTypeCode
+      : item.invoiceTypeName;
+  final tax = item.taxRateCode.isNotEmpty ? item.taxRateCode : item.taxRateName;
+  final ratio = catalogScalarText(item.settlementRatio, percent: true);
+  final unitPrice = catalogScalarText(item.unitPrice);
+  return ProposalFinanceSettleTerms(
+    billType: billTypeRef?.name ?? '',
+    billTypeRef: billTypeRef,
+    channelRef: channelRef,
+    settleMode: settleModeRef?.name ?? '',
+    settleModeRef: settleModeRef,
+    settleRatio: ratio,
+    settleUnitPrice: unitPrice,
+    formula: formulaRef?.name ?? '',
+    formulaRef: formulaRef,
+    invoiceType: invoice,
+    taxRate: tax,
+    effectiveTime: catalogDateText(item.effectiveTime),
+    expireTime: catalogDateText(item.expireTime),
+    settlePrice: ratio.isNotEmpty ? ratio : unitPrice,
+    settleRule: formulaRef?.name ?? '',
+    counterparty: item.counterpartyEntity,
+    ourParty: item.ourEntity,
+  );
+}
+
+List<ProposalSkuSettleRow> proposalIntakeSettlementsFromChannelCatalog(
+  ChannelProductSettlement data, {
+  CatalogRef? fallbackChannel,
+  List<CatalogRef> formulas = const [],
+  List<CatalogRef> billTypes = const [],
+}) {
+  final channel = data.channelRef ?? fallbackChannel;
+  if (data.items.isEmpty) {
+    return [
+      ProposalSkuSettleRow(
+        id: proposalIntakeNewSkuSettleId(),
+        terms: ProposalFinanceSettleTerms(channelRef: channel),
+      ),
+    ];
+  }
+  return [
+    for (var i = 0; i < data.items.length; i++)
+      ProposalSkuSettleRow(
+        id: 'st-asset-${data.id ?? 0}-${data.items[i].sortNo}-$i',
+        terms: proposalIntakeTermsFromChannelSettlementItem(
+          data.items[i],
+          channelRef: channel,
+          formulas: formulas,
+          billTypes: billTypes,
+        ),
+      ),
+  ];
+}
+
 bool proposalIntakeIsCouponPack(Map<String, dynamic> form) {
   final raw = form['isCouponPack'];
   if (raw is bool) return raw;
@@ -1904,6 +2146,12 @@ bool proposalIntakeIsCouponPack(Map<String, dynamic> form) {
 }
 
 bool proposalIntakeIsExistingBuilt(Map<String, dynamic> form) {
+  return proposalIntakeExistingBuiltOverride(form) ??
+      (proposalIntakeSkuDetails(form).any((item) => item.isExistingBuilt) ||
+          proposalIntakeCouponPacks(form).any((item) => item.isExistingBuilt));
+}
+
+bool? proposalIntakeExistingBuiltOverride(Map<String, dynamic> form) {
   final raw = form['isExistingBuilt'];
   if (raw is bool) return raw;
   final text = '$raw'.trim().toLowerCase();
@@ -1913,8 +2161,7 @@ bool proposalIntakeIsExistingBuilt(Map<String, dynamic> form) {
   if (text == 'false' || text == '0' || text == '否' || text == 'no') {
     return false;
   }
-  return proposalIntakeSkuDetails(form).any((item) => item.isExistingBuilt) ||
-      proposalIntakeCouponPacks(form).any((item) => item.isExistingBuilt);
+  return null;
 }
 
 List<ProposalSkuSettleRow> proposalIntakePackSettlements(
@@ -1936,32 +2183,59 @@ List<String> proposalIntakeSkuSettleReviewKeys(Map<String, dynamic> form) {
   ];
 }
 
-List<String> proposalIntakeSkuSettleIssues(Map<String, dynamic> form) {
+bool proposalIntakeSkuStarted(ProposalSkuDetailRow sku) {
+  return sku.productName.trim().isNotEmpty ||
+      (sku.assetProduct != null && sku.assetProduct!.isNotEmpty);
+}
+
+bool proposalIntakePackStarted(ProposalCouponPackRow pack) {
+  return pack.name.trim().isNotEmpty ||
+      (pack.assetProduct != null && pack.assetProduct!.isNotEmpty) ||
+      pack.skuIds.isNotEmpty;
+}
+
+List<String> proposalIntakeSkuSettleIssues(
+  Map<String, dynamic> form, {
+  bool includeSettlements = true,
+}) {
   final issues = <String>[];
   final channel = proposalIntakeSkuDetails(form);
+  final existingBuilt = proposalIntakeExistingBuiltOverride(form) == true;
+  final couponPack = proposalIntakeIsCouponPack(form);
+  if (existingBuilt) {
+    if (couponPack) {
+      if (proposalIntakeCouponPacks(form).isEmpty) {
+        issues.add('已勾选已建产品，请至少添加一条券包并搜索选择已建券包');
+      }
+    } else if (channel.isEmpty) {
+      issues.add('已勾选已建产品，请至少添加一条渠道产品并搜索选择已建产品');
+    }
+  }
   for (var i = 0; i < channel.length; i++) {
     final sku = channel[i];
-    if (sku.isExistingBuilt) {
+    if (existingBuilt || sku.isExistingBuilt) {
+      if (sku.syncSourceCode.isEmpty) {
+        issues.add('渠道产品第${i + 1}条请选择业务平台');
+      }
       if (sku.assetProduct == null || sku.assetProduct!.isEmpty) {
         issues.add('渠道产品第${i + 1}条请搜索并选择已建产品');
       }
-    } else if (sku.productName.isEmpty) {
-      issues.add('渠道产品第${i + 1}条请填写产品名称');
     }
   }
-  if (proposalIntakeIsCouponPack(form)) {
+  if (couponPack) {
     final packs = proposalIntakeCouponPacks(form);
-    if (packs.isEmpty) {
-      issues.add('已勾选券包，请至少创建一个券包');
-    }
     final skuIds = {for (final sku in channel) sku.id};
     for (var i = 0; i < packs.length; i++) {
       final pack = packs[i];
-      if (pack.isExistingBuilt) {
+      final existing = existingBuilt || pack.isExistingBuilt;
+      if (existing) {
+        if (pack.syncSourceCode.isEmpty) {
+          issues.add('券包第${i + 1}条请选择业务平台');
+        }
         if (pack.assetProduct == null || pack.assetProduct!.isEmpty) {
           issues.add('券包第${i + 1}条请搜索并选择已建券包');
         }
-      } else {
+      } else if (proposalIntakePackStarted(pack)) {
         if (pack.name.isEmpty) {
           issues.add('券包第${i + 1}条请填写券包名称');
         }
@@ -1974,6 +2248,8 @@ List<String> proposalIntakeSkuSettleIssues(Map<String, dynamic> form) {
           issues.add('券包「$name」请选择包含的渠道产品');
         }
       }
+      if (!includeSettlements) continue;
+      if (!existing && !proposalIntakePackStarted(pack)) continue;
       final label = pack.name.isEmpty ? '第${i + 1}条' : pack.name;
       final settlements = proposalIntakePackSettlements(pack);
       for (var j = 0; j < settlements.length; j++) {
@@ -1986,8 +2262,12 @@ List<String> proposalIntakeSkuSettleIssues(Map<String, dynamic> form) {
     }
     return issues;
   }
+  if (!includeSettlements) return issues;
   for (var i = 0; i < channel.length; i++) {
     final sku = channel[i];
+    if (!existingBuilt && !sku.isExistingBuilt && !proposalIntakeSkuStarted(sku)) {
+      continue;
+    }
     final name = sku.productName.isEmpty ? '第${i + 1}条' : sku.productName;
     final settlements = proposalIntakeSkuSettlements(sku);
     for (var j = 0; j < settlements.length; j++) {
@@ -2114,17 +2394,23 @@ class ProposalSkuDetailRow {
     settlements: settlements ?? this.settlements,
   );
 
-  ProposalSkuDetailRow applyAssetProduct(ChannelProductHit? hit) {
+  ProposalSkuDetailRow applyAssetProduct(
+    ChannelProductHit? hit, {
+    List<ProposalSkuSettleRow>? settlements,
+  }) {
     return copyWith(
       assetProduct: hit,
       productName: hit?.productName ?? '',
       channelRef: hit?.channelRef,
-      settlements: [
-        for (final item in settlements)
-          item.copyWith(
-            terms: item.terms.copyWith(channelRef: hit?.channelRef),
-          ),
-      ],
+      settlements: settlements ??
+          (hit == null
+              ? [ProposalSkuSettleRow(id: proposalIntakeNewSkuSettleId())]
+              : [
+                  for (final item in this.settlements)
+                    item.copyWith(
+                      terms: item.terms.copyWith(channelRef: hit.channelRef),
+                    ),
+                ]),
     );
   }
 
@@ -2310,17 +2596,23 @@ class ProposalCouponPackRow {
     settlements: settlements ?? this.settlements,
   );
 
-  ProposalCouponPackRow applyAssetProduct(ChannelProductHit? hit) {
+  ProposalCouponPackRow applyAssetProduct(
+    ChannelProductHit? hit, {
+    List<ProposalSkuSettleRow>? settlements,
+  }) {
     return copyWith(
       assetProduct: hit,
       name: hit?.productName ?? '',
       channelRef: hit?.channelRef,
-      settlements: [
-        for (final item in settlements)
-          item.copyWith(
-            terms: item.terms.copyWith(channelRef: hit?.channelRef),
-          ),
-      ],
+      settlements: settlements ??
+          (hit == null
+              ? [ProposalSkuSettleRow(id: proposalIntakeNewSkuSettleId())]
+              : [
+                  for (final item in this.settlements)
+                    item.copyWith(
+                      terms: item.terms.copyWith(channelRef: hit.channelRef),
+                    ),
+                ]),
     );
   }
 
@@ -2477,4 +2769,550 @@ List<String> proposalIntakeLaunchModuleReviewKeys(Map<String, dynamic> form) {
     for (final item in proposalIntakeFinanceModules(form))
       'launchModule:${item.id}',
   ];
+}
+
+const kPurchaseProposalTypes = ['新增', '变更', '延续'];
+
+const kPurchaseCapabilityInputForms = [
+  'API接口',
+  'H5',
+  'SDK',
+  '小程序',
+  'APP',
+  'MCP',
+];
+
+const kPurchaseDevelopmentTypes = ['运营配置', '标准接口对接', '涉及改造', '新增产品'];
+
+class ProposalSupplyProductRow {
+  const ProposalSupplyProductRow({
+    required this.id,
+    this.supplierCode = '',
+    this.supplierRef,
+    this.syncSourceRef,
+    this.thresholdAmount = '',
+    this.isYuantongCoupon = '',
+    this.isStandaloneRebate = '',
+    this.isLowDiscountCoupon = '',
+    this.rebateMode = '',
+    this.effectiveDate = '',
+    this.expireDate = '',
+    this.oilCategory = '',
+    this.oilCategoryRef,
+    this.existingBuilt = '',
+    this.assetProduct,
+    this.settlements = const [],
+  });
+
+  final String id;
+  final String supplierCode;
+  final CatalogRef? supplierRef;
+  final CatalogRef? syncSourceRef;
+  final String thresholdAmount;
+  final String isYuantongCoupon;
+  final String isStandaloneRebate;
+  final String isLowDiscountCoupon;
+  final String rebateMode;
+  final String effectiveDate;
+  final String expireDate;
+  final String oilCategory;
+  final CatalogRef? oilCategoryRef;
+  final String existingBuilt;
+  final ChannelProductHit? assetProduct;
+  final List<ProposalSkuSettleRow> settlements;
+
+  String get syncSourceCode => (syncSourceRef?.code ?? '').trim();
+
+  bool get isExistingBuilt => existingBuilt.trim() == '是';
+
+  String get supplierLabel {
+    final name = (supplierRef?.name ?? '').trim();
+    if (name.isNotEmpty) return name;
+    return supplierCode.trim();
+  }
+
+  ProposalSupplyProductRow copyWith({
+    String? supplierCode,
+    Object? supplierRef = _catalogUnset,
+    Object? syncSourceRef = _catalogUnset,
+    String? thresholdAmount,
+    String? isYuantongCoupon,
+    String? isStandaloneRebate,
+    String? isLowDiscountCoupon,
+    String? rebateMode,
+    String? effectiveDate,
+    String? expireDate,
+    String? oilCategory,
+    Object? oilCategoryRef = _catalogUnset,
+    String? existingBuilt,
+    Object? assetProduct = _catalogUnset,
+    List<ProposalSkuSettleRow>? settlements,
+  }) => ProposalSupplyProductRow(
+    id: id,
+    supplierCode: supplierCode ?? this.supplierCode,
+    supplierRef: identical(supplierRef, _catalogUnset)
+        ? this.supplierRef
+        : supplierRef as CatalogRef?,
+    syncSourceRef: identical(syncSourceRef, _catalogUnset)
+        ? this.syncSourceRef
+        : syncSourceRef as CatalogRef?,
+    thresholdAmount: thresholdAmount ?? this.thresholdAmount,
+    isYuantongCoupon: isYuantongCoupon ?? this.isYuantongCoupon,
+    isStandaloneRebate: isStandaloneRebate ?? this.isStandaloneRebate,
+    isLowDiscountCoupon: isLowDiscountCoupon ?? this.isLowDiscountCoupon,
+    rebateMode: rebateMode ?? this.rebateMode,
+    effectiveDate: effectiveDate ?? this.effectiveDate,
+    expireDate: expireDate ?? this.expireDate,
+    oilCategory: oilCategory ?? this.oilCategory,
+    oilCategoryRef: identical(oilCategoryRef, _catalogUnset)
+        ? this.oilCategoryRef
+        : oilCategoryRef as CatalogRef?,
+    existingBuilt: existingBuilt ?? this.existingBuilt,
+    assetProduct: identical(assetProduct, _catalogUnset)
+        ? this.assetProduct
+        : assetProduct as ChannelProductHit?,
+    settlements: settlements ?? this.settlements,
+  );
+
+  ProposalSupplyProductRow applyAssetProduct(
+    ChannelProductHit? hit, {
+    List<ProposalSkuSettleRow>? settlements,
+  }) {
+    return copyWith(
+      assetProduct: hit,
+      supplierRef: hit?.supplierRef,
+      supplierCode: (hit?.supplierCode.trim().isNotEmpty == true)
+          ? hit!.supplierCode.trim()
+          : (hit?.supplierRef?.code ?? ''),
+      settlements: settlements ??
+          (hit == null
+              ? proposalIntakeDefaultSupplySettlements()
+              : this.settlements),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'supplierCode': supplierCode,
+    'supplierRef': catalogRefToJson(supplierRef),
+    'syncSource': syncSourceCode,
+    'syncSourceRef': catalogRefToJson(syncSourceRef),
+    'thresholdAmount': thresholdAmount,
+    'isYuantongCoupon': isYuantongCoupon,
+    'isStandaloneRebate': isStandaloneRebate,
+    'isLowDiscountCoupon': isLowDiscountCoupon,
+    'rebateMode': rebateMode,
+    'effectiveDate': effectiveDate,
+    'expireDate': expireDate,
+    'oilCategory': oilCategory,
+    'oilCategoryRef': catalogRefToJson(oilCategoryRef),
+    'existingBuilt': existingBuilt,
+    'assetProduct': assetProduct?.toJson(),
+    'settlements': [for (final item in settlements) item.toJson()],
+  };
+
+  factory ProposalSupplyProductRow.fromJson(Object? raw) {
+    if (raw is! Map) return const ProposalSupplyProductRow(id: '');
+    var syncRef = catalogRefOrNull(raw['syncSourceRef']);
+    if (syncRef == null) {
+      final code = '${raw['syncSource'] ?? ''}'.trim();
+      if (code.isNotEmpty) syncRef = CatalogRef(code: code, name: code);
+    }
+    var supplier = catalogRefOrNull(raw['supplierRef']);
+    final asset = channelProductHitOrNull(raw['assetProduct']);
+    supplier ??= asset?.supplierRef;
+    var supplierCode =
+        '${raw['supplierCode'] ?? raw['productId'] ?? ''}'.trim();
+    if (supplierCode.isEmpty) {
+      supplierCode = (supplier?.code ?? asset?.supplierCode ?? '').trim();
+    }
+    if (supplier == null && supplierCode.isNotEmpty) {
+      supplier = CatalogRef(code: supplierCode, name: supplierCode);
+    }
+    return ProposalSupplyProductRow(
+      id: '${raw['id'] ?? ''}'.trim(),
+      supplierCode: supplierCode,
+      supplierRef: supplier,
+      syncSourceRef: syncRef,
+      thresholdAmount: '${raw['thresholdAmount'] ?? ''}'.trim(),
+      isYuantongCoupon: '${raw['isYuantongCoupon'] ?? ''}'.trim(),
+      isStandaloneRebate: '${raw['isStandaloneRebate'] ?? ''}'.trim(),
+      isLowDiscountCoupon: '${raw['isLowDiscountCoupon'] ?? ''}'.trim(),
+      rebateMode: '${raw['rebateMode'] ?? ''}'.trim(),
+      effectiveDate: '${raw['effectiveDate'] ?? ''}'.trim(),
+      expireDate: '${raw['expireDate'] ?? ''}'.trim(),
+      oilCategory: '${raw['oilCategory'] ?? ''}'.trim(),
+      oilCategoryRef: catalogRefOrNull(raw['oilCategoryRef']),
+      existingBuilt: '${raw['existingBuilt'] ?? ''}'.trim(),
+      assetProduct: asset,
+      settlements: [
+        for (final item in raw['settlements'] is List
+            ? raw['settlements'] as List
+            : const [])
+          if (item is Map) ProposalSkuSettleRow.fromJson(item),
+      ].where((item) => item.id.isNotEmpty).toList(),
+    );
+  }
+}
+
+String proposalIntakeNewSupplyProductId() =>
+    'supply-${DateTime.now().microsecondsSinceEpoch}';
+
+List<ProposalSkuSettleRow> proposalIntakeDefaultSupplySettlements() => [
+  ProposalSkuSettleRow(id: proposalIntakeNewSkuSettleId()),
+];
+
+ProposalSupplyProductRow proposalIntakeNewSupplyProduct({
+  bool existing = false,
+}) =>
+    ProposalSupplyProductRow(
+      id: proposalIntakeNewSupplyProductId(),
+      existingBuilt: existing ? '是' : '否',
+      settlements: proposalIntakeDefaultSupplySettlements(),
+    );
+
+bool proposalIntakeIsExistingSupplyProduct(Map<String, dynamic> form) {
+  return proposalIntakeExistingSupplyOverride(form) ??
+      proposalIntakeSupplyProducts(form).any((item) => item.isExistingBuilt);
+}
+
+bool? proposalIntakeExistingSupplyOverride(Map<String, dynamic> form) {
+  final raw = form['isExistingSupplyProduct'];
+  if (raw is bool) return raw;
+  final text = '$raw'.trim().toLowerCase();
+  if (text == 'true' || text == '1' || text == '是' || text == 'yes') {
+    return true;
+  }
+  if (text == 'false' || text == '0' || text == '否' || text == 'no') {
+    return false;
+  }
+  return null;
+}
+
+bool proposalIntakeSupplyStarted(ProposalSupplyProductRow product) {
+  return product.supplierCode.trim().isNotEmpty ||
+      (product.supplierRef != null && product.supplierRef!.isNotEmpty) ||
+      (product.assetProduct != null && product.assetProduct!.isNotEmpty) ||
+      product.thresholdAmount.trim().isNotEmpty ||
+      product.isYuantongCoupon.trim().isNotEmpty ||
+      product.isStandaloneRebate.trim().isNotEmpty ||
+      product.isLowDiscountCoupon.trim().isNotEmpty ||
+      product.rebateMode.trim().isNotEmpty ||
+      product.oilCategory.trim().isNotEmpty ||
+      (product.oilCategoryRef != null && product.oilCategoryRef!.isNotEmpty) ||
+      product.effectiveDate.trim().isNotEmpty ||
+      product.expireDate.trim().isNotEmpty;
+}
+
+List<ProposalSupplyProductRow> proposalIntakeSupplyProducts(
+  Map<String, dynamic> form,
+) {
+  final raw = form['supplyProducts'];
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is Map) ProposalSupplyProductRow.fromJson(item),
+  ].where((row) => row.id.isNotEmpty).toList();
+}
+
+List<ProposalSkuSettleRow> proposalIntakeSupplySettlements(
+  ProposalSupplyProductRow row,
+) => proposalIntakeSettlementsOf(id: row.id, settlements: row.settlements);
+
+bool proposalIntakeFormHasText(Map<String, dynamic> form, String key) =>
+    '${form[key] ?? ''}'.trim().isNotEmpty;
+
+bool proposalIntakeFormHasList(Map<String, dynamic> form, String key) {
+  final raw = form[key];
+  if (raw is List) {
+    return raw.any((item) => '$item'.trim().isNotEmpty);
+  }
+  return '${raw ?? ''}'.trim().isNotEmpty;
+}
+
+bool proposalIntakeFormHasRef(
+  Map<String, dynamic> form,
+  String refKey,
+  String textKey,
+) {
+  final ref = catalogRefOrNull(form[refKey]);
+  if (ref != null && ref.isNotEmpty) return true;
+  return proposalIntakeFormHasText(form, textKey);
+}
+
+const kProposalSalesFinanceFillFields = <(String, String)>[
+  ('salesScale', '销售规模目标（万元）'),
+  ('revenue', '收入（万元）'),
+  ('invoiceAmount', '发票（万元）'),
+  ('profit', '利润（万元）'),
+  ('margin', '毛利率（%）'),
+  ('turnoverCash', '预计周转资金（万元）'),
+  ('turnoverTimes', '月周转次数'),
+  ('supplySettleMode', '供给侧结算模式'),
+  ('supplySettleCycle', '供给侧结算周期'),
+  ('supplyPayer', '供给侧付款主体'),
+  ('supplyPayAccount', '供给侧付款账户'),
+  ('channelSettleMode', '渠道侧结算模式'),
+  ('channelSettleCycle', '渠道侧结算周期'),
+  ('channelPayee', '渠道侧收款主体'),
+  ('channelReceiveAccount', '渠道侧收款账户'),
+  ('generalBusinessAccount', '普通业务账'),
+  ('prepaidAccount', '预收账户'),
+  ('profitAccrualAccount', '利润计提账户'),
+  ('financeRemark', '财务备注'),
+  ('rollback', '是否回滚'),
+];
+
+List<String> proposalIntakeContractFillIssues(
+  Map<String, dynamic> form, {
+  required String prefix,
+  required String label,
+}) {
+  final issues = <String>[];
+  void need(String key, String field) {
+    if (!proposalIntakeFormHasText(form, key)) issues.add('请填写$field');
+  }
+
+  final mode = '${form['${prefix}Mode'] ?? ''}'.trim();
+  if (mode.isEmpty) {
+    issues.add('请选择$label合同状态');
+  } else if (mode == '未签署合同') {
+    if (!proposalIntakeFormHasText(form, '${prefix}FileName') &&
+        !proposalIntakeFormHasText(form, '${prefix}ObjectKey')) {
+      issues.add('请上传未签署的$label合同文件');
+    }
+  } else if (!proposalIntakeFormHasText(form, '${prefix}No')) {
+    issues.add('请填写$label合同编号');
+  }
+  need('${prefix}Name', '$label合同名称');
+  need('${prefix}SignDate', '$label合同签署时间');
+  need('${prefix}OurParty', '$label合同我方签约主体');
+  need('${prefix}Counterparty', '$label合同对方签约主体');
+  need('${prefix}ValidPeriod', '$label合同有效期');
+  need('${prefix}CoreTerms', '$label合同核心条款');
+  return issues;
+}
+
+List<String> proposalIntakeSalesMarketIssues(Map<String, dynamic> form) {
+  final issues = <String>[];
+  void need(String key, String label) {
+    if (!proposalIntakeFormHasText(form, key)) issues.add('请填写$label');
+  }
+
+  void needList(String key, String label) {
+    if (!proposalIntakeFormHasList(form, key)) issues.add('请选择$label');
+  }
+
+  void needRef(String refKey, String textKey, String label) {
+    if (!proposalIntakeFormHasRef(form, refKey, textKey)) {
+      issues.add('请选择$label');
+    }
+  }
+
+  needRef('sectorRef', 'sector', '业务板块');
+  need('proposalName', '产品提案名称');
+  need('proposalType', '提案类型');
+  needRef('productRef', 'product', '产品（标签一）');
+  needRef('projectRef', 'projectName', '项目名称（标签一二级）');
+  needList('supplies', '供给（标签二）');
+  needList('channels', '渠道（标签三）');
+  need('supplierPolicy', '供货商政策');
+  need('channelPolicy', '渠道政策');
+  need('executionPlan', '提案执行计划');
+  need('riskPoints', '合作风险点');
+  needList('profitModes', '盈利模式');
+  need('profitFormula', '盈利计算说明');
+  if (proposalIntakeHasExistingPurchaseProposal(form)) {
+    if (proposalIntakeLinkedPurchaseProposalId(form) <= 0) {
+      issues.add('请搜索并选择已审核通过的采购提案');
+    } else {
+      issues.addAll(
+        proposalIntakeContractFillIssues(form, prefix: 'purchase', label: '采购'),
+      );
+    }
+  } else {
+    issues.addAll(
+      proposalIntakeContractFillIssues(form, prefix: 'purchase', label: '采购'),
+    );
+  }
+  issues.addAll(
+    proposalIntakeContractFillIssues(form, prefix: 'sales', label: '销售'),
+  );
+  return issues;
+}
+
+List<String> proposalIntakeSalesFinanceFillIssues(Map<String, dynamic> form) {
+  final issues = <String>[];
+  for (final field in kProposalSalesFinanceFillFields) {
+    if (!proposalIntakeFormHasText(form, field.$1)) {
+      issues.add('请填写${field.$2}');
+    }
+  }
+  return issues;
+}
+
+List<String> proposalIntakeTechFillIssues(
+  Map<String, dynamic> form, {
+  required bool purchase,
+}) {
+  final issues = <String>[];
+  void need(String key, String label) {
+    if (!proposalIntakeFormHasText(form, key)) issues.add('请填写$label');
+  }
+
+  void needList(String key, String label) {
+    if (!proposalIntakeFormHasList(form, key)) issues.add('请选择$label');
+  }
+
+  need('technologyPlatform', 'τ-标签一');
+  needList('technologyCapabilities', 'τ-标签二');
+  needList('outputForms', purchase ? '能力输入形式' : '能力输出形式');
+  needList('developmentTypes', '研发类型');
+  need('hasRdCost', '是否涉及研发费用');
+  if ('${form['hasRdCost'] ?? ''}'.trim() == '是') {
+    final amount = num.tryParse('${form['rdAmount'] ?? ''}'.trim()) ?? 0;
+    if (amount <= 0) issues.add('已选择涉及研发费用，金额必须大于 0');
+  }
+  need('deliveryDate', '交付时间');
+  return issues;
+}
+
+bool proposalIntakePurchaseSettleComplete(ProposalFinanceSettleTerms terms) {
+  final billType =
+      (terms.billTypeRef != null && terms.billTypeRef!.isNotEmpty) ||
+      terms.billType.trim().isNotEmpty;
+  final settleMode =
+      (terms.settleModeRef != null && terms.settleModeRef!.isNotEmpty) ||
+      terms.settleMode.trim().isNotEmpty;
+  return billType &&
+      settleMode &&
+      terms.invoiceType.trim().isNotEmpty &&
+      terms.effectiveTime.trim().isNotEmpty &&
+      terms.expireTime.trim().isNotEmpty &&
+      terms.isSkuComplete;
+}
+
+List<String> proposalIntakePurchaseSupplyIssues(Map<String, dynamic> form) {
+  final issues = <String>[];
+  final products = proposalIntakeSupplyProducts(form);
+  final existing =
+      proposalIntakeExistingSupplyOverride(form) == true ||
+      products.any((item) => item.isExistingBuilt);
+  if (existing && products.isEmpty) {
+    issues.add('已勾选已有供给产品，请至少添加一条并搜索选择已建供给产品');
+    return issues;
+  }
+  for (var i = 0; i < products.length; i++) {
+    final product = products[i];
+    final label = '供给产品 ${i + 1}';
+    final rowExisting = existing || product.isExistingBuilt;
+    if (!rowExisting && !proposalIntakeSupplyStarted(product)) {
+      continue;
+    }
+    if (product.syncSourceCode.isEmpty) {
+      issues.add('$label 请选择业务平台');
+    }
+    if (rowExisting) {
+      if (product.assetProduct == null || product.assetProduct!.isEmpty) {
+        issues.add('$label 请搜索并选择已建供给产品');
+      }
+    } else {
+      final hasSupplier =
+          product.supplierCode.trim().isNotEmpty ||
+          (product.supplierRef != null && product.supplierRef!.isNotEmpty);
+      if (!hasSupplier) {
+        issues.add('$label 请选择供应商');
+      }
+      if (product.thresholdAmount.trim().isEmpty) {
+        issues.add('$label 请填写门槛金额');
+      }
+      if (product.isYuantongCoupon.trim().isEmpty) {
+        issues.add('$label 请选择是否元通券');
+      }
+      if (product.isStandaloneRebate.trim().isEmpty) {
+        issues.add('$label 请选择是否单独返利制券');
+      }
+      if (product.isLowDiscountCoupon.trim().isEmpty) {
+        issues.add('$label 请选择是否低折扣券');
+      }
+      if (product.rebateMode.trim().isEmpty) {
+        issues.add('$label 请选择返利模式');
+      }
+      if (product.oilCategory.trim().isEmpty &&
+          (product.oilCategoryRef == null || product.oilCategoryRef!.isEmpty)) {
+        issues.add('$label 请选择油品分类');
+      }
+      if (product.effectiveDate.trim().isEmpty) {
+        issues.add('$label 请选择产品生效日期');
+      }
+      if (product.expireDate.trim().isEmpty) {
+        issues.add('$label 请选择产品失效日期');
+      }
+    }
+    final settlements = proposalIntakeSupplySettlements(product);
+    if (settlements.isEmpty) {
+      issues.add('$label 请填写结算一');
+      continue;
+    }
+    for (var j = 0; j < settlements.length; j++) {
+      final terms = settlements[j].terms;
+      if (j > 0 && terms.isBlank) continue;
+      if (!proposalIntakePurchaseSettleComplete(terms)) {
+        issues.add(
+          '$label ${proposalIntakeSettleLabel(j)}未填完账单类型、结算方式、金额、计算公式、发票类型、税率和生效失效时间',
+        );
+      }
+    }
+  }
+  return issues;
+}
+
+List<String> proposalIntakePurchaseMarketIssues(Map<String, dynamic> form) {
+  final issues = <String>[];
+  void need(String key, String label) {
+    if (!proposalIntakeFormHasText(form, key)) issues.add('请填写$label');
+  }
+
+  void needList(String key, String label) {
+    if (!proposalIntakeFormHasList(form, key)) issues.add('请选择$label');
+  }
+
+  need('proposalType', '提案类型');
+  needList('supplies', '供给（标签二）');
+  need('supplyBrand', '供给侧品牌');
+  need('bizContact', '采购对接人（业务）');
+  need('financeContact', '采购对接人（财务）');
+  needList('invoiceTypes', '发票种类');
+  need('supplierPolicy', '供给政策');
+  need('salesPolicy', '销售政策');
+  need('executionPlan', '提案执行计划');
+  need('riskPoints', '合作风险点');
+  need('financeRemark', '财务备注');
+  final mode = '${form['purchaseMode'] ?? ''}'.trim();
+  if (mode.isEmpty) {
+    issues.add('请选择采购合同状态');
+  } else if (mode == '未签署合同') {
+    if (!proposalIntakeFormHasText(form, 'purchaseFileName') &&
+        !proposalIntakeFormHasText(form, 'purchaseObjectKey')) {
+      issues.add('请上传未签署的采购合同文件');
+    }
+  } else if (!proposalIntakeFormHasText(form, 'purchaseNo')) {
+    issues.add('请填写采购合同编号');
+  }
+  need('purchaseName', '采购合同名称');
+  need('purchaseSignDate', '采购合同签署时间');
+  need('purchaseOurParty', '我方签约主体');
+  need('purchaseCounterparty', '对方签约主体');
+  need('purchaseValidPeriod', '采购合同有效期');
+  need('purchaseCoreTerms', '采购合同核心条款');
+  issues.addAll(proposalIntakePurchaseSupplyIssues(form));
+  return issues;
+}
+
+List<String> proposalIntakePurchaseTechIssues(Map<String, dynamic> form) =>
+    proposalIntakeTechFillIssues(form, purchase: true);
+
+String? proposalIntakePurchaseHunIssue(Map<String, dynamic> form) {
+  if (proposalIntakeFormHasText(form, 'hunId')) return null;
+  return '请填写 HUN ID';
 }

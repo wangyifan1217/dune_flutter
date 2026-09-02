@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import 'fund_secondment_kanban.dart';
 import 'fund_secondment_models.dart';
 import 'fund_secondment_service.dart';
 
@@ -269,45 +270,14 @@ class _NativeQianjiFundSecondmentPageState
   }
 
   Widget _buildSummaryBoard() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE8EAED)),
-        ),
-        child: Row(
-          children: [
-            _SummaryCell(
-              label: '借款笔数',
-              value: '${_summary.count}',
-              onTap: () => unawaited(_setFilter(_SettledFilter.all)),
-            ),
-            _SummaryCell(
-              label: '借款合计',
-              value: '${_amountText(_summary.borrowTotalWan)}万',
-            ),
-            _SummaryCell(
-              label: '已还清',
-              value: '${_summary.settledCount}',
-              valueColor: DunesColors.green,
-              selected: _filter == _SettledFilter.settled,
-              onTap: () => unawaited(_setFilter(_SettledFilter.settled)),
-            ),
-            _SummaryCell(
-              label: '剩余合计',
-              value: '${_amountText(_summary.remainingTotalWan)}万',
-              valueColor: _summary.remainingTotalWan > 0
-                  ? DunesColors.coral
-                  : DunesColors.green,
-              selected: _filter == _SettledFilter.open,
-              onTap: () => unawaited(_setFilter(_SettledFilter.open)),
-            ),
-          ],
-        ),
-      ),
+    return FundSecondmentKanban(
+      summary: _summary,
+      filterAll: _filter == _SettledFilter.all,
+      filterSettled: _filter == _SettledFilter.settled,
+      filterOpen: _filter == _SettledFilter.open,
+      onFilterAll: () => unawaited(_setFilter(_SettledFilter.all)),
+      onFilterSettled: () => unawaited(_setFilter(_SettledFilter.settled)),
+      onFilterOpen: () => unawaited(_setFilter(_SettledFilter.open)),
     );
   }
 
@@ -415,61 +385,6 @@ class _NativeQianjiFundSecondmentPageState
           onTap: () => widget.onOpenDetail(row.id),
         );
       },
-    );
-  }
-}
-
-class _SummaryCell extends StatelessWidget {
-  const _SummaryCell({
-    required this.label,
-    required this.value,
-    this.valueColor = _themePurple,
-    this.selected = false,
-    this.onTap,
-  });
-
-  final String label;
-  final String value;
-  final Color valueColor;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final child = Container(
-      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-      decoration: BoxDecoration(
-        color: selected ? const Color(0xFFF3EEFA) : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              color: valueColor,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 11, color: DunesColors.text3),
-          ),
-        ],
-      ),
-    );
-    return Expanded(
-      child: onTap == null
-          ? child
-          : InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: onTap,
-              child: child,
-            ),
     );
   }
 }

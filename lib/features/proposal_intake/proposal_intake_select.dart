@@ -114,7 +114,9 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
   @override
   void didUpdateWidget(covariant ProposalSelectField<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_focus.hasFocus && oldWidget.value != widget.value) {
+    // Parent setState from onSelected runs before unfocus. Always copy the
+    // selected label into the field so catalog dropdowns do not stay blank.
+    if (oldWidget.value != widget.value) {
       _syncFromValue();
     }
     // OverlayEntry.markNeedsBuild during the parent's build throws

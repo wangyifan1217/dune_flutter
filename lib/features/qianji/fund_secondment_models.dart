@@ -53,6 +53,49 @@ class FundSecondmentRow {
   }
 }
 
+class FundSecondmentSubjectBucket {
+  const FundSecondmentSubjectBucket({
+    required this.subject,
+    this.count = 0,
+    this.remainingWan = 0,
+  });
+
+  final String subject;
+  final int count;
+  final double remainingWan;
+
+  factory FundSecondmentSubjectBucket.fromJson(Map<String, dynamic> json) {
+    return FundSecondmentSubjectBucket(
+      subject: '${json['subject'] ?? ''}'.trim(),
+      count: (json['count'] as num?)?.toInt() ?? 0,
+      remainingWan: (json['remainingWan'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
+class FundSecondmentRouteBucket {
+  const FundSecondmentRouteBucket({
+    required this.borrowSubject,
+    required this.paySubject,
+    this.count = 0,
+    this.remainingWan = 0,
+  });
+
+  final String borrowSubject;
+  final String paySubject;
+  final int count;
+  final double remainingWan;
+
+  factory FundSecondmentRouteBucket.fromJson(Map<String, dynamic> json) {
+    return FundSecondmentRouteBucket(
+      borrowSubject: '${json['borrowSubject'] ?? ''}'.trim(),
+      paySubject: '${json['paySubject'] ?? ''}'.trim(),
+      count: (json['count'] as num?)?.toInt() ?? 0,
+      remainingWan: (json['remainingWan'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
 class FundSecondmentSummary {
   const FundSecondmentSummary({
     this.count = 0,
@@ -61,6 +104,13 @@ class FundSecondmentSummary {
     this.borrowTotalWan = 0,
     this.repaidTotalWan = 0,
     this.remainingTotalWan = 0,
+    this.overdueCount = 0,
+    this.overdueRemainingWan = 0,
+    this.dueSoonCount = 0,
+    this.dueSoonRemainingWan = 0,
+    this.borrowers = const [],
+    this.lenders = const [],
+    this.routes = const [],
   });
 
   final int count;
@@ -69,6 +119,21 @@ class FundSecondmentSummary {
   final double borrowTotalWan;
   final double repaidTotalWan;
   final double remainingTotalWan;
+  final int overdueCount;
+  final double overdueRemainingWan;
+  final int dueSoonCount;
+  final double dueSoonRemainingWan;
+  final List<FundSecondmentSubjectBucket> borrowers;
+  final List<FundSecondmentSubjectBucket> lenders;
+  final List<FundSecondmentRouteBucket> routes;
+
+  double get repaidRatio {
+    if (borrowTotalWan <= 0) return remainingTotalWan > 0 ? 0 : 1;
+    final ratio = repaidTotalWan / borrowTotalWan;
+    if (ratio < 0) return 0;
+    if (ratio > 1) return 1;
+    return ratio;
+  }
 
   factory FundSecondmentSummary.fromJson(Map<String, dynamic>? json) {
     if (json == null) return const FundSecondmentSummary();
@@ -84,8 +149,35 @@ class FundSecondmentSummary {
       borrowTotalWan: (json['borrowTotalWan'] as num?)?.toDouble() ?? 0,
       repaidTotalWan: (json['repaidTotalWan'] as num?)?.toDouble() ?? 0,
       remainingTotalWan: (json['remainingTotalWan'] as num?)?.toDouble() ?? 0,
+      overdueCount: (json['overdueCount'] as num?)?.toInt() ?? 0,
+      overdueRemainingWan: (json['overdueRemainingWan'] as num?)?.toDouble() ?? 0,
+      dueSoonCount: (json['dueSoonCount'] as num?)?.toInt() ?? 0,
+      dueSoonRemainingWan: (json['dueSoonRemainingWan'] as num?)?.toDouble() ?? 0,
+      borrowers: _parseSubjectBuckets(json['borrowers']),
+      lenders: _parseSubjectBuckets(json['lenders']),
+      routes: _parseRouteBuckets(json['routes']),
     );
   }
+}
+
+List<FundSecondmentSubjectBucket> _parseSubjectBuckets(dynamic raw) {
+  return (raw as List? ?? const [])
+      .whereType<Map>()
+      .map((e) => FundSecondmentSubjectBucket.fromJson(Map<String, dynamic>.from(e)))
+      .where((e) => e.subject.isNotEmpty)
+      .toList(growable: false);
+}
+
+List<FundSecondmentRouteBucket> _parseRouteBuckets(dynamic raw) {
+  return (raw as List? ?? const [])
+      .whereType<Map>()
+      .map((e) => FundSecondmentRouteBucket.fromJson(Map<String, dynamic>.from(e)))
+      .toList(growable: false);
+}
+
+String formatFundSecondmentWan(double v) {
+  if (v == v.roundToDouble()) return '${v.toInt()}万';
+  return '${v.toStringAsFixed(2)}万';
 }
 
 class FundSecondmentListPageResult {

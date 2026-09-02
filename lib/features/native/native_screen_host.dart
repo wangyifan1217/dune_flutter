@@ -96,6 +96,7 @@ import '../qianji/native_qianji_projects_page.dart';
 import '../qianji/native_qianji_session_supervise_page.dart';
 import '../qianji/native_qianji_task_detail_page.dart';
 import '../qianji/native_qianji_team_perf_page.dart';
+import '../qianji/native_qianji_cash_flow_board_page.dart';
 import '../qianji/travel/native_qianji_travel_page.dart';
 import '../qianji/qianji_models.dart';
 import '../qianji/qianji_project_models.dart';
@@ -3171,6 +3172,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenFundSecondment: widget.session.effectiveFundSecondmentAccess
               ? () => widget.navigation.go('QJFS')
               : null,
+          onOpenCashFlow: widget.session.effectiveCashFlowAccess
+              ? () => widget.navigation.go('QJCF')
+              : null,
           onOpenTravel: () => widget.navigation.go('QJTR'),
           onOpenRobotHome: () {
             setState(() {
@@ -3391,6 +3395,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         );
       case 'QJTR':
         return NativeQianjiTravelPage(
+          session: widget.session,
+          onBack: widget.navigation.back,
+        );
+      case 'QJCF':
+        if (!widget.session.effectiveCashFlowAccess) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.go('QJ');
+          });
+          return const Scaffold(
+            backgroundColor: DunesColors.bgApp,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return NativeQianjiCashFlowBoardPage(
           session: widget.session,
           onBack: widget.navigation.back,
         );
@@ -4601,6 +4619,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJFS',
       'QJFSD',
       'QJTR',
+      'QJCF',
       'QJR',
       'QJRA',
       'QJRC',
@@ -4685,6 +4704,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'QJFS' ||
         screen == 'QJFSD' ||
         screen == 'QJTR' ||
+        screen == 'QJCF' ||
         screen == 'QJR' ||
         screen == 'QJRA' ||
         screen == 'QJRC' ||
@@ -4774,6 +4794,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJFS',
       'QJFSD',
       'QJTR',
+      'QJCF',
       'QJR',
       'QJRA',
       'QJRC',
@@ -4816,6 +4837,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJSS' => const ['QJ', 'QJSS'],
       'QJKB' => const ['QJ', 'QJKB'],
       'QJTR' => const ['QJ', 'QJTR'],
+      'QJCF' => const ['QJ', 'QJCF'],
       'QJFS' => const ['QJ', 'QJFS'],
       'QJFSD' => const ['QJ', 'QJFS', 'QJFSD'],
       'QJD' => const ['QJ', 'QJD'],

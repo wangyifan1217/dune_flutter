@@ -15,10 +15,11 @@ Future<String?> saveBytesAsNovaFile(Uint8List bytes, String fileName) async {
   return saveBytesAsNovaFileImpl(bytes, fileName);
 }
 
-/// 按会话 + 文件唯一键落盘：`沙丘文件/{conversationId}/{hash(cacheKey)}/{fileName}`。
+/// 按会话落盘：`沙丘文件/{conversationId}/{fileName}`。
 ///
-/// [cacheKey]（通常为 objectKey / URL）避免同名文件命中旧缓存。
-/// 未传 [conversationId] 时仍走旧版 `沙丘文件/{hash(cacheKey)}/{fileName}`。
+/// 同一会话内同名文件会覆盖。查找时仍兼容旧版
+/// `{conversationId}/{hash(cacheKey)}/{fileName}` 与 `{hash(cacheKey)}/{fileName}`。
+/// 未传 [conversationId] 时仍走旧版 hash 子目录。
 Future<String?> saveBytesAsCachedFile(
   Uint8List bytes,
   String cacheKey,

@@ -31,6 +31,7 @@ class AuthSession {
     this.administrativeNoticeAccess = false,
     this.broadcastAccess = false,
     this.fundSecondmentAccess = false,
+    this.cashFlowAccess = false,
     this.contractViewAccess = false,
     this.contractConfigAccess = false,
     this.contractKbSyncAccess = false,
@@ -73,6 +74,9 @@ class AuthSession {
 
   /// 后端下发的 NOVA「资金借调」看板开关。
   final bool fundSecondmentAccess;
+
+  /// 后端下发的 NOVA「资金流向」看板开关。
+  final bool cashFlowAccess;
 
   /// 合同归集查看权限。
   final bool contractViewAccess;
@@ -133,6 +137,9 @@ class AuthSession {
   bool get effectiveFundSecondmentAccess =>
       fundSecondmentAccess || DunesDefaults.localLighthouseAccessBypass;
 
+  bool get effectiveCashFlowAccess =>
+      cashFlowAccess || DunesDefaults.localLighthouseAccessBypass;
+
   bool get effectiveContractConfigAccess => contractConfigAccess;
 
   bool get effectiveContractKbSyncAccess => contractKbSyncAccess;
@@ -172,6 +179,9 @@ class AuthSession {
       }
       if (!next.fundSecondmentAccess) {
         next = next.copyWith(fundSecondmentAccess: true);
+      }
+      if (!next.cashFlowAccess) {
+        next = next.copyWith(cashFlowAccess: true);
       }
     }
     return next;
@@ -220,6 +230,7 @@ class AuthSession {
     bool? administrativeNoticeAccess,
     bool? broadcastAccess,
     bool? fundSecondmentAccess,
+    bool? cashFlowAccess,
     bool? contractViewAccess,
     bool? contractConfigAccess,
     bool? contractKbSyncAccess,
@@ -259,6 +270,7 @@ class AuthSession {
           administrativeNoticeAccess ?? this.administrativeNoticeAccess,
       broadcastAccess: broadcastAccess ?? this.broadcastAccess,
       fundSecondmentAccess: fundSecondmentAccess ?? this.fundSecondmentAccess,
+      cashFlowAccess: cashFlowAccess ?? this.cashFlowAccess,
       contractViewAccess: contractViewAccess ?? this.contractViewAccess,
       contractConfigAccess: contractConfigAccess ?? this.contractConfigAccess,
       contractKbSyncAccess: contractKbSyncAccess ?? this.contractKbSyncAccess,
@@ -333,6 +345,7 @@ class AuthSession {
       administrativeNoticeAccess: data['administrativeNoticeAccess'] == true,
       broadcastAccess: data['broadcastAccess'] == true,
       fundSecondmentAccess: data['fundSecondmentAccess'] == true,
+      cashFlowAccess: data['cashFlowAccess'] == true,
       contractViewAccess: data['contractViewAccess'] == true,
       contractConfigAccess: data['contractConfigAccess'] == true,
       contractKbSyncAccess: data['contractKbSyncAccess'] == true,
@@ -384,6 +397,7 @@ class AuthSession {
       administrativeNoticeAccess: claims['administrativeNoticeAccess'] == true,
       broadcastAccess: claims['broadcastAccess'] == true,
       fundSecondmentAccess: claims['fundSecondmentAccess'] == true,
+      cashFlowAccess: claims['cashFlowAccess'] == true,
       contractViewAccess: claims['contractViewAccess'] == true,
       contractConfigAccess: claims['contractConfigAccess'] == true,
       contractKbSyncAccess: claims['contractKbSyncAccess'] == true,
@@ -440,6 +454,7 @@ class AuthSession {
       'administrativeNoticeAccess': administrativeNoticeAccess,
       'broadcastAccess': broadcastAccess,
       'fundSecondmentAccess': fundSecondmentAccess,
+      'cashFlowAccess': cashFlowAccess,
       'contractViewAccess': contractViewAccess,
       'contractConfigAccess': contractConfigAccess,
       'contractKbSyncAccess': contractKbSyncAccess,
@@ -485,6 +500,7 @@ class AuthSession {
       administrativeNoticeAccess: json['administrativeNoticeAccess'] == true,
       broadcastAccess: json['broadcastAccess'] == true,
       fundSecondmentAccess: json['fundSecondmentAccess'] == true,
+      cashFlowAccess: json['cashFlowAccess'] == true,
       contractViewAccess: json['contractViewAccess'] == true,
       contractConfigAccess: json['contractConfigAccess'] == true,
       contractKbSyncAccess: json['contractKbSyncAccess'] == true,

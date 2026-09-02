@@ -869,22 +869,45 @@ class ProposalNextPendingFooter extends StatelessWidget {
 
 const proposalIntakeProcessSteps = <(String, String)>[
   ('1', '提交人新建提案，填写市场、合同、财务，并指定市场部负责人二等审核人。'),
-  ('2', '提交人通知科技部负责人填写科技内容。'),
-  ('3', '科技部负责人填写完成后，提交给提交人。'),
+  ('2', '提交人通知科技部负责人填写科技内容，同时通知财务部负责人二填写财务技术接口。'),
+  ('3', '科技部负责人填写完成后提交复核（必选财务技术接口须已勾选）。'),
   ('4', '提交人提交各板块进入复核。'),
   (
     '5',
-    '市场部负责人一复核市场板块；市场部负责人二逐条复核科技；财务部负责人二复核采购/销售合同并逐条复核财务，财务部负责人一整板块复核财务。发现问题可直接整板块驳回，不必先逐条点完复核。',
+    '市场部负责人一复核市场板块；市场部负责人二逐条复核科技；科技部负责人复核财务技术接口；财务部负责人二复核采购/销售合同并逐条复核财务，财务部负责人一整板块复核财务。发现问题可直接整板块驳回，不必先逐条点完复核。',
   ),
   ('6', '各板块复核完成后，提交人通知最终确认人。'),
   ('7', '最终确认人通过即完成；整单驳回则退回提交人重填。板块驳回后，填写人修改再点「重新提交并通知审核人」，系统会通知该板块审核人。'),
 ];
 
-Future<void> showProposalIntakeProcessHelp(BuildContext context) {
+const proposalIntakePurchaseProcessSteps = <(String, String)>[
+  (
+    '1',
+    '提交人新建采购提案，填写供给、采购合同，并指定市场部负责人一、二等审核人，以及财务部负责人一、二（财务板块暂不复核）。',
+  ),
+  ('2', '提交人通知科技部负责人填写科技内容，同时通知财务部负责人二填写财务技术接口。'),
+  ('3', '科技部负责人填写完成后提交复核（必选财务技术接口须已勾选）。'),
+  ('4', '提交人提交各板块进入复核。'),
+  (
+    '5',
+    '市场部负责人一复核市场板块，并可填写 HUN ID；市场部负责人二逐条复核科技；科技部负责人复核财务技术接口；财务部负责人二复核采购合同。财务板块暂不复核。发现问题可直接整板块驳回，不必先逐条点完复核。',
+  ),
+  ('6', '各板块复核完成后，提交人通知最终确认人。'),
+  ('7', '最终确认人通过即完成；整单驳回则退回提交人重填。板块驳回后，填写人修改再点「重新提交并通知审核人」，系统会通知该板块审核人。'),
+];
+
+List<(String, String)> proposalIntakeProcessStepsOf({required bool purchase}) =>
+    purchase ? proposalIntakePurchaseProcessSteps : proposalIntakeProcessSteps;
+
+Future<void> showProposalIntakeProcessHelp(
+  BuildContext context, {
+  bool purchase = false,
+}) {
   return showDialog<void>(
     context: context,
     builder: (ctx) {
       final maxWidth = MediaQuery.sizeOf(ctx).width - 48;
+      final steps = proposalIntakeProcessStepsOf(purchase: purchase);
       return AlertDialog(
         title: const Text('协作提案流程'),
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -895,7 +918,7 @@ Future<void> showProposalIntakeProcessHelp(BuildContext context) {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final step in proposalIntakeProcessSteps)
+                for (final step in steps)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Row(
@@ -948,9 +971,14 @@ Future<void> showProposalIntakeProcessHelp(BuildContext context) {
 }
 
 class ProposalIntakeProcessHelpButton extends StatelessWidget {
-  const ProposalIntakeProcessHelpButton({super.key, this.compact = false});
+  const ProposalIntakeProcessHelpButton({
+    super.key,
+    this.compact = false,
+    this.purchase = false,
+  });
 
   final bool compact;
+  final bool purchase;
 
   @override
   Widget build(BuildContext context) {
@@ -962,7 +990,9 @@ class ProposalIntakeProcessHelpButton extends StatelessWidget {
         minWidth: compact ? 36 : 40,
         minHeight: compact ? 36 : 40,
       ),
-      onPressed: () => unawaited(showProposalIntakeProcessHelp(context)),
+      onPressed: () => unawaited(
+        showProposalIntakeProcessHelp(context, purchase: purchase),
+      ),
       icon: Icon(
         Icons.help_outline_rounded,
         size: compact ? 20 : 22,

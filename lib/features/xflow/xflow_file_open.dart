@@ -37,6 +37,31 @@ String xflowAttachmentCacheKey(Map<String, dynamic> item, {String url = ''}) {
   return key;
 }
 
+/// 读取附件字节到内存，不落盘、不唤起系统下载。
+Future<Uint8List> fetchXflowAttachmentBytes({
+  required XflowService service,
+  required Map<String, dynamic> item,
+}) async {
+  final url = await service.resolveFileUrl(item);
+  if (url.isEmpty) {
+    throw Exception('无法获取文件链接');
+  }
+  final client = http.Client();
+  try {
+    final resp = await client.get(Uri.parse(url));
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('读取失败（HTTP ${resp.statusCode}）');
+    }
+    final bytes = Uint8List.fromList(resp.bodyBytes);
+    if (bytes.isEmpty) {
+      throw Exception('文件内容为空');
+    }
+    return bytes;
+  } finally {
+    client.close();
+  }
+}
+
 /// 本地是否已有该审批附件缓存（对齐微盘「已下载」状态）。
 Future<bool> isXflowAttachmentDownloaded(Map<String, dynamic> item) async {
   if (kIsWeb) return false;

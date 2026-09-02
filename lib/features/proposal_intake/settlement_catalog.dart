@@ -90,10 +90,11 @@ class CatalogRef {
   factory CatalogRef.fromJson(Object? raw) {
     if (raw is! Map) return empty;
     final map = Map<String, dynamic>.from(raw);
-    final code = '${map['code'] ?? map['channelCode'] ?? map['formulaCode'] ?? ''}'
-        .trim();
+    final code =
+        '${map['code'] ?? map['channelCode'] ?? map['supplierCode'] ?? map['formulaCode'] ?? ''}'
+            .trim();
     final name =
-        '${map['name'] ?? map['channelName'] ?? map['formulaName'] ?? ''}'
+        '${map['name'] ?? map['channelName'] ?? map['supplierName'] ?? map['shortName'] ?? map['supplierShortName'] ?? map['formulaName'] ?? ''}'
             .trim();
     return CatalogRef(
       id: catalogInt(map['id']),
@@ -110,6 +111,9 @@ class CatalogRef {
   }
 
   factory CatalogRef.fromChannel(Map<String, dynamic> json) =>
+      CatalogRef.fromJson(json);
+
+  factory CatalogRef.fromSupplier(Map<String, dynamic> json) =>
       CatalogRef.fromJson(json);
 
   factory CatalogRef.fromFormula(
@@ -178,6 +182,9 @@ class ChannelProductHit {
     this.productName = '',
     this.channelId,
     this.channelName = '',
+    this.supplierId,
+    this.supplierCode = '',
+    this.supplierName = '',
     this.syncSource = '',
     this.submitStatus = '',
   });
@@ -187,6 +194,9 @@ class ChannelProductHit {
   final String productName;
   final int? channelId;
   final String channelName;
+  final int? supplierId;
+  final String supplierCode;
+  final String supplierName;
   final String syncSource;
   final String submitStatus;
 
@@ -218,12 +228,28 @@ class ChannelProductHit {
     return CatalogRef(id: channelId, name: channelName.trim());
   }
 
+  CatalogRef? get supplierRef {
+    if ((supplierId == null || supplierId == 0) &&
+        supplierCode.trim().isEmpty &&
+        supplierName.trim().isEmpty) {
+      return null;
+    }
+    return CatalogRef(
+      id: supplierId,
+      code: supplierCode.trim(),
+      name: supplierName.trim().isEmpty ? supplierCode.trim() : supplierName.trim(),
+    );
+  }
+
   Map<String, dynamic> toJson() => {
     if (id != null && id != 0) 'id': id,
     if (productCode.trim().isNotEmpty) 'productCode': productCode.trim(),
     if (productName.trim().isNotEmpty) 'productName': productName.trim(),
     if (channelId != null && channelId != 0) 'channelId': channelId,
     if (channelName.trim().isNotEmpty) 'channelName': channelName.trim(),
+    if (supplierId != null && supplierId != 0) 'supplierId': supplierId,
+    if (supplierCode.trim().isNotEmpty) 'supplierCode': supplierCode.trim(),
+    if (supplierName.trim().isNotEmpty) 'supplierName': supplierName.trim(),
     if (syncSource.trim().isNotEmpty) 'syncSource': syncSource.trim(),
     if (submitStatus.trim().isNotEmpty) 'submitStatus': submitStatus.trim(),
   };
@@ -237,6 +263,9 @@ class ChannelProductHit {
       productName: '${map['productName'] ?? map['name'] ?? ''}'.trim(),
       channelId: catalogInt(map['channelId']),
       channelName: '${map['channelName'] ?? ''}'.trim(),
+      supplierId: catalogInt(map['supplierId']),
+      supplierCode: '${map['supplierCode'] ?? ''}'.trim(),
+      supplierName: '${map['supplierName'] ?? ''}'.trim(),
       syncSource: '${map['syncSource'] ?? ''}'.trim(),
       submitStatus: '${map['submitStatus'] ?? ''}'.trim(),
     );
@@ -253,6 +282,217 @@ class ChannelProductHit {
 ChannelProductHit? channelProductHitOrNull(Object? raw) {
   final hit = ChannelProductHit.fromJson(raw);
   return hit.isEmpty ? null : hit;
+}
+
+String catalogSettleMethodName(Object? code) {
+  return switch (catalogInt(code)) {
+    1 => '按结算比例结算',
+    2 => '按结算单价结算',
+    3 => '按阶梯价格结算',
+    5 => '按结算单价×结算比例结算',
+    _ => '',
+  };
+}
+
+String catalogScalarText(Object? value, {bool percent = false}) {
+  if (value == null) return '';
+  var raw = value is num ? '$value' : '$value'.trim();
+  if (raw.endsWith('.0')) raw = raw.substring(0, raw.length - 2);
+  if (raw.isEmpty || raw == 'null') return '';
+  if (percent && !raw.contains('%')) return '$raw%';
+  return raw;
+}
+
+String catalogDateText(Object? value) {
+  final text = catalogScalarText(value);
+  if (text.length >= 10 && text.contains('-')) return text.substring(0, 10);
+  return text;
+}
+
+CatalogRef? catalogMatchByCode(
+  CatalogRef? current,
+  List<CatalogRef> options,
+) {
+  if (current == null || current.isEmpty) return null;
+  final code = current.code.trim();
+  if (code.isNotEmpty) {
+    for (final item in options) {
+      if (item.code.trim() == code) return item;
+    }
+  }
+  final name = current.name.trim();
+  if (name.isNotEmpty) {
+    for (final item in options) {
+      if (item.name.trim() == name) return item;
+    }
+  }
+  return current;
+}
+
+CatalogRef? catalogMatchFormula({
+  required Object? formulaContent,
+  int? settleMethod,
+  List<CatalogRef> formulas = const [],
+}) {
+  final code = catalogScalarText(formulaContent);
+  if (code.isEmpty) return null;
+  final method = settleMethod == null ? '' : '$settleMethod';
+  CatalogRef? byCode;
+  for (final item in formulas) {
+    if (item.code.trim() != code) continue;
+    if (method.isNotEmpty && item.settleMethod.trim() == method) return item;
+    byCode ??= item;
+  }
+  if (byCode != null) return byCode;
+  return CatalogRef(
+    code: code,
+    name: code,
+    settleMethod: method,
+    productSource: 'CHANNEL',
+  );
+}
+
+/// 渠道产品结算规则。来自 [GET /out/shaqiu/catalog/channel-product/settlement]。
+class ChannelProductSettlementItem {
+  const ChannelProductSettlementItem({
+    this.billTypeL1Code = '',
+    this.billTypeL1Name = '',
+    this.billTypeL2Code = '',
+    this.billTypeL2Name = '',
+    this.billTypeL3Code = '',
+    this.billTypeL3Name = '',
+    this.settleMethod,
+    this.formulaContent,
+    this.settlementRatio,
+    this.unitPrice,
+    this.thresholdAmount,
+    this.invoiceTypeCode = '',
+    this.invoiceTypeName = '',
+    this.taxRateCode = '',
+    this.taxRateName = '',
+    this.ourEntity = '',
+    this.counterpartyEntity = '',
+    this.effectiveTime = '',
+    this.expireTime = '',
+    this.participateInCalc,
+    this.sortNo = 0,
+  });
+
+  final String billTypeL1Code;
+  final String billTypeL1Name;
+  final String billTypeL2Code;
+  final String billTypeL2Name;
+  final String billTypeL3Code;
+  final String billTypeL3Name;
+  final int? settleMethod;
+  final int? formulaContent;
+  final Object? settlementRatio;
+  final Object? unitPrice;
+  final Object? thresholdAmount;
+  final String invoiceTypeCode;
+  final String invoiceTypeName;
+  final String taxRateCode;
+  final String taxRateName;
+  final String ourEntity;
+  final String counterpartyEntity;
+  final String effectiveTime;
+  final String expireTime;
+  final int? participateInCalc;
+  final int sortNo;
+
+  CatalogRef? get billTypeRef {
+    final code = billTypeL3Code.isNotEmpty
+        ? billTypeL3Code
+        : (billTypeL2Code.isNotEmpty ? billTypeL2Code : billTypeL1Code);
+    final name = billTypeL3Name.isNotEmpty
+        ? billTypeL3Name
+        : (billTypeL2Name.isNotEmpty ? billTypeL2Name : billTypeL1Name);
+    final path = [
+      if (billTypeL1Name.isNotEmpty) billTypeL1Name,
+      if (billTypeL2Name.isNotEmpty) billTypeL2Name,
+      if (billTypeL3Name.isNotEmpty) billTypeL3Name,
+    ].join(' / ');
+    if (code.isEmpty && name.isEmpty) return null;
+    return CatalogRef(
+      code: code,
+      name: name.isEmpty ? code : name,
+      displayPath: path,
+    );
+  }
+
+  CatalogRef? get settleModeRef {
+    final code = settleMethod;
+    if (code == null) return null;
+    final name = catalogSettleMethodName(code);
+    return CatalogRef(code: '$code', name: name.isEmpty ? '$code' : name);
+  }
+
+  CatalogRef? get formulaRef {
+    final code = formulaContent;
+    if (code == null) return null;
+    return CatalogRef(
+      code: '$code',
+      name: '$code',
+      settleMethod: settleMethod == null ? '' : '$settleMethod',
+      productSource: 'CHANNEL',
+    );
+  }
+
+  factory ChannelProductSettlementItem.fromJson(Object? raw) {
+    if (raw is! Map) return const ChannelProductSettlementItem();
+    final map = Map<String, dynamic>.from(raw);
+    String read(String key) => '${map[key] ?? ''}'.trim();
+    return ChannelProductSettlementItem(
+      billTypeL1Code: read('billTypeL1Code'),
+      billTypeL1Name: read('billTypeL1Name'),
+      billTypeL2Code: read('billTypeL2Code'),
+      billTypeL2Name: read('billTypeL2Name'),
+      billTypeL3Code: read('billTypeL3Code'),
+      billTypeL3Name: read('billTypeL3Name'),
+      settleMethod: catalogInt(map['settleMethod']),
+      formulaContent: catalogInt(map['formulaContent']),
+      settlementRatio: map['settlementRatio'],
+      unitPrice: map['unitPrice'],
+      thresholdAmount: map['thresholdAmount'],
+      invoiceTypeCode: read('invoiceTypeCode'),
+      invoiceTypeName: read('invoiceTypeName'),
+      taxRateCode: read('taxRateCode'),
+      taxRateName: read('taxRateName'),
+      ourEntity: read('ourEntity'),
+      counterpartyEntity: read('counterpartyEntity'),
+      effectiveTime: read('effectiveTime'),
+      expireTime: read('expireTime'),
+      participateInCalc: catalogInt(map['participateInCalc']),
+      sortNo: catalogInt(map['sortNo']) ?? 0,
+    );
+  }
+}
+
+class ChannelProductSettlement {
+  const ChannelProductSettlement({
+    this.product = const ChannelProductHit(),
+    this.items = const [],
+  });
+
+  final ChannelProductHit product;
+  final List<ChannelProductSettlementItem> items;
+
+  int? get id => product.id;
+  CatalogRef? get channelRef => product.channelRef;
+
+  factory ChannelProductSettlement.fromJson(Object? raw) {
+    if (raw is! Map) return const ChannelProductSettlement();
+    final map = Map<String, dynamic>.from(raw);
+    final itemsRaw = map['settlementItems'];
+    final items = <ChannelProductSettlementItem>[
+      for (final item in itemsRaw is List ? itemsRaw : const [])
+        ChannelProductSettlementItem.fromJson(item),
+    ]..sort((a, b) => a.sortNo.compareTo(b.sortNo));
+    return ChannelProductSettlement(
+      product: ChannelProductHit.fromJson(map),
+      items: items,
+    );
+  }
 }
 
 /// 资管结算字典。测试可传 [enabled]=false，避免真实 HTTP。
@@ -346,6 +586,66 @@ class SettlementCatalogService {
     ].where((item) => item.isNotEmpty).toList(growable: false);
   }
 
+  Future<ChannelProductSettlement?> fetchChannelProductSettlement(int id) async {
+    if (id <= 0) return null;
+    final data = await _getMap(
+      '/out/shaqiu/catalog/channel-product/settlement',
+      query: {'id': '$id'},
+    );
+    if (data == null) return null;
+    return ChannelProductSettlement.fromJson(data);
+  }
+
+  Future<List<CatalogRef>> fetchSuppliers({
+    String syncSource = '',
+    String keyword = '',
+    String entityKind = 'SUPPLIER',
+  }) async {
+    return _mapList(
+      '/out/shaqiu/catalog/supplier',
+      (item) => item is Map
+          ? CatalogRef.fromSupplier(Map<String, dynamic>.from(item))
+          : CatalogRef.empty,
+      query: {
+        if (syncSource.trim().isNotEmpty) 'syncSource': syncSource.trim(),
+        if (keyword.trim().isNotEmpty) 'keyword': keyword.trim(),
+        if (entityKind.trim().isNotEmpty) 'entityKind': entityKind.trim(),
+      },
+    );
+  }
+
+  Future<List<ChannelProductHit>> fetchSupplierProducts({
+    required String syncSource,
+    required String keyword,
+    int? supplierId,
+  }) async {
+    final source = syncSource.trim();
+    final query = keyword.trim();
+    if (source.isEmpty || query.isEmpty) return const [];
+    final raw = await _getList(
+      '/out/shaqiu/catalog/supplier-product',
+      query: {
+        'syncSource': source,
+        'keyword': query,
+        if (supplierId != null && supplierId > 0) 'supplierId': '$supplierId',
+      },
+    );
+    return [
+      for (final item in raw)
+        if (item is Map) ChannelProductHit.fromJson(item),
+    ].where((item) => item.isNotEmpty).toList(growable: false);
+  }
+
+  Future<ChannelProductSettlement?> fetchSupplierProductSettlement(int id) async {
+    if (id <= 0) return null;
+    final data = await _getMap(
+      '/out/shaqiu/catalog/supplier-product/settlement',
+      query: {'id': '$id'},
+    );
+    if (data == null) return null;
+    return ChannelProductSettlement.fromJson(data);
+  }
+
   Future<List<CatalogRef>> fetchBillTypes({
     required String syncSource,
     String productSource = '',
@@ -421,7 +721,25 @@ class SettlementCatalogService {
     String path, {
     Map<String, String>? query,
   }) async {
-    if (!enabled) return const [];
+    final data = await _getData(path, query: query);
+    if (data is List) return data;
+    return const [];
+  }
+
+  Future<Map<String, dynamic>?> _getMap(
+    String path, {
+    Map<String, String>? query,
+  }) async {
+    final data = await _getData(path, query: query);
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return null;
+  }
+
+  Future<Object?> _getData(
+    String path, {
+    Map<String, String>? query,
+  }) async {
+    if (!enabled) return null;
     try {
       final uri = Uri.parse(
         '$_assetBase$path',
@@ -430,19 +748,17 @@ class SettlementCatalogService {
           .get(uri, headers: const {'Accept': 'application/json'})
           .timeout(const Duration(seconds: 12));
       final decoded = jsonDecode(utf8.decode(resp.bodyBytes));
-      if (decoded is! Map) return const [];
+      if (decoded is! Map) return null;
       final map = Map<String, dynamic>.from(decoded);
       final code = map['code'];
       if (resp.statusCode < 200 ||
           resp.statusCode >= 300 ||
           (code is num && code != 200 && code != 0)) {
-        return const [];
+        return null;
       }
-      final data = map['data'];
-      if (data is List) return data;
-      return const [];
+      return map['data'];
     } catch (_) {
-      return const [];
+      return null;
     }
   }
 }

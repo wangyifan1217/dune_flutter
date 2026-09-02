@@ -250,7 +250,7 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
               child: Text(
-                '聊天附件按会话分文件夹保存在上述目录中。后续通用设置也会放在这里。',
+                '聊天附件按会话分文件夹保存在上述目录中，同一会话的文件直接放在该文件夹下。后续通用设置也会放在这里。',
                 style: DunesTypography.sans(
                   fontSize: 12,
                   height: 1.45,

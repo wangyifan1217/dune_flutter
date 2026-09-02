@@ -26,8 +26,8 @@ bool lighthouseCompactHeroIsNarrow(double width) =>
 
 double lighthouseCompactHeroSparkHeightFor(double width) =>
     lighthouseCompactHeroIsNarrow(width)
-        ? lighthouseCompactHeroSparkHeightNarrow
-        : lighthouseCompactHeroSparkHeight;
+    ? lighthouseCompactHeroSparkHeightNarrow
+    : lighthouseCompactHeroSparkHeight;
 
 /// 净TA 与产品 Hero 同一高度：项目 / 业务成本叠进总览图，不再垫分图。
 /// 左侧再叠银行余额存量块时加高一截，否则「↓xx% vs …」环比行会溢 12px。
@@ -42,12 +42,13 @@ double lighthouseNetTAHeroSparkHeightFor(
 
 double lighthouseCompactHeroChartMaxHeightFor(double width) =>
     lighthouseCompactHeroIsNarrow(width)
-        ? lighthouseCompactHeroChartMaxHeightNarrow
-        : lighthouseCompactHeroChartMaxHeightWide;
+    ? lighthouseCompactHeroChartMaxHeightNarrow
+    : lighthouseCompactHeroChartMaxHeightWide;
 
 /// Hero §02 区块总高度（含走势卡 padding）。窄宽都是左右并排。
 double lighthouseCompactHeroBlockHeightFor(double width) =>
-    lighthouseCompactHeroSparkHeightFor(width) + lighthouseHeroChartCardPadding * 2;
+    lighthouseCompactHeroSparkHeightFor(width) +
+    lighthouseHeroChartCardPadding * 2;
 
 // 指标格自己带了 2 的上下内边距（追溯方框用），格间距相应从 6 收到 2，
 // 视觉上的行距还是 6。
@@ -83,6 +84,7 @@ const lighthouseHeroSectionIconKeys = <String, String>{
   'cash': 'wallet',
   'profit': 'trendingUp',
 };
+
 /// 「规模」语义色。hero 规模卡的 accent 和走势图的规模线族（核销主线 /
 /// 销售细线 / 两者之间的带 / 月末预测虚线）共用它 —— 两处同色才能让
 /// 「规模」在跨屏时是同一个东西，所以抽成一个常量，别再各写各的字面量。
@@ -138,10 +140,7 @@ int lighthouseHeroTrendPaneFlex(int lineCount) => lineCount >= 3 ? 3 : 2;
 
 /// 格内量级差得开时把下沿收到 0，让收入 / 成本 / 毛利的高低有真实比例。
 /// 核销和销售几乎贴在一起，不能收到 0，否则两条都会贴死在格顶。
-bool lighthouseHeroPaneSnapsToZero({
-  required double min,
-  required double max,
-}) {
+bool lighthouseHeroPaneSnapsToZero({required double min, required double max}) {
   if (min < -1e-9 || max <= 1e-9) return false;
   return min < max * 0.5;
 }
@@ -239,7 +238,10 @@ String? lighthouseTrendSoloAfterTap(String? current, String tapped) {
 }
 
 /// 应用 solo 后的可见性，长度恒为 6。solo 指向没有数据的项时保持原样。
-/// v20 · Hero 概览图默认只画一条线（核销 / 销售这对共用真轴时画两条）。
+/// v21 · 默认画全部五条线（产品要求恢复）。
+///
+/// 单线版关掉了 —— 把 [lighthouseTrendDrawsSingleLine] 改回 true 即可切换，
+/// 其余代码不用动。
 ///
 /// 五条各自归一化叠在一张图里，纵轴根本不是同一个：交叉点和相对高低都不表示
 /// 任何事，更要命的是**波动被伪造** —— 每条都拉满整个图高，成本环比 +1.4%
@@ -251,7 +253,7 @@ String? lighthouseTrendSoloAfterTap(String? current, String tapped) {
 ///
 /// 唯一保留的双线例外是核销 + 销售：它们 [lighthouseTrendShareScaleRange]
 /// 时共用同一根 Y，两线之间的面积就是未核销差额，是真实可读的量。
-const bool lighthouseTrendDrawsSingleLine = true;
+const bool lighthouseTrendDrawsSingleLine = false;
 
 /// 「哪几条有数据」。图例的可点性看这个，不受单线规则影响 ——
 /// 没画在图上不等于点不了，恰恰相反：点它就是为了把它换上去。
@@ -262,14 +264,7 @@ List<bool> lighthouseTrendBaseFlags({
   required bool hasScale,
   required bool hasScaleAlt,
   bool hasCostAlt = false,
-}) => <bool>[
-  hasRevenue,
-  hasCost,
-  hasProfit,
-  hasScale,
-  hasScaleAlt,
-  hasCostAlt,
-];
+}) => <bool>[hasRevenue, hasCost, hasProfit, hasScale, hasScaleAlt, hasCostAlt];
 
 List<bool> lighthouseTrendVisibleFlags({
   required bool hasRevenue,
@@ -294,15 +289,12 @@ List<bool> lighthouseTrendVisibleFlags({
       : lighthouseTrendSeriesKeys.indexOf(soloKey);
   final soloValid = i >= 0 && i < base.length && base[i];
   if (soloValid) {
-    return <bool>[
-      for (var k = 0; k < 6; k++) k == i,
-    ];
+    return <bool>[for (var k = 0; k < 6; k++) k == i];
   }
   if (!lighthouseTrendDrawsSingleLine) return base;
   final hero = lighthouseTrendHeroIndex(base);
   // 核销 + 销售共用真轴，两条一起画才看得出未核销差额。
-  final keepsPair =
-      pairScale && (hero == 3 || hero == 4) && base[3] && base[4];
+  final keepsPair = pairScale && (hero == 3 || hero == 4) && base[3] && base[4];
   return <bool>[
     for (var k = 0; k < 6; k++) keepsPair ? (k == 3 || k == 4) : k == hero,
   ];
@@ -622,16 +614,10 @@ List<double> lighthouseCostBillTypeSeries(dynamic seriesRaw, String metricKey) {
   if (code == null || seriesRaw is! Map) return const <double>[];
   final raw = seriesRaw[code] ?? seriesRaw[metricKey];
   if (raw is! List || raw.isEmpty) return const <double>[];
-  return [
-    for (final e in raw) (e is num) ? e.toDouble() : 0.0,
-  ];
+  return [for (final e in raw) (e is num) ? e.toDouble() : 0.0];
 }
 
-const lighthouseProjectCostPreferredLabels = [
-  '平台服务费',
-  '支付手续费',
-  '机构返佣',
-];
+const lighthouseProjectCostPreferredLabels = ['平台服务费', '支付手续费', '机构返佣'];
 
 class LighthouseCostBillChartLine {
   const LighthouseCostBillChartLine({
@@ -661,9 +647,7 @@ String lighthouseCostBillChartLabel(Map<String, String> item) {
     return (const <String>[], const <int>[]);
   }
   return (
-    [
-      for (final label in labels) lighthouseHeroCompactPeriodLabel(label),
-    ],
+    [for (final label in labels) lighthouseHeroCompactPeriodLabel(label)],
     List<int>.generate(count, (i) => i),
   );
 }
@@ -792,6 +776,7 @@ const double lighthouseLedgerLongNameFontSize = 11.0;
 /// 二级「项目」名称更长，再降一档。
 const double lighthouseLedgerProjectNameFontSize = 10.0;
 const double lighthouseLedgerValueFontSize = 11.5;
+
 /// 金额单位（万/亿/%）相对数字略小一档，与摘要格历史口径一致；字重用常规体。
 const double lighthouseLedgerUnitFontSize = 9.0;
 const double lighthouseLedgerMetricLabelFontSize = 10;
@@ -945,6 +930,7 @@ String lighthouseSyncedAtStamp(DateTime t) {
   final mm = t.minute.toString().padLeft(2, '0');
   return '$y.$mo.$dd $hh:$mm';
 }
+
 const double lighthouseHeroSummaryTitleFontSize = 13.5;
 const double lighthouseHeroSummaryIconSize = 20;
 const double lighthouseHeroSummaryIconRadius = 6;
@@ -1246,7 +1232,6 @@ List<Map<String, dynamic>> lighthousePrepareNetTARows(
   return parents;
 }
 
-
 const lighthouseNetTASecondariesByMapped = <String, List<String>>{
   '经营活动': ['和包出行回款', '项目付款', '项目回款', '应收保证金', '分润', '预收保证金'],
   '筹资活动': ['往来款', '亚洲保理', '应付贷款', '应收往来款'],
@@ -1273,7 +1258,8 @@ List<Map<String, dynamic>> lighthouseNetTASecondariesOrSeed(
 ) {
   if (secondaries.isNotEmpty) return secondaries;
   return [
-    for (final name in lighthouseNetTASecondariesByMapped[mappedName] ?? const <String>[])
+    for (final name
+        in lighthouseNetTASecondariesByMapped[mappedName] ?? const <String>[])
       {'name': name, 'netTa': 0.0},
   ];
 }
@@ -1285,14 +1271,16 @@ List<Map<String, dynamic>> lighthouseNetTACardMetrics(
 }) {
   final items = [
     for (final raw in secondaries)
-      if ((raw['name']?.toString() ?? '').isNotEmpty) Map<String, dynamic>.from(raw),
+      if ((raw['name']?.toString() ?? '').isNotEmpty)
+        Map<String, dynamic>.from(raw),
   ];
   if (items.length <= maxCells) return items;
-  final ranked = [...items]..sort((a, b) {
-    final aa = ((a['netTa'] as num?)?.toDouble() ?? 0).abs();
-    final bb = ((b['netTa'] as num?)?.toDouble() ?? 0).abs();
-    return bb.compareTo(aa);
-  });
+  final ranked = [...items]
+    ..sort((a, b) {
+      final aa = ((a['netTa'] as num?)?.toDouble() ?? 0).abs();
+      final bb = ((b['netTa'] as num?)?.toDouble() ?? 0).abs();
+      return bb.compareTo(aa);
+    });
   final head = ranked.take(maxCells - 1).toList();
   final rest = ranked.skip(maxCells - 1).toList();
   var restSum = 0.0;
@@ -1410,9 +1398,7 @@ class LighthouseNetTAHeroTrend {
 
 List<double> lighthouseReadNumberSeries(dynamic raw) {
   if (raw is! List || raw.isEmpty) return const <double>[];
-  return [
-    for (final e in raw) (e is num) ? e.toDouble() : 0.0,
-  ];
+  return [for (final e in raw) (e is num) ? e.toDouble() : 0.0];
 }
 
 List<double> _lighthouseSumSeries(List<double> a, List<double> b) {
@@ -1445,7 +1431,8 @@ LighthouseNetTAHeroTrend lighthouseNetTAHeroTrendFromPayload(
   final series = payload['series'];
   if (series is Map) {
     final m = Map<String, dynamic>.from(series);
-    final parsedLabels = (m['labels'] is List && (m['labels'] as List).isNotEmpty)
+    final parsedLabels =
+        (m['labels'] is List && (m['labels'] as List).isNotEmpty)
         ? [
             for (final e in m['labels'] as List)
               if (e.toString().trim().isNotEmpty) e.toString().trim(),
@@ -1453,7 +1440,9 @@ LighthouseNetTAHeroTrend lighthouseNetTAHeroTrendFromPayload(
         : labels;
     final projectCost = lighthouseReadNumberSeries(m['projectCost']);
     final businessCost = lighthouseReadNumberSeries(m['businessCost']);
-    var projectAndBusiness = lighthouseReadNumberSeries(m['projectAndBusiness']);
+    var projectAndBusiness = lighthouseReadNumberSeries(
+      m['projectAndBusiness'],
+    );
     if (projectAndBusiness.isEmpty &&
         (projectCost.isNotEmpty || businessCost.isNotEmpty)) {
       projectAndBusiness = _lighthouseSumSeries(projectCost, businessCost);
@@ -1676,10 +1665,7 @@ List<String> _asStringList(dynamic v) {
     return one == null ? const [] : [one];
   }
   if (v is! List) return const [];
-  return [
-    for (final item in v)
-      ..._asStringList(item),
-  ];
+  return [for (final item in v) ..._asStringList(item)];
 }
 
 List<String> _splitUrlText(String raw) {
@@ -1755,7 +1741,9 @@ String lighthouseFormatFundPoolWan(double? amount) {
 }
 
 /// 拆成数字 / 单位，便于与上方指标格一样：数字加粗、单位常规字重。
-({String number, String unit}) lighthouseFormatFundPoolWanParts(double? amount) {
+({String number, String unit}) lighthouseFormatFundPoolWanParts(
+  double? amount,
+) {
   if (amount == null) return (number: '—', unit: '');
   final sign = amount < 0 ? '-' : '';
   final wan = amount.abs() / 10000;
@@ -1863,10 +1851,7 @@ const String lighthouseFundPoolFlowDividerLabel = '期间新增';
 ///
 /// 其余格子都是余额，是中性的量，染色只会把「负数」和「变差」搞混；
 /// 这两条本身就是增量，方向才是它要说的事。
-const lighthouseFundPoolGrowthMetricKeys = <String>{
-  'profitMonth',
-  'profitDay',
-};
+const lighthouseFundPoolGrowthMetricKeys = <String>{'profitMonth', 'profitDay'};
 
 const lighthouseFundPoolFundsSection = LighthouseFundPoolSectionSpec(
   kind: LighthouseFundPoolSectionKind.funds,
@@ -1928,8 +1913,8 @@ const lighthouseFundPoolReconSection = LighthouseFundPoolSectionSpec(
 
 /// ── Hero 指标格的关联关系 ────────────────────────────────────────────
 ///
-/// 13 个格子里只有 5 个是「算出来的」。点它右上角的箭头，来源格点亮、
-/// 无关格压暗，底部出一行口径式。
+/// 13 个格子都能点：走势切到这一项，有口径的同时打开底部公式行。
+/// 算出来的格子会点亮来源、压暗无关格；取数项只出式子，不压暗别人。
 enum LighthouseHeroFormulaRole { plus, minus, numerator, denominator }
 
 /// 角标文案 —— ROI 和毛利率都点亮「毛利润」，一个当分子一个当分母，
@@ -1973,13 +1958,81 @@ class LighthouseHeroFormula {
 
 const lighthouseHeroFormulas = <LighthouseHeroFormula>[
   LighthouseHeroFormula(
+    resultKey: 'sales',
+    result: '销售额',
+    expression: '下单张数 × 面值',
+    sources: [],
+    substitutes: false,
+  ),
+  LighthouseHeroFormula(
+    resultKey: 'verifiedSales',
+    result: '核销额',
+    expression: '核销张数 × 面值',
+    sources: [],
+    substitutes: false,
+  ),
+  LighthouseHeroFormula(
+    resultKey: 'gmv',
+    result: 'GMV',
+    expression: '撮合交易额',
+    sources: [],
+    substitutes: false,
+  ),
+  LighthouseHeroFormula(
     resultKey: 'totalCost',
     result: '成本合计',
     expression: '项目成本 + 业务成本',
     sources: [
-      LighthouseHeroFormulaSource('projectCost', LighthouseHeroFormulaRole.plus),
+      LighthouseHeroFormulaSource(
+        'projectCost',
+        LighthouseHeroFormulaRole.plus,
+      ),
       LighthouseHeroFormulaSource('cost', LighthouseHeroFormulaRole.plus),
     ],
+  ),
+  LighthouseHeroFormula(
+    resultKey: 'projectCost',
+    result: '项目成本',
+    expression: '毛利润对应成本',
+    sources: [],
+    substitutes: false,
+  ),
+  LighthouseHeroFormula(
+    resultKey: 'cost',
+    result: '业务成本',
+    expression: '账单三级 BUSINESS_COST',
+    sources: [],
+    substitutes: false,
+  ),
+  LighthouseHeroFormula(
+    resultKey: 'prepaid',
+    result: '预收净增',
+    // 「销售额 − 核销额」是会上的业务定义，但现网数字对不上：
+    // 供给维 销售额 1575.0万 − 核销额 762.5万 = 812.5万，而预收净增显示 22.63万，
+    // 差 36 倍；换一组（438.1 − 321.7 = 116.4 vs 5.74）差 20 倍，不是偶然。
+    // 代码里也只是直读 prepaid 字段，没有做这个减法。
+    //
+    // 把那条式子写在界面上，用户拿旁边两个格子一减就能发现对不上 ——
+    // 界面自己打自己。口径核清楚之前如实标「待核」。
+    expression: '后端直给 prepaid · 口径待核',
+    sources: [
+      LighthouseHeroFormulaSource('sales', LighthouseHeroFormulaRole.plus),
+      LighthouseHeroFormulaSource(
+        'verifiedSales',
+        LighthouseHeroFormulaRole.minus,
+      ),
+    ],
+    substitutes: false,
+  ),
+  LighthouseHeroFormula(
+    resultKey: 'profit',
+    result: '毛利润',
+    expression: '收入 − 成本合计',
+    sources: [
+      LighthouseHeroFormulaSource('revenue', LighthouseHeroFormulaRole.plus),
+      LighthouseHeroFormulaSource('totalCost', LighthouseHeroFormulaRole.minus),
+    ],
+    substitutes: false,
   ),
   LighthouseHeroFormula(
     resultKey: 'netProfit',
@@ -1989,6 +2042,20 @@ const lighthouseHeroFormulas = <LighthouseHeroFormula>[
       LighthouseHeroFormulaSource('profit', LighthouseHeroFormulaRole.plus),
       LighthouseHeroFormulaSource('cost', LighthouseHeroFormulaRole.minus),
     ],
+  ),
+  LighthouseHeroFormula(
+    resultKey: 'revenue',
+    result: '收入',
+    expression: '核销额 × 利差率',
+    sources: [],
+    substitutes: false,
+  ),
+  LighthouseHeroFormula(
+    resultKey: 'spread',
+    result: '利差',
+    expression: '已核销利差',
+    sources: [],
+    substitutes: false,
   ),
   LighthouseHeroFormula(
     resultKey: 'grossMargin',
@@ -2020,23 +2087,32 @@ const lighthouseHeroFormulas = <LighthouseHeroFormula>[
       ),
     ],
   ),
-  LighthouseHeroFormula(
-    resultKey: 'profit',
-    result: '毛利润',
-    expression: '收入 − 成本合计',
-    sources: [
-      LighthouseHeroFormulaSource('revenue', LighthouseHeroFormulaRole.plus),
-      LighthouseHeroFormulaSource('totalCost', LighthouseHeroFormulaRole.minus),
-    ],
-    substitutes: false,
-  ),
 ];
 
+String lighthouseHeroFormulaCanonicalKey(String metricKey) =>
+    switch (metricKey) {
+      'costTotal' => 'totalCost',
+      'businessCost' => 'cost',
+      _ => metricKey,
+    };
+
 LighthouseHeroFormula? lighthouseHeroFormulaForKey(String metricKey) {
+  final canonical = lighthouseHeroFormulaCanonicalKey(metricKey);
   for (final f in lighthouseHeroFormulas) {
-    if (f.resultKey == metricKey) return f;
+    if (f.resultKey == canonical) return f;
   }
   return null;
+}
+
+/// 点格子：走势和口径一起切；再点同一格收起。
+({String? focus, String? trace}) lighthouseHeroMetricActivateAfterTap(
+  String? currentFocus,
+  String tapped,
+) {
+  final focus = lighthouseHeroTrendFocusAfterTap(currentFocus, tapped);
+  if (focus == null) return (focus: null, trace: null);
+  final hasFormula = lighthouseHeroFormulaForKey(tapped) != null;
+  return (focus: focus, trace: hasFormula ? tapped : null);
 }
 
 /// 追溯中这一格扮演什么角色；不参与返回 null。
@@ -2054,9 +2130,12 @@ LighthouseHeroFormulaRole? lighthouseHeroTraceRole(
 }
 
 /// 追溯时无关的格子压暗 —— 只加亮的话，13 个里亮 2 个还是要找。
+/// 取数项没有来源格，压暗整屏没有信息量，只出式子。
 bool lighthouseHeroTraceDims(String? traced, String metricKey) {
   if (traced == null) return false;
   if (traced == metricKey) return false;
+  final formula = lighthouseHeroFormulaForKey(traced);
+  if (formula == null || formula.sources.isEmpty) return false;
   return lighthouseHeroTraceRole(traced, metricKey) == null;
 }
 
@@ -2064,6 +2143,576 @@ bool lighthouseHeroTraceDims(String? traced, String metricKey) {
 String? lighthouseHeroTraceAfterTap(String? current, String tappedKey) {
   if (lighthouseHeroFormulaForKey(tappedKey) == null) return current;
   return current == tappedKey ? null : tappedKey;
+}
+
+/// ── 标签对账状态 ────────────────────────────────────────────────
+///
+/// 对账**全部在资管后台做**，灯塔只呈现结果，不提供任何确认操作 ——
+/// 这是会上唯一被明确否掉的方案（「沙丘前端应该是呈现不能去操作」）。
+///
+/// 状态不是布尔。对账按笔（或按财务项目）进行，标签是聚合的：一个省下 200 笔，
+/// 对完 3 笔是「有对账」，全对完也是「有对账」，一个绿勾分不出来。
+/// 参照银行流水子表现网分布（已拆分仅占 1%），按「有没有对账记录」打勾会绿成
+/// 一片而绝大部分钱没对 —— 那比不显示还糟。所以必须带金额覆盖率。
+/// 四态。`overdue` 是 D+N 账期机制存在的全部理由 ——
+/// 「还在账期内正常等」和「超期没到」必须分开，否则等于没有这把尺子。
+///
+/// 原话可以当验收标准：「为什么同意他在 D+2 之内不显示风险事项」。
+/// 账期内不报风险，超期才报，两者共用一个颜色就把这句话作废了。
+/// 资管侧的一条对账备注。灯塔**只读**——会上唯一被否掉的方案就是让灯塔去操作，
+/// 所以这里没有输入框、没有回复、没有已读。
+///
+/// 它回答的是 chip 回答不了的那个问题：为什么没对完。
+/// 「未对账 2」只说有事，不说什么事；「对方账单未出，等下午再核」是能直接
+/// 拿去问人的东西。差异的解释本来就写在资管里，搬过来看一眼，别让人再登一次。
+class LighthouseReconComment {
+  const LighthouseReconComment({
+    required this.content,
+    this.author = '',
+    this.time = '',
+    this.source = '资管',
+    this.targetName = '',
+  });
+
+  final String content;
+  final String author;
+
+  /// 后端给已格式化的串（`HH:mm` 或 `MM-dd HH:mm`）。
+  /// 灯塔不做时区和相对时间的换算 —— 换算错了比不显示更糟。
+  final String time;
+  final String source;
+
+  /// 备注指向的对象，例如「中智关爱通」。省内多个主体时靠它区分。
+  final String targetName;
+
+  bool get isEmpty => content.trim().isEmpty;
+
+  /// 「资管 · 王艳丽 · 10:12」，缺项自动省略，不留空的分隔点。
+  String get headline =>
+      [source, author, time].where((s) => s.trim().isNotEmpty).join(' · ');
+
+  String get body =>
+      targetName.trim().isEmpty ? content : '${targetName.trim()}：$content';
+}
+
+/// `recon.comments` → 列表。非列表、空内容、超过上限的都丢掉。
+///
+/// 上限 5：面板里只露最新一条 + 「还有 N 条」，全量在资管里。
+/// 不设上限的话，一个省挂几十条备注会把整个 JSON 撑起来，而界面一条都不会多显示。
+List<LighthouseReconComment> lighthouseParseReconComments(dynamic raw) {
+  if (raw is! List) return const [];
+  final out = <LighthouseReconComment>[];
+  for (final item in raw) {
+    if (item is! Map) continue;
+    // 资管那边先给的 demo 用的是 snake_case，正式契约走 camelCase。
+    // 两种都收：联调期少一次来回，代价只是几个 ?? 。
+    String pick(String camel, String snake) =>
+        (item[camel] ?? item[snake])?.toString().trim() ?? '';
+    final content = pick('content', 'comment_content');
+    if (content.isEmpty) continue;
+    out.add(
+      LighthouseReconComment(
+        content: content,
+        author: pick('author', 'comment_author'),
+        time: pick('time', 'comment_time'),
+        source: () {
+          final s = pick('source', 'comment_source');
+          return s.isEmpty ? '资管' : s;
+        }(),
+        targetName: pick('targetName', 'target_name'),
+      ),
+    );
+    if (out.length >= lighthouseReconCommentMax) break;
+  }
+  return out;
+}
+
+const int lighthouseReconCommentMax = 5;
+
+enum LighthouseReconState { none, partial, done, overdue }
+
+/// 结算周期。D+N 按天，M+N 按月（月回款渠道不按天判超期）。
+enum LighthouseSettlementKind { day, month }
+
+class LighthouseReconStatus {
+  const LighthouseReconStatus({
+    required this.state,
+    this.coveredAmount = 0,
+    this.totalAmount = 0,
+    this.confirmedBy = '',
+    this.confirmedAt = '',
+    this.deepLink = '',
+    this.crossCoveredPct,
+    this.settlementKind,
+    this.settlementDays,
+    this.settlementFromProposal = true,
+    this.overdueCount = 0,
+    this.overdueAmount = 0,
+    this.comments = const [],
+  });
+
+  final LighthouseReconState state;
+  final double coveredAmount;
+  final double totalAmount;
+  final String confirmedBy;
+  final String confirmedAt;
+
+  /// 资管后台对应页面。老板明确要的「前面页面映射到后台那个页面」——
+  /// 状态只读，但入口在灯塔：看到没对完的，从这里点进去对。
+  final String deepLink;
+
+  /// 仅标签二：销售侧（标签三）已覆盖比例，**参考值，不改变自身状态**。
+  ///
+  /// 会上老板主张「标签三点完就等于标签二点完」，业务侧反对，没有结论。
+  /// 两边各对一半：覆盖上老板对（三个标签是同一批交易的三个切面，标签三全确认
+  /// 等于所有交易都被摸过一遍）；内容上业务侧对（标签三按**销售额**确认渠道应收，
+  /// 标签二按**核销额**确认供给核销和折扣，是两个不同的检查项，中间差着预收和
+  /// 供给侧折扣）。所以这里只传导「已被覆盖」，不传导「已确认」。
+  final double? crossCoveredPct;
+
+  /// 账期。来自提案的财务板块（结算模式 / 结算周期），对账时不允许另行判断。
+  /// 同一个渠道方下不同渠道可能不同（平安有的 D+1 有的 D+2），所以挂在行上。
+  final LighthouseSettlementKind? settlementKind;
+  final int? settlementDays;
+
+  /// 账期是不是从采购/合作协议自动带出的。
+  ///
+  /// 会上问过「这个是手填的吗？如果手填，数据会不会不准」——当场没答。
+  /// 手填的账期一旦填错，超期判定跟着错，而界面上看不出来。所以这里留一个位：
+  /// 非自动带出的，chip 上要能标出来，别让一个手填的 D+5 冒充事实。
+  final bool settlementFromProposal;
+
+  /// 超账期仍未到账的笔数与金额。这才是要报红的东西。
+  final int overdueCount;
+  final double overdueAmount;
+
+  /// 资管侧写的对账备注，最新的在前。只读。
+  final List<LighthouseReconComment> comments;
+
+  bool get hasComments => comments.isNotEmpty;
+
+  /// 覆盖率。总额为 0 时返回 null —— 没有分母的百分比不能显示。
+  double? get coveredPct {
+    if (totalAmount.abs() < 1e-9) return null;
+    return coveredAmount / totalAmount * 100;
+  }
+
+  double get pendingAmount => totalAmount - coveredAmount;
+  bool get hasDeepLink => deepLink.trim().isNotEmpty;
+  bool get hasOverdue => overdueCount > 0 || overdueAmount.abs() > 1e-9;
+
+  /// 账期文案：`D+2` / `M+1`。没有账期返回空串。
+  String get settlementLabel {
+    final days = settlementDays;
+    final kind = settlementKind;
+    if (days == null || kind == null) return '';
+    final prefix = kind == LighthouseSettlementKind.month ? 'M' : 'D';
+    return '$prefix+$days';
+  }
+
+  /// 主状态只看人对完没有。超期是钱的尺子，不挡「已对账」。
+  bool get showsGreen => state == LighthouseReconState.done;
+}
+
+LighthouseReconState lighthouseParseReconState(String raw) {
+  switch (raw.trim().toLowerCase()) {
+    case 'done':
+    case 'confirmed':
+      return LighthouseReconState.done;
+    case 'partial':
+      return LighthouseReconState.partial;
+    case 'overdue':
+      return LighthouseReconState.overdue;
+  }
+  return LighthouseReconState.none;
+}
+
+LighthouseSettlementKind? lighthouseParseSettlementKind(String raw) {
+  switch (raw.trim().toUpperCase()) {
+    case 'D':
+    case 'DAY':
+      return LighthouseSettlementKind.day;
+    case 'M':
+    case 'MONTH':
+      return LighthouseSettlementKind.month;
+  }
+  return null;
+}
+
+/// 行上的 `recon` 字段 → 状态。字段缺失返回 null，界面上整块不渲染 ——
+/// 和银行余额同一套处理：拿不到就当没有，不显示「未对账」。
+///
+/// 「没有状态」和「未对账」是两件事：前者是资管还没接，后者是接了但没对。
+/// 混成一个会让所有行在联调前全变红。
+LighthouseReconStatus? lighthouseParseReconStatus(dynamic raw) {
+  if (raw is! Map) return null;
+  final stateRaw = raw['state']?.toString() ?? '';
+  if (stateRaw.trim().isEmpty) return null;
+  double num0(String key) => (raw[key] as num?)?.toDouble() ?? 0;
+  int int0(String key) => (raw[key] as num?)?.toInt() ?? 0;
+  final daysRaw = raw['settlementDays'];
+  final crossRaw = raw['crossCoveredPct'];
+  return LighthouseReconStatus(
+    state: lighthouseParseReconState(stateRaw),
+    coveredAmount: num0('coveredAmount'),
+    totalAmount: num0('totalAmount'),
+    confirmedBy: raw['confirmedBy']?.toString().trim() ?? '',
+    confirmedAt: raw['confirmedAt']?.toString().trim() ?? '',
+    deepLink: raw['deepLink']?.toString().trim() ?? '',
+    crossCoveredPct: crossRaw is num ? crossRaw.toDouble() : null,
+    settlementKind: lighthouseParseSettlementKind(
+      raw['settlementKind']?.toString() ?? '',
+    ),
+    settlementDays: daysRaw is num ? daysRaw.toInt() : null,
+    settlementFromProposal: raw['settlementFromProposal'] != false,
+    overdueCount: int0('overdueCount'),
+    overdueAmount: num0('overdueAmount'),
+    comments: lighthouseParseReconComments(raw['comments']),
+  );
+}
+
+/// 只有供给（标签二）和渠道（标签三）有对账状态。产品维（标签一）不对账。
+bool lighthouseTabHasRecon(String tab) {
+  final t = tab.trim();
+  return t == 'supply' || t == 'channel';
+}
+
+const lighthouseUnconfirmedRecon = LighthouseReconStatus(
+  state: LighthouseReconState.none,
+);
+
+/// 供给 / 渠道缺 `recon` 时按未对账呈现。资管未接真数据前全部如此。
+LighthouseReconStatus? lighthouseReconStatusForRow(String tab, Object? raw) {
+  if (!lighthouseTabHasRecon(tab)) return null;
+  return lighthouseParseReconStatus(raw) ?? lighthouseUnconfirmedRecon;
+}
+
+/// chip 上的短文案。
+///
+/// `done` 不显示百分比 —— 已对账就是 100%，再写个数字是噪音。
+/// `partial` 必须显示百分比，这是整个设计的要点。
+String lighthouseReconChipLabel(LighthouseReconStatus status) {
+  switch (status.state) {
+    case LighthouseReconState.done:
+      return '已对账';
+    case LighthouseReconState.partial:
+    case LighthouseReconState.overdue:
+      final pct = status.coveredPct;
+      if (pct == null) return '对账中';
+      return '对账 ${pct.toStringAsFixed(pct >= 10 ? 0 : 1)}%';
+    case LighthouseReconState.none:
+      return '未对账';
+  }
+}
+
+/// 行状态旁始终显示评论条数；没有就是 0。正文只在只读弹层里。
+int lighthouseReconCommentEntryCount(LighthouseReconStatus status) =>
+    status.comments.length;
+
+/// 账期一句话。界面上只印一个「D+2」，看的人无从知道它在说什么 ——
+/// 实际被问到的原话就是「对账周期和 D+2 到底什么关系，不是回款吗」。
+///
+/// 是回款。D+N 不是对账的周期，是**钱应该什么时候到**的约定：
+/// 对账做的是「该到的钱到没到、金额对不对」，D+N 只提供那把尺子 ——
+/// 没有它，「还没到账」既可能是正常在途，也可能是出事了，分不出来。
+/// 所以这句话要写在界面上，不能指望看的人自己接上。
+///
+/// 没有账期返回空串。
+String lighthouseSettlementExplain(LighthouseReconStatus status) {
+  final days = status.settlementDays;
+  final kind = status.settlementKind;
+  if (days == null || kind == null) return '';
+  final when = kind == LighthouseSettlementKind.month
+      ? (days == 1 ? '次月结算' : '第 $days 个月结算')
+      : '交易后第 $days 天到账';
+  final base = '账期 ${status.settlementLabel} · $when，超过未到才算超期';
+  // 手填的账期：这句话的可信度取决于它是不是从提案带出来的。
+  return status.settlementFromProposal ? base : '$base（人工填写，未核）';
+}
+
+/// 一屏行里的超期汇总。
+///
+/// 会上原话：「如果有不通过的，把那个问题给我暴露出来，是一个还是两个，
+/// 在这里面就能看到」。逐行看要翻几十行，所以在列表顶上收一条。
+///
+/// 只统计**有 recon 数据**的行：字段没接的行不算「没问题」，也不算「有问题」。
+class LighthouseReconOverview {
+  const LighthouseReconOverview({
+    required this.rowsWithStatus,
+    required this.overdueRows,
+    required this.overdueCount,
+    required this.overdueAmount,
+    required this.doneRows,
+    this.noSettlementRows = 0,
+    this.manualSettlementRows = 0,
+  });
+
+  final int rowsWithStatus;
+
+  /// 有超期的行数（几个省 / 几个渠道出问题），不是笔数。
+  final int overdueRows;
+
+  /// 超期笔数与金额合计。
+  final int overdueCount;
+  final double overdueAmount;
+
+  /// 已对账行数 —— 与 [LighthouseReconStatus.showsGreen] 同一口径。
+  final int doneRows;
+
+  /// 没有账期的行数。会上问的是「D+2 之内不显示风险」，可没有账期的行
+  /// 连「之内」都无从算起 —— 它们既不绿也不红，是尺子本身缺了一段。
+  final int noSettlementRows;
+
+  /// 账期是人工手填的行数（`settlementFromProposal == false`）。
+  /// 会上问过「手填的数据会不会不准」，当场没答。超期判定完全建立在这个数上，
+  /// 手填的多，红点的可信度就低 —— 这个数得能被看见。
+  final int manualSettlementRows;
+
+  bool get hasAny => rowsWithStatus > 0;
+  bool get hasOverdue => overdueRows > 0;
+  bool get allGreen => hasAny && doneRows == rowsWithStatus;
+}
+
+LighthouseReconOverview lighthouseSummarizeRecon(
+  Iterable<LighthouseReconStatus?> statuses,
+) {
+  var rows = 0, overdueRows = 0, overdueCount = 0, doneRows = 0;
+  var noSettlement = 0, manualSettlement = 0;
+  var overdueAmount = 0.0;
+  for (final s in statuses) {
+    if (s == null) continue;
+    rows++;
+    if (s.settlementLabel.isEmpty) {
+      noSettlement++;
+    } else if (!s.settlementFromProposal) {
+      manualSettlement++;
+    }
+    if (s.hasOverdue || s.state == LighthouseReconState.overdue) {
+      overdueRows++;
+      overdueCount += s.overdueCount;
+      overdueAmount += s.overdueAmount;
+    }
+    if (s.showsGreen) doneRows++;
+  }
+  return LighthouseReconOverview(
+    rowsWithStatus: rows,
+    overdueRows: overdueRows,
+    overdueCount: overdueCount,
+    overdueAmount: overdueAmount,
+    doneRows: doneRows,
+    noSettlementRows: noSettlement,
+    manualSettlementRows: manualSettlement,
+  );
+}
+
+/// 汇总条右侧的账期成色。空串 = 账期这块没什么要说的。
+///
+/// 和左边的超期分开写：左边说「对账做到哪了」，右边说「这把尺子准不准」。
+/// 一个 100% 绿、但一半的行没账期的列表，绿得没有意义 —— 那才是要露出来的。
+String lighthouseReconSettlementNote(LighthouseReconOverview o) {
+  if (!o.hasAny) return '';
+  final parts = <String>[];
+  if (o.noSettlementRows > 0) parts.add('${o.noSettlementRows} 个无账期');
+  if (o.manualSettlementRows > 0) parts.add('${o.manualSettlementRows} 个手填');
+  return parts.join(' · ');
+}
+
+/// 顶栏不再报超期。进度已经写在每一行上。
+String lighthouseReconOverviewLabel(LighthouseReconOverview overview) {
+  return '';
+}
+
+/// 发版不再灌假对账 / 假日清。缺字段的行由 [lighthouseReconStatusForRow] 显示未对账。
+List<Map<String, dynamic>> lighthouseAttachDemoRecon(
+  String tab,
+  List<Map<String, dynamic>> rows, {
+  DateTime? now,
+}) {
+  return rows;
+}
+
+/// ── 日清明细 ──────────────────────────────────────────────────
+///
+/// 老板白板上就两行：**上日** 和 **当月累计**，各看规模和利润。
+/// 「月回款的项目就两行，第一行前一天、第二行当月累计」是同一个要求。
+/// 所以这里不做长表，就是 2×2 四个数。
+///
+/// 灯塔上只呈现，不填、不确认、不复核 ——
+/// 「填一次一刀切全部结束」「只要出现人工复核，就代表系统逻辑不成立」。
+enum LighthouseApprovalStep { pending, done }
+
+class LighthouseDailyCloseRow {
+  const LighthouseDailyCloseRow({
+    required this.scale,
+    required this.profit,
+    this.label = '',
+  });
+  final double? scale;
+  final double? profit;
+
+  /// 日期范围文案，如 `9/1` 或 `9/1 – 9/2`。
+  final String label;
+}
+
+class LighthouseDailyClose {
+  const LighthouseDailyClose({
+    required this.lastDay,
+    required this.monthToDate,
+    this.finance = LighthouseApprovalStep.pending,
+    this.business = LighthouseApprovalStep.pending,
+    this.operation = LighthouseApprovalStep.pending,
+  });
+
+  final LighthouseDailyCloseRow lastDay;
+  final LighthouseDailyCloseRow monthToDate;
+
+  /// 三步审批，顺序固定：财务先填 → 业务填 → 运营确认。
+  final LighthouseApprovalStep finance;
+  final LighthouseApprovalStep business;
+  final LighthouseApprovalStep operation;
+
+  bool get allApproved =>
+      finance == LighthouseApprovalStep.done &&
+      business == LighthouseApprovalStep.done &&
+      operation == LighthouseApprovalStep.done;
+
+  /// 卡在谁那儿。全过返回空串。
+  String get pendingStepLabel {
+    if (finance != LighthouseApprovalStep.done) return '财务';
+    if (business != LighthouseApprovalStep.done) return '业务';
+    if (operation != LighthouseApprovalStep.done) return '运营';
+    return '';
+  }
+}
+
+LighthouseApprovalStep lighthouseParseApprovalStep(String raw) =>
+    raw.trim().toLowerCase() == 'done'
+    ? LighthouseApprovalStep.done
+    : LighthouseApprovalStep.pending;
+
+/// 行上的 `daily` 字段 → 日清明细。缺失返回 null，整块不渲染。
+LighthouseDailyClose? lighthouseParseDailyClose(dynamic raw) {
+  if (raw is! Map) return null;
+  LighthouseDailyCloseRow? row(dynamic v, String Function(Map) label) {
+    if (v is! Map) return null;
+    final scale = (v['scale'] as num?)?.toDouble();
+    final profit = (v['profit'] as num?)?.toDouble();
+    if (scale == null && profit == null) return null;
+    return LighthouseDailyCloseRow(
+      scale: scale,
+      profit: profit,
+      label: label(v),
+    );
+  }
+
+  final last = row(raw['lastDay'], (m) => lighthouseShortDate(m['date']));
+  final mtd = row(raw['monthToDate'], (m) {
+    final from = lighthouseShortDate(m['from']);
+    final to = lighthouseShortDate(m['to']);
+    if (from.isEmpty || to.isEmpty) return from.isEmpty ? to : from;
+    return from == to ? from : '$from – $to';
+  });
+  if (last == null && mtd == null) return null;
+
+  final approval = raw['approval'];
+  String step(String key) =>
+      approval is Map ? (approval[key]?.toString() ?? '') : '';
+  return LighthouseDailyClose(
+    lastDay: last ?? const LighthouseDailyCloseRow(scale: null, profit: null),
+    monthToDate:
+        mtd ?? const LighthouseDailyCloseRow(scale: null, profit: null),
+    finance: lighthouseParseApprovalStep(step('finance')),
+    business: lighthouseParseApprovalStep(step('business')),
+    operation: lighthouseParseApprovalStep(step('operation')),
+  );
+}
+
+/// `2026-09-01` → `9/1`。冻结列和明细里都放不下完整日期。
+String lighthouseShortDate(dynamic raw) {
+  final t = raw?.toString().trim() ?? '';
+  final m = RegExp(r'^\d{4}-(\d{2})-(\d{2})').firstMatch(t);
+  if (m == null) return t;
+  final mm = int.tryParse(m.group(1)!) ?? 0;
+  final dd = int.tryParse(m.group(2)!) ?? 0;
+  if (mm == 0 || dd == 0) return t;
+  return '$mm/$dd';
+}
+
+/// 规模这一列的表头。
+///
+/// 供给维百分之百按**核销额**确认，渠道维大部分按**销售额** —— 两个 tab 用同一个
+/// 「规模」标签却取不同的数，看表的人不可能知道。所以标签写死，不用含糊词。
+String lighthouseDailyScaleLabel(String tab) =>
+    tab.trim() == 'supply' ? '核销额' : '销售额';
+
+/// ── 银行余额日序列 ────────────────────────────────────────────────
+///
+/// 余额是存量，日间波动主要由付款批次决定，跟昨天比噪音大过信号。
+/// 跟上月末比才对应「这个月账上是多了还是少了」，也和旁边的本月净TA 同一个窗口。
+///
+/// [dates] 与 [totals] 按日期升序一一对应，格式 `yyyy-MM-dd`。
+
+/// 末点所在年月之前、最后一个点的余额 = 上月末。取不到返回 null。
+double? lighthouseBankBalancePrevMonthEnd(
+  List<String> dates,
+  List<double> totals,
+) {
+  final n = dates.length < totals.length ? dates.length : totals.length;
+  if (n < 2) return null;
+  String monthOf(String date) {
+    final t = date.trim();
+    return t.length >= 7 ? t.substring(0, 7) : t;
+  }
+
+  final lastMonth = monthOf(dates[n - 1]);
+  if (lastMonth.isEmpty) return null;
+  for (var i = n - 2; i >= 0; i--) {
+    final m = monthOf(dates[i]);
+    if (m.isNotEmpty && m.compareTo(lastMonth) < 0) return totals[i];
+  }
+  return null;
+}
+
+/// 环比 = (末点 − 上月末) ÷ |上月末| × 100。
+///
+/// 上月末缺失或为 0 时返回 null —— 除以 0 得到的百分比没有意义，
+/// 界面上这一行直接不渲染，不显示 0%。
+double? lighthouseBankBalanceMomPct(List<String> dates, List<double> totals) {
+  final prev = lighthouseBankBalancePrevMonthEnd(dates, totals);
+  if (prev == null || prev.abs() < 1e-9) return null;
+  final n = dates.length < totals.length ? dates.length : totals.length;
+  if (n < 2) return null;
+  return (totals[n - 1] - prev) / prev.abs() * 100;
+}
+
+/// 把 /net-ta 的 `bankBalance.companies` 摊成界面用的行。
+///
+/// 账户必须跟着走：合并时只留公司名和总额的话，展开箭头永远出不来。
+List<Map<String, dynamic>> lighthouseNetTABankBalanceCompanies(dynamic list) {
+  if (list is! List) return const [];
+  final out = <Map<String, dynamic>>[];
+  for (final e in list.whereType<Map>()) {
+    final name = e['company']?.toString().trim() ?? '';
+    if (name.isEmpty) continue;
+    final accounts = <Map<String, dynamic>>[];
+    final rawAccounts = e['accounts'];
+    if (rawAccounts is List) {
+      for (final a in rawAccounts.whereType<Map>()) {
+        final label = a['account']?.toString().trim() ?? '';
+        if (label.isEmpty) continue;
+        accounts.add({
+          'account': label,
+          'balance': (a['balance'] as num?)?.toDouble() ?? 0.0,
+        });
+      }
+    }
+    out.add({
+      'company': name,
+      'balance': (e['balance'] as num?)?.toDouble() ?? 0.0,
+      'accounts': accounts,
+    });
+  }
+  return out;
 }
 
 /// 资金池预览两格各自点开自己的面板：

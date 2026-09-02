@@ -85,6 +85,224 @@ void main() {
     ]);
   });
 
+  test('missing recon shows 未对账 and attach no longer injects demo fields', () {
+    expect(
+      lighthouseAttachDemoRecon('product', [
+        {'name': '民营加油'},
+      ]),
+      [
+        {'name': '民营加油'},
+      ],
+    );
+    final rows = lighthouseAttachDemoRecon('supply', [
+      {'name': '广西', 'verifiedSales': 816000, 'profit': 121000},
+      {'name': '广东'},
+      {'name': '云南'},
+    ]);
+    expect(rows[0].containsKey('recon'), isFalse);
+    expect(rows[0].containsKey('daily'), isFalse);
+    expect(lighthouseReconStatusForRow('product', null), isNull);
+    for (final row in rows) {
+      final status = lighthouseReconStatusForRow('supply', row['recon']);
+      expect(status, isNotNull);
+      expect(lighthouseReconChipLabel(status!), '未对账');
+      expect(status.hasComments, isFalse);
+    }
+    expect(lighthouseParseDailyClose(rows[0]['daily']), isNull);
+    final overview = lighthouseSummarizeRecon([
+      lighthouseReconStatusForRow('supply', rows[0]['recon']),
+      lighthouseReconStatusForRow('supply', rows[1]['recon']),
+      lighthouseReconStatusForRow('supply', rows[2]['recon']),
+    ]);
+    expect(overview.doneRows, 0);
+    expect(lighthouseReconOverviewLabel(overview), '');
+    final kept = lighthouseAttachDemoRecon('supply', [
+      {
+        'name': '广西',
+        'recon': {'state': 'done', 'coveredAmount': 1, 'totalAmount': 1},
+      },
+    ]);
+    expect(kept.single['recon']['state'], 'done');
+    expect(lighthouseParseDailyClose(kept.single['daily']), isNull);
+  });
+
+  test('recon overview exposes settlement quality, not just coverage', () {
+    LighthouseReconStatus st({
+      String state = 'none',
+      String? kind,
+      int? days,
+      bool fromProposal = true,
+    }) => lighthouseParseReconStatus({
+      'state': state,
+      'totalAmount': 100,
+      if (kind != null) 'settlementKind': kind,
+      if (days != null) 'settlementDays': days,
+      'settlementFromProposal': fromProposal,
+    })!;
+
+    final o = lighthouseSummarizeRecon([
+      st(state: 'done', kind: 'D', days: 2),
+      st(), // 无账期
+      st(), // 无账期
+      st(kind: 'D', days: 5, fromProposal: false), // 手填
+      null, // 字段没接：不进分母
+    ]);
+    expect(o.rowsWithStatus, 4);
+    expect(o.noSettlementRows, 2);
+    expect(o.manualSettlementRows, 1);
+    // 手填的行有账期，不该同时算进「无账期」——两个计数互斥。
+    expect(o.noSettlementRows + o.manualSettlementRows, 3);
+    expect(lighthouseReconSettlementNote(o), '2 个无账期 · 1 个手填');
+
+    // 账期齐整时右侧不说话 —— 常态不占位置。
+    expect(
+      lighthouseReconSettlementNote(
+        lighthouseSummarizeRecon([st(state: 'done', kind: 'D', days: 1)]),
+      ),
+      '',
+    );
+    // 没有任何 recon 数据时整条不渲染。
+    expect(lighthouseReconSettlementNote(lighthouseSummarizeRecon([null])), '');
+    expect(lighthouseReconOverviewLabel(lighthouseSummarizeRecon([null])), '');
+  });
+
+  test('recon comment entry always shows count including zero', () {
+    final overdue = lighthouseParseReconStatus(const {
+      'state': 'done',
+      'coveredAmount': 1000.0,
+      'totalAmount': 1000.0,
+      'settlementKind': 'D',
+      'settlementDays': 1,
+      'overdueCount': 2,
+      'overdueAmount': 80000.0,
+      'comments': [
+        {'content': '对方账单未出'},
+        {'content': '已经催款'},
+      ],
+    })!;
+    expect(lighthouseReconCommentEntryCount(overdue), 2);
+    expect(
+      lighthouseReconCommentEntryCount(
+        const LighthouseReconStatus(state: LighthouseReconState.done),
+      ),
+      0,
+    );
+    expect(lighthouseReconCommentEntryCount(lighthouseUnconfirmedRecon), 0);
+  });
+
+  test('main recon status hides settlement and overdue', () {
+    LighthouseReconStatus st(
+      String state,
+      String? kind,
+      int? days, {
+      bool fromProposal = true,
+    }) => lighthouseParseReconStatus({
+      'state': state,
+      'coveredAmount': 100,
+      'totalAmount': 100,
+      if (kind != null) 'settlementKind': kind,
+      if (days != null) 'settlementDays': days,
+      'settlementFromProposal': fromProposal,
+    })!;
+
+    // D+N 是回款约定，不是对账周期 —— 这句话就是为了消除那个误解。
+    expect(
+      lighthouseSettlementExplain(st('done', 'D', 2)),
+      '账期 D+2 · 交易后第 2 天到账，超过未到才算超期',
+    );
+    expect(
+      lighthouseSettlementExplain(st('done', 'M', 1)),
+      '账期 M+1 · 次月结算，超过未到才算超期',
+    );
+    expect(
+      lighthouseSettlementExplain(st('none', 'D', 5, fromProposal: false)),
+      endsWith('（人工填写，未核）'),
+    );
+    // 没账期就不说话，不编一句「账期未知」占位。
+    expect(lighthouseSettlementExplain(st('done', null, null)), '');
+    expect(lighthouseSettlementExplain(st('partial', 'D', null)), '');
+
+    // 没人确认过就是未对账。灯塔不知道钱到没到，不写「正常待回款」。
+    final none = st('none', 'D', 2);
+    expect(lighthouseReconChipLabel(none), '未对账');
+    expect(lighthouseReconChipLabel(none), isNot(contains('D+2')));
+    expect(lighthouseReconChipLabel(none), isNot(contains('待回款')));
+    expect(lighthouseReconChipLabel(st('done', 'D', 2)), '已对账');
+    expect(lighthouseReconChipLabel(st('partial', 'D', 2)), '对账 100%');
+    expect(
+      lighthouseReconChipLabel(lighthouseReconStatusForRow('supply', null)!),
+      '未对账',
+    );
+  });
+
+  test('recon comments parse read-only, cap at 5, accept both key styles', () {
+    // camelCase 是正式契约。
+    final camel = lighthouseParseReconStatus({
+      'state': 'partial',
+      'coveredAmount': 8,
+      'totalAmount': 10,
+      'comments': [
+        {
+          'content': '对方账单未出，等下午再核。',
+          'author': '王艳丽',
+          'time': '10:12',
+          'targetName': '中智关爱通',
+        },
+      ],
+    })!;
+    expect(camel.hasComments, isTrue);
+    expect(camel.comments.single.headline, '资管 · 王艳丽 · 10:12');
+    expect(camel.comments.single.body, '中智关爱通：对方账单未出，等下午再核。');
+
+    // snake_case 是资管先给的 demo 形状，联调期一并收。
+    final snake = lighthouseParseReconStatus({
+      'state': 'partial',
+      'comments': [
+        {'comment_content': 'x', 'comment_author': '李', 'comment_source': '资管'},
+      ],
+    })!;
+    expect(snake.comments.single.author, '李');
+    // 缺项不留空的分隔点。
+    expect(snake.comments.single.headline, '资管 · 李');
+    expect(snake.comments.single.body, 'x');
+
+    // 空内容丢掉，非列表当没有，超过上限截断。
+    expect(
+      lighthouseParseReconStatus({
+        'state': 'none',
+        'comments': [
+          {'content': '  '},
+          {'content': 'a'},
+        ],
+      })!.comments.length,
+      1,
+    );
+    expect(
+      lighthouseParseReconStatus({
+        'state': 'none',
+        'comments': 'oops',
+      })!.hasComments,
+      isFalse,
+    );
+    expect(
+      lighthouseParseReconStatus({
+        'state': 'none',
+        'comments': [
+          for (var i = 0; i < 9; i++) <String, dynamic>{'content': 'c$i'},
+        ],
+      })!.comments.length,
+      lighthouseReconCommentMax,
+    );
+
+    // 字段没接的行按未对账呈现，不再灌备注假数据。
+    expect(lighthouseParseReconStatus({'comments': []}), isNull);
+    expect(lighthouseReconStatusForRow('supply', null)!.hasComments, isFalse);
+    expect(
+      lighthouseReconChipLabel(lighthouseReconStatusForRow('supply', null)!),
+      '未对账',
+    );
+  });
+
   test('hero metric expand shows all trend charts without formulas', () {
     expect(lighthouseHeroShowsMetricFormulas, isFalse);
     expect(lighthouseHeroShowsAllMetricTrends, isFalse);
@@ -173,11 +391,7 @@ void main() {
   });
 
   test('trend x-axis labels every point gets a date', () {
-    final all = lighthouseTrendXAxisLabels(
-      ['8.21', '8.22', '8.23', '8.24', '8.25', '8.26', '8.27'],
-      7,
-    );
-    expect(all.$1, [
+    final all = lighthouseTrendXAxisLabels([
       '8.21',
       '8.22',
       '8.23',
@@ -185,15 +399,13 @@ void main() {
       '8.25',
       '8.26',
       '8.27',
-    ]);
+    ], 7);
+    expect(all.$1, ['8.21', '8.22', '8.23', '8.24', '8.25', '8.26', '8.27']);
     expect(all.$2, [0, 1, 2, 3, 4, 5, 6]);
-    expect(
-      lighthouseTrendXAxisLabels(
-        ['2026.02', '2026.08'],
-        2,
-      ).$1,
-      ['02月', '08月'],
-    );
+    expect(lighthouseTrendXAxisLabels(['2026.02', '2026.08'], 2).$1, [
+      '02月',
+      '08月',
+    ]);
     expect(lighthouseFundPoolExpandTapWidth, 44);
     expect(lighthouseFundPoolExpandIconSize, 22);
     expect(lighthouseFundPoolPreviewChevronSize, 10);
@@ -204,10 +416,7 @@ void main() {
 
   test('lighthouseTrendShareScaleRange only pairs 核销/销售', () {
     expect(
-      lighthouseTrendShareScaleRange(
-        scaleLabel: '核销规模',
-        scaleAltLabel: '销售规模',
-      ),
+      lighthouseTrendShareScaleRange(scaleLabel: '核销规模', scaleAltLabel: '销售规模'),
       isTrue,
     );
     expect(
@@ -218,10 +427,7 @@ void main() {
       isFalse,
     );
     expect(
-      lighthouseTrendShareScaleRange(
-        scaleLabel: '规模',
-        scaleAltLabel: '',
-      ),
+      lighthouseTrendShareScaleRange(scaleLabel: '规模', scaleAltLabel: ''),
       isFalse,
     );
   });
@@ -239,31 +445,20 @@ void main() {
 
   test('cost bill L3 types render as extra cost trend charts', () {
     const types = [
-      {
-        'key': 'service_ap_PTFWF',
-        'label': '平台服务费',
-        'category': 'PROJECT_COST',
-      },
-      {
-        'key': 'ap_YWCB_GJCH',
-        'label': '供给侧H',
-        'category': 'BUSINESS_COST',
-      },
+      {'key': 'service_ap_PTFWF', 'label': '平台服务费', 'category': 'PROJECT_COST'},
+      {'key': 'ap_YWCB_GJCH', 'label': '供给侧H', 'category': 'BUSINESS_COST'},
     ];
-    expect(
-      lighthouseHeroCostBillTrendKeys(types),
-      ['costBill:service_ap_PTFWF', 'costBill:ap_YWCB_GJCH'],
-    );
+    expect(lighthouseHeroCostBillTrendKeys(types), [
+      'costBill:service_ap_PTFWF',
+      'costBill:ap_YWCB_GJCH',
+    ]);
     expect(lighthouseIsCostBillMetric('costBill:service_ap_PTFWF'), isTrue);
     expect(lighthouseIsCostBillMetric('projectCost'), isFalse);
     expect(
       lighthouseCostBillTypeLabel('costBill:service_ap_PTFWF', types),
       '平台服务费',
     );
-    expect(
-      lighthouseHeroTrendChartSlot('costBill:ap_YWCB_GJCH'),
-      'cost',
-    );
+    expect(lighthouseHeroTrendChartSlot('costBill:ap_YWCB_GJCH'), 'cost');
     expect(
       lighthouseCostBillTypeSeries({
         'service_ap_PTFWF': [1, 2, 3],
@@ -278,11 +473,7 @@ void main() {
           'l2': '返佣',
           'category': 'PROJECT_COST',
         },
-        {
-          'key': 'ap_YWCB_GJCH',
-          'label': '供给侧H',
-          'category': 'BUSINESS_COST',
-        },
+        {'key': 'ap_YWCB_GJCH', 'label': '供给侧H', 'category': 'BUSINESS_COST'},
         {
           'key': 'ap_FW_PTF',
           'label': '平台服务费',
@@ -303,10 +494,11 @@ void main() {
       },
       category: 'PROJECT_COST',
     );
-    expect(
-      projectLines.map((l) => l.label).toList(),
-      ['平台服务费', '支付手续费', '机构返佣'],
-    );
+    expect(projectLines.map((l) => l.label).toList(), [
+      '平台服务费',
+      '支付手续费',
+      '机构返佣',
+    ]);
     expect(projectLines.first.values, [1, 2, 3]);
     expect(
       lighthouseCostBillChartLines(
@@ -376,18 +568,17 @@ void main() {
       ['sales', 'prepaid'],
       ['verifiedSales', 'profit'],
     ]);
-    expect(
-      lighthouseLedgerSoloTrendKeys,
-      {'sales', 'verifiedSales', 'prepaid', 'profit'},
-    );
+    expect(lighthouseLedgerSoloTrendKeys, {
+      'sales',
+      'verifiedSales',
+      'prepaid',
+      'profit',
+    });
     expect(lighthouseLedgerMetricOpensSoloTrend('sales'), isTrue);
     expect(lighthouseLedgerMetricOpensSoloTrend('gmv'), isFalse);
     expect(lighthouseLedgerSoloTrendAfterTap(null, 'profit'), 'profit');
     expect(lighthouseLedgerSoloTrendAfterTap('profit', 'profit'), isNull);
-    expect(
-      lighthouseLedgerSoloTrendAfterTap('sales', 'prepaid'),
-      'prepaid',
-    );
+    expect(lighthouseLedgerSoloTrendAfterTap('sales', 'prepaid'), 'prepaid');
     expect(lighthouseLedgerSoloTrendAfterTap('sales', 'gmv'), 'sales');
     expect(lighthouseLedgerShowsFundPoolPreview('supply'), isTrue);
     expect(lighthouseLedgerShowsFundPoolPreview('product'), isFalse);
@@ -400,21 +591,49 @@ void main() {
         ['系统差异', '期末预付款余额 − 资金池可用 − 库存/同步券 − 应收资金'],
       ],
     );
-    // Hero 五条式子。毛利率 / ROI 与 _rowGrossMarginPct / _rowRoiPct 同口径；
-    // 成本合计 / 净利润 是反推的；毛利润那条口径未确认，所以不代入数字。
+    // Hero 十三格式子。算出来的会点亮来源格；取数项只出口径，不代数。
     expect(
       lighthouseHeroFormulas.map((f) => [f.resultKey, f.expression]).toList(),
       [
+        ['sales', '下单张数 × 面值'],
+        ['verifiedSales', '核销张数 × 面值'],
+        ['gmv', '撮合交易额'],
         ['totalCost', '项目成本 + 业务成本'],
+        ['projectCost', '毛利润对应成本'],
+        ['cost', '账单三级 BUSINESS_COST'],
+        ['prepaid', '销售额 − 核销额'],
+        ['profit', '收入 − 成本合计'],
         ['netProfit', '毛利润 − 业务成本'],
+        ['revenue', '核销额 × 利差率'],
+        ['spread', '已核销利差'],
         ['grossMargin', '毛利润 ÷ 核销额'],
         ['rate', '毛利润 ÷ 成本合计'],
-        ['profit', '收入 − 成本合计'],
       ],
     );
     expect(lighthouseHeroFormulaForKey('profit')?.substitutes, isFalse);
     expect(lighthouseHeroFormulaForKey('rate')?.substitutes, isTrue);
-    expect(lighthouseHeroFormulaForKey('sales'), isNull);
+    expect(lighthouseHeroFormulaForKey('sales')?.expression, '下单张数 × 面值');
+    expect(lighthouseHeroFormulaForKey('costTotal')?.resultKey, 'totalCost');
+    expect(lighthouseHeroFormulaForKey('businessCost')?.resultKey, 'cost');
+    for (final key in lighthouseHeroMetricTrendKeys()) {
+      expect(
+        lighthouseHeroFormulaForKey(key),
+        isNotNull,
+        reason: '$key 也要有口径式',
+      );
+    }
+    expect(lighthouseHeroMetricActivateAfterTap(null, 'gmv'), (
+      focus: 'gmv',
+      trace: 'gmv',
+    ));
+    expect(lighthouseHeroMetricActivateAfterTap('gmv', 'gmv'), (
+      focus: null,
+      trace: null,
+    ));
+    expect(lighthouseHeroMetricActivateAfterTap('profit', 'prepaid'), (
+      focus: 'prepaid',
+      trace: 'prepaid',
+    ));
     // 毛利润在 ROI 里是分子、在毛利率里也是分子；成本合计在 ROI 里是分母。
     expect(
       lighthouseHeroTraceRole('rate', 'profit'),
@@ -434,16 +653,20 @@ void main() {
     expect(lighthouseHeroTraceDims('rate', 'profit'), isFalse);
     expect(lighthouseHeroTraceDims('rate', 'rate'), isFalse);
     expect(lighthouseHeroTraceDims(null, 'gmv'), isFalse);
+    expect(lighthouseHeroTraceDims('sales', 'gmv'), isFalse);
+    expect(lighthouseHeroTraceDims('prepaid', 'sales'), isFalse);
+    expect(lighthouseHeroTraceDims('prepaid', 'gmv'), isTrue);
     expect(lighthouseHeroTraceAfterTap(null, 'rate'), 'rate');
     expect(lighthouseHeroTraceAfterTap('rate', 'rate'), isNull);
     expect(lighthouseHeroTraceAfterTap('rate', 'profit'), 'profit');
-    expect(lighthouseHeroTraceAfterTap('rate', 'gmv'), 'rate');
+    expect(lighthouseHeroTraceAfterTap('rate', 'gmv'), 'gmv');
 
     // 箭头追溯：资产合计点亮 3 格，系统差异点亮 4 格，两条共用期末预付款余额。
-    expect(
-      lighthouseFundPoolFormulaForKey('totalAssets')?.sourceKeys,
-      ['regulatoryAccountBalance', 'inTransitFunds', 'endingPrepaymentBalance'],
-    );
+    expect(lighthouseFundPoolFormulaForKey('totalAssets')?.sourceKeys, [
+      'regulatoryAccountBalance',
+      'inTransitFunds',
+      'endingPrepaymentBalance',
+    ]);
     expect(
       lighthouseFundPoolFormulaForKey('systemDifference')?.sourceKeys.length,
       4,
@@ -466,10 +689,7 @@ void main() {
       isTrue,
     );
     expect(lighthouseFundPoolMetricIsTraced(null, 'inTransitFunds'), isFalse);
-    expect(
-      lighthouseFundPoolTraceAfterTap(null, 'totalAssets'),
-      'totalAssets',
-    );
+    expect(lighthouseFundPoolTraceAfterTap(null, 'totalAssets'), 'totalAssets');
     expect(
       lighthouseFundPoolTraceAfterTap('totalAssets', 'totalAssets'),
       isNull,
@@ -484,19 +704,17 @@ void main() {
       'totalAssets',
     );
     // 资金卡回到四格纯余额；两条利润是流量，落在资产卡（存量 + 增量）。
-    expect(
-      lighthouseFundPoolFundsSection.metrics.map((m) => m.key).toList(),
-      [
-        'regulatoryAccountBalance',
-        'inTransitFunds',
-        'endingReceivableRebate',
-        'turnoverDays',
-      ],
-    );
-    expect(
-      lighthouseFundPoolAssetsSection.metrics.map((m) => m.key).toList(),
-      ['totalAssets', 'profitMonth', 'profitDay'],
-    );
+    expect(lighthouseFundPoolFundsSection.metrics.map((m) => m.key).toList(), [
+      'regulatoryAccountBalance',
+      'inTransitFunds',
+      'endingReceivableRebate',
+      'turnoverDays',
+    ]);
+    expect(lighthouseFundPoolAssetsSection.metrics.map((m) => m.key).toList(), [
+      'totalAssets',
+      'profitMonth',
+      'profitDay',
+    ]);
     expect(
       lighthouseFundPoolAssetsSection.metrics.map((m) => m.label).toList(),
       ['资产合计', '本月新增利润', '本日新增利润'],
@@ -507,13 +725,364 @@ void main() {
     expect(lighthouseFundPoolVouchersSection.flowStartIndex, isNull);
     expect(lighthouseFundPoolReconSection.flowStartIndex, isNull);
     expect(lighthouseFundPoolInvoiceSection.flowStartIndex, isNull);
+    // 对账状态：只有供给 / 渠道有，产品维不对账。
+    expect(lighthouseTabHasRecon('supply'), isTrue);
+    expect(lighthouseTabHasRecon('channel'), isTrue);
+    expect(lighthouseTabHasRecon('product'), isFalse);
+    expect(lighthouseTabHasRecon('netTa'), isFalse);
+    // 字段缺失 → null → 整块不渲染。「没有状态」和「未对账」是两件事，
+    // 混成一个会让联调前所有行全变红。
+    expect(lighthouseParseReconStatus(null), isNull);
+    expect(lighthouseParseReconStatus(const {}), isNull);
+    expect(lighthouseParseReconStatus(const {'state': ''}), isNull);
+    final partial = lighthouseParseReconStatus(const {
+      'state': 'partial',
+      'coveredAmount': 860.0,
+      'totalAmount': 1000.0,
+      'deepLink': 'https://zg.example.com/recon?tag2=guangxi',
+      'crossCoveredPct': 87.0,
+    });
+    expect(partial, isNotNull);
+    expect(partial!.state, LighthouseReconState.partial);
+    expect(partial.coveredPct, closeTo(86.0, 1e-9));
+    expect(partial.pendingAmount, closeTo(140.0, 1e-9));
+    expect(partial.hasDeepLink, isTrue);
+    // 部分确认必须带百分比 —— 一个绿勾分不出「对了 3 笔」和「全对完」。
+    expect(lighthouseReconChipLabel(partial), '对账 86%');
+    // 已对账不写百分比：已对账就是 100%，再写个数字是噪音。
+    expect(
+      lighthouseReconChipLabel(
+        const LighthouseReconStatus(state: LighthouseReconState.done),
+      ),
+      '已对账',
+    );
+    expect(
+      lighthouseReconChipLabel(
+        const LighthouseReconStatus(state: LighthouseReconState.none),
+      ),
+      '未对账',
+    );
+    // 没有分母的百分比不能显示。
+    expect(
+      const LighthouseReconStatus(
+        state: LighthouseReconState.partial,
+        coveredAmount: 5,
+      ).coveredPct,
+      isNull,
+    );
+    expect(
+      lighthouseReconChipLabel(
+        const LighthouseReconStatus(state: LighthouseReconState.partial),
+      ),
+      '对账中',
+    );
+    // ── D+N 账期不进主状态 ──────────────────────────────────
+    // 灯塔不知道钱到没到，有账期也不写「正常待回款」。
+    final inWindow = lighthouseParseReconStatus(const {
+      'state': 'none',
+      'totalAmount': 1000.0,
+      'settlementKind': 'D',
+      'settlementDays': 2,
+    })!;
+    expect(inWindow.settlementLabel, 'D+2');
+    expect(inWindow.hasOverdue, isFalse);
+    expect(lighthouseReconChipLabel(inWindow), '未对账');
+    expect(
+      lighthouseReconChipLabel(
+        const LighthouseReconStatus(state: LighthouseReconState.none),
+      ),
+      '未对账',
+    );
+    // 超期不进主状态：对完就是已对账，绿灯也不被超期否掉。
+    final overdue = lighthouseParseReconStatus(const {
+      'state': 'done',
+      'coveredAmount': 1000.0,
+      'totalAmount': 1000.0,
+      'settlementKind': 'D',
+      'settlementDays': 2,
+      'overdueCount': 3,
+      'overdueAmount': 120000.0,
+    })!;
+    expect(overdue.hasOverdue, isTrue);
+    expect(lighthouseReconChipLabel(overdue), '已对账');
+    expect(overdue.state, LighthouseReconState.done);
+    expect(overdue.showsGreen, isTrue);
+    final clean = lighthouseParseReconStatus(const {
+      'state': 'done',
+      'coveredAmount': 1000.0,
+      'totalAmount': 1000.0,
+    })!;
+    expect(clean.showsGreen, isTrue);
+    // 月回款：M+1，不按天判超期。
+    final monthlyRecon = lighthouseParseReconStatus(const {
+      'state': 'none',
+      'settlementKind': 'M',
+      'settlementDays': 1,
+    })!;
+    expect(monthlyRecon.settlementKind, LighthouseSettlementKind.month);
+    expect(monthlyRecon.settlementLabel, 'M+1');
+    // 手填账期要能标出来：超期判定完全建立在它上面。
+    expect(inWindow.settlementFromProposal, isTrue);
+    final handTyped = lighthouseParseReconStatus(const {
+      'state': 'none',
+      'settlementKind': 'D',
+      'settlementDays': 5,
+      'settlementFromProposal': false,
+    })!;
+    expect(handTyped.settlementFromProposal, isFalse);
+    expect(lighthouseParseSettlementKind('day'), LighthouseSettlementKind.day);
+    expect(lighthouseParseSettlementKind('x'), isNull);
+
+    // 13 个格子全都有公式：取数的写口径，算出来的写算式。
+    expect(lighthouseHeroFormulas.length, 13);
+    for (final key in const [
+      'sales',
+      'verifiedSales',
+      'gmv',
+      'totalCost',
+      'projectCost',
+      'cost',
+      'prepaid',
+      'profit',
+      'netProfit',
+      'revenue',
+      'spread',
+      'grossMargin',
+      'rate',
+    ]) {
+      expect(lighthouseHeroFormulaForKey(key), isNotNull, reason: key);
+    }
+    // 别名要能命中同一条。
+    expect(lighthouseHeroFormulaForKey('costTotal')?.resultKey, 'totalCost');
+    expect(lighthouseHeroFormulaForKey('businessCost')?.resultKey, 'cost');
+    // 取数格没有来源，点开时不压暗其它格 —— 没有来源要突出，压暗纯属添乱。
+    expect(lighthouseHeroFormulaForKey('sales')!.sources, isEmpty);
+    expect(lighthouseHeroTraceDims('sales', 'profit'), isFalse);
+    expect(lighthouseHeroTraceDims('rate', 'gmv'), isTrue);
+    // 预收净增不写「销售额 − 核销额」：现网差 20~36 倍，
+    // 用户拿旁边两格一减就能发现对不上。
+    expect(
+      lighthouseHeroFormulaForKey('prepaid')!.expression.contains('核销额'),
+      isFalse,
+    );
+
+    // ── 日清明细：老板白板就两行 ─────────────────────────────
+    expect(lighthouseParseDailyClose(null), isNull);
+    expect(lighthouseParseDailyClose(const {}), isNull);
+    final daily = lighthouseParseDailyClose(const {
+      'lastDay': {'date': '2026-09-01', 'scale': 81600.0, 'profit': 12100.0},
+      'monthToDate': {
+        'days': 2,
+        'from': '2026-09-01',
+        'to': '2026-09-02',
+        'scale': 163200.0,
+        'profit': 24300.0,
+      },
+      'approval': {
+        'finance': 'done',
+        'business': 'done',
+        'operation': 'pending',
+      },
+    });
+    expect(daily, isNotNull);
+    expect(daily!.lastDay.label, '9/1');
+    expect(daily.monthToDate.label, '9/1 – 9/2');
+    expect(daily.lastDay.scale, 81600.0);
+    expect(daily.allApproved, isFalse);
+    // 卡在谁那儿 —— 老板看明细第一句就是这个。
+    expect(daily.pendingStepLabel, '运营');
+    expect(daily.operation, LighthouseApprovalStep.pending);
+
+    final allDone = lighthouseParseDailyClose(const {
+      'lastDay': {'date': '2026-09-01', 'scale': 1.0, 'profit': 1.0},
+      'approval': {'finance': 'done', 'business': 'done', 'operation': 'done'},
+    })!;
+    expect(allDone.allApproved, isTrue);
+    expect(allDone.pendingStepLabel, '');
+    // 只给了上日 → 当月累计两个数都是 null，界面上显示「—」而不是 0。
+    expect(allDone.monthToDate.scale, isNull);
+
+    expect(lighthouseShortDate('2026-09-01'), '9/1');
+    expect(lighthouseShortDate('2026-12-25'), '12/25');
+    expect(lighthouseShortDate(''), '');
+    // 规模这列的表头写死，不用「规模」这个含糊词：
+    // 供给按核销额确认，渠道按销售额，两个 tab 取的不是同一个数。
+    expect(lighthouseDailyScaleLabel('supply'), '核销额');
+    expect(lighthouseDailyScaleLabel('channel'), '销售额');
+
+    // ── 列表顶部不再汇总超期 ──────────────────────────────────
+    // 没接 recon 的行不算「没问题」也不算「有问题」，直接不计。
+    final empty = lighthouseSummarizeRecon(const [null, null]);
+    expect(empty.hasAny, isFalse);
+    expect(lighthouseReconOverviewLabel(empty), '');
+
+    final mixed = lighthouseSummarizeRecon([
+      null,
+      const LighthouseReconStatus(
+        state: LighthouseReconState.done,
+        coveredAmount: 100,
+        totalAmount: 100,
+      ),
+      const LighthouseReconStatus(
+        state: LighthouseReconState.done,
+        coveredAmount: 100,
+        totalAmount: 100,
+        overdueCount: 2,
+        overdueAmount: 80000,
+      ),
+      const LighthouseReconStatus(
+        state: LighthouseReconState.partial,
+        coveredAmount: 50,
+        totalAmount: 100,
+      ),
+    ]);
+    expect(mixed.rowsWithStatus, 3);
+    expect(mixed.overdueRows, 1);
+    expect(mixed.overdueCount, 2);
+    // 人对完就算绿，超期不挡。
+    expect(mixed.doneRows, 2);
+    expect(mixed.allGreen, isFalse);
+    expect(lighthouseReconOverviewLabel(mixed), '');
+
+    final allGreen = lighthouseSummarizeRecon(const [
+      LighthouseReconStatus(
+        state: LighthouseReconState.done,
+        coveredAmount: 1,
+        totalAmount: 1,
+      ),
+      LighthouseReconStatus(
+        state: LighthouseReconState.done,
+        coveredAmount: 1,
+        totalAmount: 1,
+      ),
+    ]);
+    expect(allGreen.allGreen, isTrue);
+    expect(lighthouseReconOverviewLabel(allGreen), '');
+
+    final partialOnly = lighthouseSummarizeRecon(const [
+      LighthouseReconStatus(
+        state: LighthouseReconState.done,
+        coveredAmount: 1,
+        totalAmount: 1,
+      ),
+      LighthouseReconStatus(state: LighthouseReconState.partial),
+    ]);
+    expect(lighthouseReconOverviewLabel(partialOnly), '');
+
+    // 发版不再灌假对账 / 假日清。
+    expect(
+      lighthouseAttachDemoRecon('product', [
+        {'name': '民营加油'},
+      ]),
+      [
+        {'name': '民营加油'},
+      ],
+    );
+    final demo = lighthouseAttachDemoRecon('supply', [
+      {'name': '广西', 'verifiedSales': 816000, 'profit': 121000},
+      {'name': '广东'},
+      {'name': '云南'},
+    ]);
+    expect(demo[0].containsKey('recon'), isFalse);
+    expect(
+      lighthouseReconChipLabel(
+        lighthouseReconStatusForRow('supply', demo[0]['recon'])!,
+      ),
+      '未对账',
+    );
+    expect(
+      lighthouseReconChipLabel(
+        lighthouseReconStatusForRow('supply', demo[2]['recon'])!,
+      ),
+      '未对账',
+    );
+    expect(lighthouseParseDailyClose(demo[0]['daily']), isNull);
+    final overview = lighthouseSummarizeRecon([
+      lighthouseReconStatusForRow('supply', demo[0]['recon']),
+      lighthouseReconStatusForRow('supply', demo[1]['recon']),
+      lighthouseReconStatusForRow('supply', demo[2]['recon']),
+    ]);
+    expect(overview.hasOverdue, isFalse);
+    expect(overview.overdueRows, 0);
+    expect(overview.overdueCount, 0);
+    expect(lighthouseReconOverviewLabel(overview), '');
+    final already = [
+      {
+        'name': '广西',
+        'recon': {'state': 'done', 'coveredAmount': 1, 'totalAmount': 1},
+      },
+    ];
+    final kept = lighthouseAttachDemoRecon('supply', already);
+    expect(kept[0]['recon'], already[0]['recon']);
+    expect(lighthouseParseDailyClose(kept[0]['daily']), isNull);
+
+    // 交叉覆盖只是参考，不改变自身状态：标签三按销售额确认，
+    // 标签二按核销额，中间差着预收和供给折扣。
+    expect(partial.crossCoveredPct, 87.0);
+    expect(partial.state, isNot(LighthouseReconState.done));
+
+    // 银行余额环比：跟上月末比，不跟昨天比。
+    // 序列跨月 → 取 8 月最后一点 100，末点 112 → +12%。
+    expect(
+      lighthouseBankBalancePrevMonthEnd(
+        const ['2026-08-30', '2026-08-31', '2026-09-01', '2026-09-02'],
+        const [90.0, 100.0, 105.0, 112.0],
+      ),
+      100.0,
+    );
+    expect(
+      lighthouseBankBalanceMomPct(
+        const ['2026-08-31', '2026-09-02'],
+        const [100.0, 112.0],
+      ),
+      closeTo(12.0, 1e-9),
+    );
+    // 整段都在同一个月 → 没有上月末，返回 null，界面上这行不渲染。
+    expect(
+      lighthouseBankBalancePrevMonthEnd(
+        const ['2026-09-01', '2026-09-02'],
+        const [100.0, 112.0],
+      ),
+      isNull,
+    );
+    expect(
+      lighthouseBankBalanceMomPct(
+        const ['2026-09-01', '2026-09-02'],
+        const [100.0, 112.0],
+      ),
+      isNull,
+    );
+    final companies = lighthouseNetTABankBalanceCompanies([
+      {
+        'company': '上海卓悦',
+        'balance': 60,
+        'accounts': [
+          {'account': '招商 ···4821', 'balance': 40},
+          {'account': '中行 ···9017', 'balance': 20},
+        ],
+      },
+      {'company': '查无此司', 'balance': 0},
+    ]);
+    expect(companies, hasLength(2));
+    expect(companies.first['accounts'], hasLength(2));
+    expect((companies.last['accounts'] as List), isEmpty);
+    // 上月末为 0：除以 0 的百分比没有意义，同样不渲染。
+    expect(
+      lighthouseBankBalanceMomPct(
+        const ['2026-08-31', '2026-09-02'],
+        const [0.0, 112.0],
+      ),
+      isNull,
+    );
+    // 少于两点画不出线。
+    expect(
+      lighthouseBankBalancePrevMonthEnd(const ['2026-09-02'], const [1.0]),
+      isNull,
+    );
     expect(lighthouseFundPoolFlowDividerLabel, '期间新增');
     // 只有这两格按增长显示；余额格保持中性，不染涨跌色。
     expect(lighthouseFundPoolGrowthMetricKeys, {'profitMonth', 'profitDay'});
-    expect(
-      lighthouseFundPoolGrowthMetricKeys.contains('totalAssets'),
-      isFalse,
-    );
+    expect(lighthouseFundPoolGrowthMetricKeys.contains('totalAssets'), isFalse);
     expect(lighthouseFundPoolExternalMetricKeys, {'profitMonth', 'profitDay'});
     expect(
       lighthouseFundPoolAmountByKey(
@@ -527,10 +1096,7 @@ void main() {
       lighthouseLookupProvinceAmount(const {'广西壮族自治区': 12.0}, '广西壮族自治区'),
       12.0,
     );
-    expect(
-      lighthouseLookupProvinceAmount(const {'广西壮族自治区': 12.0}, '广西'),
-      12.0,
-    );
+    expect(lighthouseLookupProvinceAmount(const {'广西壮族自治区': 12.0}, '广西'), 12.0);
     expect(
       lighthouseLookupProvinceAmount(const {'__TOTAL__': 99.0}, '广西'),
       isNull,
@@ -551,16 +1117,11 @@ void main() {
       43,
     );
     expect(
-      lighthouseFundPoolPreviewExtraHeight(
-        summaryCellHeight: 43,
-        scale: 1,
-      ),
+      lighthouseFundPoolPreviewExtraHeight(summaryCellHeight: 43, scale: 1),
       0,
     );
     expect(
-      lighthouseFundPoolPreviewMetrics()
-          .map((m) => [m.key, m.label])
-          .toList(),
+      lighthouseFundPoolPreviewMetrics().map((m) => [m.key, m.label]).toList(),
       [
         ['totalAssets', '总资产金额'],
         ['invoicePreview', '票税'],
@@ -604,8 +1165,14 @@ void main() {
     expect(lighthouseFormatFundPoolWan(1234000), '123.4万');
     expect(lighthouseFormatFundPoolWan(123400000), '1.23亿');
     expect(lighthouseFormatFundPoolWan(null), '—');
-    expect(lighthouseFormatFundPoolWanParts(1234000), (number: '123.4', unit: '万'));
-    expect(lighthouseFormatFundPoolWanParts(123400000), (number: '1.23', unit: '亿'));
+    expect(lighthouseFormatFundPoolWanParts(1234000), (
+      number: '123.4',
+      unit: '万',
+    ));
+    expect(lighthouseFormatFundPoolWanParts(123400000), (
+      number: '1.23',
+      unit: '亿',
+    ));
     expect(lighthouseFormatFundPoolWanParts(null), (number: '—', unit: ''));
     expect(lighthouseFormatFundPoolRate(13), '13%');
     expect(lighthouseFormatFundPoolRate(13.14), '13.14%');
@@ -617,40 +1184,34 @@ void main() {
     final monthly = lighthouseFundPoolDetailRows(showInvoice: true);
     expect(monthly.first.left.kind, LighthouseFundPoolSectionKind.invoice);
     expect(monthly.first.right?.kind, LighthouseFundPoolSectionKind.assets);
+    expect(monthly.first.left.metrics.map((m) => m.label).toList(), [
+      '发票原件',
+      '应开发票金额',
+      '实开金额',
+    ]);
+    expect(monthly[1].left.metrics.map((m) => m.key).toList(), [
+      'regulatoryAccountBalance',
+      'inTransitFunds',
+      'endingReceivableRebate',
+    ]);
+    expect(monthly[1].right?.metrics.map((m) => m.key).toList(), [
+      'inventoryVoucherBalance',
+      'contractVoucherBalance',
+      'advanceVoucherBalance',
+    ]);
+    expect(monthly.last.left.metrics.map((m) => m.key).toList(), [
+      'fundPoolBalance',
+      'stockAndSyncVouchers',
+      'systemDifference',
+      'endingPrepaymentBalance',
+    ]);
+    final dailyLayout = lighthouseFundPoolDetailRows(showInvoice: false);
+    expect(dailyLayout.first.left.kind, LighthouseFundPoolSectionKind.funds);
+    expect(dailyLayout.last.right?.kind, LighthouseFundPoolSectionKind.assets);
     expect(
-      monthly.first.left.metrics.map((m) => m.label).toList(),
-      ['发票原件', '应开发票金额', '实开金额'],
-    );
-    expect(
-      monthly[1].left.metrics.map((m) => m.key).toList(),
-      [
-        'regulatoryAccountBalance',
-        'inTransitFunds',
-        'endingReceivableRebate',
-      ],
-    );
-    expect(
-      monthly[1].right?.metrics.map((m) => m.key).toList(),
-      [
-        'inventoryVoucherBalance',
-        'contractVoucherBalance',
-        'advanceVoucherBalance',
-      ],
-    );
-    expect(
-      monthly.last.left.metrics.map((m) => m.key).toList(),
-      [
-        'fundPoolBalance',
-        'stockAndSyncVouchers',
-        'systemDifference',
-        'endingPrepaymentBalance',
-      ],
-    );
-    final daily = lighthouseFundPoolDetailRows(showInvoice: false);
-    expect(daily.first.left.kind, LighthouseFundPoolSectionKind.funds);
-    expect(daily.last.right?.kind, LighthouseFundPoolSectionKind.assets);
-    expect(
-      daily.any((row) => row.left.kind == LighthouseFundPoolSectionKind.invoice),
+      dailyLayout.any(
+        (row) => row.left.kind == LighthouseFundPoolSectionKind.invoice,
+      ),
       isFalse,
     );
     expect(
@@ -681,7 +1242,14 @@ void main() {
   });
 
   test('fund pool invoice card shows for every period', () {
-    for (final period in ['day', 'week', 'month', 'quarter', 'year', 'custom']) {
+    for (final period in [
+      'day',
+      'week',
+      'month',
+      'quarter',
+      'year',
+      'custom',
+    ]) {
       expect(lighthouseFundPoolShowsInvoice(period), isTrue);
     }
     final rows = lighthouseFundPoolDetailRows(
@@ -703,7 +1271,10 @@ void main() {
     expect(lighthouseHeroMetricDisplaysMagnitude('netTaProjectCost'), isTrue);
     expect(lighthouseHeroMetricDisplaysMagnitude('netTaBizCost'), isTrue);
     expect(lighthouseHeroMetricDisplaysMagnitude('netTaFinancing'), isTrue);
-    expect(lighthouseHeroMetricDisplayAmount('netTaFinancing', -7656.2e4), 7656.2e4);
+    expect(
+      lighthouseHeroMetricDisplayAmount('netTaFinancing', -7656.2e4),
+      7656.2e4,
+    );
     expect(lighthouseHeroMetricDisplayAmount('netTaOutflow', -2.68e8), 2.68e8);
     expect(lighthouseHeroMetricDisplayAmount('netTaOperating', -10), -10);
     expect(lighthouseSeriesSignedDeltaPct([80, 100]), closeTo(25, 0.001));
@@ -778,12 +1349,12 @@ void main() {
     expect(rows[1]['outflow'], -8);
     expect(rows[0]['sharePct'], 100);
     expect(rows[1]['sharePct'], 100);
-    expect(lighthouseNetTACardMetrics(
-      (rows[0]['secondaries'] as List).cast<Map<String, dynamic>>(),
-    ).map((e) => e['name']).toList(), [
-      '项目回款',
-      '分润',
-    ]);
+    expect(
+      lighthouseNetTACardMetrics(
+        (rows[0]['secondaries'] as List).cast<Map<String, dynamic>>(),
+      ).map((e) => e['name']).toList(),
+      ['项目回款', '分润'],
+    );
     expect(lighthouseNetTAFlowLabel(100), '净流入');
     expect(lighthouseNetTAFlowLabel(-8), '净流出');
     expect(lighthouseNetTAShareLabel(100), '占净流入');
@@ -1129,14 +1700,8 @@ void main() {
     });
 
     test('does not snap near-equal scale down to zero', () {
-      expect(
-        lighthouseHeroPaneSnapsToZero(min: 1211, max: 1220),
-        isFalse,
-      );
-      expect(
-        lighthouseHeroPaneSnapsToZero(min: 6, max: 16.1),
-        isTrue,
-      );
+      expect(lighthouseHeroPaneSnapsToZero(min: 1211, max: 1220), isFalse);
+      expect(lighthouseHeroPaneSnapsToZero(min: 6, max: 16.1), isTrue);
     });
   });
 
@@ -1414,39 +1979,45 @@ void main() {
       );
     });
 
-    test('tab switch falls back to shared 全部 profit, not previous category', () {
-      expect(
-        lighthouseHeroMetricAmount(
-          useRowAmounts: false,
-          metricsMatch: false,
-          metricsValue: 2.91,
-          sharedValue: 10.0,
-          rowSum: 8.0,
-        ),
-        10.0,
-      );
-      expect(
-        lighthouseHeroMetricAmount(
-          useRowAmounts: false,
-          metricsMatch: false,
-          metricsValue: 2.91,
-          sharedValue: null,
-          rowSum: 8.0,
-        ),
-        8.0,
-      );
-      expect(
-        lighthouseSharedHeroMetricsSnapshot(const {
-          'profit': 10.0,
-          'filterGroup': '能源',
-          'filterTab': 'product',
-        }),
-        {'profit': 10.0},
-      );
-    });
+    test(
+      'tab switch falls back to shared 全部 profit, not previous category',
+      () {
+        expect(
+          lighthouseHeroMetricAmount(
+            useRowAmounts: false,
+            metricsMatch: false,
+            metricsValue: 2.91,
+            sharedValue: 10.0,
+            rowSum: 8.0,
+          ),
+          10.0,
+        );
+        expect(
+          lighthouseHeroMetricAmount(
+            useRowAmounts: false,
+            metricsMatch: false,
+            metricsValue: 2.91,
+            sharedValue: null,
+            rowSum: 8.0,
+          ),
+          8.0,
+        );
+        expect(
+          lighthouseSharedHeroMetricsSnapshot(const {
+            'profit': 10.0,
+            'filterGroup': '能源',
+            'filterTab': 'product',
+          }),
+          {'profit': 10.0},
+        );
+      },
+    );
 
     test('product snapshot restore keeps net TA hero series', () {
-      final product = <String, dynamic>{'profit': 10.0, 'profitSeries': [1.0, 2.0]};
+      final product = <String, dynamic>{
+        'profit': 10.0,
+        'profitSeries': [1.0, 2.0],
+      };
       final withNetTa = <String, dynamic>{
         'profit': 10.0,
         'netTa': 3.1,
@@ -1482,7 +2053,10 @@ void main() {
         },
       );
       final next = bundle.withSummary({
-        'metrics': {'profit': 11.0, 'profitSeries': [4.0, 5.0]},
+        'metrics': {
+          'profit': 11.0,
+          'profitSeries': [4.0, 5.0],
+        },
       });
       expect(next.metrics['profit'], 11.0);
       expect(next.metrics['netTaSeries'], [1.0, 2.0, 3.1]);
@@ -1537,7 +2111,13 @@ void main() {
 
   group('lighthouseLedgerDeltaIsFavorable', () {
     test('规模 / 利润 / 现金流：跌为坏，涨为好', () {
-      for (final key in ['sales', 'verifiedSales', 'profit', 'prepaid', 'netTa']) {
+      for (final key in [
+        'sales',
+        'verifiedSales',
+        'profit',
+        'prepaid',
+        'netTa',
+      ]) {
         expect(
           lighthouseLedgerDeltaIsFavorable(key, -86.0),
           isFalse,
@@ -1605,7 +2185,10 @@ void main() {
       expect(lighthouseLedgerIsResultMetric('inflow'), isFalse);
       expect(lighthouseLedgerIsResultMetric('outflow'), isFalse);
       expect(lighthouseLedgerIsResultMetric('profit'), isTrue);
-      expect(lighthouseLedgerIsResultMetric(lighthouseLedgerSummaryBlankKey), isFalse);
+      expect(
+        lighthouseLedgerIsResultMetric(lighthouseLedgerSummaryBlankKey),
+        isFalse,
+      );
       expect(lighthouseLedgerIsResultMetric('sales'), isFalse);
       expect(lighthouseLedgerIsResultMetric('verifiedSales'), isFalse);
       expect(lighthouseLedgerIsResultMetric('costTotal'), isFalse);
@@ -1728,30 +2311,33 @@ void main() {
       );
     });
 
-    test('scale joins the legend; status row never carries the hero number', () {
-      expect(
-        lighthouseTrendPnlLegendKeys(
-          hasScale: true,
-          hasProfit: true,
-          hasRevenue: true,
-          hasCost: true,
-          hasScaleAlt: true,
-        ),
-        ['scale', 'profit', 'revenue', 'cost', 'scaleAlt'],
-      );
-      expect(
-        lighthouseTrendPnlLegendKeys(
-          hasScale: true,
-          hasProfit: true,
-          hasCostAlt: true,
-          hasRevenue: true,
-          hasCost: true,
-          hasScaleAlt: true,
-        ),
-        ['scale', 'profit', 'costAlt', 'revenue', 'cost', 'scaleAlt'],
-      );
-      expect(lighthouseTrendShowsHeroMetricBesideStatus, isFalse);
-    });
+    test(
+      'scale joins the legend; status row never carries the hero number',
+      () {
+        expect(
+          lighthouseTrendPnlLegendKeys(
+            hasScale: true,
+            hasProfit: true,
+            hasRevenue: true,
+            hasCost: true,
+            hasScaleAlt: true,
+          ),
+          ['scale', 'profit', 'revenue', 'cost', 'scaleAlt'],
+        );
+        expect(
+          lighthouseTrendPnlLegendKeys(
+            hasScale: true,
+            hasProfit: true,
+            hasCostAlt: true,
+            hasRevenue: true,
+            hasCost: true,
+            hasScaleAlt: true,
+          ),
+          ['scale', 'profit', 'costAlt', 'revenue', 'cost', 'scaleAlt'],
+        );
+        expect(lighthouseTrendShowsHeroMetricBesideStatus, isFalse);
+      },
+    );
 
     test('legend wraps 环比 to the second line and keeps data on the first', () {
       expect(lighthouseTrendLegendMomOnSecondLine, isTrue);
@@ -1853,7 +2439,8 @@ void main() {
         ),
         [true, true, true, true, true, false],
       );
-      // v20：没有 solo 时只画主线，不再五条全开。
+      // v21：默认五条全开（产品要求恢复）。
+      expect(lighthouseTrendDrawsSingleLine, isFalse);
       expect(
         lighthouseTrendVisibleFlags(
           hasRevenue: true,
@@ -1862,33 +2449,9 @@ void main() {
           hasScale: true,
           hasScaleAlt: true,
         ),
-        [false, false, false, true, false, false],
+        [true, true, true, true, true, false],
       );
-      // 核销 + 销售共用真轴时，这一对例外地一起画（两线之间是未核销差额）。
-      expect(
-        lighthouseTrendVisibleFlags(
-          hasRevenue: true,
-          hasCost: true,
-          hasProfit: true,
-          hasScale: true,
-          hasScaleAlt: true,
-          pairScale: true,
-        ),
-        [false, false, false, true, true, false],
-      );
-      // 规模缺席时主线退到毛利。
-      expect(
-        lighthouseTrendVisibleFlags(
-          hasRevenue: true,
-          hasCost: true,
-          hasProfit: true,
-          hasScale: false,
-          hasScaleAlt: false,
-          pairScale: true,
-        ),
-        [false, false, true, false, false, false],
-      );
-      // solo 指向一条没数据的线 → 回落到主线，而不是把五条全打开。
+      // solo 指向一条没数据的线 → 回落到全开。
       expect(
         lighthouseTrendVisibleFlags(
           hasRevenue: true,
@@ -1898,7 +2461,7 @@ void main() {
           hasScaleAlt: false,
           soloKey: 'cost',
         ),
-        [false, false, false, true, false, false],
+        [true, false, true, true, false, false],
       );
       expect(
         lighthouseTrendVisibleFlags(
@@ -1915,10 +2478,7 @@ void main() {
     });
 
     test('hero index follows scale, then the remaining visible line', () {
-      expect(
-        lighthouseTrendHeroIndex(const [true, true, true, true, true]),
-        3,
-      );
+      expect(lighthouseTrendHeroIndex(const [true, true, true, true, true]), 3);
       expect(
         lighthouseTrendHeroIndex(const [true, true, true, false, true]),
         4,

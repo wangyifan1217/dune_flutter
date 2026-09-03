@@ -92,6 +92,10 @@ class XflowDetailRenderer extends StatelessWidget {
             );
           },
         ),
+        XfDetTaskCompletionCard(
+          form: bundle.detail.formValues,
+          service: service,
+        ),
         XfDetCommentsSection(
           service: service,
           businessType: (bundle.detail.raw['businessType'] ?? 'PROPOSAL')

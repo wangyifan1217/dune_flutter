@@ -496,6 +496,42 @@ void main() {
     );
   });
 
+  testWidgets('sales and purchase show optional subtitle beside proposal name', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_harness(1440));
+    await tester.pump();
+    await _scrollUntil(tester, '产品提案名称');
+    expect(find.text('子标题'), findsOneWidget);
+    expect(tester.widget<ProposalField>(_fieldOf('产品提案名称').first).required, isTrue);
+    expect(tester.widget<ProposalField>(_fieldOf('子标题').first).required, isFalse);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 2,
+          'code': 'CG-2026-0001',
+          'kind': 'purchase',
+          'title': '',
+          'status': 'filling',
+          'createdBy': 11,
+          'form': <String, dynamic>{},
+          'review': <String, dynamic>{},
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '产品提案名称');
+    expect(find.text('子标题'), findsOneWidget);
+    expect(tester.widget<ProposalField>(_fieldOf('产品提案名称').first).required, isTrue);
+    expect(tester.widget<ProposalField>(_fieldOf('子标题').first).required, isFalse);
+  });
+
   testWidgets('empty proposal form has no mock values or draft wording', (
     tester,
   ) async {
@@ -524,6 +560,8 @@ void main() {
     await scrollUntil('销售规模目标（万元）');
     expect(find.text('销售规模目标（万元）'), findsOneWidget);
     expect(find.text('收入（万元）'), findsOneWidget);
+    expect(find.text('电子券采购成本（万元）'), findsOneWidget);
+    expect(find.text('核销金额（万元）'), findsOneWidget);
     expect(find.text('发票（万元）'), findsOneWidget);
     expect(find.text('财务部负责人二复核'), findsWidgets);
     await scrollUntil('提案全链路');
@@ -1551,7 +1589,7 @@ void main() {
     expect(find.text('结算单价'), findsOneWidget);
     expect(find.text('计算公式'), findsOneWidget);
     expect(find.text('发票类型'), findsOneWidget);
-    expect(find.text('税率'), findsOneWidget);
+    expect(find.text('税率'), findsWidgets);
     expect(
       _childInField<ProposalSelectField<String>>(tester, '发票类型').options.map(
         (item) => item.value,
@@ -2229,6 +2267,90 @@ void main() {
     },
   );
 
+  testWidgets('finance estimate fields show and selected travel cost keeps amount', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: _row().copyWith(
+          form: {
+            'revenue': 100,
+            'couponProcurementCost': 80,
+            'projectCost': 5,
+            'costItems': ['机构返佣'],
+            'costItemAmounts': {'机构返佣': 5},
+            'financeTaxRate': '6%',
+            'writeOffAmount': 200,
+            'operatingCostItems': ['差旅成本'],
+            'operatingCostItemAmounts': {'差旅成本': 0.3},
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '电子券采购成本（万元）');
+    expect(find.text('电子券采购成本（万元）'), findsOneWidget);
+    expect(find.text('核销金额（万元）'), findsOneWidget);
+    await _scrollUntil(tester, '经营成本');
+    expect(find.text('0.30'), findsOneWidget);
+    expect(find.byKey(const ValueKey('cost-formula-差旅成本')), findsOneWidget);
+    expect(find.byKey(const ValueKey('cost-formula-收入')), findsOneWidget);
+  });
+
+  testWidgets('cost formula help opens a dialog on wide screens', (tester) async {
+    tester.view.physicalSize = const Size(1440, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ProposalCostFormulaHelpButton(
+            title: '差旅成本',
+            formula: '(电子券销售收入 − 电子券采购成本 − 项目成本) × 2%',
+            substitution: '(100 − 80 − 5) × 2% = 0.30 万元',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byTooltip('查看测算公式'));
+    await tester.pump();
+    expect(find.textContaining('× 2%'), findsWidgets);
+    expect(find.text('知道了'), findsOneWidget);
+    expect(find.byType(AlertDialog), findsOneWidget);
+  });
+
+  testWidgets('cost formula help opens a sheet on a phone width', (tester) async {
+    tester.view.physicalSize = const Size(390, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ProposalCostFormulaHelpButton(
+            title: '收入',
+            formula: '测算中的电子券销售收入 = 收入',
+            substitution: '电子券销售收入 = 100 万元',
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byTooltip('查看测算公式'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('测算中的电子券销售收入 = 收入'), findsOneWidget);
+    expect(find.text('知道了'), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
+  });
+
   testWidgets('finance settlement groups supply, channel, and account fields', (
     tester,
   ) async {
@@ -2605,6 +2727,58 @@ void main() {
     expect(find.text('财务部负责人一'), findsWidgets);
     expect(find.text('财务部负责人二（采购合同复核）'), findsWidgets);
     expect(find.text('备注'), findsWidgets);
+  });
+
+  testWidgets('checking existing supply product reveals required pickers', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 2,
+          'code': 'CG-2026-0001',
+          'kind': 'purchase',
+          'title': '',
+          'status': 'filling',
+          'createdBy': 11,
+          'form': <String, dynamic>{},
+          'review': <String, dynamic>{},
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '是否已有供给产品');
+    expect(find.text('尚未添加供给产品'), findsOneWidget);
+    expect(find.text('已建供给产品'), findsNothing);
+
+    await tester.tap(find.text('是否已有供给产品'));
+    await tester.pump();
+    expect(find.text('尚未添加供给产品'), findsNothing);
+    expect(find.text('供给产品 1'), findsOneWidget);
+    expect(find.text('业务平台'), findsWidgets);
+    expect(find.text('已建供给产品'), findsOneWidget);
+    expect(
+      tester.widget<ProposalField>(_fieldOf('业务平台').first).required,
+      isTrue,
+    );
+    expect(
+      tester.widget<ProposalField>(_fieldOf('已建供给产品').first).required,
+      isTrue,
+    );
+    expect(find.text('供应商'), findsNothing);
+    expect(find.text('返利模式'), findsNothing);
+    expect(
+      find.descendant(
+        of: _fieldOf('已建供给产品'),
+        matching: find.text('请先选择业务平台'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('existing purchase supply product searches catalog product', (

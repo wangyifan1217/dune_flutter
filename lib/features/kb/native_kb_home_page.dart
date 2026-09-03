@@ -55,6 +55,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
   late final NativeKbService _service;
   late final ConversationService _chatService;
   NativeKbSummary? _summary;
+  final List<NativeKbDocument> _pageDocs = <NativeKbDocument>[];
   bool _loading = true;
   bool _syncing = false;
   bool _dragging = false;
@@ -66,8 +67,13 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
   Timer? _parsePollTimer;
   final TextEditingController _search = TextEditingController();
   Timer? _searchDebounce;
-  List<NativeKbDocument>? _searchResults;
   bool _searching = false;
+  bool _loadingMore = false;
+  bool _hasMore = true;
+  int _page = 0;
+  int _listTotal = 0;
+  static const int _pageSize = 20;
+  final ScrollController _scroll = ScrollController();
 
   bool get _uploading => KbUploadCoordinator.instance.isUploading;
   String? get _uploadProgress {
@@ -81,6 +87,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     _service = NativeKbService(session: widget.session);
     _chatService = ConversationService(session: widget.session);
     KbUploadCoordinator.instance.addListener(_onKbUploadChanged);
+    _scroll.addListener(_onScroll);
     _load();
   }
 
@@ -90,6 +97,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     _parsePollTimer?.cancel();
     _searchDebounce?.cancel();
     _search.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -103,34 +111,184 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     }
   }
 
-  Future<void> _load({bool silent = false}) async {
+  Future<void> _load({
+    bool silent = false,
+    bool reset = true,
+    bool refreshSummary = true,
+  }) async {
     if (!silent) {
       setState(() {
         _loading = true;
         _error = null;
       });
+    } else if (reset && _pageDocs.isNotEmpty) {
+      setState(() => _searching = _search.text.trim().isNotEmpty);
+    }
+    Object? summaryError;
+    Object? listError;
+    NativeKbSummary? summary = refreshSummary ? null : _summary;
+    NativeKbDocumentPage? listPage;
+    if (refreshSummary) {
+      try {
+        summary = await _service.fetchSummary();
+      } catch (e) {
+        summaryError = e;
+      }
     }
     try {
-      final summary = await _service.fetchSummary();
-      if (!mounted) return;
-      setState(() {
-        _summary = summary;
-        if (!silent) _loading = false;
-      });
-      _syncParsePoll(summary.documents);
-      unawaited(_refreshDriveSavedStatus(summary.documents));
-      if (!silent) {
-        unawaited(_healLocalMirror());
-      }
+      listPage = await _service.listDocuments(
+        keyword: _search.text.trim(),
+        page: 0,
+        size: _pageSize,
+      );
     } catch (e) {
-      if (!mounted) return;
+      listError = e;
+    }
+    if (listPage == null && summary != null) {
+      listPage = _pageFromNovaDocs(
+        summary.documents,
+        keyword: _search.text.trim(),
+        page: 0,
+      );
+    }
+    if (!mounted) return;
+    if (summary == null && listPage == null) {
       if (!silent) {
         setState(() {
-          _error = friendlyErrorText(e);
+          _error = friendlyErrorText(
+            summaryError ?? listError,
+            fallback: '知识库加载失败',
+          );
           _loading = false;
+          _searching = false;
+          _loadingMore = false;
         });
       }
+      return;
     }
+    final pageDocs = listPage?.items ?? const <NativeKbDocument>[];
+    final listTotal = listPage?.total ?? pageDocs.length;
+    setState(() {
+      if (summary != null) _summary = summary;
+      _pageDocs
+        ..clear()
+        ..addAll(pageDocs);
+      _listTotal = listTotal;
+      _page = 0;
+      _hasMore = pageDocs.length >= _pageSize && pageDocs.length < listTotal;
+      if (!silent) _loading = false;
+      _searching = false;
+      _loadingMore = false;
+    });
+    _syncParsePoll(pageDocs);
+    unawaited(_refreshDriveSavedStatus(pageDocs, replace: true));
+    if (!silent) {
+      unawaited(_healLocalMirror());
+    }
+    _scheduleLoadMoreIfShort();
+  }
+
+  void _onScroll() {
+    if (!_scroll.hasClients ||
+        _loading ||
+        _searching ||
+        _loadingMore ||
+        !_hasMore) {
+      return;
+    }
+    final pos = _scroll.position;
+    if (pos.pixels >= pos.maxScrollExtent - 240) {
+      unawaited(_loadMore());
+    }
+  }
+
+  void _scheduleLoadMoreIfShort() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_hasMore || _loadingMore || _loading) return;
+      if (!_scroll.hasClients) return;
+      if (_scroll.position.maxScrollExtent <= 80) {
+        unawaited(_loadMore());
+      }
+    });
+  }
+
+  Future<void> _loadMore() async {
+    if (_loading || _searching || _loadingMore || !_hasMore) return;
+    setState(() => _loadingMore = true);
+    final nextPage = _page + 1;
+    NativeKbDocumentPage? listPage;
+    try {
+      listPage = await _service.listDocuments(
+        keyword: _search.text.trim(),
+        page: nextPage,
+        size: _pageSize,
+      );
+    } catch (_) {
+      final fallbackDocs = _summary?.documents ?? const <NativeKbDocument>[];
+      if (fallbackDocs.isNotEmpty) {
+        listPage = _pageFromNovaDocs(
+          fallbackDocs,
+          keyword: _search.text.trim(),
+          page: nextPage,
+        );
+      }
+    }
+    if (!mounted) return;
+    if (listPage == null) {
+      setState(() => _loadingMore = false);
+      return;
+    }
+    final existing = _pageDocs.map((d) => d.id).toSet();
+    final appended = listPage.items
+        .where((d) => !existing.contains(d.id))
+        .toList(growable: false);
+    final nextTotal = listPage.total;
+    final fetchedCount = listPage.items.length;
+    setState(() {
+      _pageDocs.addAll(appended);
+      _page = nextPage;
+      _listTotal = nextTotal;
+      _hasMore = fetchedCount >= _pageSize && _pageDocs.length < _listTotal;
+      _loadingMore = false;
+    });
+    _syncParsePoll(_pageDocs);
+    unawaited(_refreshDriveSavedStatus(appended, replace: false));
+    _scheduleLoadMoreIfShort();
+  }
+
+  NativeKbDocumentPage _pageFromNovaDocs(
+    List<NativeKbDocument> docs, {
+    required String keyword,
+    required int page,
+  }) {
+    final q = keyword.trim().toLowerCase();
+    final filtered = q.isEmpty
+        ? docs
+        : docs
+              .where((doc) {
+                return doc.title.toLowerCase().contains(q) ||
+                    doc.fileName.toLowerCase().contains(q) ||
+                    doc.fileExtension.toLowerCase().contains(q);
+              })
+              .toList(growable: false);
+    final start = page <= 0 ? 0 : page * _pageSize;
+    if (start >= filtered.length) {
+      return NativeKbDocumentPage(
+        items: const <NativeKbDocument>[],
+        page: page,
+        size: _pageSize,
+        total: filtered.length,
+      );
+    }
+    final end = start + _pageSize > filtered.length
+        ? filtered.length
+        : start + _pageSize;
+    return NativeKbDocumentPage(
+      items: filtered.sublist(start, end),
+      page: page,
+      size: _pageSize,
+      total: filtered.length,
+    );
   }
 
   Future<void> _healLocalMirror() async {
@@ -148,7 +306,10 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     return id.isEmpty ? '' : 'kb-doc-$id';
   }
 
-  Future<void> _refreshDriveSavedStatus(List<NativeKbDocument> docs) async {
+  Future<void> _refreshDriveSavedStatus(
+    List<NativeKbDocument> docs, {
+    bool replace = true,
+  }) async {
     final keys = docs
         .map(_driveSourceKeyForDoc)
         .where((k) => k.isNotEmpty)
@@ -159,9 +320,8 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       final saved = await drive.fetchChatSavedKeys(keys);
       if (!mounted) return;
       setState(() {
-        _driveSavedDocKeys
-          ..clear()
-          ..addAll(saved);
+        if (replace) _driveSavedDocKeys.clear();
+        _driveSavedDocKeys.addAll(saved);
       });
     } catch (_) {
       // 标记查询失败不影响列表。
@@ -175,8 +335,43 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     _parsePollTimer = null;
     if (!nativeKbHasPendingParse(docs)) return;
     _parsePollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      unawaited(_load(silent: true));
+      unawaited(_refreshVisibleDocStatus());
     });
+  }
+
+  Future<void> _refreshVisibleDocStatus() async {
+    if (_pageDocs.isEmpty) return;
+    try {
+      final size = _pageDocs.length > 100 ? 100 : _pageDocs.length;
+      final page = await _service.listDocuments(
+        keyword: _search.text.trim(),
+        page: 0,
+        size: size < 1 ? _pageSize : size,
+      );
+      if (!mounted) return;
+      final byId = <String, NativeKbDocument>{
+        for (final doc in page.items) doc.id: doc,
+      };
+      setState(() {
+        for (var i = 0; i < _pageDocs.length; i++) {
+          final fresh = byId[_pageDocs[i].id];
+          if (fresh == null) continue;
+          _pageDocs[i] = _pageDocs[i].copyWith(
+            ingestionStatus: fresh.ingestionStatus,
+            indexed: fresh.indexed,
+            runStatus: fresh.runStatus,
+            fileObjectKey: fresh.fileObjectKey.isNotEmpty
+                ? fresh.fileObjectKey
+                : _pageDocs[i].fileObjectKey,
+            localDocId: fresh.localDocId.isNotEmpty
+                ? fresh.localDocId
+                : _pageDocs[i].localDocId,
+          );
+        }
+        _listTotal = page.total;
+      });
+      _syncParsePoll(_pageDocs);
+    } catch (_) {}
   }
 
   Future<void> _sync() async {
@@ -365,35 +560,45 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       ),
     );
     if (ok != true) return;
-    final previous = _summary;
-    // 先局部移除，避免整页 loading 闪烁。
-    if (previous != null) {
-      final nextDocs = previous.documents
-          .where((d) => d.id != doc.id)
-          .toList(growable: false);
-      setState(() {
+    final previousSummary = _summary;
+    final previousPage = List<NativeKbDocument>.from(_pageDocs);
+    final previousTotal = _listTotal;
+    setState(() {
+      _pageDocs.removeWhere((d) => d.id == doc.id);
+      if (_listTotal > 0) _listTotal -= 1;
+      if (previousSummary != null) {
+        final nextDocs = previousSummary.documents
+            .where((d) => d.id != doc.id)
+            .toList(growable: false);
         _summary = NativeKbSummary(
           documentCount: nextDocs.length,
-          categoryCount: previous.categoryCount,
-          unreadCount: previous.unreadCount,
-          ready: previous.ready,
+          categoryCount: previousSummary.categoryCount,
+          unreadCount: previousSummary.unreadCount,
+          ready: previousSummary.ready,
           documents: nextDocs,
-          folderId: previous.folderId,
-          message: previous.message,
+          folderId: previousSummary.folderId,
+          message: previousSummary.message,
         );
-      });
-      _syncParsePoll(nextDocs);
-    }
+      }
+    });
+    _syncParsePoll(_pageDocs);
     try {
-      await _service.deleteDocument(doc.id);
+      await _service.deleteDocument(
+        doc.novaDocumentId,
+        folderId: _summary?.folderId,
+      );
       KbDocumentCoordinator.instance.notifyChanged();
       await _load(silent: true);
     } catch (e) {
       if (!mounted) return;
-      if (previous != null) {
-        setState(() => _summary = previous);
-        _syncParsePoll(previous.documents);
-      }
+      setState(() {
+        if (previousSummary != null) _summary = previousSummary;
+        _pageDocs
+          ..clear()
+          ..addAll(previousPage);
+        _listTotal = previousTotal;
+      });
+      _syncParsePoll(previousPage);
       _toast('删除失败：${friendlyErrorText(e)}', error: true);
     }
   }
@@ -660,6 +865,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
             : RefreshIndicator(
                 onRefresh: () => _load(silent: true),
                 child: ListView(
+                  controller: _scroll,
                   padding: EdgeInsets.zero,
                   children: [
                     _buildHero(),
@@ -673,11 +879,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                           const SizedBox(height: 8),
                           _buildUploadPanel(),
                           const SizedBox(height: 14),
-                          _sectionLabel(
-                            '我的',
-                            '文档',
-                            count: '${_filteredDocuments.length} 篇',
-                          ),
+                          _sectionLabel('我的', '文档', count: '$_listTotal 篇'),
                           const SizedBox(height: 8),
                           _buildDocumentSearch(),
                           const SizedBox(height: 8),
@@ -808,7 +1010,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                 ),
                 child: Row(
                   children: [
-                    _heroStat('${s?.documentCount ?? 0}', '文档'),
+                    _heroStat('${_displayDocumentCount}', '文档'),
                     const SizedBox(width: 14),
                     _heroStat('${s?.categoryCount ?? 0}', '分类'),
                     const SizedBox(width: 14),
@@ -1011,8 +1213,14 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     );
   }
 
+  int get _displayDocumentCount {
+    final fromSummary = _summary?.documentCount ?? 0;
+    if (_search.text.trim().isNotEmpty) return _listTotal;
+    return fromSummary > _listTotal ? fromSummary : _listTotal;
+  }
+
   Widget _buildDocList() {
-    final docs = _filteredDocuments;
+    final docs = _pageDocs;
     if (docs.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(14),
@@ -1215,42 +1423,39 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
               ),
             ),
           ),
+        if (_loadingMore) ...[
+          const SizedBox(height: 8),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 10),
+            child: Center(
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+        ] else if (_hasMore && _pageDocs.length >= _pageSize) ...[
+          const SizedBox(height: 8),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 6),
+            child: Text(
+              '下滑加载更多',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 11, color: DunesColors.text3),
+            ),
+          ),
+        ],
       ],
     );
-  }
-
-  List<NativeKbDocument> get _filteredDocuments {
-    if (_searchResults != null) return _searchResults!;
-    final docs = _summary?.documents ?? const <NativeKbDocument>[];
-    return docs;
   }
 
   void _onKeywordChanged(String value) {
     _searchDebounce?.cancel();
     final keyword = value.trim();
-    if (keyword.isEmpty) {
-      setState(() {
-        _searchResults = null;
-        _searching = false;
-      });
-      return;
-    }
-    setState(() => _searching = true);
-    _searchDebounce = Timer(const Duration(milliseconds: 320), () async {
-      try {
-        final docs = await _service.searchDocuments(keyword: keyword);
-        if (!mounted || _search.text.trim() != keyword) return;
-        setState(() {
-          _searchResults = docs;
-          _searching = false;
-        });
-      } catch (_) {
-        if (!mounted || _search.text.trim() != keyword) return;
-        setState(() {
-          _searchResults = const <NativeKbDocument>[];
-          _searching = false;
-        });
-      }
+    setState(() => _searching = keyword.isNotEmpty);
+    _searchDebounce = Timer(const Duration(milliseconds: 320), () {
+      unawaited(_load(silent: true));
     });
   }
 

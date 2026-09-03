@@ -3043,6 +3043,9 @@ bool proposalIntakeFormHasRef(
 const kProposalSalesFinanceFillFields = <(String, String)>[
   ('salesScale', '销售规模目标（万元）'),
   ('revenue', '收入（万元）'),
+  ('couponProcurementCost', '电子券采购成本（万元）'),
+  ('financeTaxRate', '税率'),
+  ('writeOffAmount', '核销金额（万元）'),
   ('invoiceAmount', '发票（万元）'),
   ('profit', '利润（万元）'),
   ('margin', '毛利率（%）'),

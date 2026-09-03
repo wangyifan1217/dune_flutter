@@ -647,6 +647,10 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                           ),
                         ),
                         const SizedBox(height: 12),
+                        XfDetTaskCompletionCard(
+                          form: detail?.formData ?? const <String, dynamic>{},
+                          service: _service,
+                        ),
                         XfDetCommentsSection(
                           service: _service,
                           businessType: widget.businessType,

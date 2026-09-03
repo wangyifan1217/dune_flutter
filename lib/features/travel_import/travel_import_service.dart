@@ -107,6 +107,7 @@ class TravelOrderRow {
     required this.origin,
     required this.destination,
     required this.amountFen,
+    this.rebookFeeFen = 0,
     required this.shared,
   });
   final int id;
@@ -119,6 +120,7 @@ class TravelOrderRow {
   final String origin;
   final String destination;
   final int amountFen;
+  final int rebookFeeFen;
   final bool shared;
 
   bool get unmatched => matchStatus == 'unmatched';
@@ -126,7 +128,10 @@ class TravelOrderRow {
 
   String get amountLabel {
     final yuan = amountFen / 100.0;
-    return '¥${yuan.toStringAsFixed(yuan.truncateToDouble() == yuan ? 0 : 2)}';
+    final base = '¥${yuan.toStringAsFixed(yuan.truncateToDouble() == yuan ? 0 : 2)}';
+    if (rebookFeeFen <= 0) return base;
+    final fee = rebookFeeFen / 100.0;
+    return '$base · 改签¥${fee.toStringAsFixed(fee.truncateToDouble() == fee ? 0 : 2)}';
   }
 
   factory TravelOrderRow.fromJson(Map<String, dynamic> json) {
@@ -141,6 +146,7 @@ class TravelOrderRow {
       origin: '${json['origin'] ?? ''}',
       destination: '${json['destination'] ?? ''}',
       amountFen: (json['amountFen'] as num?)?.toInt() ?? 0,
+      rebookFeeFen: (json['rebookFeeFen'] as num?)?.toInt() ?? 0,
       shared: json['shared'] == true,
     );
   }

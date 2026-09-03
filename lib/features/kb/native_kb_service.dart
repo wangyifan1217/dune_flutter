@@ -119,6 +119,20 @@ class NativeKbService {
     int page = 0,
     int size = 50,
   }) async {
+    final result = await listDocuments(
+      keyword: keyword,
+      page: page,
+      size: size,
+    );
+    return result.items;
+  }
+
+  /// 分页列出当前用户知识库文档。keyword 为空时返回全部。
+  Future<NativeKbDocumentPage> listDocuments({
+    String keyword = '',
+    int page = 0,
+    int size = 20,
+  }) async {
     final query = <String, String>{
       'q': keyword.trim(),
       'page': page.toString(),
@@ -133,26 +147,18 @@ class NativeKbService {
         resp.statusCode >= 300 ||
         body['success'] == false) {
       throw Exception(
-        (body['message'] ?? body['error']?['message'] ?? '知识库搜索失败').toString(),
+        (body['message'] ?? body['error']?['message'] ?? '知识库列表获取失败')
+            .toString(),
       );
     }
     final data = body['data'] is Map<String, dynamic>
         ? body['data'] as Map<String, dynamic>
         : body;
-    final content =
-        (data['content'] as List?) ?? (data['items'] as List?) ?? const [];
-    return content
-        .whereType<Map>()
-        .toList(growable: false)
-        .asMap()
-        .entries
-        .map(
-          (entry) => NativeKbDocument.fromJson(
-            Map<String, dynamic>.from(entry.value),
-            index: entry.key,
-          ),
-        )
-        .toList(growable: false);
+    return NativeKbDocumentPage.fromJson(
+      data,
+      fallbackPage: page,
+      fallbackSize: size,
+    );
   }
 
   NativeKbSummary _parseSummary(Map<String, dynamic> st) {
@@ -238,8 +244,7 @@ class NativeKbService {
       linked ??= _matchHomeDocument(doc, homeRecents);
 
       if (linked != null && linked.dunesDocumentId.isNotEmpty) {
-        docs[i] = NativeKbDocument(
-          id: doc.id,
+        docs[i] = doc.copyWith(
           title: doc.title.isNotEmpty ? doc.title : linked.title,
           fileName: doc.fileName.isNotEmpty ? doc.fileName : linked.fileName,
           fileExtension: doc.fileExtension.isNotEmpty
@@ -255,6 +260,9 @@ class NativeKbService {
           fileObjectKey: linked.fileObjectKey,
           fileUrl: linked.fileUrl,
           localDocId: linked.dunesDocumentId,
+          ragflowDocId: doc.ragflowDocId.isNotEmpty
+              ? doc.ragflowDocId
+              : linked.ragflowDocId,
           fileSizeBytes: linked.fileSizeBytes > 0
               ? linked.fileSizeBytes
               : doc.fileSizeBytes,
@@ -297,14 +305,17 @@ class NativeKbService {
       doc.fileName.trim().toLowerCase(),
     }..removeWhere((s) => s.isEmpty);
     if (names.isEmpty) return null;
+    NativeKbDocument? unique;
     for (final candidate in homeDocs) {
       final cNames = <String>{
         candidate.title.trim().toLowerCase(),
         candidate.fileName.trim().toLowerCase(),
       }..removeWhere((s) => s.isEmpty);
-      if (names.intersection(cNames).isNotEmpty) return candidate;
+      if (names.intersection(cNames).isEmpty) continue;
+      if (unique != null) return null;
+      unique = candidate;
     }
-    return null;
+    return unique;
   }
 
   Future<String> _resolveDunesDocumentIdForPreview({
@@ -642,7 +653,11 @@ class NativeKbService {
   }) async {
     final direct = resolveDunesDocumentId(doc: doc, docId: docId);
     if (direct.isNotEmpty) return direct;
-    final ragId = (doc?.id ?? docId).trim();
+    final ragId =
+        (doc?.ragflowDocId.trim().isNotEmpty == true
+                ? doc!.ragflowDocId
+                : (doc?.id ?? docId))
+            .trim();
     if (ragId.isEmpty || int.tryParse(ragId) != null) return '';
     final detail = await fetchDunesDocumentByRagflowId(ragId);
     return detail.dunesDocumentId;
@@ -744,13 +759,36 @@ class NativeKbService {
 
     Object? lastError;
 
-    Future<Uint8List?> tryStorage(NativeKbDocument doc) async {
-      for (final key in _kbStorageKeyCandidates(doc)) {
+    bool isMissingObject(Object e) {
+      final text = e.toString();
+      return text.contains('HTTP 403') ||
+          text.contains('HTTP 404') ||
+          text.contains('HTTP 401');
+    }
+
+    void rememberError(Object e, {bool guessedKey = false}) {
+      if (guessedKey && isMissingObject(e)) return;
+      lastError = e;
+    }
+
+    Future<Uint8List?> tryStorage(
+      NativeKbDocument doc, {
+      bool guessedKeys = false,
+    }) async {
+      final keys = guessedKeys
+          ? _kbStorageKeyCandidates(doc)
+          : <String>[
+              if (doc.fileObjectKey.trim().isNotEmpty) doc.fileObjectKey.trim(),
+            ];
+      for (final key in keys) {
         try {
           final bytes = await _downloadBytesViaStorageProxy(key);
           if (bytes.isNotEmpty) return bytes;
         } catch (e) {
-          lastError = e;
+          rememberError(
+            e,
+            guessedKey: guessedKeys || doc.fileObjectKey.trim() != key,
+          );
         }
       }
       return null;
@@ -770,14 +808,13 @@ class NativeKbService {
           return (bytes: fetched, fileName: pickName(doc));
         }
       } catch (e) {
-        lastError = e;
+        rememberError(e, guessedKey: isMissingObject(e));
       }
       return null;
     }
 
-    // 已镜像到 Dunes MinIO 的文档：用真实 objectKey 快路径。
-    // Nova 直传文档没有 objectKey，不要先猜 `{userId}/{文件名}`，否则 MinIO 403
-    // 会盖掉后面的 RAGFlow 回填。
+    // 已镜像到 Dunes MinIO 的文档：只用真实 objectKey。猜路径容易 MinIO 403，
+    // 不能盖掉后面的 RAGFlow 回填。
     if (hint != null && hint.fileObjectKey.trim().isNotEmpty) {
       final bytes = await tryStorage(hint);
       if (bytes != null && bytes.isNotEmpty) {
@@ -792,26 +829,26 @@ class NativeKbService {
     try {
       dunesId = await _ensureDunesDocumentId(doc: hint, docId: docId);
     } catch (e) {
-      lastError = e;
+      rememberError(e);
     }
     // 列表来自 Nova，打开要走 Dunes MinIO。后台 sync 可能还没回填完，点开时再静默拉一次。
     if (dunesId.isEmpty) {
       try {
         await syncRagflow();
       } catch (e) {
-        lastError = e;
+        rememberError(e, guessedKey: true);
       }
       try {
         dunesId = await _ensureDunesDocumentId(doc: hint, docId: docId);
       } catch (e) {
-        lastError = e;
+        rememberError(e);
       }
     }
     if (dunesId.isEmpty) {
       // kb-go 回填可能已把文件写入 MinIO（`{userId}/ragflow/{ragId}/{文件名}`），
       // 但 INSERT 因 content_type 超长失败。此时仍可按猜测 key 下载。
       if (hint != null) {
-        final bytes = await tryStorage(hint);
+        final bytes = await tryStorage(hint, guessedKeys: true);
         if (bytes != null && bytes.isNotEmpty) {
           return (bytes: bytes, fileName: pickName(hint));
         }
@@ -838,12 +875,33 @@ class NativeKbService {
       final name = download.fileName.trim().isNotEmpty
           ? download.fileName.trim()
           : fileName;
-      final bytes = await _downloadBytesFromUrl(download.downloadUrl);
-      if (bytes.isNotEmpty) {
-        return (bytes: bytes, fileName: name);
+      try {
+        final bytes = await _downloadBytesFromUrl(download.downloadUrl);
+        if (bytes.isNotEmpty) {
+          return (bytes: bytes, fileName: name);
+        }
+      } catch (e) {
+        rememberError(e, guessedKey: isMissingObject(e));
+        final signedKey = _extractObjectKeyFromUrl(
+          download.downloadUrl,
+          bucket: 'kb-documents',
+        );
+        if (signedKey.isNotEmpty) {
+          final proxied = await _downloadBytesViaStorageProxy(signedKey);
+          if (proxied.isNotEmpty) {
+            return (bytes: proxied, fileName: name);
+          }
+        }
       }
     } catch (e) {
-      lastError = e;
+      rememberError(e);
+    }
+
+    if (doc != null) {
+      final guessed = await tryStorage(doc, guessedKeys: true);
+      if (guessed != null && guessed.isNotEmpty) {
+        return (bytes: guessed, fileName: fileName);
+      }
     }
 
     final err = lastError;
@@ -1020,7 +1078,9 @@ class NativeKbService {
     }
 
     add(doc.fileObjectKey);
-    final ragId = doc.id.trim();
+    final ragId = doc.ragflowDocId.trim().isNotEmpty
+        ? doc.ragflowDocId.trim()
+        : doc.id.trim();
     final names = <String>{doc.fileName.trim(), doc.title.trim()}
       ..removeWhere((s) => s.isEmpty);
 

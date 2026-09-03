@@ -62,11 +62,14 @@ class TravelService {
       provinces = provincesFromLegs(legs);
     }
     final stay = visits.isEmpty ? provinceStayCounts(legs) : visits;
+    final jsonFee = (json['rebookFeeFen'] as num?)?.toInt() ?? 0;
+    final fromLegs = travelRebookFeeFromLegs('${json['userId'] ?? ''}', legs);
     return TravelEmployee(
       id: '${json['userId'] ?? ''}',
       name: '${json['name'] ?? ''}',
       dept: '${json['dept'] ?? ''}',
       cost: (json['costFen'] as num?)?.toInt() ?? 0,
+      fee: fromLegs > 0 ? fromLegs : jsonFee,
       trips: (json['trips'] as num?)?.toInt() ?? legs.length,
       lastTrip: '${json['lastTrip'] ?? ''}',
       provinces: provinces,
@@ -81,7 +84,9 @@ class TravelService {
       to: '${json['to'] ?? ''}',
       date: '${json['date'] ?? ''}',
       amount: (json['amountFen'] as num?)?.toInt() ?? 0,
+      rebookFee: (json['rebookFeeFen'] as num?)?.toInt() ?? 0,
       kind: travelKindFrom('${json['kind'] ?? ''}'),
+      orderId: '${json['orderId'] ?? ''}',
       shared: json['shared'] == true,
       originProvince: '${json['originProvince'] ?? ''}',
       destProvince: '${json['destProvince'] ?? ''}',

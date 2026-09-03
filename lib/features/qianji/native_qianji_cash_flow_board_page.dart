@@ -629,67 +629,100 @@ class _NativeQianjiCashFlowBoardPageState
   }
 
   Widget _buildHeader() {
+    final back = InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: widget.onBack,
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.arrow_back_ios_new,
+              size: 14,
+              color: DunesColors.text2,
+            ),
+            SizedBox(width: 2),
+            Text(
+              'τ管理',
+              style: TextStyle(fontSize: 13, color: DunesColors.text2),
+            ),
+          ],
+        ),
+      ),
+    );
+    const title = Text(
+      '公司账户资金流向',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+        color: _themePurple,
+      ),
+    );
+    final actions = <Widget>[
+      _TourEntryChip(onTap: _openTour),
+      IconButton(
+        tooltip: '各板块怎么算',
+        onPressed: _showBoardGuide,
+        icon: const Icon(Icons.info_outline, size: 20, color: _themePurple),
+      ),
+      _AiAnalyzeChip(key: _aiKey, onTap: _openAiAnalyze),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: DunesColors.amberSoft,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          _loading ? '加载中' : '银行流水',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: DunesColors.amber,
+          ),
+        ),
+      ),
+    ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 16, 4),
-      child: Row(
-        children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: widget.onBack,
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.arrow_back_ios_new,
-                    size: 14,
-                    color: DunesColors.text2,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stacked = constraints.maxWidth < 640;
+          if (stacked) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    back,
+                    const SizedBox(width: 8),
+                    const Expanded(child: title),
+                  ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(left: 8, top: 2),
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: actions,
                   ),
-                  SizedBox(width: 2),
-                  Text(
-                    'τ管理',
-                    style: TextStyle(fontSize: 13, color: DunesColors.text2),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          const Expanded(
-            child: Text(
-              '公司账户资金流向',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: _themePurple,
-              ),
-            ),
-          ),
-          _TourEntryChip(onTap: _openTour),
-          IconButton(
-            tooltip: '各板块怎么算',
-            onPressed: _showBoardGuide,
-            icon: const Icon(Icons.info_outline, size: 20, color: _themePurple),
-          ),
-          _AiAnalyzeChip(key: _aiKey, onTap: _openAiAnalyze),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: DunesColors.amberSoft,
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Text(
-              _loading ? '加载中' : '银行流水',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: DunesColors.amber,
-              ),
-            ),
-          ),
-        ],
+                ),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              back,
+              const SizedBox(width: 8),
+              const Expanded(child: title),
+              ...actions,
+            ],
+          );
+        },
       ),
     );
   }

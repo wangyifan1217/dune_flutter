@@ -166,6 +166,48 @@ void _showTravelKindCosts(BuildContext context, List<TravelEmployee> people) {
   );
 }
 
+void _showTravelFeeBreakdown(BuildContext context, List<TravelEmployee> people) {
+  final fees = travelRebookFeeByKind(people);
+  final total = travelRebookFeeTotal(people);
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('手续费构成'),
+      content: SizedBox(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              total == 0 ? '当前筛选下没有手续费' : '合计 ${formatYuan(total)}',
+              style: const TextStyle(
+                fontSize: 13,
+                color: DunesColors.text2,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '目前只统计改签手续费。同一订单多人出行只计一次整单金额，不拆到人，也不计入出行成本。',
+              style: TextStyle(fontSize: 12, color: DunesColors.text3, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            for (final kind in TravelKind.values)
+              _KindCostLine(kind: kind, amount: fees[kind] ?? 0, total: total),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('知道了'),
+        ),
+      ],
+    ),
+  );
+}
+
 void _showTravelCostHelp(BuildContext context) {
   showDialog<void>(
     context: context,
@@ -174,7 +216,8 @@ void _showTravelCostHelp(BuildContext context) {
       content: const Text(
         '统计当前时间和部门筛选下，已关联组织用户的订单金额合计。\n\n'
         '金额是导入时按出行人等额分摊后的费用；标了「分摊」的是分摊额，不是原单全额。\n\n'
-        '机票、火车、酒店、用车都计入。未关联或重名未指定的订单不进地图，也不计入成本。',
+        '机票、火车、酒店、用车都计入。改签手续费单独放在「手续费」里，不计入出行成本。\n\n'
+        '未关联或重名未指定的订单不进地图，也不计入成本和手续费。',
       ),
       actions: [
         TextButton(
@@ -304,6 +347,7 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
   Widget build(BuildContext context) {
     final people = _people;
     final total = people.fold<int>(0, (s, p) => s + p.cost);
+    final fee = travelRebookFeeTotal(people);
     final provinces = people.expand((p) => p.provinces).toSet().length;
     final legs = _visibleLegs.length;
 
@@ -320,6 +364,7 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               child: _buildStats(
                 total: total,
+                fee: fee,
                 peopleCount: people.length,
                 provinces: provinces,
                 legs: legs,
@@ -584,6 +629,7 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
 
   Widget _buildStats({
     required int total,
+    required int fee,
     required int peopleCount,
     required int provinces,
     required int legs,
@@ -593,13 +639,20 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
       _StatChip(
         label: '出行成本',
         value: formatYuan(total),
+        infoTip: '各板块费用',
         onInfo: () => _showTravelKindCosts(context, people),
+      ),
+      _StatChip(
+        label: '手续费',
+        value: formatYuan(fee),
+        infoTip: '改签手续费',
+        onInfo: () => _showTravelFeeBreakdown(context, people),
       ),
       _StatChip(label: '员工', value: '$peopleCount'),
       _StatChip(label: '省份', value: '$provinces'),
       _StatChip(label: '行程', value: '$legs'),
     ];
-    final compact = MediaQuery.sizeOf(context).width < 520;
+    final compact = MediaQuery.sizeOf(context).width < 640;
     if (!compact) {
       return Row(
         children: [
@@ -614,17 +667,31 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
       children: [
         Row(children: [chips[0], const SizedBox(width: 8), chips[1]]),
         const SizedBox(height: 8),
-        Row(children: [chips[2], const SizedBox(width: 8), chips[3]]),
+        Row(
+          children: [
+            chips[2],
+            const SizedBox(width: 8),
+            chips[3],
+            const SizedBox(width: 8),
+            chips[4],
+          ],
+        ),
       ],
     );
   }
 }
 
 class _StatChip extends StatelessWidget {
-  const _StatChip({required this.label, required this.value, this.onInfo});
+  const _StatChip({
+    required this.label,
+    required this.value,
+    this.onInfo,
+    this.infoTip,
+  });
   final String label;
   final String value;
   final VoidCallback? onInfo;
+  final String? infoTip;
 
   @override
   Widget build(BuildContext context) {
@@ -671,7 +738,7 @@ class _StatChip extends StatelessWidget {
       child: onInfo == null
           ? body
           : Tooltip(
-              message: '各板块费用',
+              message: infoTip ?? '各板块费用',
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
@@ -1134,6 +1201,7 @@ class _EmployeeList extends StatelessWidget {
       itemBuilder: (context, i) {
         final p = people[i];
         final kinds = p.legs.map((l) => l.kind).toSet();
+        final fee = travelRebookFeeTotal([p]);
         return Material(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
@@ -1169,7 +1237,11 @@ class _EmployeeList extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${p.dept.trim().isEmpty ? '' : '${p.dept} · '}${p.trips} 段行程',
+                    [
+                      if (p.dept.trim().isNotEmpty) p.dept,
+                      '${p.trips} 段行程',
+                      if (fee > 0) '手续费 ${formatYuan(fee)}',
+                    ].join(' · '),
                     style: const TextStyle(
                       fontSize: 12,
                       color: DunesColors.text3,
@@ -1802,7 +1874,9 @@ class _ChinaTravelMapState extends State<_ChinaTravelMap>
               for (final item in bundle.items)
                 _PickLine(
                   title: '${item.person.name} · ${item.leg.kind.label}',
-                  meta: item.leg.date,
+                  meta: item.leg.rebookFee > 0
+                      ? '${item.leg.date} · 手续费 ${formatYuan(item.leg.rebookFee)}'
+                      : item.leg.date,
                   amount: item.leg.amount,
                   shared: item.leg.shared,
                 ),

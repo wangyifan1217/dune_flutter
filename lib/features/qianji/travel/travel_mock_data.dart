@@ -37,7 +37,9 @@ class TravelLeg {
     required this.to,
     required this.date,
     required this.amount,
+    this.rebookFee = 0,
     this.kind = TravelKind.flight,
+    this.orderId = '',
     this.shared = false,
     this.originProvince = '',
     this.destProvince = '',
@@ -47,7 +49,10 @@ class TravelLeg {
   final String date;
   /// 分摊后金额，单位分。
   final int amount;
+  /// 整单改签手续费，单位分；同行人各行都带同一笔全额。
+  final int rebookFee;
   final TravelKind kind;
+  final String orderId;
   final bool shared;
   final String originProvince;
   final String destProvince;
@@ -61,6 +66,7 @@ class TravelEmployee {
     required this.name,
     required this.dept,
     required this.cost,
+    this.fee = 0,
     required this.trips,
     required this.lastTrip,
     required this.provinces,
@@ -72,6 +78,8 @@ class TravelEmployee {
   final String dept;
   /// 可见范围内分摊后合计，单位分。
   final int cost;
+  /// 该员工名下订单的改签手续费合计（按订单去重），单位分。
+  final int fee;
   final int trips;
   final String lastTrip;
   final List<String> provinces;
@@ -310,6 +318,53 @@ Map<TravelKind, int> travelKindCosts(List<TravelEmployee> people) {
   return map;
 }
 
+String _rebookFeeKey(TravelEmployee person, TravelLeg leg) {
+  final orderId = leg.orderId.trim();
+  if (orderId.isNotEmpty) return orderId;
+  return '${person.id}|${leg.kind.name}|${leg.date}|${leg.from}|${leg.to}|${leg.rebookFee}';
+}
+
+int travelRebookFeeFromLegs(String personId, List<TravelLeg> legs) {
+  return travelRebookFeeTotal([
+    TravelEmployee(
+      id: personId,
+      name: '',
+      dept: '',
+      cost: 0,
+      trips: legs.length,
+      lastTrip: '',
+      provinces: const [],
+      legs: legs,
+    ),
+  ]);
+}
+
+/// 手续费按订单去重。同行多行都带整单改签费，合计时只计一次。
+int travelRebookFeeTotal(List<TravelEmployee> people) {
+  final seen = <String>{};
+  var sum = 0;
+  for (final p in people) {
+    for (final l in p.legs) {
+      if (l.rebookFee <= 0) continue;
+      if (seen.add(_rebookFeeKey(p, l))) sum += l.rebookFee;
+    }
+  }
+  return sum;
+}
+
+Map<TravelKind, int> travelRebookFeeByKind(List<TravelEmployee> people) {
+  final map = {for (final k in TravelKind.values) k: 0};
+  final seen = <String>{};
+  for (final p in people) {
+    for (final l in p.legs) {
+      if (l.rebookFee <= 0) continue;
+      if (!seen.add(_rebookFeeKey(p, l))) continue;
+      map[l.kind] = (map[l.kind] ?? 0) + l.rebookFee;
+    }
+  }
+  return map;
+}
+
 List<TravelEmployee> employeesFor(List<TravelEmployee> all, String personId) {
   if (personId == 'all') return all;
   return all.where((e) => e.id == personId).toList();
@@ -359,6 +414,7 @@ List<TravelEmployee> filterTravelEmployees({
         name: e.name,
         dept: e.dept,
         cost: cost,
+        fee: travelRebookFeeFromLegs(e.id, legs),
         trips: legs.length,
         lastTrip: legs.map((l) => l.date).reduce((a, b) => a.compareTo(b) >= 0 ? a : b),
         provinces: provinces.toList(),

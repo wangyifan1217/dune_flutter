@@ -1,3 +1,4 @@
+import 'package:dunes_app/features/proposal_intake/proposal_cost_estimate.dart';
 import 'package:dunes_app/features/proposal_intake/proposal_intake_models.dart';
 import 'package:dunes_app/features/proposal_intake/settlement_catalog.dart';
 import 'package:dunes_app/features/xflow/approval_chat_share.dart';
@@ -502,6 +503,56 @@ void main() {
     final options = ProposalIntakeOptions.fromJson({});
     expect(options.operatingCostRules, contains('2%'));
     expect(options.businessCostRules, contains('员工提成'));
+  });
+
+  test('finance cost estimates fill selected rows and keep manual overrides', () {
+    expect(proposalParseTaxRate('6%'), 0.06);
+    expect(proposalParseTaxRate(6), 0.06);
+    expect(proposalParseTaxRate(0.13), 0.13);
+    expect(proposalBusinessCostFormulaOf('供给侧BN'), ProposalBusinessCostFormula.bn);
+    expect(proposalBusinessCostFormulaOf('渠道侧N'), ProposalBusinessCostFormula.bn);
+    expect(proposalBusinessCostFormulaOf('供给侧U'), ProposalBusinessCostFormula.u);
+    expect(proposalBusinessCostFormulaOf('供给侧H'), isNull);
+
+    var form = proposalApplyEstimatedFinanceCosts({
+      'revenue': 100,
+      'couponProcurementCost': 80,
+      'projectCost': 5,
+      'financeTaxRate': '6%',
+      'writeOffAmount': 200,
+      'operatingCostItems': ['差旅成本', '招待费'],
+      'businessCostItems': ['供给侧BN', '渠道侧U'],
+      'taxCostItems': ['增值税及附加（能源）', '印花税', '所得税'],
+    });
+    expect(form['operatingCostItemAmounts']['差旅成本'], 0.3);
+    expect(form['operatingCostItemAmounts']['招待费'], 0.3);
+    expect(form['operatingCost'], 0.6);
+    expect(form['businessCostItemAmounts']['供给侧BN'], 1.44);
+    expect(form['businessCostItemAmounts']['渠道侧U'], 6.48);
+    expect(form['taxCostItemAmounts']['增值税及附加（能源）'], 1.01);
+    expect(form['taxCostItemAmounts']['印花税'], 0.12);
+    expect(form['taxCostItemAmounts']['所得税'], 1.62);
+
+    form = proposalApplyEstimatedFinanceCosts(
+      proposalMarkCostAmountManual(
+        {
+          ...form,
+          'revenue': 200,
+        },
+        amountsKey: 'operatingCostItemAmounts',
+        id: '差旅成本',
+      ),
+    );
+    expect(form['operatingCostItemAmounts']['差旅成本'], 0.3);
+    expect(form['operatingCostItemAmounts']['招待费'], 2.3);
+
+    final help = proposalCostFormulaHelpOf(name: '差旅成本', form: {
+      'revenue': 100,
+      'couponProcurementCost': 80,
+      'projectCost': 5,
+    });
+    expect(help?.formula, contains('× 2%'));
+    expect(help?.substitution, contains('0.30 万元'));
   });
 
   test('historical values remain available in proposal row form', () {
@@ -1745,6 +1796,8 @@ void main() {
   test('sales fill fields are required except optional products and packs', () {
     final empty = proposalIntakeSalesMarketIssues({});
     expect(empty, contains('请选择业务板块'));
+    expect(empty, contains('请填写产品提案名称'));
+    expect(empty, isNot(contains('请填写子标题')));
     expect(empty, contains('请选择产品（标签一）'));
     expect(empty, contains('请选择供给（标签二）'));
     expect(empty, contains('请填写盈利计算说明'));
@@ -1795,6 +1848,9 @@ void main() {
       'deliveryDate': '2026-12-01',
       'salesScale': '100',
       'revenue': '80',
+      'couponProcurementCost': '60',
+      'financeTaxRate': '6%',
+      'writeOffAmount': '80',
       'invoiceAmount': '80',
       'profit': '10',
       'margin': '12',

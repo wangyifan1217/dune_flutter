@@ -10,6 +10,7 @@ class NativeKbDocument {
     this.fileObjectKey = '',
     this.fileUrl = '',
     this.localDocId = '',
+    this.ragflowDocId = '',
     this.fileSizeBytes = 0,
   });
 
@@ -23,6 +24,7 @@ class NativeKbDocument {
   final String fileObjectKey;
   final String fileUrl;
   final String localDocId;
+  final String ragflowDocId;
   final int fileSizeBytes;
 
   /// kb-go 本地文档 ID（数字），用于 GET /api/v1/kb/documents/{id}。
@@ -30,6 +32,15 @@ class NativeKbDocument {
     if (_isNumericId(localDocId)) return localDocId.trim();
     if (_isNumericId(id)) return id.trim();
     return '';
+  }
+
+  /// Nova / RAGFlow 文档 ID，删除走 Nova 时必须用这个而不是本地数字 ID。
+  String get novaDocumentId {
+    final rag = ragflowDocId.trim();
+    if (rag.isNotEmpty) return rag;
+    final id = this.id.trim();
+    if (id.isNotEmpty && !_isNumericId(id)) return id;
+    return id;
   }
 
   String get statusLabel {
@@ -57,58 +68,172 @@ class NativeKbDocument {
     return '已上传';
   }
 
-  factory NativeKbDocument.fromJson(Map<String, dynamic> json, {int index = 0}) {
-    final runStatus = (json['runStatus'] ?? json['run'] ?? '').toString().trim();
+  factory NativeKbDocument.fromJson(
+    Map<String, dynamic> json, {
+    int index = 0,
+  }) {
+    final runStatus = (json['runStatus'] ?? json['run'] ?? '')
+        .toString()
+        .trim();
     final runUpper = runStatus.toUpperCase();
     final progress = (json['progress'] as num?)?.toDouble();
-    final chunkCount = (json['chunk_count'] ?? json['chunkCount'] as num?)?.toInt() ?? 0;
-    var indexed = json['indexed'] == true ||
+    final chunkCount =
+        (json['chunk_count'] ?? json['chunkCount'] as num?)?.toInt() ?? 0;
+    var indexed =
+        json['indexed'] == true ||
         (json['ingestionStatus'] ?? '').toString().toUpperCase() == 'INDEXED';
     if (!indexed &&
         runUpper == 'DONE' &&
         ((progress != null && progress >= 1) || chunkCount > 0)) {
       indexed = true;
     }
+    final id =
+        (json['id'] ??
+                json['documentId'] ??
+                json['ragflowDocId'] ??
+                'doc-$index')
+            .toString();
+    var ragflowDocId = (json['ragflowDocId'] ?? json['ragflow_doc_id'] ?? '')
+        .toString()
+        .trim();
+    if (ragflowDocId.isEmpty && id.trim().isNotEmpty && !_isNumericId(id)) {
+      ragflowDocId = id.trim();
+    }
     return NativeKbDocument(
-      id: (json['id'] ??
-              json['documentId'] ??
-              json['ragflowDocId'] ??
-              'doc-$index')
-          .toString(),
+      id: id,
       title: (json['title'] ?? json['name'] ?? json['fileName'] ?? '知识库文档')
           .toString(),
-      fileName: (json['fileName'] ?? json['name'] ?? json['title'] ?? '').toString(),
+      fileName: (json['fileName'] ?? json['name'] ?? json['title'] ?? '')
+          .toString(),
       fileExtension: (json['fileExtension'] ?? '').toString().isNotEmpty
           ? (json['fileExtension'] ?? '').toString()
           : _extensionFromFileName(
-              (json['fileName'] ?? json['name'] ?? json['title'] ?? '').toString(),
+              (json['fileName'] ?? json['name'] ?? json['title'] ?? '')
+                  .toString(),
             ),
-      ingestionStatus: (json['ingestionStatus'] ??
-              (indexed ? 'INDEXED' : (runUpper == 'DONE' ? 'DONE' : 'UPLOADED')))
-          .toString(),
+      ingestionStatus:
+          (json['ingestionStatus'] ??
+                  (indexed
+                      ? 'INDEXED'
+                      : (runUpper == 'DONE' ? 'DONE' : 'UPLOADED')))
+              .toString(),
       indexed: indexed,
       runStatus: runStatus,
-      fileObjectKey: (json['fileObjectKey'] ??
-              json['objectKey'] ??
-              json['storageKey'] ??
-              json['file_object_key'] ??
-              '')
-          .toString(),
-      fileUrl: (json['url'] ??
-              json['downloadUrl'] ??
-              json['publicUrl'] ??
-              json['accessUrl'] ??
-              json['previewUrl'] ??
-              '')
-          .toString(),
-      localDocId: (json['localDocId'] ??
-              json['local_doc_id'] ??
-              json['dunesDocumentId'] ??
-              '')
-          .toString(),
+      fileObjectKey:
+          (json['fileObjectKey'] ??
+                  json['objectKey'] ??
+                  json['storageKey'] ??
+                  json['file_object_key'] ??
+                  '')
+              .toString(),
+      fileUrl:
+          (json['url'] ??
+                  json['downloadUrl'] ??
+                  json['publicUrl'] ??
+                  json['accessUrl'] ??
+                  json['previewUrl'] ??
+                  '')
+              .toString(),
+      localDocId:
+          (json['localDocId'] ??
+                  json['local_doc_id'] ??
+                  json['dunesDocumentId'] ??
+                  '')
+              .toString(),
+      ragflowDocId: ragflowDocId,
       fileSizeBytes: (json['fileSizeBytes'] as num?)?.toInt() ?? 0,
     );
   }
+
+  NativeKbDocument copyWith({
+    String? id,
+    String? title,
+    String? fileName,
+    String? fileExtension,
+    String? ingestionStatus,
+    bool? indexed,
+    String? runStatus,
+    String? fileObjectKey,
+    String? fileUrl,
+    String? localDocId,
+    String? ragflowDocId,
+    int? fileSizeBytes,
+  }) {
+    return NativeKbDocument(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      fileName: fileName ?? this.fileName,
+      fileExtension: fileExtension ?? this.fileExtension,
+      ingestionStatus: ingestionStatus ?? this.ingestionStatus,
+      indexed: indexed ?? this.indexed,
+      runStatus: runStatus ?? this.runStatus,
+      fileObjectKey: fileObjectKey ?? this.fileObjectKey,
+      fileUrl: fileUrl ?? this.fileUrl,
+      localDocId: localDocId ?? this.localDocId,
+      ragflowDocId: ragflowDocId ?? this.ragflowDocId,
+      fileSizeBytes: fileSizeBytes ?? this.fileSizeBytes,
+    );
+  }
+}
+
+class NativeKbDocumentPage {
+  const NativeKbDocumentPage({
+    required this.items,
+    required this.page,
+    required this.size,
+    required this.total,
+  });
+
+  final List<NativeKbDocument> items;
+  final int page;
+  final int size;
+  final int total;
+
+  int get totalPages {
+    if (size <= 0) return 1;
+    final pages = (total + size - 1) ~/ size;
+    return pages < 1 ? 1 : pages;
+  }
+
+  factory NativeKbDocumentPage.fromJson(
+    Map<String, dynamic> json, {
+    int fallbackPage = 0,
+    int fallbackSize = 20,
+  }) {
+    final content =
+        (json['content'] as List?) ??
+        (json['items'] as List?) ??
+        (json['documents'] as List?) ??
+        const [];
+    final items = content
+        .whereType<Map>()
+        .toList(growable: false)
+        .asMap()
+        .entries
+        .map(
+          (entry) => NativeKbDocument.fromJson(
+            Map<String, dynamic>.from(entry.value),
+            index: entry.key,
+          ),
+        )
+        .toList(growable: false);
+    final size = _jsonInt(json['size'], fallbackSize);
+    final total = _jsonInt(
+      json['total'] ?? json['totalElements'] ?? json['count'],
+      items.length,
+    );
+    return NativeKbDocumentPage(
+      items: items,
+      page: _jsonInt(json['page'] ?? json['number'], fallbackPage),
+      size: size <= 0 ? fallbackSize : size,
+      total: total,
+    );
+  }
+}
+
+int _jsonInt(dynamic value, int fallback) {
+  if (value is num) return value.toInt();
+  return int.tryParse('$value') ?? fallback;
 }
 
 class NativeKbSummary {

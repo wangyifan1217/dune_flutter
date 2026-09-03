@@ -970,6 +970,148 @@ Future<void> showProposalIntakeProcessHelp(
   );
 }
 
+Future<void> showProposalCostFormulaHelp(
+  BuildContext context, {
+  required String title,
+  required String formula,
+  String substitution = '',
+}) {
+  Widget body(BuildContext ctx) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: ProposalPalette.text,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          '测算公式',
+          style: TextStyle(
+            color: ProposalPalette.text3,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 6),
+        SelectableText(
+          formula,
+          style: const TextStyle(
+            color: ProposalPalette.text,
+            fontSize: 14,
+            height: 1.45,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        if (substitution.trim().isNotEmpty) ...[
+          const SizedBox(height: 14),
+          const Text(
+            '代入当前值',
+            style: TextStyle(
+              color: ProposalPalette.text3,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          SelectableText(
+            substitution,
+            style: const TextStyle(
+              color: ProposalPalette.purpleDeep,
+              fontSize: 13,
+              height: 1.45,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('知道了'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  final narrow = MediaQuery.sizeOf(context).width < 620;
+  if (narrow) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            4,
+            20,
+            12 + MediaQuery.paddingOf(ctx).bottom,
+          ),
+          child: SingleChildScrollView(child: body(ctx)),
+        );
+      },
+    );
+  }
+  final maxWidth = MediaQuery.sizeOf(context).width - 48;
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) {
+      return AlertDialog(
+        title: const Text('测算公式'),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        content: SizedBox(
+          width: maxWidth < 420 ? maxWidth : 420,
+          child: SingleChildScrollView(child: body(ctx)),
+        ),
+      );
+    },
+  );
+}
+
+class ProposalCostFormulaHelpButton extends StatelessWidget {
+  const ProposalCostFormulaHelpButton({
+    super.key,
+    required this.title,
+    required this.formula,
+    this.substitution = '',
+  });
+
+  final String title;
+  final String formula;
+  final String substitution;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: '查看测算公式',
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+      onPressed: () => unawaited(
+        showProposalCostFormulaHelp(
+          context,
+          title: title,
+          formula: formula,
+          substitution: substitution,
+        ),
+      ),
+      icon: const Icon(
+        Icons.functions_outlined,
+        size: 18,
+        color: ProposalPalette.purpleDeep,
+      ),
+    );
+  }
+}
+
 class ProposalIntakeProcessHelpButton extends StatelessWidget {
   const ProposalIntakeProcessHelpButton({
     super.key,

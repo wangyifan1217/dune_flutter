@@ -441,6 +441,93 @@ class XfDetTaskTodoBanner extends StatelessWidget {
   }
 }
 
+const kTaskTodoCompletionLabels = <String, String>{
+  'actualPayAmount': '实付金额',
+  'paymentVoucher': '支付凭证号',
+  'verifyResult': '核验结果',
+  'fileDestination': '文件去向',
+  'expressTrackingNo': '快递单号',
+  'expressSentAt': '寄出时间',
+  'signedAt': '签收时间',
+};
+
+List<(String, String)> taskTodoCompletionTexts(Map<String, dynamic> form) {
+  final out = <(String, String)>[];
+  for (final entry in kTaskTodoCompletionLabels.entries) {
+    final text = '${form[entry.key] ?? ''}'.trim();
+    if (text.isEmpty) continue;
+    out.add((entry.value, text));
+  }
+  return out;
+}
+
+List<Map<String, dynamic>> taskTodoCompletionFiles(Map<String, dynamic> form) {
+  final raw = form['invoiceFiles'] ?? form['files'] ?? form['paymentVoucherFiles'];
+  return normalizeUploadItems(raw).where((item) {
+    final key = '${item['objectKey'] ?? item['url'] ?? item['fileName'] ?? ''}'
+        .trim();
+    return key.isNotEmpty && item['status'] != 'error';
+  }).toList(growable: false);
+}
+
+/// 审批详情里展示待办办理时填写的字段和上传文件。
+class XfDetTaskCompletionCard extends StatelessWidget {
+  const XfDetTaskCompletionCard({
+    super.key,
+    required this.form,
+    required this.service,
+  });
+
+  final Map<String, dynamic> form;
+  final XflowService service;
+
+  @override
+  Widget build(BuildContext context) {
+    final texts = taskTodoCompletionTexts(form);
+    final files = taskTodoCompletionFiles(form);
+    if (texts.isEmpty && files.isEmpty) return const SizedBox.shrink();
+    return XfDetCard(
+      title: '待办办理信息',
+      marginBottom: 10,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final row in texts) ...[
+            Text(
+              row.$1,
+              style: DunesTypography.sans(
+                fontSize: 11,
+                color: DunesColors.text3,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              row.$2,
+              style: DunesTypography.sans(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: DunesColors.text,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (files.isNotEmpty) ...[
+            Text(
+              '上传文件',
+              style: DunesTypography.sans(
+                fontSize: 11,
+                color: DunesColors.text3,
+              ),
+            ),
+            const SizedBox(height: 6),
+            XfDetFileList(items: files, service: service),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class XfDetPeopleCard extends StatelessWidget {
   const XfDetPeopleCard({super.key, required this.bundle});
 

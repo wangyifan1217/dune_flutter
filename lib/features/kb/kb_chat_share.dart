@@ -64,21 +64,23 @@ class KbChatDocShare {
   }
 
   NativeKbDocument toDocument() {
+    final resolvedId = id.isNotEmpty ? id : openDocId;
     return NativeKbDocument(
-      id: id.isNotEmpty ? id : openDocId,
+      id: resolvedId,
       title: title.isNotEmpty ? title : '知识库文档',
       fileName: fileName.isNotEmpty ? fileName : title,
       fileExtension: fileExtension,
       ingestionStatus: indexed ? 'INDEXED' : 'UPLOADED',
       indexed: indexed,
       localDocId: localDocId,
+      ragflowDocId: int.tryParse(resolvedId.trim()) == null ? resolvedId : '',
       fileSizeBytes: fileSizeBytes,
     );
   }
 
   factory KbChatDocShare.fromDocument(NativeKbDocument doc) {
     return KbChatDocShare(
-      id: doc.id,
+      id: doc.novaDocumentId.isNotEmpty ? doc.novaDocumentId : doc.id,
       localDocId: doc.dunesDocumentId,
       title: doc.title.trim().isNotEmpty ? doc.title.trim() : doc.fileName,
       fileName: doc.fileName,
@@ -94,8 +96,9 @@ class KbChatDocShare {
     if (raw is! Map) return null;
     final map = Map<String, dynamic>.from(raw);
     final id = (map['id'] ?? map['docId'] ?? '').toString().trim();
-    final localDocId =
-        (map['localDocId'] ?? map['dunesDocumentId'] ?? '').toString().trim();
+    final localDocId = (map['localDocId'] ?? map['dunesDocumentId'] ?? '')
+        .toString()
+        .trim();
     final title = (map['title'] ?? map['fileName'] ?? '').toString().trim();
     if (id.isEmpty && localDocId.isEmpty && title.isEmpty) return null;
     return KbChatDocShare(

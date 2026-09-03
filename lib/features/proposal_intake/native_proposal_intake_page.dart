@@ -21,6 +21,7 @@ import '../xflow/xflow_service.dart';
 import 'flow_panorama/flow_ctx.dart';
 import 'flow_panorama/flow_ctx_mapper.dart';
 import 'flow_panorama/flow_panorama_section.dart';
+import 'proposal_cost_estimate.dart';
 import 'proposal_intake_models.dart';
 import 'proposal_intake_select.dart';
 import 'proposal_intake_service.dart';
@@ -1003,6 +1004,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   List<String> _issues = const [];
   bool _dirty = false;
   int _fieldEpoch = 0;
+  final Map<String, int> _costAmountStamp = {};
   bool _deleting = false;
   bool _forwarding = false;
   List<ProposalContractChoice> _contractHits = const [];
@@ -1040,6 +1042,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   static const _financeMetricFields = <(String, String)>[
     ('salesScale', '销售规模目标（万元）'),
     ('revenue', '收入（万元）'),
+    ('couponProcurementCost', '电子券采购成本（万元）'),
+    ('financeTaxRate', '税率'),
+    ('writeOffAmount', '核销金额（万元）'),
     ('invoiceAmount', '发票（万元）'),
     ('profit', '利润（万元）'),
     ('margin', '毛利率（%）'),
@@ -1110,6 +1115,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   static const _kFinanceReviewKeys = <String>[
     'salesScale',
     'revenue',
+    'couponProcurementCost',
+    'financeTaxRate',
+    'writeOffAmount',
     'invoiceAmount',
     'profit',
     'margin',
@@ -1427,7 +1435,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String? resetReview,
     bool rebuild = true,
   }) {
-    final form = Map<String, dynamic>.from(_form)..[key] = value;
+    var form = Map<String, dynamic>.from(_form)..[key] = value;
+    var estimated = false;
+    if (proposalIsFinanceEstimateInputKey(key)) {
+      final before = Map<String, dynamic>.from(form);
+      form = proposalApplyEstimatedFinanceCosts(
+        form,
+        businessCatalog: widget.options.businessCostItemOptions,
+      );
+      _bumpCostAmountStamps(before, form);
+      estimated = true;
+    }
     final review = Map<String, dynamic>.from(_review);
     if (resetReview != null) review[resetReview] = false;
     _dirty = true;
@@ -1437,8 +1455,61 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       form: form,
       review: review,
     );
-    if (rebuild && mounted) setState(() {});
+    if ((rebuild || estimated) && mounted) setState(() {});
     widget.onChanged(_row);
+  }
+
+  void _bumpCostAmountStamps(
+    Map<String, dynamic> before,
+    Map<String, dynamic> after,
+  ) {
+    const keys = [
+      'operatingCostItemAmounts',
+      'taxCostItemAmounts',
+      'businessCostItemAmounts',
+    ];
+    for (final amountsKey in keys) {
+      final prev = proposalCostAmountMap(before[amountsKey]);
+      final next = proposalCostAmountMap(after[amountsKey]);
+      for (final entry in next.entries) {
+        if (prev[entry.key] != entry.value) {
+          final stampKey = '$amountsKey::${entry.key}';
+          _costAmountStamp[stampKey] = (_costAmountStamp[stampKey] ?? 0) + 1;
+        }
+      }
+    }
+  }
+
+  Map<String, dynamic> _withEstimatedFinanceCosts(Map<String, dynamic> form) {
+    final before = Map<String, dynamic>.from(form);
+    final next = proposalApplyEstimatedFinanceCosts(
+      form,
+      businessCatalog: widget.options.businessCostItemOptions,
+    );
+    _bumpCostAmountStamps(before, next);
+    return next;
+  }
+
+  Widget? _mergeTrailing(List<Widget?> items) {
+    final children = [for (final item in items) if (item != null) item];
+    if (children.isEmpty) return null;
+    if (children.length == 1) return children.single;
+    return Row(mainAxisSize: MainAxisSize.min, children: children);
+  }
+
+  Widget? _costFormulaHelpButton(String name) {
+    final help = proposalCostFormulaHelpOf(
+      name: name,
+      form: _form,
+      businessCatalog: widget.options.businessCostItemOptions,
+    );
+    if (help == null) return null;
+    return ProposalCostFormulaHelpButton(
+      key: ValueKey('cost-formula-$name'),
+      title: help.title,
+      formula: help.formula,
+      substitution: help.substitution,
+    );
   }
 
   void _setContractMode(String prefix, String? mode) {
@@ -1806,15 +1877,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String settleTermsKey = '',
     String? resetReview,
   }) {
-    final form = proposalSyncCostSelection(
-      form: _form,
-      names: names,
-      catalog: catalog,
-      namesKey: namesKey,
-      codesKey: codesKey,
-      amountsKey: amountsKey,
-      totalKey: totalKey,
-      settleTermsKey: settleTermsKey,
+    final form = _withEstimatedFinanceCosts(
+      proposalSyncCostSelection(
+        form: _form,
+        names: names,
+        catalog: catalog,
+        namesKey: namesKey,
+        codesKey: codesKey,
+        amountsKey: amountsKey,
+        totalKey: totalKey,
+        settleTermsKey: settleTermsKey,
+      ),
     );
     final review = Map<String, dynamic>.from(_review);
     if (resetReview != null) review[resetReview] = false;
@@ -1834,17 +1907,23 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (amountsKey == 'businessCostItemAmounts' && !_canEditBusinessCost) {
       return;
     }
-    final amounts = proposalCostAmountMap(_form[amountsKey]);
+    var amounts = proposalCostAmountMap(_form[amountsKey]);
     if (value == null) {
       amounts.remove(id);
     } else {
       amounts[id] = value;
     }
-    final form = Map<String, dynamic>.from(_form)
+    var form = Map<String, dynamic>.from(_form)
       ..[amountsKey] = {
         for (final entry in amounts.entries) entry.key: entry.value,
       }
       ..[totalKey] = proposalCostAmountTotal(amounts);
+    form = proposalMarkCostAmountManual(
+      form,
+      amountsKey: amountsKey,
+      id: id,
+    );
+    form = _withEstimatedFinanceCosts(form);
     final review = Map<String, dynamic>.from(_review);
     if (resetReview != null) review[resetReview] = false;
     _dirty = true;
@@ -3497,6 +3576,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             '产品提案名称',
             'proposalName',
             required: true,
+            resetReview: 'marketCompleted',
+          ),
+          _textField(
+            '子标题',
+            'proposalSubtitle',
+            hint: '选填，补充说明',
             resetReview: 'marketCompleted',
           ),
           _dropdownField(
@@ -8076,12 +8161,25 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       'invoiceAmount' => '已开票金额 · 与收入差额为开票缺口',
       _ => null,
     };
+    final formulaHelp = key == 'revenue'
+        ? _costFormulaHelpButton('收入')
+        : null;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 2),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: ProposalPalette.borderSoft)),
       ),
-      child: textual
+      child: key == 'financeTaxRate'
+          ? _dropdownField(
+              field.$2,
+              key,
+              kProposalTaxRates,
+              required: true,
+              resetReview: 'financeCompleted',
+              reviewSection: 'financeItem:$key',
+              reviewLabel: _financeReviewLabel,
+            )
+          : textual
           ? _textField(
               field.$2,
               key,
@@ -8098,6 +8196,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               resetReview: 'financeCompleted',
               reviewSection: 'financeItem:$key',
               reviewLabel: _financeReviewLabel,
+              extraTrailing: formulaHelp,
             ),
     );
   }
@@ -8491,10 +8590,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String? source,
     bool? writable,
     bool required = false,
+    Widget? extraTrailing,
   }) {
     final enabled = _fillEnabled(writable);
     final tone = proposalFieldTone(enabled: enabled, source: source);
     final footer = _contractEditFooter(key);
+    final trailing = _mergeTrailing([
+      extraTrailing,
+      _rowReviewToggle(reviewSection, reviewLabel),
+    ]);
     if (_showSelectedAsText) {
       return ProposalField(
         label: label,
@@ -8502,7 +8606,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         source: source,
         tone: tone,
         footer: footer,
-        trailing: _rowReviewToggle(reviewSection, reviewLabel),
+        trailing: trailing,
         child: _readonlySelectedText(_text(key)),
       );
     }
@@ -8512,7 +8616,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       source: source,
       tone: tone,
       footer: footer,
-      trailing: _rowReviewToggle(reviewSection, reviewLabel),
+      trailing: trailing,
       child: TextFormField(
         key: ValueKey('$key-${_row.id}-$_fieldEpoch'),
         initialValue: _text(key),
@@ -8875,13 +8979,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   alignment: Alignment.centerLeft,
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 6),
-                    child: Text(
-                      name,
-                      style: const TextStyle(
-                        color: ProposalPalette.text,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            name,
+                            style: const TextStyle(
+                              color: ProposalPalette.text,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        ?_costFormulaHelpButton(name),
+                      ],
                     ),
                   ),
                 )
@@ -8933,15 +9044,22 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     for (final name in names) ...[
                       Padding(
                         padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(
-                          settleTermsKey.isEmpty
-                              ? '$name  ${_money(amounts[proposalCostAmountId(name, catalog)] ?? amounts[name] ?? 0)}'
-                              : name,
-                          style: const TextStyle(
-                            color: ProposalPalette.text,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                settleTermsKey.isEmpty
+                                    ? '$name  ${_money(amounts[proposalCostAmountId(name, catalog)] ?? amounts[name] ?? 0)}'
+                                    : name,
+                                style: const TextStyle(
+                                  color: ProposalPalette.text,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            ?_costFormulaHelpButton(name),
+                          ],
                         ),
                       ),
                       settleFields(name),
@@ -9005,6 +9123,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     required bool enabled,
   }) {
     final tone = proposalFieldTone(enabled: enabled);
+    final stamp = _costAmountStamp['$amountsKey::$id'] ?? 0;
+    final formulaHelp = _costFormulaHelpButton(name);
+    final estimated = proposalCostHasEstimateFormula(name);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -9021,11 +9142,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               ),
             ),
           ),
-          const SizedBox(width: 10),
+          if (formulaHelp != null) formulaHelp,
+          const SizedBox(width: 6),
           SizedBox(
             width: 148,
             child: TextFormField(
-              key: ValueKey('$amountsKey-$id-${_row.id}-$_fieldEpoch'),
+              key: ValueKey('$amountsKey-$id-${_row.id}-$_fieldEpoch-$stamp'),
               initialValue: amount == 0 ? '' : _textFromAmount(amount),
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
@@ -9051,7 +9173,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     )
                   : null,
               decoration: proposalInputDecoration(
-                hint: '预计（万元）',
+                hint: estimated ? '测算（万元）' : '预计（万元）',
                 readOnly: !enabled,
                 tone: tone,
               ),
@@ -9181,6 +9303,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               '产品提案名称',
               'proposalName',
               required: true,
+              resetReview: 'marketCompleted',
+            ),
+            _textField(
+              '子标题',
+              'proposalSubtitle',
+              hint: '选填，补充说明',
               resetReview: 'marketCompleted',
             ),
             _dropdownField(
@@ -9797,16 +9925,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   void _setExistingSupplyEnabled(bool enabled) {
     if (!_canEditMarket) return;
     final label = enabled ? '是' : '否';
-    _writeSupplyProducts(
-      [
-        for (final row in proposalIntakeSupplyProducts(_form))
-          row.copyWith(
-            existingBuilt: label,
-            assetProduct: enabled ? row.assetProduct : null,
-          ),
-      ],
-      isExistingSupplyProduct: enabled,
-    );
+    var rows = [
+      for (final row in proposalIntakeSupplyProducts(_form))
+        row.copyWith(
+          existingBuilt: label,
+          assetProduct: enabled ? row.assetProduct : null,
+        ),
+    ];
+    if (enabled && rows.isEmpty) {
+      rows = [proposalIntakeNewSupplyProduct(existing: true)];
+    }
+    _writeSupplyProducts(rows, isExistingSupplyProduct: enabled);
   }
 
   void _addSupplyProduct() {

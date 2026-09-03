@@ -884,15 +884,15 @@ void main() {
     );
 
     await _scrollUntil(tester, '交付时间');
+    expect(find.byKey(const ValueKey('date-deliveryDate')), findsNothing);
     expect(
-      tester
-          .widget<InkWell>(find.byKey(const ValueKey('date-deliveryDate')))
-          .onTap,
-      isNull,
-    );
-    expect(
-      _childInField<ProposalSelectField<String>>(tester, 'τ-标签一').onSelected,
-      isNull,
+      find.descendant(
+        of: _fieldOf('τ-标签一'),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is ProposalSelectField,
+        ),
+      ),
+      findsNothing,
     );
   });
 
@@ -927,8 +927,13 @@ void main() {
     await tester.pump();
 
     expect(
-      _childInField<ProposalSelectField<CatalogRef>>(tester, '业务板块').onSelected,
-      isNull,
+      find.descendant(
+        of: _fieldOf('业务板块'),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is ProposalSelectField,
+        ),
+      ),
+      findsNothing,
     );
     expect(find.text('由提交人填写。当前账号不可编辑本板块。'), findsOneWidget);
 
@@ -944,8 +949,13 @@ void main() {
       isNotNull,
     );
     expect(
-      _childInField<ProposalSelectField<int>>(tester, '科技部负责人（填写人）').onSelected,
-      isNull,
+      find.descendant(
+        of: _fieldOf('科技部负责人（填写人）'),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is ProposalSelectField,
+        ),
+      ),
+      findsNothing,
     );
 
     await _scrollUntil(tester, '开票接口 *');
@@ -1092,8 +1102,13 @@ void main() {
     await tester.pump();
 
     expect(
-      _childInField<ProposalSelectField<CatalogRef>>(tester, '业务板块').onSelected,
-      isNull,
+      find.descendant(
+        of: _fieldOf('业务板块'),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is ProposalSelectField,
+        ),
+      ),
+      findsNothing,
     );
     expect(find.text('由提交人填写。当前账号不可编辑本板块。'), findsOneWidget);
     expect(find.byTooltip('通知科技负责人'), findsNothing);
@@ -2376,6 +2391,166 @@ void main() {
     final payAccount = tester.getTopLeft(find.text('付款账户'));
     expect(payer.dy, closeTo(payAccount.dy, 12));
     expect(payAccount.dx, greaterThan(payer.dx));
+  });
+
+  testWidgets('channel product grid cells hug content instead of stretching', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        session: AuthSession.fromJson(const {
+          'userId': 12,
+          'displayName': '李思',
+        }),
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'reviewing',
+          'createdBy': 11,
+          'form': {
+            'skuDetails': [
+              {
+                'id': 'sku-1',
+                'productName': '满200减15',
+                'faceValue': '15',
+                'stockQty': '0',
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '面值');
+    final box = tester.widget<ConstrainedBox>(
+      find
+          .ancestor(of: find.text('面值'), matching: find.byType(ConstrainedBox))
+          .first,
+    );
+    expect(box.constraints.minHeight, lessThanOrEqualTo(48));
+    expect(tester.getSize(_fieldOf('面值').first).height, lessThan(72));
+    expect(
+      find.descendant(
+        of: _fieldOf('业务平台'),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is ProposalSelectField,
+        ),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('reviewer proposal name stays compact without textarea chrome', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        session: AuthSession.fromJson(const {
+          'userId': 12,
+          'displayName': '李思',
+        }),
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '湖北电信中石油权益-小套/点播（复核演示）',
+          'status': 'reviewing',
+          'createdBy': 11,
+          'form': {
+            'proposalName': '湖北电信中石油权益-小套/点播（复核演示）',
+            'proposalType': '新增业务提案',
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '产品提案名称');
+    expect(tester.getSize(_fieldOf('产品提案名称').first).height, lessThan(72));
+    expect(tester.getSize(_fieldOf('子标题').first).height, lessThan(72));
+    expect(
+      find.descendant(
+        of: _fieldOf('产品提案名称'),
+        matching: find.byType(TextFormField),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('finance supply settlement clauses wrap instead of clipping', (
+    tester,
+  ) async {
+    const tail = '复核可见完整结算条款收尾句';
+    tester.view.physicalSize = const Size(1440, 2800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'reviewing',
+          'createdBy': 11,
+          'form': {
+            'supplySettleMode':
+                '4.1.3 在本协议终止后，甲方应在三十个工作日内完成全部未结算款项的清算与支付。$tail',
+            'supplySettleCycle':
+                '4.1.8 结算周期：当批次电子礼品卡券使用结束后，甲方以每打款批次核对。$tail',
+            'channelSettleMode': '线上结算：M+2。$tail',
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '供给侧');
+    expect(find.textContaining(tail), findsWidgets);
+    final modeField = tester.getSize(_fieldOf('结算模式').first);
+    final payerField = tester.getSize(_fieldOf('付款主体').first);
+    expect(modeField.width, greaterThan(payerField.width + 80));
+  });
+
+  testWidgets('finance settlement clauses remain readable on a phone width', (
+    tester,
+  ) async {
+    const tail = '手机宽度下结算条款也应完整可见';
+    tester.view.physicalSize = const Size(390, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        390,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'reviewing',
+          'createdBy': 11,
+          'form': {
+            'supplySettleMode': '4.1.3 协议终止后三十个工作日内完成清算。$tail',
+            'skuDetails': [
+              {'id': 'sku-1', 'productName': '满200减15', 'faceValue': '15'},
+            ],
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '供给侧');
+    expect(find.textContaining(tail), findsWidgets);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('finance cost items show asset bill-type headers', (

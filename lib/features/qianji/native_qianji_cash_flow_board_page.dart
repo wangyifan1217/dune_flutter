@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
@@ -533,9 +532,6 @@ class _NativeQianjiCashFlowBoardPageState
                 child: Stack(
                   children: [
                     ListView(
-                      scrollCacheExtent: _tourOpen
-                          ? const ScrollCacheExtent.pixels(12000)
-                          : null,
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
                       padding: EdgeInsets.fromLTRB(

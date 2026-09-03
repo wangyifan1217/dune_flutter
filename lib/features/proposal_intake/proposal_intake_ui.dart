@@ -220,9 +220,7 @@ class ProposalSectionTitle extends StatelessWidget {
 enum ProposalFieldTone { fill, auto, locked }
 
 ProposalFieldTone proposalFieldTone({required bool enabled, String? source}) {
-  if (!enabled) return ProposalFieldTone.locked;
   final tag = (source ?? '').trim();
-  if (tag.isEmpty) return ProposalFieldTone.fill;
   if (tag.contains('系统') ||
       tag.contains('当前用户') ||
       tag.contains('管理后台') ||
@@ -231,7 +229,8 @@ ProposalFieldTone proposalFieldTone({required bool enabled, String? source}) {
       tag.contains('实时串联')) {
     return ProposalFieldTone.auto;
   }
-  return ProposalFieldTone.fill;
+  // 只读不再套一层 locked 灰底卡片，避免复核页格子虚高。
+  return enabled ? ProposalFieldTone.fill : ProposalFieldTone.fill;
 }
 
 class ProposalField extends StatelessWidget {
@@ -278,11 +277,10 @@ class ProposalField extends StatelessWidget {
         ProposalChipKind.purple,
       ),
     };
-    final narrow = MediaQuery.sizeOf(context).width < 620;
     return SizedBox(
       width: double.infinity,
       child: Padding(
-        padding: EdgeInsets.all(narrow ? 2 : 4),
+        padding: const EdgeInsets.all(2),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: resolved == ProposalFieldTone.fill ? null : bg,
@@ -292,11 +290,9 @@ class ProposalField extends StatelessWidget {
                 : Border.all(color: border),
           ),
           child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: narrow ? 10 : 8,
-              vertical: narrow ? 10 : 8,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Wrap(
@@ -325,7 +321,7 @@ class ProposalField extends StatelessWidget {
                     ?trailing,
                   ],
                 ),
-                const SizedBox(height: 7),
+                const SizedBox(height: 2),
                 child,
                 if (footer != null) ...[const SizedBox(height: 6), footer!],
               ],
@@ -612,7 +608,7 @@ InputDecoration proposalInputDecoration({
     filled: true,
     fillColor: fillColor,
     isDense: true,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
       borderSide: const BorderSide(color: Color(0xFFE1D9E8)),

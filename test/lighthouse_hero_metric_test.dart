@@ -54,6 +54,120 @@ void main() {
     });
   });
 
+  test('tag3 recon: project-count score, reject wins, who to chase', () {
+    LighthouseReconStatus st(Map<String, dynamic> extra) =>
+        lighthouseReconStatusForRow('channel', {
+          'state': 'partial',
+          ...extra,
+        })!;
+
+    // 没有金额 → 退到项目数口径。必须是「9/10」不是「90%」：
+    // 这一屏其它百分号全是金额，写 % 会被读成钱。
+    final score = st({'confirmedCount': 9, 'totalCount': 10});
+    expect(score.hasProjectScore, isTrue);
+    expect(lighthouseReconChipLabel(score), '已确认 9/10');
+
+    // 有金额时金额口径优先（标签二不受影响）。
+    final money = st({
+      'coveredAmount': 860,
+      'totalAmount': 1000,
+      'confirmedCount': 9,
+      'totalCount': 10,
+    });
+    expect(lighthouseReconChipLabel(money), '对账 86%');
+
+    // 驳回优先于一切 —— 10 个确认完 9 个也得先说驳回。
+    final rejected = st({
+      'confirmedCount': 9,
+      'totalCount': 10,
+      'comments': [
+        {'content': '折扣对不上', 'author': '卢笛', 'isReject': true},
+      ],
+    });
+    expect(rejected.hasReject, isTrue);
+    expect(lighthouseReconChipLabel(rejected), '有驳回');
+
+    // 「卡在谁那儿」= 环节 + 人，缺一个也能降级说。
+    expect(
+      lighthouseReconPendingWho(st({
+        'pendingStageLabel': '业务',
+        'owner': {'name': '卢笛', 'role': '业务'},
+      })),
+      '待业务确认 · 卢笛',
+    );
+    expect(
+      lighthouseReconPendingWho(st({'pendingStageLabel': '财务'})),
+      '待财务确认',
+    );
+    expect(lighthouseReconPendingWho(st({})), '');
+
+    // 没有分数也没有金额时，仍然是原来那句，不编数字。
+    expect(lighthouseReconChipLabel(st({})), '对账中');
+    // 一个都没确认时说 0/10 —— 比「未对账」多告诉一件事：一共几个。
+    expect(
+      lighthouseReconChipLabel(
+        lighthouseReconStatusForRow('channel', {
+          'state': 'none',
+          'confirmedCount': 0,
+          'totalCount': 10,
+        })!,
+      ),
+      '已确认 0/10',
+    );
+  });
+
+  test('recon local preview covers score, reject, who and money', () {
+    LighthouseReconStatus parsed(int i) =>
+        lighthouseParseReconStatus(lighthouseReconPreviewRaw(i))!;
+
+    expect(lighthouseReconChipLabel(parsed(0)), '已确认 9/10');
+    expect(lighthouseReconPendingWho(parsed(0)), '待业务确认 · 卢笛');
+    expect(lighthouseReconChipLabel(parsed(1)), '有驳回');
+    expect(parsed(1).hasReject, isTrue);
+    expect(lighthouseReconChipLabel(parsed(2)), '已对账');
+    expect(lighthouseReconChipLabel(parsed(3)), '已确认 0/6');
+    expect(lighthouseReconPendingWho(parsed(3)), '待财务确认 · 刘雨滴');
+    expect(lighthouseReconChipLabel(parsed(4)), '对账 86%');
+    expect(lighthouseReconChipLabel(parsed(5)), '未对账');
+
+    expect(
+      lighthouseReconRawOrPreview(
+        tab: 'channel',
+        index: 0,
+        raw: null,
+        preview: true,
+      ),
+      isNotNull,
+    );
+    expect(
+      lighthouseReconRawOrPreview(
+        tab: 'channel',
+        index: 0,
+        raw: const {'state': 'done'},
+        preview: true,
+      ),
+      const {'state': 'done'},
+    );
+    expect(
+      lighthouseReconRawOrPreview(
+        tab: 'product',
+        index: 0,
+        raw: null,
+        preview: true,
+      ),
+      isNull,
+    );
+    expect(
+      lighthouseReconRawOrPreview(
+        tab: 'channel',
+        index: 0,
+        raw: null,
+        preview: false,
+      ),
+      isNull,
+    );
+  });
+
   test('hero financial board balances four sections across three columns', () {
     expect(
       lighthouseHeroVerticalSections.map((section) => section.title).toList(),
@@ -235,6 +349,40 @@ void main() {
     );
   });
 
+  test('recon owner: who to chase, separate from who signed off', () {
+    final s = lighthouseParseReconStatus({
+      'state': 'partial',
+      'totalAmount': 100,
+      'owner': {'name': '王艳丽', 'role': '运营'},
+      'confirmedBy': '李财务',
+      'confirmedAt': '2026-09-02 10:12',
+    })!;
+    expect(s.hasOwner, isTrue);
+    expect(s.owner!.label, '王艳丽 · 运营');
+    // owner 和 confirmedBy 是两个人，不能互相顶替。
+    expect(s.confirmedBy, '李财务');
+
+    // 没角色就只有名字，不留一个孤零零的分隔点。
+    expect(
+      lighthouseParseReconStatus({
+        'state': 'none',
+        'owner': {'name': '王艳丽'},
+      })!.owner!.label,
+      '王艳丽',
+    );
+    // 只有角色没名字 = 没给人，不显示「· 运营」。
+    expect(
+      lighthouseParseReconStatus({
+        'state': 'none',
+        'owner': {'role': '运营'},
+      })!.hasOwner,
+      isFalse,
+    );
+    // 字段没给就是 null —— 不编一个「未分配」出来。
+    expect(lighthouseParseReconStatus({'state': 'none'})!.owner, isNull);
+    expect(lighthouseParseReconOwner('王艳丽'), isNull);
+  });
+
   test('recon comments parse read-only, cap at 5, accept both key styles', () {
     // camelCase 是正式契约。
     final camel = lighthouseParseReconStatus({
@@ -305,6 +453,7 @@ void main() {
 
   test('hero metric expand shows all trend charts without formulas', () {
     expect(lighthouseHeroShowsMetricFormulas, isFalse);
+    expect(lighthouseHeroShowsFormulaBar, isFalse);
     expect(lighthouseHeroShowsAllMetricTrends, isFalse);
     expect(lighthouseHeroMetricIsOverlay('profit'), isTrue);
     expect(lighthouseHeroMetricIsOverlay('revenue'), isTrue);
@@ -562,24 +711,64 @@ void main() {
       'prepaid',
       'profit',
       'costTotal',
+      'revenue',
       'netTa',
     ]);
     expect(lighthouseLedgerSummaryMetricRows, [
       ['sales', 'prepaid'],
       ['verifiedSales', 'profit'],
+      ['costTotal', 'revenue'],
     ]);
     expect(lighthouseLedgerSoloTrendKeys, {
       'sales',
       'verifiedSales',
+      'gmv',
+      'totalCost',
+      'costTotal',
+      'projectCost',
+      'cost',
       'prepaid',
       'profit',
+      'netProfit',
+      'revenue',
+      'spread',
+      'grossMargin',
+      'rate',
     });
     expect(lighthouseLedgerMetricOpensSoloTrend('sales'), isTrue);
-    expect(lighthouseLedgerMetricOpensSoloTrend('gmv'), isFalse);
+    expect(lighthouseLedgerMetricOpensSoloTrend('costTotal'), isTrue);
+    expect(lighthouseLedgerMetricOpensSoloTrend('revenue'), isTrue);
+    expect(lighthouseLedgerMetricOpensSoloTrend('gmv'), isTrue);
+    expect(lighthouseLedgerMetricOpensSoloTrend('discount'), isFalse);
     expect(lighthouseLedgerSoloTrendAfterTap(null, 'profit'), 'profit');
     expect(lighthouseLedgerSoloTrendAfterTap('profit', 'profit'), isNull);
     expect(lighthouseLedgerSoloTrendAfterTap('sales', 'prepaid'), 'prepaid');
-    expect(lighthouseLedgerSoloTrendAfterTap('sales', 'gmv'), 'sales');
+    expect(lighthouseLedgerSoloTrendAfterTap('sales', 'costTotal'), 'costTotal');
+    expect(lighthouseLedgerSoloTrendAfterTap('sales', 'gmv'), 'gmv');
+    expect(lighthouseHeroMetricIsOverlay('profit'), isTrue);
+    expect(lighthouseHeroMetricIsOverlay('costTotal'), isTrue);
+    expect(lighthouseHeroMetricIsOverlay('revenue'), isTrue);
+    expect(lighthouseHeroMetricIsOverlay('gmv'), isFalse);
+    expect(lighthouseHeroMetricIsOverlay('projectCost'), isFalse);
+    expect(lighthouseLedgerMetricKeysMatch('costTotal', 'totalCost'), isTrue);
+    expect(lighthouseLedgerMetricKeysMatch('profit', 'profit'), isTrue);
+    expect(lighthouseLedgerMetricKeysMatch('profit', 'netProfit'), isFalse);
+    expect(
+      lighthouseLedgerMetricFromTrendSlot(
+        'cost',
+        scaleKey: 'verifiedSales',
+        scaleAltKey: 'sales',
+      ),
+      'costTotal',
+    );
+    expect(
+      lighthouseLedgerMetricFromTrendSlot(
+        'scale',
+        scaleKey: 'verifiedSales',
+        scaleAltKey: 'sales',
+      ),
+      'verifiedSales',
+    );
     expect(lighthouseLedgerShowsFundPoolPreview('supply'), isTrue);
     expect(lighthouseLedgerShowsFundPoolPreview('product'), isFalse);
     expect(lighthouseLedgerShowsFundPoolPreview('channel'), isFalse);
@@ -601,7 +790,7 @@ void main() {
         ['totalCost', '项目成本 + 业务成本'],
         ['projectCost', '毛利润对应成本'],
         ['cost', '账单三级 BUSINESS_COST'],
-        ['prepaid', '销售额 − 核销额'],
+        ['prepaid', '后端直给 prepaid · 口径待核'],
         ['profit', '收入 − 成本合计'],
         ['netProfit', '毛利润 − 业务成本'],
         ['revenue', '核销额 × 利差率'],
@@ -1079,6 +1268,20 @@ void main() {
       lighthouseBankBalancePrevMonthEnd(const ['2026-09-02'], const [1.0]),
       isNull,
     );
+    final parsed = lighthouseBankBalanceChangeFromPayload({
+      'amount': 120000.0,
+      'vs': 'vs 昨日',
+      'pct': 1.2,
+    });
+    expect(parsed, isNotNull);
+    expect(parsed!.amount, 120000.0);
+    expect(parsed.vs, 'vs 昨日');
+    expect(parsed.pct, closeTo(1.2, 1e-9));
+    expect(lighthouseBankBalanceChangeFromPayload(null), isNull);
+    expect(lighthouseBankBalanceChangeFromPayload({'amount': 1}), isNull);
+    expect(lighthouseBankBalanceSeriesLabel('2026-09-03'), '09.03');
+    expect(lighthouseBankBalanceSeriesLabel('2026-09'), '2026.09');
+    expect(lighthouseBankBalanceSeriesLabel('2026-Q3'), '2026.Q3');
     expect(lighthouseFundPoolFlowDividerLabel, '期间新增');
     // 只有这两格按增长显示；余额格保持中性，不染涨跌色。
     expect(lighthouseFundPoolGrowthMetricKeys, {'profitMonth', 'profitDay'});
@@ -1226,14 +1429,17 @@ void main() {
     expect(lighthouseLedgerSummaryMetricRowsForTab('supply'), [
       ['sales', 'prepaid'],
       ['verifiedSales', 'profit'],
+      ['costTotal', 'revenue'],
     ]);
     expect(lighthouseLedgerSummaryMetricRowsForTab('channel'), [
       ['sales', 'prepaid'],
       ['verifiedSales', 'profit'],
+      ['costTotal', 'revenue'],
     ]);
     expect(lighthouseLedgerSummaryMetricRowsForTab('product'), [
       ['sales', 'prepaid'],
       ['verifiedSales', 'profit'],
+      ['costTotal', 'revenue'],
     ]);
     expect(lighthouseLedgerSummaryMetricRowsForTab('netTa'), [
       ['inflow', 'netTa'],

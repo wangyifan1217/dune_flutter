@@ -1171,6 +1171,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _row.status == 'pending_president' ||
       (_row.status == 'done' && !_row.isTechRevising);
 
+  /// 当前字段不能改时只展示已填值，避免复核人看到锁住的大输入框。
+  bool _readValuesOnly(bool enabled) => _showSelectedAsText || !enabled;
+
   bool get _isReviewing =>
       _stage == 'reviewing' ||
       _stage == 'awaiting_submit' ||
@@ -1320,17 +1323,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         defaultTargetPlatform == TargetPlatform.linux;
   }
 
-  Widget _readonlySelectedText(String value, {int maxLines = 6}) {
+  Widget _readonlySelectedText(String value, {int? maxLines}) {
     final text = value.trim();
     final display = text.isEmpty ? '未填写' : text;
     final child = Align(
       alignment: Alignment.centerLeft,
+      heightFactor: 1,
       child: SelectableText(
         display,
         maxLines: maxLines,
         style: TextStyle(
           fontSize: 13,
-          height: 1.45,
+          height: 1.35,
           fontWeight: text.isEmpty ? FontWeight.w500 : FontWeight.w600,
           color: text.isEmpty ? ProposalPalette.text3 : ProposalPalette.text,
         ),
@@ -6271,7 +6275,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       required: required,
       tone: tone,
       child: locked
-          ? _readonlySelectedText(value, maxLines: maxLines)
+          ? _readonlySelectedText(value)
           : TextFormField(
               key: ValueKey('sku-$rowId-$fieldKey-$_fieldEpoch'),
               initialValue: value,
@@ -8093,12 +8097,28 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
+  bool _isFinanceLongTextKey(String key) =>
+      key.contains('Mode') || key.contains('Cycle') || key == 'financeRemark';
+
   Widget _financeFieldRows(List<(String, String)> fields, int columns) {
     final rows = <List<(String, String)>>[];
-    for (var i = 0; i < fields.length; i += columns) {
-      final end = i + columns > fields.length ? fields.length : i + columns;
-      rows.add(fields.sublist(i, end));
+    var current = <(String, String)>[];
+    for (final field in fields) {
+      if (_isFinanceLongTextKey(field.$1)) {
+        if (current.isNotEmpty) {
+          rows.add(current);
+          current = <(String, String)>[];
+        }
+        rows.add([field]);
+        continue;
+      }
+      current.add(field);
+      if (current.length == columns) {
+        rows.add(current);
+        current = <(String, String)>[];
+      }
     }
+    if (current.isNotEmpty) rows.add(current);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -8111,7 +8131,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   if (index > 0) const SizedBox(width: 12),
                   Expanded(child: _financeItem(row[index])),
                 ],
-                if (row.length < columns)
+                if (row.length < columns &&
+                    (row.length != 1 || !_isFinanceLongTextKey(row.first.$1)))
                   const Expanded(child: SizedBox.shrink()),
               ],
             ),
@@ -8156,6 +8177,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         key.contains('Payer') ||
         key.contains('Payee') ||
         key.contains('Account');
+    final longText = _isFinanceLongTextKey(key);
     final source = switch (key) {
       'revenue' => '已确认收入 · 核销/结算口径',
       'invoiceAmount' => '已开票金额 · 与收入差额为开票缺口',
@@ -8184,6 +8206,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               field.$2,
               key,
               required: true,
+              maxLines: longText ? 12 : 3,
+              minLines: longText ? 2 : 1,
+              fullWidth: longText,
               resetReview: 'financeCompleted',
               reviewSection: 'financeItem:$key',
               reviewLabel: _financeReviewLabel,
@@ -8247,25 +8272,23 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       );
     }
     final filler = cells.length < columns;
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var index = 0; index < cells.length; index++)
-            Expanded(
-              child: _gridCell(
-                child: cells[index],
-                lastInRow: index == cells.length - 1 && !filler,
-                lastRow: lastRow,
-              ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var index = 0; index < cells.length; index++)
+          Expanded(
+            child: _gridCell(
+              child: cells[index],
+              lastInRow: index == cells.length - 1 && !filler,
+              lastRow: lastRow,
             ),
-          if (filler)
-            Expanded(
-              flex: columns - cells.length,
-              child: _gridCell(lastInRow: true, lastRow: lastRow),
-            ),
-        ],
-      ),
+          ),
+        if (filler)
+          Expanded(
+            flex: columns - cells.length,
+            child: _gridCell(lastInRow: true, lastRow: lastRow),
+          ),
+      ],
     );
   }
 
@@ -8300,7 +8323,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }) => SizedBox(
     width: double.infinity,
     child: ConstrainedBox(
-      constraints: BoxConstraints(minHeight: compact ? 56 : 90),
+      constraints: BoxConstraints(minHeight: compact ? 0 : 0),
       child: DecoratedBox(
         decoration: BoxDecoration(
           border: Border(
@@ -8312,7 +8335,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 : const BorderSide(color: ProposalPalette.borderSoft),
           ),
         ),
-        child: child,
+        child: Align(
+          alignment: Alignment.topLeft,
+          heightFactor: 1,
+          child: child ?? const SizedBox.shrink(),
+        ),
       ),
     ),
   );
@@ -8436,7 +8463,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     bool required = false,
   }) {
     final tone = proposalFieldTone(enabled: enabled, source: source);
-    if (_showSelectedAsText) {
+    if (_readValuesOnly(enabled)) {
       return ProposalField(
         label: label,
         required: required,
@@ -8528,6 +8555,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     bool required = false,
     int maxLines = 1,
     int? minLines,
+    bool? fullWidth,
     String? source,
     String? hint,
     String? resetReview,
@@ -8539,8 +8567,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final tone = proposalFieldTone(enabled: enabled, source: source);
     final footer = _contractEditFooter(key);
     final multiline = maxLines > 1;
-    final Widget input = _showSelectedAsText
-        ? _readonlySelectedText(_text(key), maxLines: maxLines)
+    final Widget input = (_showSelectedAsText || !enabled)
+        ? _readonlySelectedText(_text(key))
         : TextFormField(
             key: ValueKey('$key-${_row.id}-$_fieldEpoch'),
             initialValue: _text(key),
@@ -8578,7 +8606,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       trailing: _rowReviewToggle(reviewSection, reviewLabel),
       child: input,
     );
-    return multiline ? _FullWidthField(child: field) : field;
+    return (fullWidth ?? multiline) ? _FullWidthField(child: field) : field;
   }
 
   Widget _numberField(
@@ -8599,7 +8627,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       extraTrailing,
       _rowReviewToggle(reviewSection, reviewLabel),
     ]);
-    if (_showSelectedAsText) {
+    if (_readValuesOnly(enabled)) {
       return ProposalField(
         label: label,
         required: required,
@@ -8662,7 +8690,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final tone = proposalFieldTone(enabled: canEdit);
     final selected = _selectedCatalog(current, options);
     final values = _withCurrent(options, selected);
-    if (_showSelectedAsText) {
+    if (_readValuesOnly(canEdit)) {
       return ProposalField(
         label: label,
         required: required,
@@ -8714,7 +8742,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final enabled = _fillEnabled(writable);
     final tone = proposalFieldTone(enabled: enabled);
     final current = _text(key);
-    if (_showSelectedAsText) {
+    if (_readValuesOnly(enabled)) {
       return ProposalField(
         label: label,
         required: required,
@@ -8792,7 +8820,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ...widget.people.where((person) => !preferredIds.contains(person.userId)),
     ];
     final currentId = int.tryParse(_text('${key}UserId'));
-    if (_showSelectedAsText) {
+    if (_readValuesOnly(enabled)) {
       return ProposalField(
         label: label,
         required: required,
@@ -9204,7 +9232,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final enabled = _fillEnabled(writable);
     final tone = proposalFieldTone(enabled: enabled, source: source);
     final selected = _setOf(key);
-    if (_showSelectedAsText) {
+    if (_readValuesOnly(enabled)) {
       return _FullWidthField(
         child: ProposalField(
           label: label,

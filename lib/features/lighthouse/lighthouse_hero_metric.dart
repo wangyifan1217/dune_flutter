@@ -505,6 +505,9 @@ const lighthouseHeroColumnSectionKeys = <List<String>>[
 /// 点 Hero 格子不再出公式面板；走势图用与账本总图同一套 `_TrendChart`。
 const bool lighthouseHeroShowsMetricFormulas = false;
 
+/// 主 Hero 底部「成本合计 = 项目成本 + 业务成本 …」口径条。关掉，只留格子和走势。
+const bool lighthouseHeroShowsFormulaBar = false;
+
 /// 底下不再堆每条指标一张图；点格子只改顶部那一张。
 const bool lighthouseHeroShowsAllMetricTrends = false;
 
@@ -1556,21 +1559,34 @@ const lighthouseLedgerSummaryMetricKeys = <String>[
   'prepaid',
   'profit',
   'costTotal',
+  'revenue',
   'netTa',
 ];
 
 /// 产品 / 供给 / 渠道统一四核心：左列规模，右列经营结果。
+/// 第三行对齐主 Hero 总图：成本合计 / 收入，点开后走同一套 `_TrendChart`。
 const lighthouseLedgerSummaryMetricRows = <List<String>>[
   ['sales', 'prepaid'],
   ['verifiedSales', 'profit'],
+  ['costTotal', 'revenue'],
 ];
 
-/// 账本摘要格可点开单条走势的四个指标。
+/// 账本格可点开走势的指标，与主 Hero 格子同一批。
 const lighthouseLedgerSoloTrendKeys = <String>{
   'sales',
   'verifiedSales',
+  'gmv',
+  'totalCost',
+  'costTotal',
+  'projectCost',
+  'cost',
   'prepaid',
   'profit',
+  'netProfit',
+  'revenue',
+  'spread',
+  'grossMargin',
+  'rate',
 };
 
 bool lighthouseLedgerMetricOpensSoloTrend(String key) =>
@@ -1580,6 +1596,36 @@ bool lighthouseLedgerMetricOpensSoloTrend(String key) =>
 String? lighthouseLedgerSoloTrendAfterTap(String? current, String tapped) {
   if (!lighthouseLedgerMetricOpensSoloTrend(tapped)) return current;
   return current == tapped ? null : tapped;
+}
+
+/// Hero 用 `totalCost`、账本摘要用 `costTotal`，点开后要当成同一格。
+bool lighthouseLedgerMetricKeysMatch(String? a, String b) {
+  if (a == null || a.isEmpty) return false;
+  if (a == b) return true;
+  return lighthouseHeroFormulaCanonicalKey(a) ==
+      lighthouseHeroFormulaCanonicalKey(b);
+}
+
+/// 总图槽位 → 账本格 key。成本槽用账本的 `costTotal`（Hero 格子是 `totalCost`）。
+String? lighthouseLedgerMetricFromTrendSlot(
+  String? slot, {
+  required String scaleKey,
+  required String scaleAltKey,
+}) {
+  switch (slot) {
+    case 'profit':
+      return 'profit';
+    case 'revenue':
+      return 'revenue';
+    case 'cost':
+      return 'costTotal';
+    case 'scale':
+      return scaleKey;
+    case 'scaleAlt':
+      return scaleAltKey.isEmpty ? scaleKey : scaleAltKey;
+    default:
+      return null;
+  }
 }
 
 /// 保留产品专用名称供既有调用使用，三维实际共用同一布局。
@@ -2172,6 +2218,8 @@ class LighthouseReconComment {
     this.time = '',
     this.source = '资管',
     this.targetName = '',
+    this.stage = '',
+    this.isReject = false,
   });
 
   final String content;
@@ -2184,6 +2232,16 @@ class LighthouseReconComment {
 
   /// 备注指向的对象，例如「中智关爱通」。省内多个主体时靠它区分。
   final String targetName;
+
+  /// 哪一环节写的：财务 / 业务 / 运营。标签三的新接口才有，标签二为空。
+  final String stage;
+
+  /// 这条是不是**驳回**。
+  ///
+  /// 新标签三接口不给超期数据，界面上的红色就只剩这一个来源 ——
+  /// 驳回是「有人不认这笔账」，它替代不了「钱该到没到」，但它是目前
+  /// 唯一能说「这里出事了」的信号。
+  final bool isReject;
 
   bool get isEmpty => content.trim().isEmpty;
 
@@ -2220,6 +2278,8 @@ List<LighthouseReconComment> lighthouseParseReconComments(dynamic raw) {
           return s.isEmpty ? '资管' : s;
         }(),
         targetName: pick('targetName', 'target_name'),
+        stage: pick('stage', 'stage_label'),
+        isReject: item['isReject'] == true || item['is_reject'] == true,
       ),
     );
     if (out.length >= lighthouseReconCommentMax) break;
@@ -2233,6 +2293,45 @@ enum LighthouseReconState { none, partial, done, overdue }
 
 /// 结算周期。D+N 按天，M+N 按月（月回款渠道不按天判超期）。
 enum LighthouseSettlementKind { day, month }
+
+/// 这一行现在归谁 —— 没对完的时候「找谁」。
+///
+/// 和 [LighthouseReconStatus.confirmedBy] 是两个人：owner 是「现在归谁、催谁」，
+/// confirmedBy 是「谁签的字」。已对账的行两个都有值很正常。
+///
+/// 会上定的标签三颗粒度是「按财务颗粒度打包分人」—— 分人是这一维的组织方式，
+/// 所以人不是附加信息，是标签三的主键之一。
+class LighthouseReconOwner {
+  const LighthouseReconOwner({this.name = '', this.role = '', this.phone = ''});
+
+  final String name;
+
+  /// 运营 / 财务 / 业务。空串就只显示名字。
+  final String role;
+  final String phone;
+
+  bool get isEmpty => name.trim().isEmpty;
+
+  /// 「王艳丽 · 运营」。没有角色就只有名字。
+  String get label {
+    final n = name.trim();
+    if (n.isEmpty) return '';
+    final r = role.trim();
+    return r.isEmpty ? n : '$n · $r';
+  }
+}
+
+LighthouseReconOwner? lighthouseParseReconOwner(dynamic raw) {
+  if (raw is! Map) return null;
+  String pick(String key) => raw[key]?.toString().trim() ?? '';
+  final owner = LighthouseReconOwner(
+    name: pick('name'),
+    role: pick('role'),
+    phone: pick('phone'),
+  );
+  // 只有角色没有名字等于没给人 —— 界面上「· 运营」比空着更难看。
+  return owner.isEmpty ? null : owner;
+}
 
 class LighthouseReconStatus {
   const LighthouseReconStatus({
@@ -2249,6 +2348,10 @@ class LighthouseReconStatus {
     this.overdueCount = 0,
     this.overdueAmount = 0,
     this.comments = const [],
+    this.owner,
+    this.confirmedCount = 0,
+    this.totalCount = 0,
+    this.pendingStageLabel = '',
   });
 
   final LighthouseReconState state;
@@ -2256,6 +2359,36 @@ class LighthouseReconStatus {
   final double totalAmount;
   final String confirmedBy;
   final String confirmedAt;
+
+  /// 这行现在归谁。资管没给就是 null，界面上整块不显示 ——
+  /// 和 recon 本身一样：没给不等于「没人负责」，不编一个「未分配」出来。
+  final LighthouseReconOwner? owner;
+
+  /// 项目数分数 —— **不是金额覆盖率**。
+  ///
+  /// 资管的新标签三接口（AM-LH-SHUCAI-TAG3V2-RECON-001）不给金额，
+  /// 所以「对账 86%」那种金额口径没有数据源了。退而求其次数项目个数：
+  /// 一个渠道行下 10 个项目确认完 9 个 = 9/10。
+  ///
+  /// 界面上必须写「已确认 9/10」，**不能写 90%** —— 百分号在这一屏的
+  /// 其它地方全是金额，会被读成钱。
+  ///
+  /// 标签二（供给）如果将来给金额，仍然走 coveredAmount/totalAmount，
+  /// 两种口径共存，靠哪个字段有值决定显示哪种。
+  final int confirmedCount;
+  final int totalCount;
+
+  /// 卡在哪一步：财务 / 业务 / 运营。全过了或没数据为空串。
+  final String pendingStageLabel;
+
+  /// 有没有项目数口径可用。
+  bool get hasProjectScore => totalCount > 0;
+
+  /// 有没有驳回。红色的唯一来源（新标签三没有超期数据）。
+  bool get hasReject => comments.any((c) => c.isReject);
+
+  /// 「找谁」这句话有没有答案。
+  bool get hasOwner => owner != null && !owner!.isEmpty;
 
   /// 资管后台对应页面。老板明确要的「前面页面映射到后台那个页面」——
   /// 状态只读，但入口在灯塔：看到没对完的，从这里点进去对。
@@ -2368,6 +2501,10 @@ LighthouseReconStatus? lighthouseParseReconStatus(dynamic raw) {
     overdueCount: int0('overdueCount'),
     overdueAmount: num0('overdueAmount'),
     comments: lighthouseParseReconComments(raw['comments']),
+    owner: lighthouseParseReconOwner(raw['owner']),
+    confirmedCount: int0('confirmedCount'),
+    totalCount: int0('totalCount'),
+    pendingStageLabel: raw['pendingStageLabel']?.toString().trim() ?? '',
   );
 }
 
@@ -2387,22 +2524,144 @@ LighthouseReconStatus? lighthouseReconStatusForRow(String tab, Object? raw) {
   return lighthouseParseReconStatus(raw) ?? lighthouseUnconfirmedRecon;
 }
 
+/// 本地 debug 预览对账 chip / 对账人 / 驳回。发版 `kDebugMode` 为 false，不会带上。
+/// 看完改回 `false`。
+const bool lighthouseReconUsesLocalPreview = true;
+
+const lighthouseReconPreviewFixtures = <Map<String, dynamic>>[
+  {
+    'state': 'partial',
+    'confirmedCount': 9,
+    'totalCount': 10,
+    'pendingStageLabel': '业务',
+    'owner': {'name': '卢笛', 'role': '业务'},
+    'comments': [
+      {
+        'content': '渠道账单未出，等下午再核。',
+        'author': '卢笛',
+        'time': '09-03 10:12',
+        'stage': '业务',
+      },
+    ],
+  },
+  {
+    'state': 'overdue',
+    'confirmedCount': 9,
+    'totalCount': 10,
+    'pendingStageLabel': '业务',
+    'owner': {'name': '卢笛', 'role': '业务'},
+    'comments': [
+      {
+        'content': '折扣对不上，驳回。',
+        'author': '卢笛',
+        'time': '09-02 16:40',
+        'stage': '业务',
+        'isReject': true,
+      },
+      {
+        'content': '财务已确认金额。',
+        'author': '刘雨滴',
+        'time': '09-02 10:12',
+        'stage': '财务',
+      },
+    ],
+  },
+  {
+    'state': 'done',
+    'confirmedCount': 8,
+    'totalCount': 8,
+    'owner': {'name': 'LBZ', 'role': '运营'},
+    'confirmedBy': 'LBZ',
+    'comments': [
+      {
+        'content': '三步都过了。',
+        'author': 'LBZ',
+        'time': '09-03 09:01',
+        'stage': '运营',
+      },
+    ],
+  },
+  {
+    'state': 'none',
+    'confirmedCount': 0,
+    'totalCount': 6,
+    'pendingStageLabel': '财务',
+    'owner': {'name': '刘雨滴', 'role': '财务'},
+  },
+  {
+    'state': 'partial',
+    'coveredAmount': 860000,
+    'totalAmount': 1000000,
+    'owner': {'name': '王艳丽', 'role': '运营'},
+    'comments': [
+      {'content': '核销差 2 笔，等供应商补单。', 'author': '王艳丽', 'time': '11:08'},
+    ],
+  },
+  {'state': 'none'},
+];
+
+Map<String, dynamic> lighthouseReconPreviewRaw(int index) {
+  final n = lighthouseReconPreviewFixtures.length;
+  return Map<String, dynamic>.from(lighthouseReconPreviewFixtures[index % n]);
+}
+
+/// 行上已有 `recon` 不覆盖。预览关掉或产品维原样返回。
+Object? lighthouseReconRawOrPreview({
+  required String tab,
+  required int index,
+  Object? raw,
+  bool preview = false,
+}) {
+  if (!lighthouseTabHasRecon(tab)) return raw;
+  if (raw != null) return raw;
+  if (!preview) return raw;
+  return lighthouseReconPreviewRaw(index);
+}
+
 /// chip 上的短文案。
 ///
 /// `done` 不显示百分比 —— 已对账就是 100%，再写个数字是噪音。
 /// `partial` 必须显示百分比，这是整个设计的要点。
 String lighthouseReconChipLabel(LighthouseReconStatus status) {
+  // 驳回优先于一切。新标签三接口没有超期数据，红色只剩这一个来源 ——
+  // 一行 10 个项目确认完 9 个，只要有一条驳回也得先说驳回：
+  // 老板会上要的是「有不通过的把那个问题暴露出来」。
+  if (status.hasReject) return '有驳回';
   switch (status.state) {
     case LighthouseReconState.done:
       return '已对账';
     case LighthouseReconState.partial:
     case LighthouseReconState.overdue:
+      // 金额口径优先（标签二）；没有金额才退到项目数口径（标签三）。
       final pct = status.coveredPct;
-      if (pct == null) return '对账中';
-      return '对账 ${pct.toStringAsFixed(pct >= 10 ? 0 : 1)}%';
+      if (pct != null) {
+        return '对账 ${pct.toStringAsFixed(pct >= 10 ? 0 : 1)}%';
+      }
+      if (status.hasProjectScore) {
+        return '已确认 ${status.confirmedCount}/${status.totalCount}';
+      }
+      return '对账中';
     case LighthouseReconState.none:
+      // 有分数就说分数：「0/10」比「未对账」多告诉一件事 —— 一共有多少个。
+      if (status.hasProjectScore) {
+        return '已确认 ${status.confirmedCount}/${status.totalCount}';
+      }
       return '未对账';
   }
+}
+
+/// 「卡在谁那儿」。资管给的是**三个人 + 卡在哪一步**，组合起来才是答案：
+/// 「待业务确认 · 卢笛」。这比一个孤立的 owner 准确 —— 老板看到没对完，
+/// 下一个动作是找人，要的正是这一句。
+///
+/// 没有环节或没配人返回空串，界面上整块不显示。
+String lighthouseReconPendingWho(LighthouseReconStatus status) {
+  final stage = status.pendingStageLabel.trim();
+  final who = status.owner?.name.trim() ?? '';
+  if (stage.isEmpty && who.isEmpty) return '';
+  if (stage.isEmpty) return who;
+  if (who.isEmpty) return '待$stage确认';
+  return '待$stage确认 · $who';
 }
 
 /// 行状态旁始终显示评论条数；没有就是 0。正文只在只读弹层里。
@@ -2677,12 +2936,51 @@ double? lighthouseBankBalancePrevMonthEnd(
 ///
 /// 上月末缺失或为 0 时返回 null —— 除以 0 得到的百分比没有意义，
 /// 界面上这一行直接不渲染，不显示 0%。
+/// 新接口请用 [lighthouseBankBalanceChangeFromPayload]：按日/周/月/季/年
+/// 给出「涨了多少钱」，这条只在旧后端没下发 change 时兜底。
 double? lighthouseBankBalanceMomPct(List<String> dates, List<double> totals) {
   final prev = lighthouseBankBalancePrevMonthEnd(dates, totals);
   if (prev == null || prev.abs() < 1e-9) return null;
   final n = dates.length < totals.length ? dates.length : totals.length;
   if (n < 2) return null;
   return (totals[n - 1] - prev) / prev.abs() * 100;
+}
+
+/// 银行余额这一期相对上一期期末涨了多少钱。
+///
+/// 存量比的是「账上多了还是少了」，不是把本期流水加总。
+/// `amount` 是元；`vs` 是对照文案（vs 昨日 / 上周末 / 上月末 / 上季末 / 年初）。
+class LighthouseBankBalanceChange {
+  const LighthouseBankBalanceChange({
+    required this.amount,
+    required this.vs,
+    this.pct,
+  });
+
+  final double amount;
+  final String vs;
+  final double? pct;
+}
+
+LighthouseBankBalanceChange? lighthouseBankBalanceChangeFromPayload(
+  dynamic raw,
+) {
+  if (raw is! Map) return null;
+  final amount = (raw['amount'] as num?)?.toDouble();
+  final vs = raw['vs']?.toString().trim() ?? '';
+  if (amount == null || vs.isEmpty) return null;
+  final pct = (raw['pct'] as num?)?.toDouble();
+  return LighthouseBankBalanceChange(amount: amount, vs: vs, pct: pct);
+}
+
+String lighthouseBankBalanceSeriesLabel(String raw) {
+  final t = raw.trim();
+  if (t.contains('Q')) return t.replaceAll('-', '.');
+  final day = RegExp(r'^\d{4}-(\d{2})-(\d{2})$').firstMatch(t);
+  if (day != null) return '${day.group(1)}.${day.group(2)}';
+  final month = RegExp(r'^(\d{4})-(\d{2})$').firstMatch(t);
+  if (month != null) return '${month.group(1)}.${month.group(2)}';
+  return t;
 }
 
 /// 把 /net-ta 的 `bankBalance.companies` 摊成界面用的行。

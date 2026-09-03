@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
@@ -176,14 +177,20 @@ class _NativeQianjiFundSecondmentPageState
           children: [
             _buildHeader(),
             _buildKeywordSearch(),
-            if (!_loading && _error == null) ...[
-              _buildSummaryBoard(),
-              _buildFilterChips(),
-            ],
             Expanded(
-              child: RefreshIndicator(
-                onRefresh: () => _load(reset: true),
-                child: _buildBody(),
+              child: ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(
+                  dragDevices: {
+                    PointerDeviceKind.touch,
+                    PointerDeviceKind.mouse,
+                    PointerDeviceKind.trackpad,
+                    PointerDeviceKind.stylus,
+                  },
+                ),
+                child: RefreshIndicator(
+                  onRefresh: () => _load(reset: true),
+                  child: _buildBody(),
+                ),
               ),
             ),
           ],
@@ -344,47 +351,54 @@ class _NativeQianjiFundSecondmentPageState
         ],
       );
     }
-    if (_rows.isEmpty) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: const [
-          SizedBox(height: 80),
-          Center(
-            child: Text(
-              '暂无资金借调记录',
-              style: TextStyle(color: DunesColors.text3, fontSize: 14),
-            ),
-          ),
-        ],
-      );
-    }
-    return ListView.separated(
+    return CustomScrollView(
+      key: const Key('fund-secondment-scroll'),
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
-      itemCount: _rows.length + (_loadingMore ? 1 : 0),
-      separatorBuilder: (_, _) => const SizedBox(height: 6),
-      itemBuilder: (context, index) {
-        if (index >= _rows.length) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
+      slivers: [
+        SliverToBoxAdapter(child: _buildSummaryBoard()),
+        SliverToBoxAdapter(child: _buildFilterChips()),
+        if (_rows.isEmpty)
+          const SliverFillRemaining(
+            hasScrollBody: false,
             child: Center(
-              child: SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2),
+              child: Text(
+                '暂无资金借调记录',
+                style: TextStyle(color: DunesColors.text3, fontSize: 14),
               ),
             ),
-          );
-        }
-        final row = _rows[index];
-        return _FundSecondmentCard(
-          row: row,
-          amountText: _amountText(row.borrowAmountWan),
-          remainingText: row.isCleared ? '' : '剩 ${_amountText(row.remainingWan)}万',
-          onTap: () => widget.onOpenDetail(row.id),
-        );
-      },
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
+            sliver: SliverList.separated(
+              itemCount: _rows.length + (_loadingMore ? 1 : 0),
+              separatorBuilder: (_, _) => const SizedBox(height: 6),
+              itemBuilder: (context, index) {
+                if (index >= _rows.length) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(
+                      child: SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  );
+                }
+                final row = _rows[index];
+                return _FundSecondmentCard(
+                  row: row,
+                  amountText: _amountText(row.borrowAmountWan),
+                  remainingText:
+                      row.isCleared ? '' : '剩 ${_amountText(row.remainingWan)}万',
+                  onTap: () => widget.onOpenDetail(row.id),
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 }

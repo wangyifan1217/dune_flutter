@@ -76,6 +76,44 @@ Future<http.Response> dunesHttpPost(
   );
 }
 
+Future<http.Response> dunesHttpPatch(
+  AuthSession session,
+  String path, {
+  Object? body,
+  Map<String, String>? headers,
+  http.Client? client,
+}) {
+  final c = client ?? http.Client();
+  return _dunesRequestWithRetry(
+    session,
+    (active) => c.patch(
+      dunesApiUri(active, path),
+      headers: dunesAuthHeaders(active, headers),
+      body: body,
+    ),
+    client: c,
+  );
+}
+
+Future<http.Response> dunesHttpPut(
+  AuthSession session,
+  String path, {
+  Object? body,
+  Map<String, String>? headers,
+  http.Client? client,
+}) {
+  final c = client ?? http.Client();
+  return _dunesRequestWithRetry(
+    session,
+    (active) => c.put(
+      dunesApiUri(active, path),
+      headers: dunesAuthHeaders(active, headers),
+      body: body,
+    ),
+    client: c,
+  );
+}
+
 Future<http.Response> dunesHttpDelete(
   AuthSession session,
   String path, {

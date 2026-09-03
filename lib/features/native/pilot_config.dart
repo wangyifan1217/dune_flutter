@@ -2,6 +2,7 @@ const Set<String> kNativePilotScreens = <String>{
   'B1',
   'B2',
   'B2P',
+  'B2PERF',
   'FD1',
   'B3',
   'B10',

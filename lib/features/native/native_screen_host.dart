@@ -13,6 +13,7 @@ import '../../core/platform/desktop_features.dart';
 import '../../core/theme/app_text_scale.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/widgets/cached_network_image.dart';
+import '../../core/widgets/spotlight_tour.dart';
 import '../weekly_summary/native_weekly_summary_page.dart';
 import '../approval/native_approval_page.dart';
 import '../approval_assistant/native_approval_assistant_page.dart';
@@ -136,7 +137,9 @@ import '../drive/native_drive_page.dart';
 import '../drive/native_drive_assistant_page.dart';
 import '../xrxs/native_xrxs_assistant_page.dart';
 import '../administrative_notice/native_administrative_notice_page.dart';
+import '../profile/native_profile_tour.dart';
 import '../profile/native_user_work_profile_page.dart';
+import '../profile/native_work_profile_perf_page.dart';
 
 class NativeScreenHost extends StatefulWidget {
   const NativeScreenHost({
@@ -3664,6 +3667,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return NativeUserWorkProfilePage(
           session: widget.session,
           onBack: widget.navigation.back,
+          onOpenPerformance: () => widget.navigation.go('B2PERF'),
+        );
+      case 'B2PERF':
+        return NativeWorkProfilePerfPage(
+          session: widget.session,
+          onBack: widget.navigation.back,
         );
       case 'C1':
         return _buildConversationListPage();
@@ -4572,6 +4581,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     return const <String>{
       'B2',
       'B2P',
+      'B2PERF',
       'B1',
       'B3',
       'B10',
@@ -5300,10 +5310,16 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     '/business/proposals/new',
   );
   final MeetingLiveController _live = MeetingLiveController.instance;
+  late final ProfileTourPrefs _profileTourPrefs;
+  final GlobalKey _workProfileBtnKey = GlobalKey();
+  bool _profileTourOpen = false;
+  bool _profileTourAutoChecked = false;
 
   @override
   void initState() {
     super.initState();
+    _profileTourPrefs = ProfileTourPrefs(widget.session.userId);
+    widget.navigation.addListener(_onProfileTourNavigation);
     _profile = _restoreCachedProfile();
     _quickLaunchItems = buildQuickLaunchItems(
       bizTemplates: XflowService.cachedTemplatesByCategory('biz'),
@@ -5331,6 +5347,9 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     );
     _loadStats(silent: _profile != null);
     _refreshCommBadge();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_maybeAutoStartProfileTour());
+    });
   }
 
   void _onLiveStateChanged() {
@@ -5399,12 +5418,50 @@ class _NativeB2PageState extends State<_NativeB2Page> {
 
   @override
   void dispose() {
+    widget.navigation.removeListener(_onProfileTourNavigation);
     widget.workbenchRefresh.removeListener(_onWorkbenchDataRefresh);
     _live.active.removeListener(_onLiveStateChanged);
     _live.paused.removeListener(_onLiveStateChanged);
     _live.elapsed.removeListener(_onLiveStateChanged);
     _live.interruptionHint.removeListener(_onLiveInterruptionHint);
     super.dispose();
+  }
+
+  void _onProfileTourNavigation() {
+    if (widget.navigation.currentScreen == 'B2') {
+      unawaited(_maybeAutoStartProfileTour());
+    }
+  }
+
+  Future<void> _maybeAutoStartProfileTour() async {
+    if (_profileTourOpen || _profileTourAutoChecked) return;
+    if (widget.navigation.currentScreen != 'B2') return;
+    try {
+      if (await _profileTourPrefs.hasSeen()) {
+        if (mounted) _profileTourAutoChecked = true;
+        return;
+      }
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    if (widget.navigation.currentScreen != 'B2') return;
+    _profileTourAutoChecked = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _profileTourOpen) return;
+      if (widget.navigation.currentScreen != 'B2') {
+        _profileTourAutoChecked = false;
+        return;
+      }
+      setState(() => _profileTourOpen = true);
+    });
+  }
+
+  Future<void> _closeProfileTour() async {
+    if (_profileTourOpen) setState(() => _profileTourOpen = false);
+    try {
+      await _profileTourPrefs.markSeen();
+    } catch (_) {}
   }
 
   String _formatLiveElapsed(Duration duration) {
@@ -6054,6 +6111,20 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                 12,
             child: _buildLiveTranscribeFab(),
           ),
+        if (_profileTourOpen)
+          Positioned.fill(
+            child: SpotlightTourOverlay(
+              steps: [
+                SpotlightTourStep(
+                  targetKey: _workProfileBtnKey,
+                  title: '个人工作画像',
+                  body: '点这里查看你的工作节奏、协作沉淀、绩效发展等内容。之后就不会再出现这条指引。',
+                  holeRadius: 99,
+                ),
+              ],
+              onClose: _closeProfileTour,
+            ),
+          ),
       ],
     );
     return ColoredBox(
@@ -6499,6 +6570,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
             child: Tooltip(
               message: '个人工作画像',
               child: InkWell(
+                key: _workProfileBtnKey,
                 borderRadius: BorderRadius.circular(18),
                 onTap: () => widget.navigation.go('B2P'),
                 child: Padding(

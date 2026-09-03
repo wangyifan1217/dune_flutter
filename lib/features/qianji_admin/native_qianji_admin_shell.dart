@@ -15,6 +15,8 @@ import '../contract_register/native_contract_register_page.dart';
 import '../drive/native_drive_page.dart';
 import '../proposal_intake/native_proposal_intake_page.dart';
 import '../proposal_intake/proposal_intake_service.dart';
+import '../kpi/native_workbench_kpi_page.dart';
+import '../kpi/workbench_kpi_service.dart';
 import '../travel_import/native_travel_import_page.dart';
 import '../travel_import/travel_import_service.dart';
 import '../reconciliation/native_daily_reconciliation_page.dart';
@@ -75,6 +77,7 @@ enum _WorkbenchView {
   proposalIntake,
   purchaseProposalIntake,
   travelImport,
+  kpiPerformance,
 }
 
 class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
@@ -97,6 +100,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   bool? _canSeeContracts;
   bool? _canSeeProposalIntake;
   bool? _canSeeTravelImport;
+  bool? _canSeeKpiPerformance;
 
   static const _titles = {
     _WorkbenchView.tasks: '任务',
@@ -113,6 +117,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _WorkbenchView.proposalIntake: '销售提案',
     _WorkbenchView.purchaseProposalIntake: '采购提案',
     _WorkbenchView.travelImport: '差旅导入',
+    _WorkbenchView.kpiPerformance: '业务绩效',
   };
 
   bool get _isQianjiAdmin => _session.effectiveQianjiAdminAccess;
@@ -130,6 +135,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_resolveContractAccess());
     unawaited(_resolveProposalIntakeAccess());
     unawaited(_resolveTravelImportAccess());
+    unawaited(_resolveKpiPerformanceAccess());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (widget.active) _syncBackInterceptor();
@@ -155,6 +161,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
       unawaited(_resolveContractAccess());
       unawaited(_resolveProposalIntakeAccess());
       unawaited(_resolveTravelImportAccess());
+    unawaited(_resolveKpiPerformanceAccess());
     }
     if (widget.active != oldWidget.active) {
       if (widget.active) {
@@ -193,6 +200,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_resolveContractAccess());
     unawaited(_resolveProposalIntakeAccess());
     unawaited(_resolveTravelImportAccess());
+    unawaited(_resolveKpiPerformanceAccess());
   }
 
   Future<void> _resolveTaskSummaryAccess() async {
@@ -307,6 +315,24 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     }
     if (!mounted) return;
     setState(() => _canSeeTravelImport = allowed);
+  }
+
+  Future<void> _resolveKpiPerformanceAccess() async {
+    if (_session.isExternalUser) {
+      if (mounted) setState(() => _canSeeKpiPerformance = false);
+      return;
+    }
+    bool allowed = _session.effectiveKpiPerformanceAccess;
+    try {
+      final access = await WorkbenchKpiService(
+        session: _session,
+      ).fetchAccess();
+      allowed = access.allowed;
+    } catch (_) {
+      allowed = _session.effectiveKpiPerformanceAccess;
+    }
+    if (!mounted) return;
+    setState(() => _canSeeKpiPerformance = allowed);
   }
 
   void _maybeOpenDailyRecon() {
@@ -625,6 +651,12 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           session: _session,
           onChromeChanged: _onTaskChrome,
         );
+      case _WorkbenchView.kpiPerformance:
+        return NativeWorkbenchKpiPage(
+          key: const ValueKey<String>('workbench-kpi-performance'),
+          session: _session,
+          onChromeChanged: _onTaskChrome,
+        );
       case _WorkbenchView.overview:
         return _buildOverviewPage();
     }
@@ -744,6 +776,15 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           color: const Color(0xFF5B6FC4),
           enabled: true,
           onTap: () => _open(_WorkbenchView.travelImport),
+        ),
+      if (!_session.isExternalUser && _canSeeKpiPerformance == true)
+        _WorkbenchTile(
+          title: '业务绩效',
+          subtitle: '人员任务 · 重跑与导出',
+          icon: Icons.insights_outlined,
+          color: const Color(0xFF0F766E),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.kpiPerformance),
         ),
     ];
 

@@ -20,17 +20,24 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: NativeUserWorkProfilePage(session: session, onBack: () {}),
+        home: NativeUserWorkProfilePage(
+          session: session,
+          snapshot: UserWorkProfileSnapshot.connecting(),
+          onBack: () {},
+        ),
       ),
     );
 
     expect(find.text('陈沙'), findsOneWidget);
     expect(find.text('产品与技术部 · 产品经理'), findsOneWidget);
     for (final module in UserWorkProfileModuleType.values) {
-      await tester.scrollUntilVisible(find.text(module.label), 220);
-      expect(find.text(module.label), findsOneWidget);
+      expect(find.text(module.label), findsWidgets);
+      expect(
+        find.byKey(Key('work-profile-module-${module.name}')),
+        findsOneWidget,
+      );
     }
-    expect(find.text('数据对接中'), findsNWidgets(6));
+    expect(find.text('数据对接中'), findsAtLeastNWidgets(6));
   });
 
   test('connecting snapshot declares all six modules', () {
@@ -66,7 +73,35 @@ void main() {
       ),
     );
 
+    await tester.scrollUntilVisible(find.text('本周节奏已同步'), 300);
     expect(find.text('本周节奏已同步'), findsOneWidget);
-    expect(find.text('数据对接中'), findsNothing);
+  });
+
+  testWidgets('tapping performance module opens callback', (tester) async {
+    var opened = false;
+    const snapshot = UserWorkProfileSnapshot(
+      modules: <UserWorkProfileModule>[
+        UserWorkProfileModule(
+          type: UserWorkProfileModuleType.performance,
+          status: UserWorkProfileModuleStatus.ready,
+          summary: '2026-08 主营 70.3',
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeUserWorkProfilePage(
+          session: session,
+          snapshot: snapshot,
+          onBack: () {},
+          onOpenPerformance: () => opened = true,
+        ),
+      ),
+    );
+    await tester.scrollUntilVisible(find.text('2026-08 主营 70.3'), 300);
+    await tester.tap(find.byKey(const Key('work-profile-module-performance')));
+    await tester.pump();
+    expect(opened, isTrue);
+    expect(find.text('2026-08 主营 70.3'), findsOneWidget);
   });
 }

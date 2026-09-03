@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../workbench/native_avatar_sheet.dart';
+import 'work_profile_kpi.dart';
 
 /// A local, replaceable view-model for the current user's work portrait.
 ///
@@ -63,30 +65,85 @@ class UserWorkProfileModule {
 
 /// A self-only personal work portrait.
 ///
-/// It reads identity exclusively from [AuthSession], makes no requests, and
-/// starts every module in an explicit “数据对接中” state.
-class NativeUserWorkProfilePage extends StatelessWidget {
+/// Identity comes from [AuthSession]. Modules start as “数据对接中”;
+/// 绩效发展 is filled from `/work-profile/me` when that snapshot is not injected.
+class NativeUserWorkProfilePage extends StatefulWidget {
   const NativeUserWorkProfilePage({
     super.key,
     required this.session,
     required this.onBack,
     this.snapshot,
+    this.onOpenPerformance,
   });
 
   final AuthSession session;
   final VoidCallback onBack;
   final UserWorkProfileSnapshot? snapshot;
+  final VoidCallback? onOpenPerformance;
+
+  @override
+  State<NativeUserWorkProfilePage> createState() =>
+      _NativeUserWorkProfilePageState();
+}
+
+class _NativeUserWorkProfilePageState extends State<NativeUserWorkProfilePage> {
+  UserWorkProfileSnapshot? _loaded;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.snapshot == null) {
+      unawaited(_loadModules());
+    }
+  }
+
+  Future<void> _loadModules() async {
+    try {
+      final hints = await WorkProfileKpiService(
+        session: widget.session,
+      ).fetchProfileModules();
+      UserWorkProfileModule? perf;
+      for (final hint in hints) {
+        if (hint.type != 'performance') continue;
+        perf = UserWorkProfileModule(
+          type: UserWorkProfileModuleType.performance,
+          status: hint.status == 'ready'
+              ? UserWorkProfileModuleStatus.ready
+              : UserWorkProfileModuleStatus.connecting,
+          summary: hint.summary,
+        );
+      }
+      if (!mounted || perf == null) return;
+      setState(() {
+        _loaded = UserWorkProfileSnapshot(
+          modules: UserWorkProfileModuleType.values
+              .map(
+                (type) => type == UserWorkProfileModuleType.performance
+                    ? perf!
+                    : UserWorkProfileModule.connecting(type),
+              )
+              .toList(growable: false),
+        );
+      });
+    } catch (_) {
+      // keep connecting snapshot
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final portrait = snapshot ?? UserWorkProfileSnapshot.connecting();
-    final name = (session.displayName ?? '').trim().isEmpty
-        ? (session.phone.trim().isEmpty ? '我' : session.phone.trim())
-        : session.displayName!.trim();
+    final portrait =
+        widget.snapshot ?? _loaded ?? UserWorkProfileSnapshot.connecting();
+    final name = (widget.session.displayName ?? '').trim().isEmpty
+        ? (widget.session.phone.trim().isEmpty
+              ? '我'
+              : widget.session.phone.trim())
+        : widget.session.displayName!.trim();
     final identityParts = <String>[
-      if (session.departmentName.trim().isNotEmpty)
-        session.departmentName.trim(),
-      if (session.jobTitle.trim().isNotEmpty) session.jobTitle.trim(),
+      if (widget.session.departmentName.trim().isNotEmpty)
+        widget.session.departmentName.trim(),
+      if (widget.session.jobTitle.trim().isNotEmpty)
+        widget.session.jobTitle.trim(),
     ];
 
     return ColoredBox(
@@ -95,46 +152,55 @@ class NativeUserWorkProfilePage extends StatelessWidget {
         bottom: false,
         child: Column(
           children: [
-            _Header(onBack: onBack),
+            _Header(onBack: widget.onBack),
             Expanded(
-              child: ListView(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
-                children: [
-                  _IdentityHero(
-                    name: name,
-                    identityLine: identityParts.isEmpty
-                        ? '我的个人工作画像'
-                        : identityParts.join(' · '),
-                    avatarUrl: session.avatarUrl,
-                    avatarPreset: session.avatarPreset,
-                  ),
-                  const SizedBox(height: 16),
-                  const _ExplanationCard(),
-                  const SizedBox(height: 22),
-                  _ConnectingRadarCard(modules: portrait.modules),
-                  const SizedBox(height: 22),
-                  Text(
-                    '我的工作画像',
-                    style: DunesTypography.sans(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF312249),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _IdentityHero(
+                      name: name,
+                      identityLine: identityParts.isEmpty
+                          ? '我的个人工作画像'
+                          : identityParts.join(' · '),
+                      avatarUrl: widget.session.avatarUrl,
+                      avatarPreset: widget.session.avatarPreset,
                     ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    '以下模块仅展示当前登录用户，数据完成接入后会在此更新。',
-                    style: DunesTypography.sans(
-                      fontSize: 13,
-                      color: const Color(0xFF766B86),
+                    const SizedBox(height: 16),
+                    const _ExplanationCard(),
+                    const SizedBox(height: 22),
+                    _ConnectingRadarCard(modules: portrait.modules),
+                    const SizedBox(height: 22),
+                    Text(
+                      '我的工作画像',
+                      style: DunesTypography.sans(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF312249),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  for (final module in portrait.modules) ...[
-                    _ModuleCard(module: module),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 5),
+                    Text(
+                      '以下模块仅展示当前登录用户，数据完成接入后会在此更新。',
+                      style: DunesTypography.sans(
+                        fontSize: 13,
+                        color: const Color(0xFF766B86),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    for (final module in portrait.modules) ...[
+                      _ModuleCard(
+                        module: module,
+                        onTap:
+                            module.type == UserWorkProfileModuleType.performance
+                            ? widget.onOpenPerformance
+                            : null,
+                      ),
+                      const SizedBox(height: 10),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ],
@@ -475,9 +541,10 @@ class _RadarGridPainter extends CustomPainter {
 }
 
 class _ModuleCard extends StatelessWidget {
-  const _ModuleCard({required this.module});
+  const _ModuleCard({required this.module, this.onTap});
 
   final UserWorkProfileModule module;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -486,7 +553,8 @@ class _ModuleCard extends StatelessWidget {
     final summary = module.summary.trim().isEmpty
         ? '数据对接中'
         : module.summary.trim();
-    return Container(
+    final moduleKey = Key('work-profile-module-${module.type.name}');
+    final card = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -528,13 +596,28 @@ class _ModuleCard extends StatelessWidget {
               ],
             ),
           ),
-          if (isConnecting)
-            const Icon(
-              Icons.hourglass_top_rounded,
-              color: Color(0xFF9A7FB8),
-              size: 19,
-            ),
+          Icon(
+            onTap != null
+                ? Icons.chevron_right_rounded
+                : isConnecting
+                ? Icons.hourglass_top_rounded
+                : Icons.chevron_right_rounded,
+            color: const Color(0xFF9A7FB8),
+            size: 19,
+          ),
         ],
+      ),
+    );
+    if (onTap == null) {
+      return KeyedSubtree(key: moduleKey, child: card);
+    }
+    return Material(
+      key: moduleKey,
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: card,
       ),
     );
   }

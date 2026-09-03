@@ -70,6 +70,32 @@ void main() {
     expect(session.netTaAccess, isTrue);
     expect(session.effectiveNetTaAccess, isTrue);
   });
+
+  test('AuthSession reads and persists KPI performance access', () {
+    final fromJwt = AuthSession.fromJwt(
+      phone: '13800138000',
+      userId: 0,
+      token: _fakeJwt({'userId': 7, 'kpiPerformanceAccess': true}),
+      apiBase: 'http://example/api/v1',
+    );
+    expect(fromJwt.kpiPerformanceAccess, isTrue);
+    expect(fromJwt.effectiveKpiPerformanceAccess, isTrue);
+
+    final restored = AuthSession.fromJson(fromJwt.toJson());
+    expect(restored.kpiPerformanceAccess, isTrue);
+
+    const base = AuthSession(
+      phone: '13800138000',
+      userId: 7,
+      token: 't',
+      apiBase: 'http://example/api/v1',
+      roles: [],
+    );
+    final fromMe = AuthSession.enrichFromUsersMe(base, {
+      'kpiPerformanceAccess': true,
+    });
+    expect(fromMe.kpiPerformanceAccess, isTrue);
+  });
 }
 
 String _fakeJwt(Map<String, dynamic> claims) {

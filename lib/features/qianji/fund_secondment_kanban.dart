@@ -165,37 +165,47 @@ class FundSecondmentKanban extends StatelessWidget {
   Widget _buildBreakdown(bool wide) {
     final routes = _BreakdownColumn(
       title: '谁欠谁',
-      hint: '还没还清的借调方向',
+      hint: '借款主体还欠付款主体',
       children: summary.routes
           .map(
             (route) => _BreakdownRow(
-              label: '${route.borrowSubject}  →  ${route.paySubject}',
+              from: route.borrowSubject,
+              relation: '欠',
+              to: route.paySubject,
               value: formatFundSecondmentWan(route.remainingWan),
             ),
           )
           .toList(growable: false),
     );
-    if (!wide || summary.lenders.isEmpty) return routes;
+    if (summary.lenders.isEmpty) return routes;
+    final lenders = _BreakdownColumn(
+      title: '谁还在垫钱',
+      hint: '付款主体未收回余额',
+      children: summary.lenders
+          .map(
+            (item) => _BreakdownRow(
+              label: item.subject,
+              value: formatFundSecondmentWan(item.remainingWan),
+            ),
+          )
+          .toList(growable: false),
+    );
+    if (!wide) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          routes,
+          const SizedBox(height: 12),
+          lenders,
+        ],
+      );
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(flex: 3, child: routes),
         const SizedBox(width: 16),
-        Expanded(
-          flex: 2,
-          child: _BreakdownColumn(
-            title: '谁还在垫钱',
-            hint: '付款主体未收回余额',
-            children: summary.lenders
-                .map(
-                  (item) => _BreakdownRow(
-                    label: item.subject,
-                    value: formatFundSecondmentWan(item.remainingWan),
-                  ),
-                )
-                .toList(growable: false),
-          ),
-        ),
+        Expanded(flex: 2, child: lenders),
       ],
     );
   }
@@ -351,31 +361,58 @@ class _BreakdownColumn extends StatelessWidget {
 
 class _BreakdownRow extends StatelessWidget {
   const _BreakdownRow({
-    required this.label,
+    this.label,
+    this.from,
+    this.relation,
+    this.to,
     required this.value,
   });
 
-  final String label;
+  final String? label;
+  final String? from;
+  final String? relation;
+  final String? to;
   final String value;
+
+  static const _nameStyle = TextStyle(
+    fontSize: 13,
+    fontWeight: FontWeight.w600,
+    color: DunesColors.text,
+  );
 
   @override
   Widget build(BuildContext context) {
+    final left = (from != null && to != null)
+        ? Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: from),
+                TextSpan(
+                  text: '  ${relation ?? '欠'}  ',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: DunesColors.coral,
+                  ),
+                ),
+                TextSpan(text: to),
+              ],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _nameStyle,
+          )
+        : Text(
+            label ?? '',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _nameStyle,
+          );
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         children: [
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: DunesColors.text,
-              ),
-            ),
-          ),
+          Expanded(child: left),
           const SizedBox(width: 8),
           Text(
             value,

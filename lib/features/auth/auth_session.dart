@@ -39,6 +39,7 @@ class AuthSession {
     this.proposalIntakeViewAll = false,
     this.travelImportAccess = false,
     this.travelViewAll = false,
+    this.kpiPerformanceAccess = false,
   });
 
   final String phone;
@@ -99,6 +100,9 @@ class AuthSession {
   /// 差旅地图查看全部员工；未开通仅自己及下属。
   final bool travelViewAll;
 
+  /// 工作台行政「业务绩效」。
+  final bool kpiPerformanceAccess;
+
   /// 后端下发的「任务汇总」能力开关；未下发时工作台会走接口探测。
   final bool hrbpAccess;
 
@@ -152,6 +156,9 @@ class AuthSession {
 
   bool get effectiveTravelImportAccess =>
       travelImportAccess || DunesDefaults.localLighthouseAccessBypass;
+
+  bool get effectiveKpiPerformanceAccess =>
+      kpiPerformanceAccess || DunesDefaults.localLighthouseAccessBypass;
 
   AuthSession withLocalDevGrants() {
     var next = this;
@@ -238,6 +245,7 @@ class AuthSession {
     bool? proposalIntakeViewAll,
     bool? travelImportAccess,
     bool? travelViewAll,
+    bool? kpiPerformanceAccess,
   }) {
     return AuthSession(
       phone: phone ?? this.phone,
@@ -279,6 +287,8 @@ class AuthSession {
           proposalIntakeViewAll ?? this.proposalIntakeViewAll,
       travelImportAccess: travelImportAccess ?? this.travelImportAccess,
       travelViewAll: travelViewAll ?? this.travelViewAll,
+      kpiPerformanceAccess:
+          kpiPerformanceAccess ?? this.kpiPerformanceAccess,
     );
   }
 
@@ -353,6 +363,7 @@ class AuthSession {
       proposalIntakeViewAll: data['proposalIntakeViewAll'] == true,
       travelImportAccess: data['travelImportAccess'] == true,
       travelViewAll: data['travelViewAll'] == true,
+      kpiPerformanceAccess: data['kpiPerformanceAccess'] == true,
     );
   }
 
@@ -405,6 +416,7 @@ class AuthSession {
       proposalIntakeViewAll: claims['proposalIntakeViewAll'] == true,
       travelImportAccess: claims['travelImportAccess'] == true,
       travelViewAll: claims['travelViewAll'] == true,
+      kpiPerformanceAccess: claims['kpiPerformanceAccess'] == true,
     );
   }
 
@@ -462,6 +474,7 @@ class AuthSession {
       'proposalIntakeViewAll': proposalIntakeViewAll,
       'travelImportAccess': travelImportAccess,
       'travelViewAll': travelViewAll,
+      'kpiPerformanceAccess': kpiPerformanceAccess,
     };
   }
 
@@ -508,6 +521,7 @@ class AuthSession {
       proposalIntakeViewAll: json['proposalIntakeViewAll'] == true,
       travelImportAccess: json['travelImportAccess'] == true,
       travelViewAll: json['travelViewAll'] == true,
+      kpiPerformanceAccess: json['kpiPerformanceAccess'] == true,
     );
   }
 

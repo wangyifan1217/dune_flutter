@@ -95,7 +95,12 @@ void main() {
     expect(find.textContaining('已收回 534万'), findsOneWidget);
     expect(find.text('未还清 6 笔'), findsOneWidget);
     expect(find.text('谁欠谁'), findsOneWidget);
-    expect(find.text('积分  →  中石油'), findsOneWidget);
+    expect(find.text('谁还在垫钱'), findsOneWidget);
+    expect(find.text('积分  欠  中石油'), findsOneWidget);
+    expect(find.text('中石油'), findsOneWidget);
+    expect(find.text('120万'), findsOneWidget);
+    expect(find.text('借款主体还欠付款主体'), findsOneWidget);
+    expect(find.textContaining('→'), findsNothing);
     expect(find.textContaining('已过预计还款日'), findsOneWidget);
   });
 
@@ -121,5 +126,50 @@ void main() {
     expect(find.text('目前没有未收回的钱'), findsOneWidget);
     expect(find.text('0万'), findsOneWidget);
     expect(find.text('谁欠谁'), findsNothing);
+  });
+
+  testWidgets('phone APP still shows who is advancing money', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: FundSecondmentKanban(
+            summary: FundSecondmentSummary(
+              count: 9,
+              unsettledCount: 6,
+              remainingTotalWan: 239,
+              borrowTotalWan: 773,
+              repaidTotalWan: 534,
+              routes: const [
+                FundSecondmentRouteBucket(
+                  borrowSubject: '积分',
+                  paySubject: '中石油',
+                  count: 2,
+                  remainingWan: 35,
+                ),
+              ],
+              lenders: const [
+                FundSecondmentSubjectBucket(
+                  subject: '中石油',
+                  count: 2,
+                  remainingWan: 120,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('谁欠谁'), findsOneWidget);
+    expect(find.text('谁还在垫钱'), findsOneWidget);
+    expect(find.text('付款主体未收回余额'), findsOneWidget);
+    expect(find.text('中石油'), findsOneWidget);
+    expect(find.text('120万'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

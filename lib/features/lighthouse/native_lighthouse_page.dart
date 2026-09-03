@@ -821,6 +821,7 @@ class _TrendSeries {
     this.scale = const <double>[],
     this.scaleAlt = const <double>[],
     this.costAlt = const <double>[],
+    this.stock = const <double>[],
   });
   final List<double> revenue;
   final List<double> cost;
@@ -838,6 +839,9 @@ class _TrendSeries {
 
   /// 第六条：净TA 业务成本。与 [cost] / [profit] 各自值域，不共用 Y。
   final List<double> costAlt;
+
+  /// 第七条：银行余额存量。各自值域，图例用时点不是加总。
+  final List<double> stock;
 }
 
 // ============================================================================
@@ -999,7 +1003,8 @@ class _TrendBounds {
     this.profit,
     this.scale,
     this.scaleAlt,
-    this.costAlt, {
+    this.costAlt,
+    this.stock, {
     this.shareScaleRange = true,
   });
   final _SeriesRange revenue;
@@ -1008,6 +1013,7 @@ class _TrendBounds {
   final _SeriesRange scale;
   final _SeriesRange scaleAlt;
   final _SeriesRange costAlt;
+  final _SeriesRange stock;
   final bool shareScaleRange;
 }
 
@@ -1045,6 +1051,7 @@ _TrendBounds _computeBounds(
     scaleRange,
     shareScaleRange ? scaleRange : scaleAltRange,
     computeOne(s.costAlt),
+    computeOne(s.stock),
     shareScaleRange: shareScaleRange,
   );
 }
@@ -1068,6 +1075,11 @@ _TrendBounds _computeBounds(
       return (pts: series.scaleAlt, range: bounds.scaleAlt, color: scaleColor);
     case 5:
       return (pts: series.costAlt, range: bounds.costAlt, color: costAltColor);
+    case 6:
+      final stockColor = colors.length > 5
+          ? colors[5]
+          : const Color(lighthouseStockAccentValue);
+      return (pts: series.stock, range: bounds.stock, color: stockColor);
     default:
       return (pts: series.scale, range: bounds.scale, color: scaleColor);
   }
@@ -6290,6 +6302,10 @@ class _TrendChart extends StatefulWidget {
     this.profitLabel = '毛利',
     this.costAlt = const <double>[],
     this.costAltLabel = '',
+    this.stock = const <double>[],
+    this.stockLabel = '银行余额',
+    this.periodStock,
+    this.periodStockDeltaPct,
     this.unsignedSlots = const <String>{},
     this.valueIsRate = false,
     this.soloKey,
@@ -6323,6 +6339,12 @@ class _TrendChart extends StatefulWidget {
   /// 第六条序列（净TA 业务成本）。空 label 表示不画。
   final List<double> costAlt;
   final String costAltLabel;
+
+  /// 第七条：银行余额存量。图例用时点，不把近 N 期加总。
+  final List<double> stock;
+  final String stockLabel;
+  final double? periodStock;
+  final double? periodStockDeltaPct;
 
   /// 这些 slot 的图例金额按绝对值显示（流出 / 成本栏目本身已带方向）。
   final Set<String> unsignedSlots;
@@ -6397,12 +6419,14 @@ class _TrendChartState extends State<_TrendChart> {
   static const Color _cProf = Color(lighthouseProfitAccentValue);
   static const Color _cScale = Color(lighthouseScaleAccentValue);
   static const Color _cCostAlt = Color(lighthouseNetTABizCostAccentValue);
+  static const Color _cStock = Color(lighthouseStockAccentValue);
   static const List<Color> _kColors = [
     _cRev,
     _cCost,
     _cProf,
     _cScale,
     _cCostAlt,
+    _cStock,
   ];
 
   /// 上下文线的中性阶：同一支墨色（ink2）不同透明度。
@@ -6417,12 +6441,14 @@ class _TrendChartState extends State<_TrendChart> {
     Color(0x995A5C56),
     Color(0x875A5C56),
     Color(0x6B5A5C56),
+    Color(0x8C5A5C56),
   ];
 
   /// series key → 颜色槽位。scale / scaleAlt 同属规模族，共用一个槽。
   static int _colorSlotFor(int seriesIndex) => switch (seriesIndex) {
     4 => 3,
     5 => 4,
+    6 => 5,
     _ => seriesIndex,
   };
 
@@ -6433,12 +6459,15 @@ class _TrendChartState extends State<_TrendChart> {
     final accent = _colorSlotFor(lighthouseTrendHeroIndex(_visibleFlags));
     return [
       for (var i = 0; i < _kColors.length; i++)
-        i == accent ? _kColors[i] : _kContextColors[i],
+        i == accent || i == 5 ? _kColors[i] : _kContextColors[i],
     ];
   }
 
   /// 图例色块跟线同一套规则：只有强调的那条是彩色，其余是中性点。
   Color _legendAccent(String key, Color accent) {
+    if (key == 'stock' && (_soloKey == null || _soloKey == 'stock')) {
+      return accent;
+    }
     final i = lighthouseTrendSeriesKeys.indexOf(key);
     if (i < 0) return accent;
     final slot = _colorSlotFor(i);
@@ -6461,6 +6490,7 @@ class _TrendChartState extends State<_TrendChart> {
   double _totRev = 0, _totCost = 0, _totProf = 0, _totScale = 0;
   double _totScaleAlt = 0;
   double _totCostAlt = 0;
+  double _totStock = 0;
   // v3.9 · 每条序列是否"真的有数据"(非空 & 非全 0). 后端有时只下发 profit,
   //         revenue/cost 缺 → 之前 pad(0) 后 painter 恒画 3 条线, legend 恒
   //         3 chip, 视觉上"只有一条动". 现在改成: 缺的序列 legend 不显示,
@@ -6471,6 +6501,7 @@ class _TrendChartState extends State<_TrendChart> {
   bool _hasScale = false;
   bool _hasScaleAlt = false;
   bool _hasCostAlt = false;
+  bool _hasStock = false;
   int get _visibleCount =>
       (_hasRev ? 1 : 0) +
       (_hasCost ? 1 : 0) +
@@ -6484,6 +6515,7 @@ class _TrendChartState extends State<_TrendChart> {
     hasScale: _hasScale,
     hasScaleAlt: _hasScaleAlt,
     hasCostAlt: _hasCostAlt,
+    hasStock: _hasStock,
   );
 
   /// 核销 / 销售是否共用真轴 —— 只有这一对才允许同时画两条。
@@ -6499,6 +6531,7 @@ class _TrendChartState extends State<_TrendChart> {
     hasScale: _hasScale,
     hasScaleAlt: _hasScaleAlt,
     hasCostAlt: _hasCostAlt,
+    hasStock: _hasStock,
     soloKey: _soloKey,
     pairScale: _pairsScale,
   );
@@ -6557,13 +6590,16 @@ class _TrendChartState extends State<_TrendChart> {
         !listEquals(old.costAlt, widget.costAlt) ||
         !listEquals(old.scale, widget.scale) ||
         !listEquals(old.scaleAlt, widget.scaleAlt) ||
+        !listEquals(old.stock, widget.stock) ||
         old.periodScaleAlt != widget.periodScaleAlt ||
+        old.periodStock != widget.periodStock ||
         !listEquals(old.labels, widget.labels) ||
         old.periodScaleDeltaPct != widget.periodScaleDeltaPct ||
         old.periodRevenueDeltaPct != widget.periodRevenueDeltaPct ||
         old.periodCostDeltaPct != widget.periodCostDeltaPct ||
         old.periodScaleAltDeltaPct != widget.periodScaleAltDeltaPct ||
         old.periodCostAltDeltaPct != widget.periodCostAltDeltaPct ||
+        old.periodStockDeltaPct != widget.periodStockDeltaPct ||
         old.partialPeriod != widget.partialPeriod ||
         old.periodRevenue != widget.periodRevenue ||
         old.periodCost != widget.periodCost ||
@@ -6608,6 +6644,8 @@ class _TrendChartState extends State<_TrendChart> {
         widget.scaleAltLabel.isNotEmpty && _seriesHasData(widget.scaleAlt);
     _hasCostAlt =
         widget.costAltLabel.isNotEmpty && _seriesHasData(widget.costAlt);
+    _hasStock =
+        widget.stockLabel.isNotEmpty && _seriesHasData(widget.stock);
 
     final n = [
       widget.revenue.length,
@@ -6616,6 +6654,7 @@ class _TrendChartState extends State<_TrendChart> {
       widget.scale.length,
       widget.scaleAlt.length,
       widget.costAlt.length,
+      widget.stock.length,
     ].fold<int>(0, math.max);
     List<double> pad(List<double> l) =>
         l.length == n ? l : [...l, ...List<double>.filled(n - l.length, 0.0)];
@@ -6628,6 +6667,7 @@ class _TrendChartState extends State<_TrendChart> {
       scale: _hasScale ? pad(widget.scale) : const <double>[],
       scaleAlt: _hasScaleAlt ? pad(widget.scaleAlt) : const <double>[],
       costAlt: _hasCostAlt ? pad(widget.costAlt) : const <double>[],
+      stock: _hasStock ? pad(widget.stock) : const <double>[],
     );
     // 预测虚线要画得进画布 —— 把预测值一并纳入规模值域。
     _bounds = _computeBounds(
@@ -6649,6 +6689,10 @@ class _TrendChartState extends State<_TrendChart> {
         widget.periodScaleAlt ?? _series.scaleAlt.fold(0.0, (a, b) => a + b);
     _totCostAlt =
         widget.periodCostAlt ?? _series.costAlt.fold(0.0, (a, b) => a + b);
+    _totStock = lighthouseTrendStockLegendValue(
+      series: _series.stock,
+      periodStock: widget.periodStock,
+    );
     final (xs, anchors) = lighthouseTrendXAxisLabels(widget.labels, n);
     _xLabels = xs;
     _xAnchors = anchors;
@@ -7126,12 +7170,15 @@ class _TrendChartState extends State<_TrendChart> {
     final sVal = isSelected ? at(_series.scale, si) : _totScale;
     final sAltVal = isSelected ? at(_series.scaleAlt, si) : _totScaleAlt;
     final caVal = isSelected ? at(_series.costAlt, si) : _totCostAlt;
+    final stVal = isSelected ? at(_series.stock, si) : _totStock;
     final sAbsFmt = _fmtHeroAbs(sVal.abs());
     final sUnitFmt = _fmtHeroUnit(sVal.abs());
     final sAltAbsFmt = _fmtHeroAbs(sAltVal.abs());
     final sAltUnitFmt = _fmtHeroUnit(sAltVal.abs());
     final caAbsFmt = _fmtHeroAbs(caVal.abs());
     final caUnitFmt = _fmtHeroUnit(caVal.abs());
+    final stAbsFmt = _fmtHeroAbs(stVal.abs());
+    final stUnitFmt = _fmtHeroUnit(stVal.abs());
     final pIsNeg = pVal < 0;
     final pAbsFmt = _fmtHeroAbs(pVal.abs());
     final pUnitFmt = _fmtHeroUnit(pVal.abs());
@@ -7142,6 +7189,7 @@ class _TrendChartState extends State<_TrendChart> {
 
     final pnlLegendKeys = lighthouseTrendPnlLegendKeys(
       hasScale: _hasScale,
+      hasStock: _hasStock,
       hasProfit: _hasProf,
       hasCostAlt: _hasCostAlt,
       hasRevenue: _hasRev || rVal.abs() > 1e-9,
@@ -7211,6 +7259,21 @@ class _TrendChartState extends State<_TrendChart> {
                     partialPeriod: widget.partialPeriod,
                     selectedIndex: _selectedIndex,
                     series: _series.scale,
+                  ),
+                ),
+                'stock' => _trendLegendChip(
+                  label: widget.stockLabel,
+                  color: _legendAccent('stock', _cStock),
+                  negative: _legendNegative('stock', stVal < 0),
+                  absFmt: stAbsFmt,
+                  unitFmt: stUnitFmt,
+                  seriesKey: 'stock',
+                  expandLabel: !wrap,
+                  momPct: lighthouseTrendMomPct(
+                    periodDeltaPct: widget.periodStockDeltaPct,
+                    partialPeriod: widget.partialPeriod,
+                    selectedIndex: _selectedIndex,
+                    series: _series.stock,
                   ),
                 ),
                 'profit' => _trendLegendChip(
@@ -13967,6 +14030,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           final chartLabels = labels.isNotEmpty
               ? labels
               : _heroTrendLabels(netTa.length);
+          final bankSeries = lighthouseAlignSeriesToLabels(
+            axisLabels: chartLabels,
+            seriesLabels: _netTABankBalanceSeriesLabels(),
+            values: _netTABankBalanceSeries(),
+          );
+          final stock = lighthouseSeriesHasVisibleData(bankSeries)
+              ? bankSeries
+              : const <double>[];
+          final bankChange = _netTABankBalanceChange();
+          final periodStock =
+              (_bundle?.metrics['netTaBankBalance'] as num?)?.toDouble();
           return _TrendChart(
             key: const ValueKey('hero-overview-netTa'),
             labels: chartLabels,
@@ -13982,6 +14056,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             profitLabel: '项目成本',
             costAlt: businessCost,
             costAltLabel: '业务成本',
+            stock: stock,
+            stockLabel: '银行余额',
             unsignedSlots: const {'cost', 'profit', 'costAlt', 'scaleAlt'},
             periodScale: totals['netTa'],
             periodScaleAlt: totals['netTaFinancing'],
@@ -13989,12 +14065,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             periodCost: totals['netTaOpCost'],
             periodProfit: totals['netTaProjectCost'],
             periodCostAlt: totals['netTaBizCost'],
+            periodStock: periodStock,
             periodScaleDeltaPct: _deltaForMetric('netTa')?.pct,
             periodScaleAltDeltaPct: _deltaForMetric('netTaFinancing')?.pct,
             periodRevenueDeltaPct: _deltaForMetric('netTaOperating')?.pct,
             periodCostDeltaPct: _deltaForMetric('netTaOpCost')?.pct,
             periodProfitDeltaPct: _deltaForMetric('netTaProjectCost')?.pct,
             periodCostAltDeltaPct: _deltaForMetric('netTaBizCost')?.pct,
+            periodStockDeltaPct: bankChange?.pct,
             showHeader: false,
             showScrubHint: false,
             fitHeight: true,
@@ -14523,9 +14601,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 clipBehavior: Clip.none,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  // 存量块加进来之后内容变高，但仍然填不满卡 —— 顶着上边缘会
-                  // 让左卡和右卡的视觉重心错位，所以统一居中。
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  // 内容一旦顶满（银行余额迷你走势 + 本月净TA 环比），
+                  // 居中会把多出来的像素挤到上下两边，debug 下就是黄条。
+                  // 顶对齐：多出来的高度加在 spark 上，环比行留在卡内。
+                  mainAxisAlignment: MainAxisAlignment.start,
                   children: [
                     if (_tab == 'netTa') _buildNetTABankBalanceLine(),
                     if (lighthouseHeroMastheadLabelAboveNumber) ...[
@@ -27155,7 +27234,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 一百多像素宽，标签和时间在一行里必然挤爆。每行只放一个元素，
   /// 宽度再窄也只会省略号，不会溢出。
   ///
-  /// 有公司明细或走势时整块可点：点开右边换成余额走势 + 按公司清单，再点收回。
+  /// 有公司明细时整块可点：点开右边换成按公司清单，走势在本月净TA 图上。再点收回。
   Widget _buildNetTABankBalanceLine() {
     final balance = (_bundle?.metrics['netTaBankBalance'] as num?)?.toDouble();
     if (balance == null) return const SizedBox.shrink();
@@ -27747,9 +27826,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return LighthouseBankBalanceChange(amount: amount, vs: vs, pct: pct);
   }
 
-  bool get _netTABankBalanceCanOpen =>
-      _netTABankBalanceRows().isNotEmpty ||
-      _netTABankBalanceSeries().length >= 2;
+  bool get _netTABankBalanceCanOpen => _netTABankBalanceRows().isNotEmpty;
 
   /// 按公司的余额行。资管这支接口到公司一层就停了 —— 没有账号、没有开户行，
   /// 也没有业务日期，所以这里能给的就是「哪家公司账上多少」。
@@ -27759,46 +27836,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
-  Widget _buildNetTABankBalanceTrendChart() {
-    final series = _netTABankBalanceSeries();
-    if (series.length < 2) return const SizedBox.shrink();
-    var labels = _netTABankBalanceSeriesLabels();
-    if (labels.length != series.length) {
-      labels = [
-        for (var i = 0; i < series.length; i++)
-          i < labels.length && labels[i].trim().isNotEmpty
-              ? labels[i]
-              : '${i + 1}',
-      ];
-    }
-    const empty = <double>[];
-    return _TrendChart(
-      key: const ValueKey('hero-bank-balance'),
-      labels: labels,
-      revenue: empty,
-      cost: empty,
-      profit: empty,
-      scale: series,
-      scaleLabel: '余额',
-      rangeLabel: _heroTrendRangeLabel(labels),
-      title: '银行余额',
-      showHeader: false,
-      showScrubHint: false,
-      fitHeight: true,
-      chartHeight: 48,
-      partialPeriod: _periodInProgress,
-    );
-  }
-
-  /// 点开银行余额后，走势位换成这块：上面是跟日/周/月/季/年走的存量曲线，
-  /// 下面按公司列余额。
+  /// 点开银行余额后只列按公司清单，走势已经画在本月净TA 那张图上。
   ///
   /// 每家公司一行：名称在左、金额在右、占比在最右，**进度条是这一行的底色**。
   /// 上一版把条单独占一行，名字下面空一截，38 家排下来全是空白；
   /// 做成行底填充之后，同样的信息量少一半高度，条也不再是"多出来的一条线"。
   Widget _buildNetTABankBalancePanel() {
     final rows = _netTABankBalanceRows();
-    final series = _netTABankBalanceSeries();
     final accent = Color(lighthouseHeroSectionAccentValues['cash']!);
     final total =
         (_bundle?.metrics['netTaBankBalance'] as num?)?.toDouble() ?? 0;
@@ -28078,7 +28122,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  series.length >= 2 ? '银行余额' : '银行余额 · 按公司',
+                  '银行余额 · 按公司',
                   style: LhTypography.sans(
                     size: 11,
                     color: LhColors.ink2,
@@ -28116,14 +28160,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ),
             const SizedBox(height: 8),
             Container(height: 0.7, color: _LhPlum.line),
-            if (series.length >= 2) ...[
-              const SizedBox(height: 6),
-              SizedBox(
-                height: rows.isEmpty ? 96 : 72,
-                width: double.infinity,
-                child: _buildNetTABankBalanceTrendChart(),
-              ),
-            ],
             if (rows.isNotEmpty) ...[
               const SizedBox(height: 8),
               // 排不下就滚动，不截断 —— 截断会让人以为公司只有这么多家。

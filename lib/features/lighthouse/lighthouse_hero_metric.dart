@@ -26,12 +26,13 @@ bool lighthouseCompactHeroIsNarrow(double width) =>
 
 double lighthouseCompactHeroSparkHeightFor(double width) =>
     lighthouseCompactHeroIsNarrow(width)
-    ? lighthouseCompactHeroSparkHeightNarrow
-    : lighthouseCompactHeroSparkHeight;
+        ? lighthouseCompactHeroSparkHeightNarrow
+        : lighthouseCompactHeroSparkHeight;
 
 /// 净TA 与产品 Hero 同一高度：项目 / 业务成本叠进总览图，不再垫分图。
-/// 左侧再叠银行余额存量块时加高一截，否则「↓xx% vs …」环比行会溢 12px。
-const double lighthouseNetTABankBalanceExtraHeight = 24;
+/// 左侧再叠银行余额存量块时加高一截。块里有迷你走势和「vs 上月末」时，
+/// 24px 不够，「本月净TA」的环比行会 BOTTOM OVERFLOW ~13px。
+const double lighthouseNetTABankBalanceExtraHeight = 40;
 
 double lighthouseNetTAHeroSparkHeightFor(
   double width, {
@@ -42,8 +43,8 @@ double lighthouseNetTAHeroSparkHeightFor(
 
 double lighthouseCompactHeroChartMaxHeightFor(double width) =>
     lighthouseCompactHeroIsNarrow(width)
-    ? lighthouseCompactHeroChartMaxHeightNarrow
-    : lighthouseCompactHeroChartMaxHeightWide;
+        ? lighthouseCompactHeroChartMaxHeightNarrow
+        : lighthouseCompactHeroChartMaxHeightWide;
 
 /// Hero §02 区块总高度（含走势卡 padding）。窄宽都是左右并排。
 double lighthouseCompactHeroBlockHeightFor(double width) =>
@@ -153,9 +154,11 @@ List<String> lighthouseTrendPnlLegendKeys({
   required bool hasScaleAlt,
   bool hasScale = false,
   bool hasCostAlt = false,
+  bool hasStock = false,
 }) {
   return [
     if (hasScale) 'scale',
+    if (hasStock) 'stock',
     if (hasProfit) 'profit',
     if (hasCostAlt) 'costAlt',
     if (hasRevenue) 'revenue',
@@ -220,8 +223,8 @@ String lighthouseTrendMomLabel(double pct) {
   return '${pct >= 0 ? '↑' : '↓'} ${pct.abs().toStringAsFixed(1)}%';
 }
 
-/// `_TrendChart` 六条序列在 `available` 里的下标。
-/// [revenue, cost, profit, scale, scaleAlt, costAlt]
+/// `_TrendChart` 序列在 `available` 里的下标。
+/// [revenue, cost, profit, scale, scaleAlt, costAlt, stock]
 const lighthouseTrendSeriesKeys = <String>[
   'revenue',
   'cost',
@@ -229,6 +232,7 @@ const lighthouseTrendSeriesKeys = <String>[
   'scale',
   'scaleAlt',
   'costAlt',
+  'stock',
 ];
 
 /// 点图例：再点当前项（或点「全部」）恢复全显；点另一项只留该项。
@@ -264,7 +268,16 @@ List<bool> lighthouseTrendBaseFlags({
   required bool hasScale,
   required bool hasScaleAlt,
   bool hasCostAlt = false,
-}) => <bool>[hasRevenue, hasCost, hasProfit, hasScale, hasScaleAlt, hasCostAlt];
+  bool hasStock = false,
+}) => <bool>[
+    hasRevenue,
+    hasCost,
+    hasProfit,
+    hasScale,
+    hasScaleAlt,
+  hasCostAlt,
+  hasStock,
+];
 
 List<bool> lighthouseTrendVisibleFlags({
   required bool hasRevenue,
@@ -273,6 +286,7 @@ List<bool> lighthouseTrendVisibleFlags({
   required bool hasScale,
   required bool hasScaleAlt,
   bool hasCostAlt = false,
+  bool hasStock = false,
   String? soloKey,
   bool pairScale = false,
 }) {
@@ -283,27 +297,29 @@ List<bool> lighthouseTrendVisibleFlags({
     hasScale: hasScale,
     hasScaleAlt: hasScaleAlt,
     hasCostAlt: hasCostAlt,
+    hasStock: hasStock,
   );
+  final n = lighthouseTrendSeriesKeys.length;
   final i = soloKey == null || soloKey.isEmpty
       ? -1
       : lighthouseTrendSeriesKeys.indexOf(soloKey);
   final soloValid = i >= 0 && i < base.length && base[i];
   if (soloValid) {
-    return <bool>[for (var k = 0; k < 6; k++) k == i];
+    return <bool>[for (var k = 0; k < n; k++) k == i];
   }
   if (!lighthouseTrendDrawsSingleLine) return base;
   final hero = lighthouseTrendHeroIndex(base);
   // 核销 + 销售共用真轴，两条一起画才看得出未核销差额。
   final keepsPair = pairScale && (hero == 3 || hero == 4) && base[3] && base[4];
   return <bool>[
-    for (var k = 0; k < 6; k++) keepsPair ? (k == 3 || k == 4) : k == hero,
+    for (var k = 0; k < n; k++) keepsPair ? (k == 3 || k == 4) : k == hero,
   ];
 }
 
 /// 粗线 / 填充 / MAX·MIN 跟哪条走：规模在场时归规模，否则第一条可见的
-/// 规模副线 / 毛利 / 收入 / 成本。
+/// 规模副线 / 毛利 / 收入 / 成本。银行余额是存量，不当主线。
 int lighthouseTrendHeroIndex(List<bool> available) {
-  const order = <int>[3, 4, 2, 0, 1, 5];
+  const order = <int>[3, 4, 2, 0, 1, 5, 6];
   for (final i in order) {
     if (i < available.length && available[i]) return i;
   }
@@ -1280,10 +1296,10 @@ List<Map<String, dynamic>> lighthouseNetTACardMetrics(
   if (items.length <= maxCells) return items;
   final ranked = [...items]
     ..sort((a, b) {
-      final aa = ((a['netTa'] as num?)?.toDouble() ?? 0).abs();
-      final bb = ((b['netTa'] as num?)?.toDouble() ?? 0).abs();
-      return bb.compareTo(aa);
-    });
+    final aa = ((a['netTa'] as num?)?.toDouble() ?? 0).abs();
+    final bb = ((b['netTa'] as num?)?.toDouble() ?? 0).abs();
+    return bb.compareTo(aa);
+  });
   final head = ranked.take(maxCells - 1).toList();
   final rest = ranked.skip(maxCells - 1).toList();
   var restSum = 0.0;
@@ -1302,8 +1318,7 @@ String lighthouseNetTAFlowLabel(num? netTa) =>
 String lighthouseNetTAShareLabel(num? netTa) =>
     (netTa ?? 0) >= 0 ? '占净流入' : '占净流出';
 
-/// 净TA 主 Hero 总览图六槽：净TA / 经营活动 / 筹资活动 / 经营成本 / 项目成本 / 业务成本。
-/// 项目成本、业务成本与其余指标叠在同一张图，各自一条线。
+/// 净TA 主 Hero 总览图：净TA / 经营活动 / 筹资活动 / 经营成本 / 项目成本 / 业务成本 / 银行余额。
 const lighthouseNetTAHeroOverlaySlots = <String, String>{
   'netTa': 'scale',
   'netTaOperating': 'revenue',
@@ -1311,6 +1326,7 @@ const lighthouseNetTAHeroOverlaySlots = <String, String>{
   'netTaOpCost': 'cost',
   'netTaProjectCost': 'profit',
   'netTaBizCost': 'costAlt',
+  'netTaBankBalance': 'stock',
 };
 
 /// 净TA 主 Hero 指标栏。三列与产品 / 供给方 / 渠道的
@@ -1368,6 +1384,8 @@ String? lighthouseNetTAHeroMetricFromSlot(String? slot) {
       return 'netTaProjectCost';
     case 'costAlt':
       return 'netTaBizCost';
+    case 'stock':
+      return 'netTaBankBalance';
     default:
       return null;
   }
@@ -2981,6 +2999,56 @@ String lighthouseBankBalanceSeriesLabel(String raw) {
   final month = RegExp(r'^(\d{4})-(\d{2})$').firstMatch(t);
   if (month != null) return '${month.group(1)}.${month.group(2)}';
   return t;
+}
+
+/// 银行余额走势线颜色。跟左侧存量卡同一支绿，不跟净TA 紫抢身份。
+const int lighthouseStockAccentValue = 0xFF1E9E72;
+
+/// 存量图例：用这一期时点，不许把近 N 期余额加总冒充「本期合计」。
+double lighthouseTrendStockLegendValue({
+  required List<double> series,
+  double? periodStock,
+}) {
+  if (periodStock != null) return periodStock;
+  return series.isEmpty ? 0.0 : series.last;
+}
+
+/// 把银行余额点对到净TA 图的横轴。缺的月份沿用上一期存量，不补 0。
+List<double> lighthouseAlignSeriesToLabels({
+  required List<String> axisLabels,
+  required List<String> seriesLabels,
+  required List<double> values,
+}) {
+  if (axisLabels.isEmpty) return const [];
+  final n = seriesLabels.length < values.length
+      ? seriesLabels.length
+      : values.length;
+  if (n <= 0) return List<double>.filled(axisLabels.length, 0);
+  final byKey = <String, double>{};
+  for (var i = 0; i < n; i++) {
+    byKey[lighthouseHeroCompactPeriodLabel(
+          lighthouseBankBalanceSeriesLabel(seriesLabels[i]),
+        )] =
+        values[i];
+  }
+  var matched = 0;
+  double? last;
+  final out = <double>[];
+  for (final label in axisLabels) {
+    final key = lighthouseHeroCompactPeriodLabel(
+      lighthouseBankBalanceSeriesLabel(label),
+    );
+    final hit = byKey[key];
+    if (hit != null) {
+      last = hit;
+      matched++;
+      out.add(hit);
+    } else {
+      out.add(last ?? 0);
+    }
+  }
+  if (matched == 0 && values.length == axisLabels.length) return values;
+  return out;
 }
 
 /// 把 /net-ta 的 `bankBalance.companies` 摊成界面用的行。

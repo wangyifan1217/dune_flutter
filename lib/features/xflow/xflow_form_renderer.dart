@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../shell/dunes_toast.dart';
+import 'xflow_bill_cascade_field.dart';
 import 'xflow_detail_logic.dart';
 import 'xflow_form_styles.dart';
 import 'xflow_models.dart';
@@ -244,6 +245,19 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     if (field.type == 'proposal') return _proposalField(field, inRow: inRow);
     if (_isRemoteSearchField(field)) {
       return _remoteSearchField(field, inRow: inRow);
+    }
+    if (field.type == 'billCascade') {
+      return _fieldWrap(
+        field,
+        XflowBillCascadeField(
+          field: field,
+          value: widget.values[field.key],
+          service: widget.service,
+          readonly: field.readonly,
+          onChanged: (v) => widget.onChanged(field.key, v),
+        ),
+        inRow: inRow,
+      );
     }
     switch (field.type) {
       case 'section':

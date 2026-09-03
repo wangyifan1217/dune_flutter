@@ -1282,6 +1282,42 @@ void main() {
     expect(lighthouseBankBalanceSeriesLabel('2026-09-03'), '09.03');
     expect(lighthouseBankBalanceSeriesLabel('2026-09'), '2026.09');
     expect(lighthouseBankBalanceSeriesLabel('2026-Q3'), '2026.Q3');
+
+    expect(
+      lighthouseAlignSeriesToLabels(
+        axisLabels: const ['03月', '04月', '05月', '06月', '07月', '08月', '09月'],
+        seriesLabels: const [
+          '2026.03',
+          '2026.04',
+          '2026.05',
+          '2026.06',
+          '2026.07',
+          '2026.08',
+          '2026.09',
+        ],
+        values: const [20, 22, 18, 16, 21, 22.27, 13.52],
+      ),
+      const [20, 22, 18, 16, 21, 22.27, 13.52],
+    );
+    expect(
+      lighthouseAlignSeriesToLabels(
+        axisLabels: const ['08月', '09月'],
+        seriesLabels: const ['2026.07', '2026.08'],
+        values: const [21, 22],
+      ),
+      const [22, 22],
+    );
+    expect(
+      lighthouseTrendStockLegendValue(
+        series: const [20, 22, 18, 16, 21, 22.27, 13.52],
+        periodStock: 13.518,
+      ),
+      13.518,
+    );
+    expect(
+      lighthouseTrendStockLegendValue(series: const [20, 22, 13.52]),
+      13.52,
+    );
     expect(lighthouseFundPoolFlowDividerLabel, '期间新增');
     // 只有这两格按增长显示；余额格保持中性，不染涨跌色。
     expect(lighthouseFundPoolGrowthMetricKeys, {'profitMonth', 'profitDay'});
@@ -1470,8 +1506,10 @@ void main() {
     expect(lighthouseNetTAHeroOverlaySlot('netTaOperating'), 'revenue');
     expect(lighthouseNetTAHeroOverlaySlot('netTaProjectCost'), 'profit');
     expect(lighthouseNetTAHeroOverlaySlot('netTaBizCost'), 'costAlt');
+    expect(lighthouseNetTAHeroOverlaySlot('netTaBankBalance'), 'stock');
     expect(lighthouseNetTAHeroMetricFromSlot('profit'), 'netTaProjectCost');
     expect(lighthouseNetTAHeroMetricFromSlot('costAlt'), 'netTaBizCost');
+    expect(lighthouseNetTAHeroMetricFromSlot('stock'), 'netTaBankBalance');
     expect(lighthouseHeroMetricDisplaysMagnitude('netTaOutflow'), isTrue);
     expect(lighthouseHeroMetricDisplaysMagnitude('netTaOpCost'), isTrue);
     expect(lighthouseHeroMetricDisplaysMagnitude('netTaProjectCost'), isTrue);
@@ -1784,6 +1822,7 @@ void main() {
     expect(lighthouseCompactHeroSparkHeightFor(800), 180);
     expect(lighthouseNetTAHeroSparkHeightFor(390), 216);
     expect(lighthouseNetTAHeroSparkHeightFor(800), 180);
+    expect(lighthouseNetTABankBalanceExtraHeight, 40);
     expect(
       lighthouseNetTAHeroSparkHeightFor(800, hasBankBalance: true),
       180 + lighthouseNetTABankBalanceExtraHeight,
@@ -2541,6 +2580,26 @@ void main() {
           ),
           ['scale', 'profit', 'costAlt', 'revenue', 'cost', 'scaleAlt'],
         );
+        expect(
+          lighthouseTrendPnlLegendKeys(
+            hasScale: true,
+            hasStock: true,
+            hasProfit: true,
+            hasCostAlt: true,
+            hasRevenue: true,
+            hasCost: true,
+            hasScaleAlt: true,
+          ),
+          [
+            'scale',
+            'stock',
+            'profit',
+            'costAlt',
+            'revenue',
+            'cost',
+            'scaleAlt',
+          ],
+        );
         expect(lighthouseTrendShowsHeroMetricBesideStatus, isFalse);
       },
     );
@@ -2632,7 +2691,7 @@ void main() {
           hasScaleAlt: true,
           soloKey: 'profit',
         ),
-        [false, false, true, false, false, false],
+        [false, false, true, false, false, false, false],
       );
       // 图例可点性看「有没有数据」，不受单线规则影响。
       expect(
@@ -2643,7 +2702,7 @@ void main() {
           hasScale: true,
           hasScaleAlt: true,
         ),
-        [true, true, true, true, true, false],
+        [true, true, true, true, true, false, false],
       );
       // v21：默认五条全开（产品要求恢复）。
       expect(lighthouseTrendDrawsSingleLine, isFalse);
@@ -2655,7 +2714,7 @@ void main() {
           hasScale: true,
           hasScaleAlt: true,
         ),
-        [true, true, true, true, true, false],
+        [true, true, true, true, true, false, false],
       );
       // solo 指向一条没数据的线 → 回落到全开。
       expect(
@@ -2667,7 +2726,7 @@ void main() {
           hasScaleAlt: false,
           soloKey: 'cost',
         ),
-        [true, false, true, true, false, false],
+        [true, false, true, true, false, false, false],
       );
       expect(
         lighthouseTrendVisibleFlags(
@@ -2679,7 +2738,19 @@ void main() {
           hasCostAlt: true,
           soloKey: 'costAlt',
         ),
-        [false, false, false, false, false, true],
+        [false, false, false, false, false, true, false],
+      );
+      expect(
+        lighthouseTrendVisibleFlags(
+          hasRevenue: true,
+          hasCost: true,
+          hasProfit: true,
+          hasScale: true,
+          hasScaleAlt: true,
+          hasStock: true,
+          soloKey: 'stock',
+        ),
+        [false, false, false, false, false, false, true],
       );
     });
 
@@ -2700,6 +2771,18 @@ void main() {
       expect(
         lighthouseTrendHeroIndex(const [false, true, false, false, false]),
         1,
+      );
+      expect(
+        lighthouseTrendHeroIndex(const [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+        ]),
+        6,
       );
     });
   });

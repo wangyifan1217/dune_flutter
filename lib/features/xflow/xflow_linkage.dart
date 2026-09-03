@@ -1,3 +1,4 @@
+import 'xflow_bill_cascade.dart';
 import 'xflow_models.dart';
 
 /// 原生 XFlow 表单的联动 / 计算逻辑。
@@ -29,9 +30,51 @@ class XflowLinkage {
       final expr = field.raw['computeExpr']?.toString();
       if (expr != null && expr.trim().isNotEmpty) {
         values[field.key] = evalExpr(expr, values);
+        continue;
+      }
+      if (field.key == 'remainingInvoiceAmount') {
+        final rows = xflowBillSelectedList(values['linkedArBills']);
+        values[field.key] = rows.isEmpty
+            ? ''
+            : xflowBillSelectedRemainingSum(rows, 'invoice').toStringAsFixed(2);
       }
     }
     sumReadonlyTotalFromCardLists(fields, values);
+    fillEmptyAmountFromBills(fields, values);
+  }
+
+  /// 付款金额 / 申请开票总额为空时，用已选账单剩余合计填上，方便对应金额直接看见。
+  static void fillEmptyAmountFromBills(
+    List<XflowField> fields,
+    Map<String, dynamic> values,
+  ) {
+    for (final field in fields) {
+      if (field.readonly || field.type == 'computed' || field.key.isEmpty) {
+        continue;
+      }
+      if (!_isBlankAmount(values[field.key])) continue;
+      if (field.key == 'paymentAmount') {
+        final rows = xflowBillSelectedList(values['linkedApBills']);
+        if (rows.isEmpty) continue;
+        values[field.key] = xflowBillSelectedRemainingSum(
+          rows,
+          'payable',
+        ).toStringAsFixed(2);
+      } else if (field.key == 'invoiceTotalLimit') {
+        final rows = xflowBillSelectedList(values['linkedArBills']);
+        if (rows.isEmpty) continue;
+        values[field.key] = xflowBillSelectedRemainingSum(
+          rows,
+          'invoice',
+        ).toStringAsFixed(2);
+      }
+    }
+  }
+
+  static bool _isBlankAmount(dynamic raw) {
+    if (raw == null) return true;
+    final text = raw.toString().trim();
+    return text.isEmpty;
   }
 
   /// 卡片分组里 money 列之和写入只读 `totalAmount`。无 card 列表时不改动。

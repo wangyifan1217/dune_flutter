@@ -1432,6 +1432,77 @@ class XflowService {
         .toList(growable: false);
   }
 
+  Future<List<Map<String, dynamic>>> fetchAssetBillTypes(
+    String billDirection,
+  ) async {
+    final dir = billDirection.trim().toUpperCase();
+    if (dir != 'AR' && dir != 'AP') return const [];
+    final rows = await _requestList(
+      '/asset/bills/types?billDirection=${Uri.encodeQueryComponent(dir)}',
+    );
+    return rows
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList(growable: false);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAssetBillProjects({
+    required String billDirection,
+    required String billTypeCode,
+  }) async {
+    final dir = billDirection.trim().toUpperCase();
+    final code = billTypeCode.trim();
+    if ((dir != 'AR' && dir != 'AP') || code.isEmpty) return const [];
+    final rows = await _requestList(
+      '/asset/bills/projects?billDirection=${Uri.encodeQueryComponent(dir)}'
+      '&billTypeCode=${Uri.encodeQueryComponent(code)}',
+    );
+    return rows
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList(growable: false);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAssetBills({
+    required String billDirection,
+    required String billTypeCode,
+    required String dateStart,
+    required String dateEnd,
+    String projectName = '',
+    String query = '',
+  }) async {
+    final dir = billDirection.trim().toUpperCase();
+    final code = billTypeCode.trim();
+    final start = dateStart.trim();
+    final end = dateEnd.trim();
+    if ((dir != 'AR' && dir != 'AP') ||
+        code.isEmpty ||
+        start.isEmpty ||
+        end.isEmpty) {
+      return const [];
+    }
+    final params = <String>[
+      'billDirection=${Uri.encodeQueryComponent(dir)}',
+      'billTypeCode=${Uri.encodeQueryComponent(code)}',
+      'dateStart=${Uri.encodeQueryComponent(start)}',
+      'dateEnd=${Uri.encodeQueryComponent(end)}',
+      'pageSize=200',
+    ];
+    final project = projectName.trim();
+    if (project.isNotEmpty) {
+      params.add('projectName=${Uri.encodeQueryComponent(project)}');
+    }
+    final q = query.trim();
+    if (q.isNotEmpty) {
+      params.add('q=${Uri.encodeQueryComponent(q)}');
+    }
+    final rows = await _requestList('/asset/bills?${params.join('&')}');
+    return rows
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList(growable: false);
+  }
+
   /// 将配置里的完整 `/api/v1/...` 路径转为相对 [session.apiBase] 的路径。
   String _normalizeApiPath(String path) {
     var p = path.trim();
@@ -1581,7 +1652,7 @@ class XflowService {
     final data = map['data'];
     if (data is List<dynamic>) return data;
     if (data is Map<String, dynamic>) {
-      final items = data['items'];
+      final items = data['items'] ?? data['rows'];
       if (items is List<dynamic>) return items;
     }
     return const <dynamic>[];

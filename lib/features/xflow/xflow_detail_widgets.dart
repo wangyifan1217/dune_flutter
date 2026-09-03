@@ -10,6 +10,8 @@ import '../../core/util/detail_text_format.dart';
 import '../chat/chat_file_type_icon.dart';
 import '../shell/dunes_toast.dart';
 import 'xflow_approval_flow_ui.dart';
+import 'xflow_bill_cascade.dart';
+import 'xflow_bill_cascade_field.dart';
 import 'xflow_detail_logic.dart';
 import 'xflow_file_open.dart';
 import 'xflow_models.dart';
@@ -1154,6 +1156,14 @@ class _ExpandBody extends StatelessWidget {
         service: service,
       );
     }
+    if (item.field.type == 'billCascade') {
+      final cfg = XflowBillCascadeConfig.fromField(item.field.raw);
+      return XfDetBillCascadeList(
+        rows: xflowBillSelectedList(item.rawValue),
+        remainingKind: cfg.remainingKind,
+        billDirection: cfg.billDirection,
+      );
+    }
     if (item.field.isCardDynamicList) {
       return XfDetRepeatableGroups(
         field: item.field,
@@ -1164,6 +1174,57 @@ class _ExpandBody extends StatelessWidget {
     return XfDetTable(
       field: item.field,
       rows: normalizeDynamicListValue(item.rawValue),
+    );
+  }
+}
+
+class XfDetBillCascadeList extends StatelessWidget {
+  const XfDetBillCascadeList({
+    super.key,
+    required this.rows,
+    required this.remainingKind,
+    required this.billDirection,
+  });
+
+  final List<Map<String, dynamic>> rows;
+  final String remainingKind;
+  final String billDirection;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final row in rows)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  xflowBillLabelOf(row),
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                XflowBillAmountGrid(
+                  row: row,
+                  remainingKind: remainingKind,
+                  billDirection: billDirection,
+                  compact: true,
+                ),
+              ],
+            ),
+          ),
+        if (rows.isNotEmpty)
+          XflowBillAmountSummary(
+            rows: rows,
+            remainingKind: remainingKind,
+            billDirection: billDirection,
+          ),
+      ],
     );
   }
 }

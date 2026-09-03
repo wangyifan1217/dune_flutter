@@ -1,3 +1,4 @@
+import 'xflow_bill_cascade.dart';
 import 'xflow_models.dart';
 import 'xflow_upload_field.dart';
 
@@ -216,6 +217,18 @@ String formatFieldValue(XflowField field, dynamic val) {
     case 'pill':
     case 'level':
       return labelForOptionValue(field, val);
+    case 'billCascade':
+      final cfg = XflowBillCascadeConfig.fromField(field.raw);
+      return xflowBillSelectedList(val)
+          .map(
+            (row) => xflowBillPreviewLine(
+              row,
+              cfg.remainingKind,
+              billDirection: cfg.billDirection,
+            ),
+          )
+          .where((e) => e.isNotEmpty)
+          .join('、');
   }
   if (val is List) {
     if (val.isEmpty) return '';
@@ -258,6 +271,9 @@ bool isExpandableField(XflowField field, dynamic val) {
   if (val == null) return false;
   if (field.type == 'dynamicList' || field.type == 'matrix' || field.type == 'structuredTable') {
     return normalizeDynamicListValue(val).isNotEmpty;
+  }
+  if (field.type == 'billCascade') {
+    return xflowBillSelectedList(val).isNotEmpty;
   }
   if (field.type == 'upload') {
     return normalizeUploadItems(val).where((it) => it['status'] != 'error').isNotEmpty;

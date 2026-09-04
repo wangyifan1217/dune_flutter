@@ -2290,6 +2290,8 @@ class ProposalSkuDetailRow {
     this.productCategoryL2 = '',
     this.channelCategoryL1 = '',
     this.channelCategoryL2 = '',
+    this.channelCategoryL1Ref,
+    this.channelCategoryL2Ref,
     this.syncZhongyouHaoke = '',
     this.effectiveDate = '',
     this.expireDate = '',
@@ -2310,6 +2312,8 @@ class ProposalSkuDetailRow {
   final String productCategoryL2;
   final String channelCategoryL1;
   final String channelCategoryL2;
+  final CatalogRef? channelCategoryL1Ref;
+  final CatalogRef? channelCategoryL2Ref;
   final String syncZhongyouHaoke;
   final String effectiveDate;
   final String expireDate;
@@ -2327,6 +2331,10 @@ class ProposalSkuDetailRow {
   String get institutionName => (institutionRef?.name ?? '').trim();
   String get channelCode => (channelRef?.code ?? '').trim();
   String get channelName => (channelRef?.name ?? '').trim();
+  CatalogRef? get resolvedChannelCategoryL1 =>
+      proposalIntakeResolvedCategoryRef(channelCategoryL1Ref, channelCategoryL1);
+  CatalogRef? get resolvedChannelCategoryL2 =>
+      proposalIntakeResolvedCategoryRef(channelCategoryL2Ref, channelCategoryL2);
   bool get isExistingBuilt => existingBuilt.trim() == '是';
 
   bool get isBlank =>
@@ -2336,6 +2344,8 @@ class ProposalSkuDetailRow {
       productCategoryL2.isEmpty &&
       channelCategoryL1.isEmpty &&
       channelCategoryL2.isEmpty &&
+      (channelCategoryL1Ref == null || channelCategoryL1Ref!.isEmpty) &&
+      (channelCategoryL2Ref == null || channelCategoryL2Ref!.isEmpty) &&
       syncZhongyouHaoke.isEmpty &&
       effectiveDate.isEmpty &&
       expireDate.isEmpty &&
@@ -2354,6 +2364,8 @@ class ProposalSkuDetailRow {
     String? productCategoryL2,
     String? channelCategoryL1,
     String? channelCategoryL2,
+    Object? channelCategoryL1Ref = _catalogUnset,
+    Object? channelCategoryL2Ref = _catalogUnset,
     String? syncZhongyouHaoke,
     String? effectiveDate,
     String? expireDate,
@@ -2373,6 +2385,12 @@ class ProposalSkuDetailRow {
     productCategoryL2: productCategoryL2 ?? this.productCategoryL2,
     channelCategoryL1: channelCategoryL1 ?? this.channelCategoryL1,
     channelCategoryL2: channelCategoryL2 ?? this.channelCategoryL2,
+    channelCategoryL1Ref: identical(channelCategoryL1Ref, _catalogUnset)
+        ? this.channelCategoryL1Ref
+        : channelCategoryL1Ref as CatalogRef?,
+    channelCategoryL2Ref: identical(channelCategoryL2Ref, _catalogUnset)
+        ? this.channelCategoryL2Ref
+        : channelCategoryL2Ref as CatalogRef?,
     syncZhongyouHaoke: syncZhongyouHaoke ?? this.syncZhongyouHaoke,
     effectiveDate: effectiveDate ?? this.effectiveDate,
     expireDate: expireDate ?? this.expireDate,
@@ -2420,8 +2438,16 @@ class ProposalSkuDetailRow {
     'faceValue': faceValue,
     'productCategoryL1': productCategoryL1,
     'productCategoryL2': productCategoryL2,
-    'channelCategoryL1': channelCategoryL1,
-    'channelCategoryL2': channelCategoryL2,
+    'channelCategoryL1': proposalIntakeCategoryLabel(
+      resolvedChannelCategoryL1,
+      channelCategoryL1,
+    ),
+    'channelCategoryL2': proposalIntakeCategoryLabel(
+      resolvedChannelCategoryL2,
+      channelCategoryL2,
+    ),
+    'channelCategoryL1Ref': catalogRefToJson(resolvedChannelCategoryL1),
+    'channelCategoryL2Ref': catalogRefToJson(resolvedChannelCategoryL2),
     'syncZhongyouHaoke': syncZhongyouHaoke,
     'effectiveDate': effectiveDate,
     'expireDate': expireDate,
@@ -2469,14 +2495,26 @@ class ProposalSkuDetailRow {
     if (productName.isEmpty) productName = asset?.productName ?? '';
     var channelRef = proposalIntakeChannelRefFromJson(raw);
     channelRef ??= asset?.channelRef;
+    final l1Ref = proposalIntakeResolvedCategoryRef(
+      catalogRefOrNull(raw['channelCategoryL1Ref']),
+      '${raw['channelCategoryL1'] ?? ''}'.trim(),
+    );
+    final l2Ref = proposalIntakeResolvedCategoryRef(
+      catalogRefOrNull(raw['channelCategoryL2Ref']),
+      '${raw['channelCategoryL2'] ?? ''}'.trim(),
+    );
     return ProposalSkuDetailRow(
       id: '${raw['id'] ?? ''}'.trim(),
       productName: productName,
       faceValue: '${raw['faceValue'] ?? raw['skuFaceValue'] ?? ''}'.trim(),
       productCategoryL1: '${raw['productCategoryL1'] ?? ''}'.trim(),
       productCategoryL2: '${raw['productCategoryL2'] ?? ''}'.trim(),
-      channelCategoryL1: '${raw['channelCategoryL1'] ?? ''}'.trim(),
-      channelCategoryL2: '${raw['channelCategoryL2'] ?? ''}'.trim(),
+      channelCategoryL1:
+          (l1Ref?.name ?? '${raw['channelCategoryL1'] ?? ''}').trim(),
+      channelCategoryL2:
+          (l2Ref?.name ?? '${raw['channelCategoryL2'] ?? ''}').trim(),
+      channelCategoryL1Ref: l1Ref,
+      channelCategoryL2Ref: l2Ref,
       syncZhongyouHaoke: '${raw['syncZhongyouHaoke'] ?? ''}'.trim(),
       effectiveDate:
           '${raw['effectiveDate'] ?? raw['productEffectiveDate'] ?? ''}'.trim(),
@@ -2533,6 +2571,39 @@ List<ProposalSkuDetailRow> proposalIntakeSkuDetails(Map<String, dynamic> form) {
 
 String proposalIntakeNewSkuId() =>
     'sku-${DateTime.now().microsecondsSinceEpoch}';
+
+CatalogRef? proposalIntakeResolvedCategoryRef(CatalogRef? ref, String name) {
+  if (ref != null && ref.isNotEmpty) return ref;
+  final fromName = CatalogRef.fromName(name);
+  return fromName.isEmpty ? null : fromName;
+}
+
+String proposalIntakeCategoryLabel(CatalogRef? ref, String fallback) {
+  final name = (ref?.name ?? '').trim();
+  if (name.isNotEmpty) return name;
+  final code = (ref?.code ?? '').trim();
+  if (code.isNotEmpty) return code;
+  return fallback.trim();
+}
+
+bool proposalIntakeChannelCategoryChildOf(CatalogRef child, CatalogRef parent) {
+  if (child.isEmpty || parent.isEmpty) return false;
+  final pid = child.parentId;
+  if (pid != null && pid != 0 && parent.id != null && parent.id == pid) {
+    return true;
+  }
+  bool same(String a, String b) =>
+      a.trim().isNotEmpty && a.trim() == b.trim();
+  if (same(child.parentCode, parent.code) ||
+      same(child.parentCode, parent.name)) {
+    return true;
+  }
+  if (same(child.parentName, parent.name) ||
+      same(child.parentName, parent.code)) {
+    return true;
+  }
+  return false;
+}
 
 String proposalIntakeNewCouponPackId() =>
     'pack-${DateTime.now().microsecondsSinceEpoch}';
@@ -2790,6 +2861,7 @@ class ProposalSupplyProductRow {
     this.supplierCode = '',
     this.supplierRef,
     this.syncSourceRef,
+    this.productCode = '',
     this.thresholdAmount = '',
     this.isYuantongCoupon = '',
     this.isStandaloneRebate = '',
@@ -2808,6 +2880,7 @@ class ProposalSupplyProductRow {
   final String supplierCode;
   final CatalogRef? supplierRef;
   final CatalogRef? syncSourceRef;
+  final String productCode;
   final String thresholdAmount;
   final String isYuantongCoupon;
   final String isStandaloneRebate;
@@ -2835,6 +2908,7 @@ class ProposalSupplyProductRow {
     String? supplierCode,
     Object? supplierRef = _catalogUnset,
     Object? syncSourceRef = _catalogUnset,
+    String? productCode,
     String? thresholdAmount,
     String? isYuantongCoupon,
     String? isStandaloneRebate,
@@ -2856,6 +2930,7 @@ class ProposalSupplyProductRow {
     syncSourceRef: identical(syncSourceRef, _catalogUnset)
         ? this.syncSourceRef
         : syncSourceRef as CatalogRef?,
+    productCode: productCode ?? this.productCode,
     thresholdAmount: thresholdAmount ?? this.thresholdAmount,
     isYuantongCoupon: isYuantongCoupon ?? this.isYuantongCoupon,
     isStandaloneRebate: isStandaloneRebate ?? this.isStandaloneRebate,
@@ -2884,6 +2959,7 @@ class ProposalSupplyProductRow {
       supplierCode: (hit?.supplierCode.trim().isNotEmpty == true)
           ? hit!.supplierCode.trim()
           : (hit?.supplierRef?.code ?? ''),
+      productCode: hit?.productCode ?? '',
       settlements: settlements ??
           (hit == null
               ? proposalIntakeDefaultSupplySettlements()
@@ -2897,6 +2973,7 @@ class ProposalSupplyProductRow {
     'supplierRef': catalogRefToJson(supplierRef),
     'syncSource': syncSourceCode,
     'syncSourceRef': catalogRefToJson(syncSourceRef),
+    'productCode': productCode,
     'thresholdAmount': thresholdAmount,
     'isYuantongCoupon': isYuantongCoupon,
     'isStandaloneRebate': isStandaloneRebate,
@@ -2929,11 +3006,16 @@ class ProposalSupplyProductRow {
     if (supplier == null && supplierCode.isNotEmpty) {
       supplier = CatalogRef(code: supplierCode, name: supplierCode);
     }
+    var productCode = '${raw['productCode'] ?? ''}'.trim();
+    if (productCode.isEmpty) {
+      productCode = (asset?.productCode ?? '').trim();
+    }
     return ProposalSupplyProductRow(
       id: '${raw['id'] ?? ''}'.trim(),
       supplierCode: supplierCode,
       supplierRef: supplier,
       syncSourceRef: syncRef,
+      productCode: productCode,
       thresholdAmount: '${raw['thresholdAmount'] ?? ''}'.trim(),
       isYuantongCoupon: '${raw['isYuantongCoupon'] ?? ''}'.trim(),
       isStandaloneRebate: '${raw['isStandaloneRebate'] ?? ''}'.trim(),
@@ -2993,6 +3075,7 @@ bool proposalIntakeSupplyStarted(ProposalSupplyProductRow product) {
   return product.supplierCode.trim().isNotEmpty ||
       (product.supplierRef != null && product.supplierRef!.isNotEmpty) ||
       (product.assetProduct != null && product.assetProduct!.isNotEmpty) ||
+      product.productCode.trim().isNotEmpty ||
       product.thresholdAmount.trim().isNotEmpty ||
       product.isYuantongCoupon.trim().isNotEmpty ||
       product.isStandaloneRebate.trim().isNotEmpty ||
@@ -3225,6 +3308,9 @@ List<String> proposalIntakePurchaseSupplyIssues(Map<String, dynamic> form) {
           (product.supplierRef != null && product.supplierRef!.isNotEmpty);
       if (!hasSupplier) {
         issues.add('$label 请选择供应商');
+      }
+      if (product.productCode.trim().isEmpty) {
+        issues.add('$label 请填写产品编码');
       }
       if (product.thresholdAmount.trim().isEmpty) {
         issues.add('$label 请填写门槛金额');

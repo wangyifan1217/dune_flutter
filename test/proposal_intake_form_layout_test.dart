@@ -1406,6 +1406,8 @@ void main() {
     expect(find.text('已建产品'), findsOneWidget);
     expect(find.text('产品名称'), findsNothing);
     expect(find.text('面值'), findsNothing);
+    expect(find.text('渠道一级分类'), findsNothing);
+    expect(find.text('渠道二级分类'), findsNothing);
     expect(find.text('请先选择业务平台'), findsNothing);
     expect(find.text('输入产品名称关键字搜索'), findsOneWidget);
     expect(
@@ -1442,6 +1444,8 @@ void main() {
       isTrue,
     );
     expect(find.text('产品名称'), findsNothing);
+    expect(find.text('渠道一级分类'), findsNothing);
+    expect(find.text('渠道二级分类'), findsNothing);
     expect(
       find.descendant(
         of: _fieldOf('已建产品'),
@@ -1594,6 +1598,8 @@ void main() {
     expect(find.text('结算一'), findsOneWidget);
     expect(find.text('是否已经建产品'), findsOneWidget);
     expect(find.text('渠道'), findsOneWidget);
+    expect(find.text('渠道一级分类'), findsOneWidget);
+    expect(find.text('渠道二级分类'), findsOneWidget);
     expect(
       tester.getTopLeft(find.text('渠道')).dy,
       lessThan(tester.getTopLeft(find.text('结算一')).dy),
@@ -2883,6 +2889,7 @@ void main() {
     expect(find.text('是否已有供给产品'), findsWidgets);
     await _scrollUntil(tester, '供应商');
     expect(find.text('供应商'), findsWidgets);
+    expect(find.text('产品编码'), findsWidgets);
     expect(find.text('供应商编码'), findsNothing);
     expect(find.text('已建供给产品'), findsNothing);
     expect(find.text('返利模式'), findsWidgets);
@@ -2946,6 +2953,7 @@ void main() {
       isTrue,
     );
     expect(find.text('供应商'), findsNothing);
+    expect(find.text('产品编码'), findsNothing);
     expect(find.text('返利模式'), findsNothing);
     expect(
       find.descendant(
@@ -2988,6 +2996,7 @@ void main() {
     expect(find.text('是否已有供给产品'), findsWidgets);
     await _scrollUntil(tester, '已建供给产品');
     expect(find.text('已建供给产品'), findsOneWidget);
+    expect(find.text('产品编码'), findsNothing);
     expect(find.text('门槛金额'), findsNothing);
     expect(find.text('返利模式'), findsNothing);
   });

@@ -205,59 +205,58 @@ class _NativeQianjiCashFlowBoardPageState
   }
 
   List<CashFlowTourStep> get _tourSteps => [
-        CashFlowTourStep(
-          targetKey: _periodKey,
-          title: '先选统计区间',
-          body:
-              '近7天、近30天、本月、上月、本季、本年都能切。下面总览、走势、流水都会跟着变；点「自定义」可以自己选起止日期。',
-        ),
-        CashFlowTourStep(
-          targetKey: _kpiKey,
-          title: '集团总览四张卡',
-          body:
-              '可动用现金是各账户最新余额合计，点它看资金轨迹。净流入＝流入−流出。经营净现金流不含贷款、保证金、往来。点「需关注账户」看名单和单户轨迹。',
-        ),
-        CashFlowTourStep(
-          targetKey: _healthKey,
-          title: '账户健康',
-          body: '按最新余额分成正常、偏低、备付。点「余额偏低」或「备付账户」直接打开名单，再点某一行看该账户怎么走。',
-        ),
-        CashFlowTourStep(
-          targetKey: _insightKey,
-          title: '区间要点都能点',
-          body: '高峰日跳到下面走势图，最大流入科目会过滤流向结构，主要对手方会去流水里搜索。先看异常，再往下钻。',
-        ),
-        CashFlowTourStep(
-          targetKey: _trendKey,
-          title: '现金和收支走势',
-          body: '上图是每天日终可动用现金，下图是当天流入、流出。点一下或按住拖动，就能看某一天的数。',
-        ),
-        CashFlowTourStep(
-          targetKey: _entityKey,
-          title: '按公司看钱在哪',
-          body: '点某一行只看这家公司的流向和流水。「占合计」是占全部现金的比例。可搜索名称、按现金或净流入排序。',
-        ),
-        CashFlowTourStep(
-          targetKey: _flowKey,
-          title: '钱从哪来、到哪去',
-          body: '按科目看流入、流出构成。点一个科目，下面的对手方和流水会跟着过滤；再点一次取消。',
-        ),
-        CashFlowTourStep(
-          targetKey: _cpKey,
-          title: '主要跟谁往来',
-          body: '这里是区间内净额最大的对手方。可搜名称、按金额排序，用来抓大额进出。',
-        ),
-        CashFlowTourStep(
-          targetKey: _txnKey,
-          title: '核对账户流水',
-          body: '当前筛选下的明细，每页 20 笔。可搜对手方、摘要、账号，按时间或金额排序。和上面的下钻是同一套过滤。',
-        ),
-        CashFlowTourStep(
-          targetKey: _aiKey,
-          title: '不会看就问 AI',
-          body: '右上角「AI分析」按当前区间提问，比如钱从哪来、为什么流出、哪些账户要补钱。随时可再点「指引」重看。',
-        ),
-      ];
+    CashFlowTourStep(
+      targetKey: _periodKey,
+      title: '先选统计区间',
+      body: '近7天、近30天、本月、上月、本季、本年都能切。下面总览、走势、流水都会跟着变；点「自定义」可以自己选起止日期。',
+    ),
+    CashFlowTourStep(
+      targetKey: _kpiKey,
+      title: '集团总览四张卡',
+      body:
+          '可动用现金是各账户最新余额合计，点它看资金轨迹。净流入＝流入−流出。经营净现金流不含贷款、保证金、往来。点「需关注账户」看名单和单户轨迹。',
+    ),
+    CashFlowTourStep(
+      targetKey: _healthKey,
+      title: '账户健康',
+      body: '按最新余额分成正常、偏低、备付。点「余额偏低」或「备付账户」直接打开名单，再点某一行看该账户怎么走。',
+    ),
+    CashFlowTourStep(
+      targetKey: _insightKey,
+      title: '区间要点都能点',
+      body: '高峰日跳到下面走势图，最大流入科目会过滤流向结构，主要对手方会去流水里搜索。先看异常，再往下钻。',
+    ),
+    CashFlowTourStep(
+      targetKey: _trendKey,
+      title: '现金和收支走势',
+      body: '上图是每天日终可动用现金，下图是当天流入、流出。点一下或按住拖动，就能看某一天的数。',
+    ),
+    CashFlowTourStep(
+      targetKey: _entityKey,
+      title: '按公司看钱在哪',
+      body: '点某一行只看这家公司的流向和流水。「占合计」是占全部现金的比例。可搜索名称、按现金或净流入排序。',
+    ),
+    CashFlowTourStep(
+      targetKey: _flowKey,
+      title: '钱从哪来、到哪去',
+      body: '按科目看流入、流出构成。点一个科目，下面的对手方和流水会跟着过滤；再点一次取消。',
+    ),
+    CashFlowTourStep(
+      targetKey: _cpKey,
+      title: '主要跟谁往来',
+      body: '这里是区间内净额最大的对手方。可搜名称、按金额排序，用来抓大额进出。',
+    ),
+    CashFlowTourStep(
+      targetKey: _txnKey,
+      title: '核对账户流水',
+      body: '当前筛选下的明细，每页 20 笔。可搜对手方、摘要、账号，按时间或金额排序。和上面的下钻是同一套过滤。',
+    ),
+    CashFlowTourStep(
+      targetKey: _aiKey,
+      title: '不会看就问 AI',
+      body: '右上角「AI分析」按当前区间提问，比如钱从哪来、为什么流出、哪些账户要补钱。随时可再点「指引」重看。',
+    ),
+  ];
 
   Future<void> _loadTxnPage(int page) async {
     if (page < 1 || _txnLoading) return;
@@ -509,7 +508,11 @@ class _NativeQianjiCashFlowBoardPageState
     if (picked == null || !mounted) return;
     setState(() {
       _preset = _CashRangePreset.custom;
-      _customFrom = DateTime(picked.start.year, picked.start.month, picked.start.day);
+      _customFrom = DateTime(
+        picked.start.year,
+        picked.start.month,
+        picked.start.day,
+      );
       _customTo = DateTime(picked.end.year, picked.end.month, picked.end.day);
       _entityId = null;
       _flowId = null;
@@ -524,93 +527,98 @@ class _NativeQianjiCashFlowBoardPageState
       children: [
         ColoredBox(
           color: _pageBg,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildHeader(),
-              Expanded(
-                child: Stack(
-                  children: [
-                    ListView(
-                      keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior.onDrag,
-                      padding: EdgeInsets.fromLTRB(
-                        16,
-                        4,
-                        16,
-                        24 + MediaQuery.paddingOf(context).bottom,
+          child: SafeArea(
+            bottom: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildHeader(),
+                Expanded(
+                  child: Stack(
+                    children: [
+                      ListView(
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        padding: EdgeInsets.fromLTRB(
+                          16,
+                          4,
+                          16,
+                          24 + MediaQuery.paddingOf(context).bottom,
+                        ),
+                        children: [
+                          if (_error != null) ...[
+                            _buildError(),
+                            const SizedBox(height: 12),
+                          ],
+                          _buildPeriodAndBreadcrumb(),
+                          const SizedBox(height: 12),
+                          _buildKpis(),
+                          const SizedBox(height: 12),
+                          _buildHealthBoard(),
+                          const SizedBox(height: 12),
+                          _buildInsightBoard(),
+                          const SizedBox(height: 14),
+                          _SectionTitle(
+                            key: _trendKey,
+                            step: '1',
+                            title: '现金与收支走势',
+                            hint: '点图看当日，手机可点按或拖动',
+                          ),
+                          const SizedBox(height: 8),
+                          _buildTrendCharts(),
+                          const SizedBox(height: 16),
+                          _SectionTitle(
+                            key: _entityKey,
+                            step: '2',
+                            title: '主体现金分布',
+                            hint: '点主体下钻；占合计是占全部现金的比例',
+                          ),
+                          const SizedBox(height: 8),
+                          _buildEntities(),
+                          const SizedBox(height: 16),
+                          _SectionTitle(
+                            key: _flowKey,
+                            step: '3',
+                            title: '资金流向结构',
+                            hint: '点科目看对手方与流水',
+                          ),
+                          const SizedBox(height: 8),
+                          _buildFlowColumns(),
+                          const SizedBox(height: 16),
+                          _SectionTitle(
+                            key: _cpKey,
+                            step: '4',
+                            title: '对手方集中度',
+                            hint: '当前筛选下的主要往来',
+                          ),
+                          const SizedBox(height: 8),
+                          _buildCounterparties(),
+                          const SizedBox(height: 16),
+                          _SectionTitle(
+                            key: _txnKey,
+                            step: '5',
+                            title: '账户流水',
+                            hint: _txnTotal > 0
+                                ? '共 $_txnTotal 笔'
+                                : '当前筛选下暂无流水',
+                          ),
+                          const SizedBox(height: 8),
+                          _buildTxnTable(),
+                        ],
                       ),
-                  children: [
-                    if (_error != null) ...[
-                      _buildError(),
-                      const SizedBox(height: 12),
+                      if (_loading)
+                        const Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
                     ],
-                    _buildPeriodAndBreadcrumb(),
-                    const SizedBox(height: 12),
-                    _buildKpis(),
-                    const SizedBox(height: 12),
-                    _buildHealthBoard(),
-                    const SizedBox(height: 12),
-                    _buildInsightBoard(),
-                    const SizedBox(height: 14),
-                    _SectionTitle(
-                      key: _trendKey,
-                      step: '1',
-                      title: '现金与收支走势',
-                      hint: '点图看当日，手机可点按或拖动',
-                    ),
-                    const SizedBox(height: 8),
-                    _buildTrendCharts(),
-                    const SizedBox(height: 16),
-                    _SectionTitle(
-                      key: _entityKey,
-                      step: '2',
-                      title: '主体现金分布',
-                      hint: '点主体下钻；占合计是占全部现金的比例',
-                    ),
-                    const SizedBox(height: 8),
-                    _buildEntities(),
-                    const SizedBox(height: 16),
-                    _SectionTitle(
-                      key: _flowKey,
-                      step: '3',
-                      title: '资金流向结构',
-                      hint: '点科目看对手方与流水',
-                    ),
-                    const SizedBox(height: 8),
-                    _buildFlowColumns(),
-                    const SizedBox(height: 16),
-                    _SectionTitle(
-                      key: _cpKey,
-                      step: '4',
-                      title: '对手方集中度',
-                      hint: '当前筛选下的主要往来',
-                    ),
-                    const SizedBox(height: 8),
-                    _buildCounterparties(),
-                    const SizedBox(height: 16),
-                    _SectionTitle(
-                      key: _txnKey,
-                      step: '5',
-                      title: '账户流水',
-                      hint: _txnTotal > 0 ? '共 $_txnTotal 笔' : '当前筛选下暂无流水',
-                    ),
-                    const SizedBox(height: 8),
-                    _buildTxnTable(),
-                  ],
-                ),
-                if (_loading)
-                  const Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: LinearProgressIndicator(minHeight: 2),
                   ),
+                ),
               ],
             ),
           ),
-        ],
-      ),
         ),
         if (_tourOpen)
           Positioned.fill(
@@ -633,11 +641,7 @@ class _NativeQianjiCashFlowBoardPageState
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.arrow_back_ios_new,
-              size: 14,
-              color: DunesColors.text2,
-            ),
+            Icon(Icons.arrow_back_ios_new, size: 14, color: DunesColors.text2),
             SizedBox(width: 2),
             Text(
               'τ管理',
@@ -682,7 +686,7 @@ class _NativeQianjiCashFlowBoardPageState
       ),
     ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 16, 4),
+      padding: const EdgeInsets.fromLTRB(8, 10, 16, 6),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final stacked = constraints.maxWidth < 640;
@@ -733,7 +737,11 @@ class _NativeQianjiCashFlowBoardPageState
       ),
       child: Text(
         '流水加载失败：$_error',
-        style: const TextStyle(fontSize: 12.5, height: 1.45, color: DunesColors.coral),
+        style: const TextStyle(
+          fontSize: 12.5,
+          height: 1.45,
+          color: DunesColors.coral,
+        ),
       ),
     );
   }
@@ -921,7 +929,8 @@ class _NativeQianjiCashFlowBoardPageState
                   ),
                   const _GuideItem(
                     title: '账户流水',
-                    body: '当前筛选下按页展示，每页 20 笔。可搜对手方 / 摘要 / 账号，并按时间、金额、名称排序。APP 与 PC 共用。',
+                    body:
+                        '当前筛选下按页展示，每页 20 笔。可搜对手方 / 摘要 / 账号，并按时间、金额、名称排序。APP 与 PC 共用。',
                   ),
                 ],
               ),
@@ -987,10 +996,7 @@ class _NativeQianjiCashFlowBoardPageState
             ),
             const Spacer(),
             if (_entityId != null || _flowId != null)
-              TextButton(
-                onPressed: _clearEntity,
-                child: const Text('清除下钻'),
-              ),
+              TextButton(onPressed: _clearEntity, child: const Text('清除下钻')),
           ],
         ),
       ],
@@ -1012,9 +1018,7 @@ class _NativeQianjiCashFlowBoardPageState
     final net = _yuanToWan(k?.netYuan ?? 0);
     final operating = _yuanToWan(k?.operatingYuan ?? 0);
     final alertCount = k?.alertCount ?? 0;
-    final alertHint = (k?.alertHint ?? '').trim().isEmpty
-        ? '—'
-        : k!.alertHint;
+    final alertHint = (k?.alertHint ?? '').trim().isEmpty ? '—' : k!.alertHint;
     return Container(
       key: _kpiKey,
       padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
@@ -1041,7 +1045,10 @@ class _NativeQianjiCashFlowBoardPageState
                 const SizedBox(width: 8),
                 Text(
                   entity == null ? _rangeLabel : entity.name,
-                  style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: DunesColors.text3,
+                  ),
                 ),
               ],
             ),
@@ -1061,7 +1068,9 @@ class _NativeQianjiCashFlowBoardPageState
                     label: '本期净流入',
                     value: _fmtWan(net, signed: true),
                     sub: '流入 − 流出',
-                    valueColor: net >= 0 ? DunesColors.green : DunesColors.coral,
+                    valueColor: net >= 0
+                        ? DunesColors.green
+                        : DunesColors.coral,
                   ),
                   _KpiCell(
                     label: '经营净现金流',
@@ -1150,13 +1159,17 @@ class _NativeQianjiCashFlowBoardPageState
                   label: '余额偏低',
                   value: '$low',
                   color: DunesColors.coral,
-                  onTap: low > 0 ? () => _showAlertAccounts(reason: '余额偏低') : null,
+                  onTap: low > 0
+                      ? () => _showAlertAccounts(reason: '余额偏低')
+                      : null,
                 ),
                 _HealthTile(
                   label: '备付账户',
                   value: '$reserve',
                   color: DunesColors.amber,
-                  onTap: reserve > 0 ? () => _showAlertAccounts(reason: '备付账户') : null,
+                  onTap: reserve > 0
+                      ? () => _showAlertAccounts(reason: '备付账户')
+                      : null,
                 ),
               ];
               if (c.maxWidth < 520) {
@@ -1323,9 +1336,8 @@ class _NativeQianjiCashFlowBoardPageState
 
   Widget _buildTrendCharts() {
     final points = _trend;
-    final hover = _trendHover == null ||
-            _trendHover! < 0 ||
-            _trendHover! >= points.length
+    final hover =
+        _trendHover == null || _trendHover! < 0 || _trendHover! >= points.length
         ? null
         : points[_trendHover!];
     return Container(
@@ -1345,11 +1357,7 @@ class _NativeQianjiCashFlowBoardPageState
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
               ),
               const SizedBox(width: 8),
-              Container(
-                width: 16,
-                height: 2,
-                color: _themePurple,
-              ),
+              Container(width: 16, height: 2, color: _themePurple),
               const Spacer(),
               Text(
                 hover == null
@@ -1385,7 +1393,10 @@ class _NativeQianjiCashFlowBoardPageState
               if (hover != null)
                 Text(
                   '入 ${_fmtWan(hover.inflow)}  出 ${_fmtWan(hover.outflow)}',
-                  style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: DunesColors.text2,
+                  ),
                 ),
             ],
           ),
@@ -1551,7 +1562,11 @@ class _NativeQianjiCashFlowBoardPageState
             children: [
               SizedBox(
                 width: 168,
-                child: _DonutCard(title: '流入构成', items: _inflows, color: DunesColors.green),
+                child: _DonutCard(
+                  title: '流入构成',
+                  items: _inflows,
+                  color: DunesColors.green,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(child: inflow),
@@ -1560,7 +1575,11 @@ class _NativeQianjiCashFlowBoardPageState
               const SizedBox(width: 12),
               SizedBox(
                 width: 168,
-                child: _DonutCard(title: '流出构成', items: _outflows, color: DunesColors.coral),
+                child: _DonutCard(
+                  title: '流出构成',
+                  items: _outflows,
+                  color: DunesColors.coral,
+                ),
               ),
             ],
           );
@@ -1570,11 +1589,19 @@ class _NativeQianjiCashFlowBoardPageState
             Row(
               children: [
                 Expanded(
-                  child: _DonutCard(title: '流入构成', items: _inflows, color: DunesColors.green),
+                  child: _DonutCard(
+                    title: '流入构成',
+                    items: _inflows,
+                    color: DunesColors.green,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _DonutCard(title: '流出构成', items: _outflows, color: DunesColors.coral),
+                  child: _DonutCard(
+                    title: '流出构成',
+                    items: _outflows,
+                    color: DunesColors.coral,
+                  ),
                 ),
               ],
             ),
@@ -1727,9 +1754,7 @@ class _NativeQianjiCashFlowBoardPageState
               child: Text(
                 _txnLoading
                     ? '正在加载流水…'
-                    : (_txnQuery.isEmpty
-                        ? '当前筛选下暂无流水'
-                        : '没有匹配「$_txnQuery」的流水'),
+                    : (_txnQuery.isEmpty ? '当前筛选下暂无流水' : '没有匹配「$_txnQuery」的流水'),
                 style: const TextStyle(fontSize: 13, color: DunesColors.text3),
               ),
             )
@@ -1901,13 +1926,13 @@ class _SectionTitle extends StatelessWidget {
   final String hint;
 
   IconData get _icon => switch (step) {
-        '1' => Icons.show_chart_rounded,
-        '2' => Icons.account_balance_outlined,
-        '3' => Icons.pie_chart_outline_rounded,
-        '4' => Icons.groups_outlined,
-        '5' => Icons.receipt_long_outlined,
-        _ => Icons.circle_outlined,
-      };
+    '1' => Icons.show_chart_rounded,
+    '2' => Icons.account_balance_outlined,
+    '3' => Icons.pie_chart_outline_rounded,
+    '4' => Icons.groups_outlined,
+    '5' => Icons.receipt_long_outlined,
+    _ => Icons.circle_outlined,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -1970,7 +1995,10 @@ class _KpiCell extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: DunesColors.text3,
+                  ),
                 ),
               ),
               if (onTap != null)
@@ -2054,7 +2082,12 @@ class _EntityRow extends StatelessWidget {
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(entity.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: nameStyle),
+                    Text(
+                      entity.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: nameStyle,
+                    ),
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -2241,7 +2274,10 @@ class _FlowRow extends StatelessWidget {
                   Container(
                     width: 8,
                     height: 8,
-                    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -2255,7 +2291,10 @@ class _FlowRow extends StatelessWidget {
                   ),
                   Text(
                     _fmtWan(item.amountWan),
-                    style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.text2,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   SizedBox(
@@ -2325,10 +2364,16 @@ class _TxnHeader extends StatelessWidget {
         children: [
           SizedBox(
             width: 88,
-            child: Text('日期', style: TextStyle(fontSize: 12, color: DunesColors.text3)),
+            child: Text(
+              '日期',
+              style: TextStyle(fontSize: 12, color: DunesColors.text3),
+            ),
           ),
           Expanded(
-            child: Text('账户 / 摘要', style: TextStyle(fontSize: 12, color: DunesColors.text3)),
+            child: Text(
+              '账户 / 摘要',
+              style: TextStyle(fontSize: 12, color: DunesColors.text3),
+            ),
           ),
           SizedBox(
             width: 96,
@@ -2485,7 +2530,9 @@ class _TxnPagerBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = enabled ? DunesColors.text2 : DunesColors.text3.withValues(alpha: 0.5);
+    final color = enabled
+        ? DunesColors.text2
+        : DunesColors.text3.withValues(alpha: 0.5);
     final children = <Widget>[
       Icon(icon, size: 18, color: color),
       Text(
@@ -2517,41 +2564,41 @@ enum _TxnSort { dateDesc, dateAsc, amountDesc, amountAsc, nameAsc }
 
 extension on _TxnSort {
   String get api => switch (this) {
-        _TxnSort.dateDesc => 'date_desc',
-        _TxnSort.dateAsc => 'date_asc',
-        _TxnSort.amountDesc => 'amount_desc',
-        _TxnSort.amountAsc => 'amount_asc',
-        _TxnSort.nameAsc => 'name_asc',
-      };
+    _TxnSort.dateDesc => 'date_desc',
+    _TxnSort.dateAsc => 'date_asc',
+    _TxnSort.amountDesc => 'amount_desc',
+    _TxnSort.amountAsc => 'amount_asc',
+    _TxnSort.nameAsc => 'name_asc',
+  };
 
   String get label => switch (this) {
-        _TxnSort.dateDesc => '时间最新',
-        _TxnSort.dateAsc => '时间最早',
-        _TxnSort.amountDesc => '金额从大到小',
-        _TxnSort.amountAsc => '金额从小到大',
-        _TxnSort.nameAsc => '对手方名称',
-      };
+    _TxnSort.dateDesc => '时间最新',
+    _TxnSort.dateAsc => '时间最早',
+    _TxnSort.amountDesc => '金额从大到小',
+    _TxnSort.amountAsc => '金额从小到大',
+    _TxnSort.nameAsc => '对手方名称',
+  };
 }
 
 enum _CpSort { absDesc, amountDesc, amountAsc, nameAsc }
 
 extension on _CpSort {
   String get label => switch (this) {
-        _CpSort.absDesc => '按金额大小',
-        _CpSort.amountDesc => '净额从大到小',
-        _CpSort.amountAsc => '净额从小到大',
-        _CpSort.nameAsc => '按名称',
-      };
+    _CpSort.absDesc => '按金额大小',
+    _CpSort.amountDesc => '净额从大到小',
+    _CpSort.amountAsc => '净额从小到大',
+    _CpSort.nameAsc => '按名称',
+  };
 }
 
 enum _EntitySort { cashDesc, netDesc, nameAsc }
 
 extension on _EntitySort {
   String get label => switch (this) {
-        _EntitySort.cashDesc => '按现金',
-        _EntitySort.netDesc => '按净流入',
-        _EntitySort.nameAsc => '按名称',
-      };
+    _EntitySort.cashDesc => '按现金',
+    _EntitySort.netDesc => '按净流入',
+    _EntitySort.nameAsc => '按名称',
+  };
 }
 
 class _ListTools extends StatelessWidget {
@@ -2587,24 +2634,42 @@ class _ListTools extends StatelessWidget {
           textInputAction: TextInputAction.search,
           onChanged: onChanged,
           onSubmitted: onSubmitted,
-          style: const TextStyle(fontSize: 13, height: 1.2, color: DunesColors.text),
+          style: const TextStyle(
+            fontSize: 13,
+            height: 1.2,
+            color: DunesColors.text,
+          ),
           decoration: InputDecoration(
             isDense: true,
             hintText: hint,
             hintStyle: const TextStyle(fontSize: 13, color: DunesColors.text3),
-            prefixIcon: const Icon(Icons.search_rounded, size: 18, color: DunesColors.text3),
-            prefixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            prefixIcon: const Icon(
+              Icons.search_rounded,
+              size: 18,
+              color: DunesColors.text3,
+            ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 36,
+              minHeight: 36,
+            ),
             suffixIcon: value.text.isEmpty
                 ? null
                 : IconButton(
                     tooltip: '清除',
                     visualDensity: VisualDensity.compact,
                     onPressed: onClear,
-                    icon: const Icon(Icons.close_rounded, size: 16, color: DunesColors.text3),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      size: 16,
+                      color: DunesColors.text3,
+                    ),
                   ),
             filled: true,
             fillColor: Colors.white,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 9,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: const BorderSide(color: _cardBorder),
@@ -2680,7 +2745,9 @@ class _ListTools extends StatelessWidget {
                       fontWeight: o.id == selectedId
                           ? FontWeight.w700
                           : FontWeight.w500,
-                      color: o.id == selectedId ? _themePurple : DunesColors.text,
+                      color: o.id == selectedId
+                          ? _themePurple
+                          : DunesColors.text,
                     ),
                   ),
                 ],
@@ -2767,7 +2834,10 @@ class _HealthTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 11, color: DunesColors.text3)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+          ),
           const SizedBox(height: 4),
           Text(
             value,
@@ -2820,7 +2890,10 @@ class _InsightTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 11, color: DunesColors.text3)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+          ),
           const SizedBox(height: 4),
           Text(
             value,
@@ -2932,8 +3005,8 @@ class _AlertAccountsSheetState extends State<_AlertAccountsSheet> {
                   Text(
                     reason == null
                         ? (widget.alerts.isEmpty
-                            ? '需关注账户'
-                            : '需关注账户 · ${widget.alerts.length}')
+                              ? '需关注账户'
+                              : '需关注账户 · ${widget.alerts.length}')
                         : '$reason · ${rows.length}',
                     style: const TextStyle(
                       fontSize: 16,
@@ -2981,9 +3054,7 @@ class _AlertAccountsSheetState extends State<_AlertAccountsSheet> {
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Text(
-                          widget.count > 0
-                              ? '账户名单需要更新服务后才能展示'
-                              : '当前筛选下暂无异常账户',
+                          widget.count > 0 ? '账户名单需要更新服务后才能展示' : '当前筛选下暂无异常账户',
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             fontSize: 13,
@@ -2993,32 +3064,32 @@ class _AlertAccountsSheetState extends State<_AlertAccountsSheet> {
                       ),
                     )
                   : rows.isEmpty
-                      ? const Center(
-                          child: Text(
-                            '没有匹配的账户',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: DunesColors.text3,
-                            ),
-                          ),
-                        )
-                      : ListView.separated(
-                          keyboardDismissBehavior:
-                              ScrollViewKeyboardDismissBehavior.onDrag,
-                          padding: const EdgeInsets.fromLTRB(8, 4, 8, 16),
-                          itemCount: rows.length,
-                          separatorBuilder: (_, _) =>
-                              const Divider(height: 1, color: _cardBorder),
-                          itemBuilder: (context, i) {
-                            final a = rows[i];
-                            return _AlertAccountTile(
-                              account: a,
-                              onTap: a.accountNo.trim().isEmpty
-                                  ? null
-                                  : () => widget.onSelectAccount(a),
-                            );
-                          },
+                  ? const Center(
+                      child: Text(
+                        '没有匹配的账户',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: DunesColors.text3,
                         ),
+                      ),
+                    )
+                  : ListView.separated(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: const EdgeInsets.fromLTRB(8, 4, 8, 16),
+                      itemCount: rows.length,
+                      separatorBuilder: (_, _) =>
+                          const Divider(height: 1, color: _cardBorder),
+                      itemBuilder: (context, i) {
+                        final a = rows[i];
+                        return _AlertAccountTile(
+                          account: a,
+                          onTap: a.accountNo.trim().isEmpty
+                              ? null
+                              : () => widget.onSelectAccount(a),
+                        );
+                      },
+                    ),
             ),
           ],
         ),
@@ -3031,10 +3102,10 @@ enum _AlertSort { balanceAsc, balanceDesc, nameAsc }
 
 extension on _AlertSort {
   String get label => switch (this) {
-        _AlertSort.balanceAsc => '余额从低到高',
-        _AlertSort.balanceDesc => '余额从高到低',
-        _AlertSort.nameAsc => '按账号',
-      };
+    _AlertSort.balanceAsc => '余额从低到高',
+    _AlertSort.balanceDesc => '余额从高到低',
+    _AlertSort.nameAsc => '按账号',
+  };
 }
 
 class _TrendPoint {
@@ -3050,8 +3121,7 @@ class _TrendPoint {
   final double outflow;
 }
 
-String _fmtTrendLabel(DateTime d) =>
-    '${d.month}/${d.day}';
+String _fmtTrendLabel(DateTime d) => '${d.month}/${d.day}';
 
 double _yuanToWan(double yuan) => yuan / 10000.0;
 
@@ -3100,7 +3170,10 @@ class _LegendDot extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontSize: 11, color: DunesColors.text3)),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+        ),
       ],
     );
   }
@@ -3243,9 +3316,10 @@ class _LineChart extends StatelessWidget {
     const padL = 44.0;
     const padR = 10.0;
     final plotW = (size.width - padL - padR).clamp(1, size.width);
-    final i = (((pos.dx - padL) / plotW) * (values.length - 1))
-        .round()
-        .clamp(0, values.length - 1);
+    final i = (((pos.dx - padL) / plotW) * (values.length - 1)).round().clamp(
+      0,
+      values.length - 1,
+    );
     onHover(i);
   }
 }
@@ -3285,7 +3359,8 @@ class _LinePainter extends CustomPainter {
     );
 
     Offset pt(int i) {
-      final x = plot.left +
+      final x =
+          plot.left +
           plot.width * (values.length == 1 ? 0.5 : i / (values.length - 1));
       final y = plot.bottom - plot.height * ((values[i] - minV) / span);
       return Offset(x, y);
@@ -3411,9 +3486,10 @@ class _GroupedBarChart extends StatelessWidget {
     const padL = 44.0;
     const padR = 12.0;
     final plotW = (size.width - padL - padR).clamp(1, size.width);
-    final i = (((pos.dx - padL) / plotW) * inflows.length)
-        .floor()
-        .clamp(0, inflows.length - 1);
+    final i = (((pos.dx - padL) / plotW) * inflows.length).floor().clamp(
+      0,
+      inflows.length - 1,
+    );
     onHover(i);
   }
 }
@@ -3559,7 +3635,9 @@ String _fmtWan(double wan, {bool signed = false}) {
   if (wan.abs() >= 10000) {
     return '$sign${(wan / 10000).toStringAsFixed(2)} 亿';
   }
-  final n = wan == wan.roundToDouble() ? wan.toStringAsFixed(0) : wan.toStringAsFixed(1);
+  final n = wan == wan.roundToDouble()
+      ? wan.toStringAsFixed(0)
+      : wan.toStringAsFixed(1);
   return '$sign$n 万';
 }
 
@@ -3682,9 +3760,7 @@ class _TrackSheetState extends State<_TrackSheet> {
   @override
   Widget build(BuildContext context) {
     final points = widget.points;
-    final hi = _hover == null ||
-            _hover! < 0 ||
-            _hover! >= points.length
+    final hi = _hover == null || _hover! < 0 || _hover! >= points.length
         ? (points.isEmpty ? null : points.length - 1)
         : _hover;
     final cur = hi == null ? null : points[hi];
@@ -3755,14 +3831,18 @@ class _TrackSheetState extends State<_TrackSheet> {
                       child: _TrackStat(
                         label: '终点',
                         value: _fmtWan(end.cash),
-                        valueColor: delta >= 0 ? DunesColors.green : DunesColors.coral,
+                        valueColor: delta >= 0
+                            ? DunesColors.green
+                            : DunesColors.coral,
                       ),
                     ),
                     Expanded(
                       child: _TrackStat(
                         label: '区间变化',
                         value: _fmtWan(delta, signed: true),
-                        valueColor: delta >= 0 ? DunesColors.green : DunesColors.coral,
+                        valueColor: delta >= 0
+                            ? DunesColors.green
+                            : DunesColors.coral,
                       ),
                     ),
                   ],
@@ -3770,60 +3850,62 @@ class _TrackSheetState extends State<_TrackSheet> {
               const SizedBox(height: 12),
               Expanded(
                 child: widget.loading
-                    ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : widget.error != null
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(20),
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Text(
+                            widget.error!.contains('not found') ||
+                                    widget.error!.contains('404')
+                                ? '账户轨迹需要更新服务后才能展示'
+                                : '轨迹加载失败：${widget.error}',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: DunesColors.text3,
+                            ),
+                          ),
+                        ),
+                      )
+                    : points.isEmpty
+                    ? const Center(
+                        child: Text(
+                          '当前区间没有轨迹点',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: DunesColors.text3,
+                          ),
+                        ),
+                      )
+                    : Column(
+                        children: [
+                          if (cur != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
                               child: Text(
-                                widget.error!.contains('not found') ||
-                                        widget.error!.contains('404')
-                                    ? '账户轨迹需要更新服务后才能展示'
-                                    : '轨迹加载失败：${widget.error}',
-                                textAlign: TextAlign.center,
+                                '${cur.date.month.toString().padLeft(2, '0')}-${cur.date.day.toString().padLeft(2, '0')}  余额 ${_fmtWan(cur.cash)}  入 ${_fmtWan(cur.inflow)}  出 ${_fmtWan(cur.outflow)}',
                                 style: const TextStyle(
-                                  fontSize: 13,
-                                  color: DunesColors.text3,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: DunesColors.text2,
                                 ),
                               ),
                             ),
-                          )
-                        : points.isEmpty
-                            ? const Center(
-                                child: Text(
-                                  '当前区间没有轨迹点',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: DunesColors.text3,
-                                  ),
-                                ),
-                              )
-                            : Column(
-                                children: [
-                                  if (cur != null)
-                                    Padding(
-                                      padding: const EdgeInsets.only(bottom: 8),
-                                      child: Text(
-                                        '${cur.date.month.toString().padLeft(2, '0')}-${cur.date.day.toString().padLeft(2, '0')}  余额 ${_fmtWan(cur.cash)}  入 ${_fmtWan(cur.inflow)}  出 ${_fmtWan(cur.outflow)}',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: DunesColors.text2,
-                                        ),
-                                      ),
-                                    ),
-                                  Expanded(
-                                    child: _TrackChart(
-                                      values: [for (final p in points) p.cash],
-                                      labels: [
-                                        for (final p in points) _fmtTrendLabel(p.date)
-                                      ],
-                                      hoverIndex: hi,
-                                      onHover: (i) => setState(() => _hover = i),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                          Expanded(
+                            child: _TrackChart(
+                              values: [for (final p in points) p.cash],
+                              labels: [
+                                for (final p in points) _fmtTrendLabel(p.date),
+                              ],
+                              hoverIndex: hi,
+                              onHover: (i) => setState(() => _hover = i),
+                            ),
+                          ),
+                        ],
+                      ),
               ),
               if (widget.footer != null) widget.footer!,
             ],
@@ -3835,11 +3917,7 @@ class _TrackSheetState extends State<_TrackSheet> {
 }
 
 class _TrackStat extends StatelessWidget {
-  const _TrackStat({
-    required this.label,
-    required this.value,
-    this.valueColor,
-  });
+  const _TrackStat({required this.label, required this.value, this.valueColor});
 
   final String label;
   final String value;
@@ -3849,7 +3927,10 @@ class _TrackStat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(fontSize: 11, color: DunesColors.text3)),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+        ),
         const SizedBox(height: 2),
         Text(
           value,
@@ -3904,9 +3985,10 @@ class _TrackChart extends StatelessWidget {
     const padL = 44.0;
     const padR = 16.0;
     final plotW = (size.width - padL - padR).clamp(1, size.width);
-    final i = (((pos.dx - padL) / plotW) * (values.length - 1))
-        .round()
-        .clamp(0, values.length - 1);
+    final i = (((pos.dx - padL) / plotW) * (values.length - 1)).round().clamp(
+      0,
+      values.length - 1,
+    );
     onHover(i);
   }
 }
@@ -3944,7 +4026,8 @@ class _TrackPainter extends CustomPainter {
       size.height - _padB,
     );
     Offset pt(int i) {
-      final x = plot.left +
+      final x =
+          plot.left +
           plot.width * (values.length == 1 ? 0.5 : i / (values.length - 1));
       final y = plot.bottom - plot.height * ((values[i] - minV) / span);
       return Offset(x, y);
@@ -4017,8 +4100,18 @@ class _TrackPainter extends CustomPainter {
     canvas.drawCircle(end, 7, Paint()..color = color);
     canvas.drawCircle(end, 3, Paint()..color = Colors.white);
 
-    _paintAxisText(canvas, '起', Offset(start.dx, start.dy - 16), align: TextAlign.center);
-    _paintAxisText(canvas, '止', Offset(end.dx, end.dy - 18), align: TextAlign.center);
+    _paintAxisText(
+      canvas,
+      '起',
+      Offset(start.dx, start.dy - 16),
+      align: TextAlign.center,
+    );
+    _paintAxisText(
+      canvas,
+      '止',
+      Offset(end.dx, end.dy - 18),
+      align: TextAlign.center,
+    );
 
     final labelStep = math.max(1, (values.length / 6).ceil());
     for (var i = 0; i < values.length; i += labelStep) {
@@ -4089,7 +4182,10 @@ class _AlertAccountTile extends StatelessWidget {
               children: [
                 for (final reason in account.reasons)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: DunesColors.amberSoft,
                       borderRadius: BorderRadius.circular(99),
@@ -4120,7 +4216,11 @@ class _AlertAccountTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
-          const Icon(Icons.timeline_rounded, size: 16, color: DunesColors.text3),
+          const Icon(
+            Icons.timeline_rounded,
+            size: 16,
+            color: DunesColors.text3,
+          ),
         ],
       ),
     );

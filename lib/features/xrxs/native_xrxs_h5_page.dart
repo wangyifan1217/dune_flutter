@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,39 @@ import '../auth/auth_session.dart';
 import '../tasks/native_task_home_pane.dart';
 import 'xrxs_h5_browser.dart';
 import 'xrxs_service.dart';
+
+const _xrxsNavHandler = 'xrxsNav';
+
+/// 薪人薪事 H5 无自带返回，钩住 pushState / hash 以便容器提供「返回」。
+const _xrxsHistoryScript = '''
+(function () {
+  if (window.__dunesXrxsNav) return;
+  var nav = { depth: 0 };
+  window.__dunesXrxsNav = nav;
+  function notify() {
+    try {
+      if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+        window.flutter_inappwebview.callHandler('xrxsNav', nav.depth);
+      }
+    } catch (e) {}
+  }
+  var push = history.pushState;
+  history.pushState = function () {
+    nav.depth += 1;
+    var ret = push.apply(this, arguments);
+    notify();
+    return ret;
+  };
+  window.addEventListener('hashchange', function () {
+    nav.depth += 1;
+    notify();
+  });
+  window.addEventListener('popstate', function () {
+    if (nav.depth > 0) nav.depth -= 1;
+    notify();
+  });
+})();
+''';
 
 /// 薪人薪事员工端 H5 免登容器。
 class NativeXrxsH5Page extends StatefulWidget {
@@ -46,13 +80,32 @@ class _NativeXrxsH5PageState extends State<NativeXrxsH5Page> {
   bool _loading = true;
   bool _pageReady = false;
   bool _submitting = false;
+  bool _historyCleared = false;
+  bool _webViewCanGoBack = false;
+  int _spaDepth = 0;
+  WebUri? _rootUri;
+  WebUri? _currentUri;
+
+  bool get _atRoot {
+    final cur = _currentUri;
+    final root = _rootUri;
+    if (cur == null || root == null) return true;
+    return _uriKey(cur) == _uriKey(root);
+  }
+
+  /// 薪人薪事 H5 无自带返回，有历史或已离开落地页时才能回上一页。
+  bool get _canH5Back {
+    if (!_pageReady || !_historyCleared) return false;
+    if (_webViewCanGoBack || _spaDepth > 0) return true;
+    return !_atRoot;
+  }
 
   @override
   void initState() {
     super.initState();
     widget.navigation
-      ..backInterceptor = _exitToApp
-      ..canBackInterceptor = () => widget.onBack != null;
+      ..backInterceptor = _handleSystemBack
+      ..canBackInterceptor = () => _canH5Back || widget.onBack != null;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _publishChrome();
@@ -62,7 +115,7 @@ class _NativeXrxsH5PageState extends State<NativeXrxsH5Page> {
 
   @override
   void dispose() {
-    if (widget.navigation.backInterceptor == _exitToApp) {
+    if (widget.navigation.backInterceptor == _handleSystemBack) {
       widget.navigation
         ..backInterceptor = null
         ..canBackInterceptor = null;
@@ -74,6 +127,66 @@ class _NativeXrxsH5PageState extends State<NativeXrxsH5Page> {
   bool _exitToApp() {
     widget.onBack?.call();
     return widget.onBack != null;
+  }
+
+  /// 系统返回：先回薪人薪事上一页，没有历史再退出容器。
+  bool _handleSystemBack() {
+    if (_canH5Back) {
+      unawaited(_goBackInH5());
+      return true;
+    }
+    return _exitToApp();
+  }
+
+  String _uriKey(WebUri uri) {
+    return '${uri.origin}${uri.path}?${uri.query}#${uri.fragment}';
+  }
+
+  bool _isUnsafeBackUrl(WebUri? url) {
+    if (url == null || url.scheme == 'about') return true;
+    final text = url.toString().toLowerCase();
+    return text.contains('ticket=') ||
+        text.contains('accesstoken') ||
+        text.contains('/login/') ||
+        text.contains('geturl');
+  }
+
+  Future<void> _refreshCanGoBack(InAppWebViewController controller) async {
+    var can = false;
+    try {
+      can = await controller.canGoBack();
+    } catch (_) {}
+    if (!mounted) return;
+    if (_webViewCanGoBack != can) {
+      setState(() => _webViewCanGoBack = can);
+    }
+  }
+
+  Future<void> _goBackInH5() async {
+    if (!_controllerReady.isCompleted) return;
+    final controller = await _controllerReady.future;
+    try {
+      if (await controller.canGoBack()) {
+        await controller.goBack();
+        final url = await controller.getUrl();
+        if (_isUnsafeBackUrl(url) && _rootUri != null) {
+          await controller.loadUrl(urlRequest: URLRequest(url: _rootUri!));
+        }
+        return;
+      }
+    } catch (_) {}
+    if (_spaDepth > 0) {
+      try {
+        await controller.evaluateJavascript(source: 'history.back();');
+        return;
+      } catch (_) {}
+    }
+    final root = _rootUri;
+    if (root != null && !_atRoot) {
+      try {
+        await controller.loadUrl(urlRequest: URLRequest(url: root));
+      } catch (_) {}
+    }
   }
 
   void _publishChrome() {
@@ -99,6 +212,11 @@ class _NativeXrxsH5PageState extends State<NativeXrxsH5Page> {
         _loading = true;
         _error = null;
         _pageReady = false;
+        _historyCleared = false;
+        _webViewCanGoBack = false;
+        _spaDepth = 0;
+        _rootUri = null;
+        _currentUri = null;
       });
     }
     try {
@@ -190,7 +308,14 @@ class _NativeXrxsH5PageState extends State<NativeXrxsH5Page> {
         preferredSize: Size.fromHeight(52 + topInset),
         child: _buildAppTopBar(),
       ),
-      body: content,
+      body: kIsWeb
+          ? content
+          : Column(
+              children: [
+                _buildH5BackBar(),
+                Expanded(child: content),
+              ],
+            ),
     );
   }
 
@@ -247,12 +372,52 @@ class _NativeXrxsH5PageState extends State<NativeXrxsH5Page> {
     );
   }
 
+  Widget _buildH5BackBar() {
+    final enabled = _canH5Back;
+    return Material(
+      color: Colors.white,
+      child: Container(
+        height: 44,
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: DunesColors.borderSoft)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: enabled ? () => unawaited(_goBackInH5()) : null,
+            style: TextButton.styleFrom(
+              foregroundColor: enabled ? DunesColors.text : DunesColors.text3,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+            ),
+            icon: const Icon(Icons.arrow_back_ios_new, size: 14),
+            label: Text(
+              '返回',
+              style: DunesTypography.sans(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: enabled ? DunesColors.text : DunesColors.text3,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildNativeBody() {
     return Stack(
       fit: StackFit.expand,
       children: [
         InAppWebView(
           initialUrlRequest: URLRequest(url: WebUri('about:blank')),
+          initialUserScripts: UnmodifiableListView([
+            UserScript(
+              source: _xrxsHistoryScript,
+              injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+              contentWorld: ContentWorld.PAGE,
+            ),
+          ]),
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
             thirdPartyCookiesEnabled: true,
@@ -268,6 +433,19 @@ class _NativeXrxsH5PageState extends State<NativeXrxsH5Page> {
                 'Chrome/120.0.0.0 Mobile Safari/537.36',
           ),
           onWebViewCreated: (controller) {
+            controller.addJavaScriptHandler(
+              handlerName: _xrxsNavHandler,
+              callback: (args) {
+                final depth = args.isNotEmpty
+                    ? int.tryParse('${args.first}') ?? 0
+                    : 0;
+                if (!mounted) return null;
+                if (_spaDepth != depth) {
+                  setState(() => _spaDepth = depth);
+                }
+                return null;
+              },
+            );
             if (!_controllerReady.isCompleted) {
               _controllerReady.complete(controller);
             }
@@ -279,12 +457,41 @@ class _NativeXrxsH5PageState extends State<NativeXrxsH5Page> {
               _error = null;
             });
           },
-          onLoadStop: (_, url) {
+          onLoadStop: (controller, url) async {
             if (!mounted || url?.scheme == 'about') return;
+            if (!_isUnsafeBackUrl(url)) {
+              if (!_historyCleared) {
+                try {
+                  await controller.clearHistory();
+                } catch (_) {}
+                try {
+                  await controller.evaluateJavascript(
+                    source:
+                        'if (window.__dunesXrxsNav) window.__dunesXrxsNav.depth = 0;',
+                  );
+                } catch (_) {}
+                _historyCleared = true;
+                _rootUri = url;
+                _spaDepth = 0;
+              }
+              _currentUri = url;
+              await _refreshCanGoBack(controller);
+            }
+            if (!mounted) return;
             setState(() {
               _loading = false;
               _pageReady = true;
             });
+          },
+          onUpdateVisitedHistory: (controller, url, _) async {
+            if (!mounted || url == null || url.scheme == 'about') return;
+            if (_isUnsafeBackUrl(url)) return;
+            _currentUri = url;
+            if (_historyCleared) {
+              _rootUri ??= url;
+            }
+            await _refreshCanGoBack(controller);
+            if (mounted) setState(() {});
           },
           onReceivedError: (_, request, error) {
             if (request.isForMainFrame != true || !mounted) return;

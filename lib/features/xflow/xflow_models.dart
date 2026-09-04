@@ -63,6 +63,7 @@ class XflowRemoteSearchConfig {
     this.valueFields = const <String>[],
     this.fill = const <String, String>{},
     this.allowManual = true,
+    this.storeObject = false,
   });
 
   final String path;
@@ -74,6 +75,7 @@ class XflowRemoteSearchConfig {
   final List<String> valueFields;
   final Map<String, String> fill;
   final bool allowManual;
+  final bool storeObject;
 
   static XflowRemoteSearchConfig? tryParse(dynamic raw) {
     if (raw is! Map) return null;
@@ -90,6 +92,7 @@ class XflowRemoteSearchConfig {
       valueFields: _stringList(map['valueFields']),
       fill: _stringMap(map['fill']),
       allowManual: map['allowManual'] != false,
+      storeObject: map['storeObject'] == true,
     );
   }
 

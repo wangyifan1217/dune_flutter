@@ -1625,6 +1625,27 @@ void main() {
     expect(sku.toJson()['syncSource'], 'DIGITALG');
     expect(sku.toJson()['syncSourceRef']['name'], '能源');
     expect(sector.toJson()['code'], 'NY');
+
+    final categorized = ProposalSkuDetailRow.fromJson({
+      'id': 'sku-2',
+      'productName': '出行券',
+      'channelCategoryL1': '出行',
+      'channelCategoryL2Ref': {
+        'code': 'CXQYJ',
+        'name': '出行权益金',
+        'parentCode': 'CX',
+        'parentName': '出行',
+      },
+    });
+    expect(categorized.resolvedChannelCategoryL1?.name, '出行');
+    expect(categorized.toJson()['channelCategoryL2'], '出行权益金');
+    expect(
+      proposalIntakeChannelCategoryChildOf(
+        categorized.resolvedChannelCategoryL2!,
+        categorized.resolvedChannelCategoryL1!,
+      ),
+      isTrue,
+    );
   });
 
   test('purchase supply product maps productId to supplierCode and default settlements', () {
@@ -1636,11 +1657,13 @@ void main() {
     final restored = ProposalSupplyProductRow.fromJson({
       'id': 'supply-1',
       'productId': 'SP-001',
+      'productCode': 'NY-100',
       'thresholdAmount': '100',
       'supplierRef': {'id': 8, 'code': 'SUP-1', 'name': '中石油'},
       'assetProduct': {
         'id': 20,
         'productName': '中石油供给100',
+        'productCode': 'NY-100',
         'supplierCode': 'SUP-1',
         'supplierName': '中石油',
       },
@@ -1649,6 +1672,8 @@ void main() {
       ],
     });
     expect(restored.supplierCode, 'SP-001');
+    expect(restored.productCode, 'NY-100');
+    expect(restored.toJson()['productCode'], 'NY-100');
     expect(restored.supplierRef?.name, '中石油');
     expect(restored.assetProduct?.productName, '中石油供给100');
     expect(
@@ -1694,6 +1719,7 @@ void main() {
         {
           'id': 's1',
           'supplierCode': 'SUP-1',
+          'productCode': 'SP-100',
           'syncSource': 'P1',
           'thresholdAmount': '100',
           'isYuantongCoupon': '否',
@@ -1759,6 +1785,18 @@ void main() {
         ],
       }),
       contains('供给产品 1 请填写门槛金额'),
+    );
+    expect(
+      proposalIntakePurchaseSupplyIssues({
+        'supplyProducts': [
+          {
+            'id': 's1',
+            'syncSource': 'P1',
+            'supplierRef': {'id': 8, 'code': 'SUP-1', 'name': '中石油'},
+          },
+        ],
+      }),
+      contains('供给产品 1 请填写产品编码'),
     );
     expect(
       proposalIntakePurchaseSupplyIssues({

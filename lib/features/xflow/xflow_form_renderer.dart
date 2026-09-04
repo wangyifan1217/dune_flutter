@@ -1239,7 +1239,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
   }) {
     final colKey = (col['key'] ?? '').toString();
     final label = (col['label'] ?? colKey).toString();
-    final value = rows[ri][colKey]?.toString() ?? '';
+    final colField = XflowField.fromJson(Map<String, dynamic>.from(col));
     void setVal(String v) {
       rows[ri][colKey] = v;
       if (nestedKey != null && parentRi >= 0) {
@@ -1254,6 +1254,39 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       setState(() {});
     }
 
+    void patchRow(Map<String, dynamic> updates) {
+      rows[ri] = <String, dynamic>{...rows[ri], ...updates};
+      if (nestedKey != null && parentRi >= 0) {
+        final parent = _listValue(fieldKey);
+        if (parentRi < parent.length) {
+          parent[parentRi][nestedKey] = rows;
+          widget.onChanged(fieldKey, parent);
+        }
+      } else {
+        widget.onChanged(fieldKey, rows);
+      }
+      setState(() {});
+    }
+
+    if (colField.remoteSearch != null) {
+      final cfg = colField.remoteSearch!;
+      final hint = colField.placeholder.isEmpty ? '搜索城市' : colField.placeholder;
+      final picker = _XflowRemoteSearchPicker(
+        service: widget.service,
+        config: cfg,
+        fieldKey: colKey,
+        value: rows[ri][colKey],
+        placeholder: hint,
+        readonly: colField.readonly,
+        scopeValues: rows[ri],
+        onPatch: patchRow,
+        onFieldChanged: (key, value) => patchRow({key: value}),
+      );
+      if (matrix) return picker;
+      return XfDynCell(label: label, child: picker);
+    }
+
+    final value = rows[ri][colKey]?.toString() ?? '';
     final decoration = matrix
         ? xfMatrixCellDecoration(hint: col['placeholder']?.toString())
         : xfDynCellDecoration(hint: col['placeholder']?.toString());
@@ -2389,6 +2422,12 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
 
   String _displayText(dynamic val) {
     if (val == null) return '';
+    if (val is Map) {
+      for (final key in ['label', 'cityName', 'name', 'value']) {
+        final text = '${val[key] ?? ''}'.trim();
+        if (text.isNotEmpty) return text;
+      }
+    }
     return val.toString();
   }
 
@@ -2434,7 +2473,25 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
   void _selectRow(Map<String, dynamic> row) {
     final patch = <String, dynamic>{};
     final value = _cfg.valueOf(row);
-    if (value != null) {
+    if (_cfg.storeObject) {
+      final obj = <String, dynamic>{
+        'label': _cfg.labelOf(row),
+      };
+      if (value != null) obj['value'] = value;
+      for (final key in <String>[
+        ..._cfg.valueFields,
+        ..._cfg.labelFields,
+        'cityId',
+        'cityName',
+        'provinceName',
+      ]) {
+        final raw = row[key];
+        if (raw == null) continue;
+        final text = '$raw'.trim();
+        if (text.isNotEmpty) obj[key] = raw is num ? raw : text;
+      }
+      patch[widget.fieldKey] = obj;
+    } else if (value != null) {
       patch[widget.fieldKey] = value;
     }
     patch.addAll(_cfg.fillPatches(row));
@@ -2445,8 +2502,12 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
         ...patch,
       };
       _controller.text = _cfg.fillDisplayOf(merged);
-    } else if (patch.containsKey(widget.fieldKey)) {
-      _controller.text = '${patch[widget.fieldKey]}';
+    } else {
+      _controller.text = _cfg.storeObject
+          ? _displayText(patch[widget.fieldKey])
+          : (patch.containsKey(widget.fieldKey)
+                ? '${patch[widget.fieldKey]}'
+                : _controller.text);
     }
     _writeMany(patch);
     setState(() {

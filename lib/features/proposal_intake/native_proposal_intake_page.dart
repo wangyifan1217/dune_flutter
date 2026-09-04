@@ -1028,6 +1028,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   List<CatalogRef> _productCatalog = const [];
   List<CatalogRef> _projectCatalog = const [];
   List<CatalogRef> _syncSourceCatalog = const [];
+  List<CatalogRef> _channelCategoryL1 = const [];
+  List<CatalogRef> _channelCategoryL2 = const [];
   final Map<String, _SettleCatalogBundle> _settleBundles = {};
   final Set<String> _settleLoading = {};
   final Map<String, Future<_SettleCatalogBundle>> _settleBundleLoads = {};
@@ -1148,6 +1150,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     _ownsCatalog = widget.catalog == null;
     _catalog = widget.catalog ?? SettlementCatalogService();
     unawaited(_loadMarketCatalog());
+    unawaited(_loadChannelCategories());
     if (_showProductTemplates) unawaited(_loadImportTemplates());
   }
 
@@ -2002,6 +2005,23 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final sector = _formRef('sectorRef');
     if (sector != null && sector.isNotEmpty) {
       await _loadProductCatalog(sector);
+    }
+  }
+
+  Future<void> _loadChannelCategories() async {
+    try {
+      final data = await widget.service.fetchChannelCategories();
+      if (!mounted) return;
+      setState(() {
+        _channelCategoryL1 = data.l1;
+        _channelCategoryL2 = data.l2;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _channelCategoryL1 = const [];
+        _channelCategoryL2 = const [];
+      });
     }
   }
 
@@ -5997,6 +6017,41 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 (current) => current.copyWith(institutionRef: value),
               ),
             ),
+            _skuCatalogCell(
+              label: '渠道一级分类',
+              current: row.resolvedChannelCategoryL1,
+              options: _channelCategoryL1,
+              locked: locked,
+              hint: _channelCategoryL1.isEmpty ? '字典加载中或暂无分类' : '请选择渠道一级分类',
+              emptyText: _channelCategoryL1.isEmpty ? '字典加载中或暂无分类' : null,
+              onSelected: (value) => _patchSkuDetail(
+                row.id,
+                (current) => _applyChannelCategoryL1(current, value),
+              ),
+            ),
+            _skuCatalogCell(
+              label: '渠道二级分类',
+              current: row.resolvedChannelCategoryL2,
+              options: _channelCategoryL2Of(row.resolvedChannelCategoryL1),
+              locked: locked,
+              hint: (row.resolvedChannelCategoryL1 == null ||
+                      row.resolvedChannelCategoryL1!.isEmpty)
+                  ? '请先选择渠道一级分类'
+                  : (_channelCategoryL2Of(row.resolvedChannelCategoryL1).isEmpty
+                      ? '字典加载中或暂无分类'
+                      : '请选择渠道二级分类'),
+              emptyText: (row.resolvedChannelCategoryL1 == null ||
+                      row.resolvedChannelCategoryL1!.isEmpty)
+                  ? '请先选择渠道一级分类'
+                  : '该一级分类暂无二级分类',
+              onSelected: (value) => _patchSkuDetail(
+                row.id,
+                (current) => current.copyWith(
+                  channelCategoryL2Ref: value,
+                  channelCategoryL2: proposalIntakeCategoryLabel(value, ''),
+                ),
+              ),
+            ),
             _skuTextCell(
               rowId: row.id,
               label: '面值',
@@ -6214,6 +6269,31 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ? '请先选择业务平台'
           : (loading ? '字典加载中…' : '该业务平台暂无渠道'),
       onSelected: onSelected,
+    );
+  }
+
+  List<CatalogRef> _channelCategoryL2Of(CatalogRef? l1) {
+    if (l1 == null || l1.isEmpty) return const [];
+    return [
+      for (final item in _channelCategoryL2)
+        if (proposalIntakeChannelCategoryChildOf(item, l1)) item,
+    ];
+  }
+
+  ProposalSkuDetailRow _applyChannelCategoryL1(
+    ProposalSkuDetailRow current,
+    CatalogRef? value,
+  ) {
+    final l2 = current.resolvedChannelCategoryL2;
+    final keep = value != null &&
+        value.isNotEmpty &&
+        l2 != null &&
+        proposalIntakeChannelCategoryChildOf(l2, value);
+    return current.copyWith(
+      channelCategoryL1Ref: value,
+      channelCategoryL1: proposalIntakeCategoryLabel(value, ''),
+      channelCategoryL2Ref: keep ? current.channelCategoryL2Ref : null,
+      channelCategoryL2: keep ? current.channelCategoryL2 : '',
     );
   }
 
@@ -9796,6 +9876,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 ),
               ),
             if (!existing) ...[
+            _skuTextCell(
+              rowId: row.id,
+              label: '产品编码',
+              value: row.productCode,
+              fieldKey: 'productCode',
+              hint: '请填写产品编码',
+              locked: locked,
+              required: true,
+              onChanged: (value) => _patchSupplyProduct(
+                row.id,
+                (current) => current.copyWith(productCode: value),
+                rebuild: false,
+              ),
+            ),
             _skuTextCell(
               rowId: row.id,
               label: '门槛金额',

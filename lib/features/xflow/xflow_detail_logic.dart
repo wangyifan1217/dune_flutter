@@ -340,7 +340,13 @@ String formatCellDisplay(dynamic val, Map<String, dynamic> col, Map<String, dyna
       if (o is Map && '${o['value']}' == '$val') return (o['label'] ?? val).toString();
     }
   }
-  if (val is Map) return formatUserDisplay(val);
+  if (val is Map) {
+    for (final key in ['label', 'cityName', 'displayName', 'name']) {
+      final s = (val[key] ?? '').toString().trim();
+      if (s.isNotEmpty) return s;
+    }
+    return formatUserDisplay(val);
+  }
   return val.toString();
 }
 

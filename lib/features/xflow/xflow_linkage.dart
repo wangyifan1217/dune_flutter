@@ -43,13 +43,17 @@ class XflowLinkage {
     fillEmptyAmountFromBills(fields, values);
   }
 
-  /// 付款金额 / 申请开票总额为空时，用已选账单剩余合计填上，方便对应金额直接看见。
+  /// 金额框为空或仍是 0 时，用已选账单剩余合计预填。已填非零金额不覆盖。
   static void fillEmptyAmountFromBills(
     List<XflowField> fields,
     Map<String, dynamic> values,
   ) {
     for (final field in fields) {
-      if (field.readonly || field.type == 'computed' || field.key.isEmpty) {
+      if (field.type == 'computed' || field.key.isEmpty) continue;
+      // 只读总金额仍允许预填：付款明细为空时卡片合计会写成 0.00。
+      if (field.readonly &&
+          field.key != 'totalAmount' &&
+          field.key != 'invoiceTotalLimit') {
         continue;
       }
       if (!_isBlankAmount(values[field.key])) continue;
@@ -67,14 +71,49 @@ class XflowLinkage {
           rows,
           'invoice',
         ).toStringAsFixed(2);
+      } else if (field.key == 'totalAmount') {
+        final filled = _billRemainingPrefill(fields, values);
+        if (filled == null) continue;
+        values[field.key] = filled;
       }
     }
+  }
+
+  /// 有应付先用应付剩余；否则用应收字段配置的剩余口径（付款看应还、开票看可开）。
+  static String? _billRemainingPrefill(
+    List<XflowField> fields,
+    Map<String, dynamic> values,
+  ) {
+    final ap = xflowBillSelectedList(values['linkedApBills']);
+    if (ap.isNotEmpty) {
+      return xflowBillSelectedRemainingSum(
+        ap,
+        _remainingKindOf(fields, 'linkedApBills'),
+      ).toStringAsFixed(2);
+    }
+    final ar = xflowBillSelectedList(values['linkedArBills']);
+    if (ar.isEmpty) return null;
+    return xflowBillSelectedRemainingSum(
+      ar,
+      _remainingKindOf(fields, 'linkedArBills'),
+    ).toStringAsFixed(2);
+  }
+
+  static String _remainingKindOf(List<XflowField> fields, String key) {
+    for (final field in fields) {
+      if (field.key == key) {
+        return XflowBillCascadeConfig.fromField(field.raw).remainingKind;
+      }
+    }
+    return 'payable';
   }
 
   static bool _isBlankAmount(dynamic raw) {
     if (raw == null) return true;
     final text = raw.toString().trim();
-    return text.isEmpty;
+    if (text.isEmpty) return true;
+    final n = double.tryParse(text);
+    return n != null && n == 0;
   }
 
   /// 卡片分组里 money 列之和写入只读 `totalAmount`。无 card 列表时不改动。

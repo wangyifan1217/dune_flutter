@@ -20,6 +20,7 @@ import 'lighthouse_data.dart';
 import 'lighthouse_discount_metric.dart';
 import 'lighthouse_forecast.dart';
 import 'lighthouse_hero_metric.dart';
+import 'lighthouse_period_bar.dart';
 import 'lighthouse_service.dart';
 import 'lighthouse_theme.dart';
 import 'lighthouse_scroll_text.dart';
@@ -14030,10 +14031,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           final chartLabels = labels.isNotEmpty
               ? labels
               : _heroTrendLabels(netTa.length);
-          final bankSeries = lighthouseAlignSeriesToLabels(
+          // 银行余额是「日度存量」，这张图的横轴却跟着日/周/月/季/年变。
+          // 直接按标签对点会整段对不上（对不上就返回全 0，再被判成没数据，
+          // 于是余额线在图上根本不出现）—— 这里按轴的口径折进每一格，
+          // 每格取期末余额，不求和。日期比标签准，能拿到日期就用日期。
+          final bankValues = _netTABankBalanceSeries();
+          final bankDates = _netTABankBalanceSeriesDates();
+          final bankSeries = lighthouseFoldStockToAxis(
             axisLabels: chartLabels,
-            seriesLabels: _netTABankBalanceSeriesLabels(),
-            values: _netTABankBalanceSeries(),
+            seriesLabels: bankDates.length == bankValues.length
+                ? bankDates
+                : _netTABankBalanceSeriesLabels(),
+            values: bankValues,
           );
           final stock = lighthouseSeriesHasVisibleData(bankSeries)
               ? bankSeries
@@ -15938,112 +15947,47 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
+        LhPeriodBar(
+          labels: [for (final k in _kPeriodKeys) _kPeriodShort[k] ?? ''],
+          selectedIndex: _isCustomRange ? -1 : _kPeriodKeys.indexOf(_period),
+          pickerOpen: _periodPickerOpen,
+          floating: lighthousePeriodUsesFloatingSegment,
           height: lighthousePeriodTrackHeight,
-          padding: const EdgeInsets.all(4),
-          decoration: lighthousePeriodUsesFloatingSegment
-              ? BoxDecoration(
-                  color: LhColors.paper,
-                  border: Border.all(color: LhColors.line2, width: 0.7),
-                  borderRadius: BorderRadius.circular(
-                    lighthousePeriodTrackRadius,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withAlpha(8),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                )
-              : null,
-          child: Row(
-            children: _kPeriodKeys.map((k) {
-              final isOn = k == _period && !_isCustomRange;
-              final shortLabel = _kPeriodShort[k] ?? '';
-              return Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    // v12.7 · 自定义区间生效时, 点任何 period tab 都先清区间
-                    //   然后按 tab 意图继续: 同 tab 就切到 offset=0, 不同 tab 切粒度.
-                    if (_isCustomRange) {
-                      _clearCustomRange();
-                      if (k != _period) {
-                        _applyPeriod(period: k, offset: 0);
-                      }
-                      return;
-                    }
-                    if (k == _period) {
-                      // 再点选中项 → 展开/收起实例选择
-                      setState(() => _periodPickerOpen = !_periodPickerOpen);
-                    } else {
-                      // 切粒度 → offset 回到 0
-                      setState(() => _periodPickerOpen = false);
-                      _applyPeriod(period: k, offset: 0);
-                    }
-                  },
-                  child: AnimatedContainer(
-                    height: double.infinity,
-                    duration: const Duration(
-                      milliseconds: lighthousePeriodAnimationMs,
-                    ),
-                    curve: Curves.easeOutCubic,
-                    decoration: BoxDecoration(
-                      color: isOn ? LhColors.purpleSoft : Colors.transparent,
-                      borderRadius: BorderRadius.circular(
-                        lighthousePeriodSelectedRadius,
-                      ),
-                      border: Border.all(
-                        color: isOn
-                            ? _LhPlum.primary.withAlpha(55)
-                            : Colors.transparent,
-                        width: 0.7,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (isOn) ...[
-                          Container(
-                            width: lighthousePeriodStatusDotSize,
-                            height: lighthousePeriodStatusDotSize,
-                            decoration: const BoxDecoration(
-                              color: _LhPlum.primary,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 5),
-                        ],
-                        Text(
-                          shortLabel,
-                          textAlign: TextAlign.center,
-                          style: LhTypography.sans(
-                            size: 12,
-                            color: isOn ? _LhPlum.deep : LhColors.ink2,
-                            weight: isOn ? FontWeight.w600 : FontWeight.w500,
-                            letterSpacing: 0.3,
-                            height: 1.0,
-                          ),
-                        ),
-                        if (isOn) ...[
-                          const SizedBox(width: 2),
-                          Icon(
-                            _periodPickerOpen
-                                ? Icons.keyboard_arrow_up_rounded
-                                : Icons.keyboard_arrow_down_rounded,
-                            size: 13,
-                            color: _LhPlum.primary,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
+          trackRadius: lighthousePeriodTrackRadius,
+          pillRadius: lighthousePeriodSelectedRadius,
+          dotSize: lighthousePeriodStatusDotSize,
+          primary: _LhPlum.primary,
+          deep: _LhPlum.deep,
+          trackColor: LhColors.paper,
+          trackBorder: LhColors.line2,
+          idleTextColor: LhColors.ink2,
+          baseTextStyle: LhTypography.sans(
+            size: 12,
+            color: LhColors.ink2,
+            weight: FontWeight.w500,
+            letterSpacing: 0.3,
+            height: 1.0,
           ),
+          onTap: (i) {
+            final k = _kPeriodKeys[i];
+            // v12.7 · 自定义区间生效时, 点任何 period tab 都先清区间
+            //   然后按 tab 意图继续: 同 tab 就切到 offset=0, 不同 tab 切粒度.
+            if (_isCustomRange) {
+              _clearCustomRange();
+              if (k != _period) {
+                _applyPeriod(period: k, offset: 0);
+              }
+              return;
+            }
+            if (k == _period) {
+              // 再点选中项 → 展开/收起实例选择
+              setState(() => _periodPickerOpen = !_periodPickerOpen);
+            } else {
+              // 切粒度 → offset 回到 0
+              setState(() => _periodPickerOpen = false);
+              _applyPeriod(period: k, offset: 0);
+            }
+          },
         ),
         // 实例选择条 — 点当前粒度 tab 展开 —— 横滑选具体哪一天/周/月/季/年
         // (自定义区间生效时不显示, 走列表控制条 _buildDateRangeControl → _pickDateRange)

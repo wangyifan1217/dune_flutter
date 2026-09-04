@@ -1103,27 +1103,28 @@ class _XfDetKvExpandState extends State<XfDetKvExpand> {
                       ),
                     ),
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        widget.item.value,
-                        style: DunesTypography.sans(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      widget.item.value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                      style: DunesTypography.sans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
                       ),
-                      const SizedBox(width: 4),
-                      AnimatedRotation(
-                        turns: _open ? 0.5 : 0,
-                        duration: const Duration(milliseconds: 200),
-                        child: Icon(
-                          Icons.expand_more,
-                          size: 18,
-                          color: DunesColors.text3,
-                        ),
-                      ),
-                    ],
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  AnimatedRotation(
+                    turns: _open ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      Icons.expand_more,
+                      size: 18,
+                      color: DunesColors.text3,
+                    ),
                   ),
                 ],
               ),
@@ -1208,6 +1209,16 @@ class XfDetBillCascadeList extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                if (xflowBillTypeProjectLine(row).isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    xflowBillTypeProjectLine(row),
+                    style: DunesTypography.sans(
+                      fontSize: 11,
+                      color: DunesColors.text3,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 6),
                 XflowBillAmountGrid(
                   row: row,

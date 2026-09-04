@@ -3051,6 +3051,229 @@ List<double> lighthouseAlignSeriesToLabels({
   return out;
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// 存量（银行余额）折到走势图横轴
+//
+//   资管那支接口给的是**日度**余额，净TA 走势图的横轴却跟着日/周/月/季/年变。
+//   点数和标签都对不上时，`lighthouseAlignSeriesToLabels` 会返回一串 0，
+//   `lighthouseSeriesHasVisibleData` 判它没数据 —— 于是整条余额线在图上消失。
+//   这就是「银行余额有卡片、有迷你走势，唯独不在大图里」的原因。
+//
+//   这里按轴的口径把日度点折进每一格：
+//     · 存量取「桶内最后一个点」＝ 期末余额。**绝不求和** —— 把每天的余额
+//       加起来是个没有意义的数。
+//     · 认得出轴标签口径就按日期精确分桶；认不出（后端换了文案）就按位置
+//       等分兜底 —— 形状近似也好过整条线不画。
+//     · 空格沿用上一期存量；开头的空格向后借第一个已知值。一律不补 0，
+//       0 会被读成「账上没钱」。
+// ═════════════════════════════════════════════════════════════════════════════
+
+enum LhAxisGranularity { day, week, month, quarter, year, unknown }
+
+/// 从轴标签反推这张图现在是什么口径。取第一个认得出的标签为准。
+LhAxisGranularity lighthouseAxisGranularity(List<String> labels) {
+  for (final raw in labels) {
+    final t = raw.trim();
+    if (t.isEmpty) continue;
+    if (t.contains('Q') || t.contains('q') || t.contains('季')) {
+      return LhAxisGranularity.quarter;
+    }
+    if (t.contains('周') ||
+        RegExp(r'^W\d{1,2}$', caseSensitive: false).hasMatch(t)) {
+      return LhAxisGranularity.week;
+    }
+    if (RegExp(r'^\d{4}\s*年?$').hasMatch(t)) return LhAxisGranularity.year;
+    if (RegExp(r'^\d{1,2}\s*月$').hasMatch(t) ||
+        RegExp(r'^\d{4}[.\-/]\d{1,2}$').hasMatch(t) ||
+        RegExp(r'^\d{4}\s*年\s*\d{1,2}\s*月$').hasMatch(t)) {
+      return LhAxisGranularity.month;
+    }
+    if (RegExp(r'^\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2}$').hasMatch(t) ||
+        RegExp(r'^\d{1,2}[.\-/]\d{1,2}$').hasMatch(t) ||
+        RegExp(r'^\d{1,2}\s*月\s*\d{1,2}\s*日$').hasMatch(t)) {
+      return LhAxisGranularity.day;
+    }
+  }
+  return LhAxisGranularity.unknown;
+}
+
+/// 序列点的日期。`2026-09-03` / `2026.09` / `2026-Q3` 都认；
+/// `09.03` 这种没年份的交给标签键那条路。
+DateTime? lighthouseParseSeriesDate(String raw) {
+  final t = raw.trim();
+  if (t.isEmpty) return null;
+  var m = RegExp(r'^(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})').firstMatch(t);
+  if (m != null) {
+    return DateTime(
+      int.parse(m.group(1)!),
+      int.parse(m.group(2)!),
+      int.parse(m.group(3)!),
+    );
+  }
+  m = RegExp(r'^(\d{4})[.\-/]?Q([1-4])$', caseSensitive: false).firstMatch(t);
+  if (m != null) {
+    return DateTime(int.parse(m.group(1)!), int.parse(m.group(2)!) * 3, 1);
+  }
+  m = RegExp(r'^(\d{4})[.\-/](\d{1,2})$').firstMatch(t);
+  if (m != null) {
+    return DateTime(int.parse(m.group(1)!), int.parse(m.group(2)!), 1);
+  }
+  return null;
+}
+
+/// ISO 周序（周一为一周之始）。后端周口径若与此不同，会落到位置兜底那条路。
+int lighthouseIsoWeekNumber(DateTime d) {
+  final thursday = DateTime(
+    d.year,
+    d.month,
+    d.day,
+  ).add(Duration(days: 4 - d.weekday));
+  final jan1 = DateTime(thursday.year, 1, 1);
+  return thursday.difference(jan1).inDays ~/ 7 + 1;
+}
+
+/// 轴标签 → 桶键。认不出返回空串。
+String lighthouseAxisBucketKey(String label, LhAxisGranularity gran) {
+  final t = label.trim();
+  switch (gran) {
+    case LhAxisGranularity.year:
+      {
+        final m = RegExp(r'(\d{4})').firstMatch(t);
+        return m == null ? '' : m.group(1)!;
+      }
+    case LhAxisGranularity.quarter:
+      {
+        final m =
+            RegExp(r'[Qq季]\s*([1-4])').firstMatch(t) ??
+            RegExp(r'^([1-4])\s*[Qq季]').firstMatch(t);
+        return m == null ? '' : m.group(1)!;
+      }
+    case LhAxisGranularity.week:
+      {
+        final m = RegExp(r'(\d{1,2})').firstMatch(t);
+        return m == null ? '' : int.parse(m.group(1)!).toString();
+      }
+    case LhAxisGranularity.month:
+      {
+        final ym =
+            RegExp(r'^(\d{4})[.\-/](\d{1,2})$').firstMatch(t) ??
+            RegExp(r'^(\d{4})\s*年\s*(\d{1,2})\s*月$').firstMatch(t);
+        if (ym != null) return int.parse(ym.group(2)!).toString();
+        final mm = RegExp(r'^(\d{1,2})\s*月$').firstMatch(t);
+        if (mm != null) return int.parse(mm.group(1)!).toString();
+        return '';
+      }
+    case LhAxisGranularity.day:
+      {
+        final ymd = RegExp(
+          r'^(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})$',
+        ).firstMatch(t);
+        if (ymd != null) {
+          return '${int.parse(ymd.group(2)!)}-${int.parse(ymd.group(3)!)}';
+        }
+        final md = RegExp(r'^(\d{1,2})[.\-/](\d{1,2})$').firstMatch(t);
+        if (md != null) {
+          return '${int.parse(md.group(1)!)}-${int.parse(md.group(2)!)}';
+        }
+        final cn = RegExp(r'^(\d{1,2})\s*月\s*(\d{1,2})\s*日$').firstMatch(t);
+        if (cn != null) {
+          return '${int.parse(cn.group(1)!)}-${int.parse(cn.group(2)!)}';
+        }
+        return '';
+      }
+    case LhAxisGranularity.unknown:
+      return '';
+  }
+}
+
+String lighthouseDateBucketKey(DateTime d, LhAxisGranularity gran) {
+  switch (gran) {
+    case LhAxisGranularity.year:
+      return '${d.year}';
+    case LhAxisGranularity.quarter:
+      return '${(d.month - 1) ~/ 3 + 1}';
+    case LhAxisGranularity.week:
+      return '${lighthouseIsoWeekNumber(d)}';
+    case LhAxisGranularity.month:
+      return '${d.month}';
+    case LhAxisGranularity.day:
+      return '${d.month}-${d.day}';
+    case LhAxisGranularity.unknown:
+      return '';
+  }
+}
+
+/// 把存量序列折到 [axisLabels] 这条横轴上。[seriesLabels] 传原始日期最准
+/// （`netTaBankBalanceSeriesDates`），只有标签时也能跑。
+List<double> lighthouseFoldStockToAxis({
+  required List<String> axisLabels,
+  required List<String> seriesLabels,
+  required List<double> values,
+}) {
+  if (axisLabels.isEmpty) return const <double>[];
+  final n = seriesLabels.length < values.length
+      ? seriesLabels.length
+      : values.length;
+  // 一个点都没有就不画。这里绝不能返回全 0 —— 那是「账上没钱」，不是「没数据」。
+  if (n <= 0) return const <double>[];
+
+  final gran = lighthouseAxisGranularity(axisLabels);
+  final slot = List<double?>.filled(axisLabels.length, null);
+  var matched = 0;
+
+  if (gran != LhAxisGranularity.unknown) {
+    final index = <String, int>{};
+    for (var i = 0; i < axisLabels.length; i++) {
+      final k = lighthouseAxisBucketKey(axisLabels[i], gran);
+      if (k.isNotEmpty) index.putIfAbsent(k, () => i);
+    }
+    for (var i = 0; i < n; i++) {
+      final raw = seriesLabels[i].trim();
+      final d = lighthouseParseSeriesDate(raw);
+      final key = d != null
+          ? lighthouseDateBucketKey(d, gran)
+          : lighthouseAxisBucketKey(
+              lighthouseBankBalanceSeriesLabel(raw),
+              gran,
+            );
+      if (key.isEmpty) continue;
+      final at = index[key];
+      if (at == null) continue;
+      // 序列按时间升序，后来的覆盖先来的 —— 落到格子里的就是期末余额。
+      slot[at] = values[i];
+      matched++;
+    }
+  }
+
+  // 一个都没对上（后端换了标签文案 / 周口径不一致）：按位置等分兜底。
+  if (matched == 0) {
+    for (var i = 0; i < axisLabels.length; i++) {
+      var end = ((i + 1) * n + axisLabels.length - 1) ~/ axisLabels.length;
+      if (end < 1) end = 1;
+      if (end > n) end = n;
+      slot[i] = values[end - 1];
+    }
+  }
+
+  // 开头的空格向后借第一个已知值；其余空格沿用上一期。都不补 0。
+  var first = -1;
+  for (var i = 0; i < slot.length; i++) {
+    if (slot[i] != null) {
+      first = i;
+      break;
+    }
+  }
+  if (first < 0) return const <double>[];
+  final out = List<double>.filled(axisLabels.length, slot[first]!);
+  var last = slot[first]!;
+  for (var i = 0; i < slot.length; i++) {
+    final v = slot[i];
+    if (v != null) last = v;
+    if (i >= first) out[i] = last;
+  }
+  return out;
+}
+
 /// 把 /net-ta 的 `bankBalance.companies` 摊成界面用的行。
 ///
 /// 账户必须跟着走：合并时只留公司名和总额的话，展开箭头永远出不来。

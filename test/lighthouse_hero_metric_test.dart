@@ -1307,6 +1307,70 @@ void main() {
       ),
       const [22, 22],
     );
+
+    // 银行余额是日度存量，横轴跟着日/周/月/季/年变 —— 每格取期末余额，不求和。
+    expect(
+      lighthouseFoldStockToAxis(
+        axisLabels: const ['07月', '08月', '09月'],
+        seriesLabels: const [
+          '2026-07-30',
+          '2026-07-31',
+          '2026-08-31',
+          '2026-09-01',
+          '2026-09-03',
+        ],
+        values: const [10, 11, 22, 13, 13.518],
+      ),
+      const [11, 22, 13.518],
+    );
+    // 季轴同理。
+    expect(
+      lighthouseFoldStockToAxis(
+        axisLabels: const ['2026Q1', '2026Q2', '2026Q3'],
+        seriesLabels: const ['2026-03-31', '2026-06-30', '2026-09-03'],
+        values: const [20, 18, 13.5],
+      ),
+      const [20, 18, 13.5],
+    );
+    // 开头没数据的格向后借第一个已知值，绝不补 0（0 会被读成「账上没钱」）。
+    expect(
+      lighthouseFoldStockToAxis(
+        axisLabels: const ['06月', '07月', '08月', '09月'],
+        seriesLabels: const ['2026-08-31', '2026-09-02'],
+        values: const [22, 13.5],
+      ),
+      const [22, 22, 22, 13.5],
+    );
+    // 轴标签认不出口径时按位置等分兜底 —— 形状近似好过整条线不画。
+    expect(
+      lighthouseFoldStockToAxis(
+        axisLabels: const ['上期', '本期'],
+        seriesLabels: const ['2026-09-01', '2026-09-02', '2026-09-03'],
+        values: const [10, 11, 12],
+      ),
+      const [11, 12],
+    );
+    // 真的没数据才返回空 —— 空表示不画这条线。
+    expect(
+      lighthouseFoldStockToAxis(
+        axisLabels: const ['08月', '09月'],
+        seriesLabels: const [],
+        values: const [],
+      ),
+      isEmpty,
+    );
+    expect(
+      lighthouseAxisGranularity(const ['第36周', '第37周']),
+      LhAxisGranularity.week,
+    );
+    expect(
+      lighthouseAxisGranularity(const ['09.01', '09.02']),
+      LhAxisGranularity.day,
+    );
+    expect(
+      lighthouseAxisGranularity(const ['2025年', '2026年']),
+      LhAxisGranularity.year,
+    );
     expect(
       lighthouseTrendStockLegendValue(
         series: const [20, 22, 18, 16, 21, 22.27, 13.52],
@@ -1363,7 +1427,7 @@ void main() {
       lighthouseFundPoolPreviewMetrics().map((m) => [m.key, m.label]).toList(),
       [
         ['totalAssets', '总资产金额'],
-        ['invoicePreview', '票税'],
+        ['invoiceToIssue', '票税 · 应开'],
       ],
     );
 
@@ -1432,6 +1496,7 @@ void main() {
       'regulatoryAccountBalance',
       'inTransitFunds',
       'endingReceivableRebate',
+      'turnoverDays',
     ]);
     expect(monthly[1].right?.metrics.map((m) => m.key).toList(), [
       'inventoryVoucherBalance',

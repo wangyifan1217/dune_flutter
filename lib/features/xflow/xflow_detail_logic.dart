@@ -405,6 +405,9 @@ List<DetailSection> buildFieldSections(
     if (text.isEmpty) continue;
     var fieldDef = field;
     var expandable = isExpandableField(field, val);
+    if (field.type == 'billCascade') {
+      text = '${xflowBillSelectedList(val).length}笔';
+    }
     if (!expandable &&
         val is List &&
         val.isNotEmpty &&

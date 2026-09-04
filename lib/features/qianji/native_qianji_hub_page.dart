@@ -35,8 +35,7 @@ class NativeQianjiHubPage extends StatefulWidget {
     this.onOpenTravel,
     this.onOpenRobotHome,
     this.onOpenRobot,
-    this.onOpenMeetingAssistant,
-    this.onOpenDigitalAuto,
+    this.onOpenDigitalEmployee,
     this.session,
   });
 
@@ -51,8 +50,7 @@ class NativeQianjiHubPage extends StatefulWidget {
 
   /// 点击单个机器人名片：由 Host 按 canChat 决定进聊天或提示。
   final ValueChanged<RobotRole>? onOpenRobot;
-  final ValueChanged<DigitalEmployeeItem>? onOpenMeetingAssistant;
-  final ValueChanged<DigitalEmployeeItem>? onOpenDigitalAuto;
+  final ValueChanged<DigitalEmployeeItem>? onOpenDigitalEmployee;
   final AuthSession? session;
 
   @override
@@ -89,6 +87,14 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
       subtitle: '数字配置 · AI 助理',
       iconKey: 'oil_barrel',
       screenId: 'QJTO',
+      comingSoon: false,
+    ),
+    DigitalEmployeeItem(
+      employeeKey: 'am-settlement',
+      name: '资管.AI助理',
+      subtitle: '结算字典 · AI 助理',
+      iconKey: 'account_balance',
+      screenId: 'QJAM',
       comingSoon: false,
     ),
   ];
@@ -202,8 +208,7 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                           _digitalEmployees.isNotEmpty)) ...[
                     _TauHubPreview(
                       items: _digitalEmployees,
-                      onOpenMeetingAssistant: widget.onOpenMeetingAssistant,
-                      onOpenDigitalAuto: widget.onOpenDigitalAuto,
+                      onOpenDigitalEmployee: widget.onOpenDigitalEmployee,
                       onComingSoon: _showMeetingAssistantComingSoon,
                     ),
                     const SizedBox(height: 16),
@@ -337,27 +342,23 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
 class _TauHubPreview extends StatelessWidget {
   const _TauHubPreview({
     required this.items,
-    this.onOpenMeetingAssistant,
-    this.onOpenDigitalAuto,
+    this.onOpenDigitalEmployee,
     this.onComingSoon,
   });
 
   final List<DigitalEmployeeItem> items;
-  final ValueChanged<DigitalEmployeeItem>? onOpenMeetingAssistant;
-  final ValueChanged<DigitalEmployeeItem>? onOpenDigitalAuto;
+  final ValueChanged<DigitalEmployeeItem>? onOpenDigitalEmployee;
   final VoidCallback? onComingSoon;
 
   VoidCallback? _onTap(DigitalEmployeeItem item) {
     if (item.comingSoon) return onComingSoon;
     switch (item.screenId) {
       case 'QJTO':
-        return onOpenDigitalAuto == null
-            ? null
-            : () => onOpenDigitalAuto!(item);
       case 'QJMA':
-        return onOpenMeetingAssistant == null
+      case 'QJAM':
+        return onOpenDigitalEmployee == null
             ? onComingSoon
-            : () => onOpenMeetingAssistant!(item);
+            : () => onOpenDigitalEmployee!(item);
       default:
         return onComingSoon;
     }

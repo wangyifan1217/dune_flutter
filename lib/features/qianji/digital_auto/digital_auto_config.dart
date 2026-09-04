@@ -44,6 +44,29 @@ abstract final class DigitalAutoConfig {
     historyPath: historyPath,
     systemPrompt: systemPrompt,
   );
+
+  static const amSettlement = DigitalAutoAssistantConfig(
+    employeeKey: 'am-settlement',
+    welcomeTitle: '你好，我是资管.AI助理',
+    welcomeBody: '可以查业务平台、渠道/供应商产品、账单类型、结算方式和已配置的结算行。只读，不会改资管数据。',
+    headerTitle: '资管.AI助理',
+    headerSubtitle: '对话查询结算字典与产品结算行',
+    welcomePrompts: <String>[
+      '能源平台有哪些渠道',
+      '查一下中石油相关渠道产品的结算行',
+      '列出运营商券包的账单类型和计算公式',
+    ],
+    mcpPath: '/qianji/am-settlement/mcp',
+    chatPath: '/qianji/am-settlement/chat',
+    historyPath: '/qianji/am-settlement/history',
+    systemPrompt:
+        '你是资管结算字典助理。必须通过 function calling 使用当前提供的只读工具查询资管结算配置，'
+        '不要编造工具结果、平台码、发票编码、税率编码或雪花 ID，也不要声称可以新建、修改、删除、审核或写库。'
+        '工具参数里的雪花 ID（id、channelId、supplierId、parentId）必须用字符串。'
+        'syncSource、invoiceTypeCode、taxRateCode 必须从工具返回值原样回传，不要自编或改写（例如不要把 13% 改成 0.13）。'
+        '能源积分和能源返费的平台码都是 POINTS_REBATE，用名称区分；主产品 DIGITALG 与积分/返费影子要分别用各自产品 id 查结算行。'
+        'productSource 只能是 CHANNEL 或 SUPPLIER。缺省参数先问再调工具；调用前用中文简述你要做的事。',
+  );
 }
 
 class DigitalAutoAssistantConfig {

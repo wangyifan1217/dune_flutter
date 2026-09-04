@@ -5,7 +5,6 @@ import 'package:http/http.dart' as http;
 
 import '../auth/auth_session.dart';
 import 'proposal_intake_models.dart';
-import 'settlement_catalog.dart';
 
 class ProposalIntakeService {
   ProposalIntakeService({required this.session});
@@ -34,27 +33,6 @@ class ProposalIntakeService {
       await http.get(_uri('/proposal-intakes/options'), headers: _headers),
     );
     return ProposalIntakeOptions.fromJson(_asMap(data));
-  }
-
-  Future<({List<CatalogRef> l1, List<CatalogRef> l2})> fetchChannelCategories() async {
-    if (session.apiBase.trim().isEmpty) {
-      return (l1: const <CatalogRef>[], l2: const <CatalogRef>[]);
-    }
-    try {
-      final data = _unwrap(
-        await http.get(
-          _uri('/proposal-intakes/channel-categories'),
-          headers: _headers,
-        ),
-      );
-      final map = _asMap(data);
-      return (
-        l1: _catalogRefs(map['l1']),
-        l2: _catalogRefs(map['l2']),
-      );
-    } catch (_) {
-      return (l1: const <CatalogRef>[], l2: const <CatalogRef>[]);
-    }
   }
 
   Future<List<ProposalPerson>> fetchPeople() async {
@@ -328,13 +306,5 @@ class ProposalIntakeService {
     if (value is Map<String, dynamic>) return value;
     if (value is Map) return Map<String, dynamic>.from(value);
     return <String, dynamic>{};
-  }
-
-  List<CatalogRef> _catalogRefs(Object? raw) {
-    if (raw is! List) return const [];
-    return [
-      for (final item in raw)
-        if (item is Map) CatalogRef.fromJson(Map<String, dynamic>.from(item)),
-    ].where((item) => item.isNotEmpty).toList(growable: false);
   }
 }

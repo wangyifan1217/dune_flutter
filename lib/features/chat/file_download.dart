@@ -17,9 +17,8 @@ Future<String?> saveBytesAsNovaFile(Uint8List bytes, String fileName) async {
 
 /// 按会话落盘：`沙丘文件/{conversationId}/{fileName}`。
 ///
-/// 同一会话内同名文件会覆盖。查找时仍兼容旧版
-/// `{conversationId}/{hash(cacheKey)}/{fileName}` 与 `{hash(cacheKey)}/{fileName}`。
-/// 未传 [conversationId] 时仍走旧版 hash 子目录。
+/// 同一会话里不同消息的同名文件会分开保存。原文件被 Excel 等占用、无法覆盖时，
+/// 自动改名为 `文件名(1).xlsx`。查找按 objectKey 对应到实际文件名。
 Future<String?> saveBytesAsCachedFile(
   Uint8List bytes,
   String cacheKey,

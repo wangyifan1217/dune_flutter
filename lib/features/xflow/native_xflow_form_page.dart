@@ -15,6 +15,7 @@ import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
 import 'proposal_upload_config.dart';
+import 'electronic_reimbursement_form.dart';
 
 class NativeXflowFormPage extends StatefulWidget {
   const NativeXflowFormPage({
@@ -33,6 +34,7 @@ class NativeXflowFormPage extends StatefulWidget {
   final DunesNavigationController navigation;
   final String templateKey;
   final int? editProposalId;
+
   /// 第二个参数为业务类型；非 PROPOSAL 时应跳转动态审批详情。
   final void Function(int businessId, String businessType) onSubmitted;
   final String editBusinessType;
@@ -63,21 +65,25 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   bool _submitting = false;
   bool _submitSucceeded = false;
   int? _draftProposalId;
+
   /// 自动保存草稿对应的业务类型（非销售模板也可能拿到服务端草稿 id）。
   String? _draftBusinessType;
   Timer? _autosaveTimer;
   int _autosaveSeq = 0;
   String _autosaveHint = '填写中将自动保存草稿';
   bool _autosaving = false;
+
   /// 保存进行中又有新编辑时置位，finally 里补一次 schedule，避免 silent drop。
   bool _needsAutosave = false;
   Map<int, String> _stageUserNames = const {};
+
   /// 仅渲染 preview-approval 返回的 stages；失败不回退模板全量列表。
   List<Map<String, dynamic>>? _previewStages;
   Timer? _previewTimer;
   int _previewSeq = 0;
   bool _previewFailed = false;
   bool _previewLoading = false;
+  bool _keyboardWasVisible = false;
 
   void _dismissKeyboard() {
     final focus = FocusManager.instance.primaryFocus;
@@ -86,6 +92,24 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       return;
     }
     focus?.unfocus();
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    final keyboardVisible =
+        WidgetsBinding
+            .instance
+            .platformDispatcher
+            .views
+            .first
+            .viewInsets
+            .bottom >
+        0;
+    if (_keyboardWasVisible && !keyboardVisible) {
+      _dismissKeyboard();
+    }
+    _keyboardWasVisible = keyboardVisible;
   }
 
   bool get _isEditing =>
@@ -377,8 +401,8 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     });
     final ccFuture = _service.fetchCcRulesList(templateKey: widget.templateKey);
     try {
-      final template = await _service.fetchTemplateDetail(
-        templateKey: widget.templateKey,
+      final template = applyElectronicReimbursementTemplate(
+        await _service.fetchTemplateDetail(templateKey: widget.templateKey),
       );
       // 先挂上模板，便于 _localDraftBusinessType 取到真实业务类型。
       _template = template;
@@ -411,7 +435,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
         );
       } catch (_) {}
       // 初次渲染前先重算计算字段（如印花税），避免编辑/草稿预填时显示为空。
-      XflowLinkage.recompute(template.fields, template.layout, _values);
+      await _applySubmitterDefaults(template);
       if (!mounted) return;
       setState(() {
         _template = template;
@@ -449,6 +473,31 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   void _recompute() {
     final template = _template;
     if (template == null) return;
+    XflowLinkage.recompute(template.fields, template.layout, _values);
+  }
+
+  Future<void> _applySubmitterDefaults(XflowTemplateDetail template) async {
+    Map<String, dynamic>? profile;
+    try {
+      profile = await _service.fetchOrgUserProfile(
+        userId: widget.session.userId,
+        displayName: widget.session.displayName ?? '',
+      );
+    } catch (_) {}
+    applySubmitterDefaults(
+      fields: template.fields,
+      values: _values,
+      userId: widget.session.userId,
+      displayName: (widget.session.displayName ?? '').trim().isNotEmpty
+          ? widget.session.displayName!.trim()
+          : widget.session.phone,
+      profile:
+          profile ??
+          {
+            'positionName': widget.session.jobTitle,
+            'jobTitle': widget.session.jobTitle,
+          },
+    );
     XflowLinkage.recompute(template.fields, template.layout, _values);
   }
 
@@ -716,18 +765,15 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     final oldBt = _trackedDraftBusinessType;
     _draftProposalId = null;
     _draftBusinessType = null;
-    await _service.clearLocalDraft(
-      businessType: oldBt,
-      businessId: oldId,
-    );
-    await _service.clearLocalDraft(
-      businessType: oldBt,
-      businessId: null,
-    );
+    await _service.clearLocalDraft(businessType: oldBt, businessId: oldId);
+    await _service.clearLocalDraft(businessType: oldBt, businessId: null);
     await _service.clearLocalDraft(
       businessType: _localDraftBusinessType,
       businessId: null,
     );
+    if (_template != null) {
+      await _applySubmitterDefaults(_template!);
+    }
     if (!mounted) return;
     setState(() => _autosaveHint = '填写中将自动保存草稿');
     showDunesToast(context, '表单已清空');
@@ -746,7 +792,9 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
         return;
       }
       _draftProposalId = pid;
-      final bt = (res['businessType'] ?? _templateBusinessType).toString().trim();
+      final bt = (res['businessType'] ?? _templateBusinessType)
+          .toString()
+          .trim();
       if (bt.isNotEmpty) _draftBusinessType = bt;
       if (!mounted) return;
       await _showPushDialog(pid);
@@ -877,6 +925,8 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                       child: RefreshIndicator(
                         onRefresh: _load,
                         child: ListView(
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
                           padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
                           children: [
                             XflowFormCard(
@@ -887,7 +937,9 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                                 children: [
                                   if (_autosaveHint.isNotEmpty)
                                     Padding(
-                                      padding: const EdgeInsets.only(bottom: 10),
+                                      padding: const EdgeInsets.only(
+                                        bottom: 10,
+                                      ),
                                       child: Text(
                                         _autosaveHint,
                                         style: DunesTypography.sans(
@@ -897,41 +949,47 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                                       ),
                                     ),
                                   XflowFormRenderer(
-                                fields: _isDelegatedPendingInitiate
-                                    ? _template!.fields
-                                          .where((f) {
-                                            if (f.type != 'action') return true;
-                                            final kind =
-                                                (f.raw['actionKind'] ?? f.key)
-                                                    .toString();
-                                            return _isDelegatedClearActionKind(
-                                              kind,
-                                            );
-                                          })
-                                          .toList(growable: false)
-                                    : _template!.fields,
-                                values: _values,
-                                layout: _template!.layout,
-                                service: _service,
-                                embedded: true,
-                                allowedActionKinds: _isDelegatedPendingInitiate
-                                    ? <String>{
-                                        'clear-form',
-                                        'clear_form',
-                                        'clearform',
-                                        'reset-form',
-                                      }
-                                    : null,
-                                onChanged: (key, value) {
-                                  setState(() {
-                                    _values[key] = value;
-                                    _recompute();
-                                  });
-                                  _scheduleAutosave();
-                                  _scheduleApprovalPreview();
-                                },
-                                onAction: _handleAction,
-                              ),
+                                    fields: _isDelegatedPendingInitiate
+                                        ? _template!.fields
+                                              .where((f) {
+                                                if (f.type != 'action')
+                                                  return true;
+                                                final kind =
+                                                    (f.raw['actionKind'] ??
+                                                            f.key)
+                                                        .toString();
+                                                return _isDelegatedClearActionKind(
+                                                  kind,
+                                                );
+                                              })
+                                              .toList(growable: false)
+                                        : _template!.fields,
+                                    values: _values,
+                                    layout: _template!.layout,
+                                    service: _service,
+                                    embedded: true,
+                                    showProgressCard:
+                                        widget.templateKey !=
+                                        kElectronicReimbursementTemplateKey,
+                                    allowedActionKinds:
+                                        _isDelegatedPendingInitiate
+                                        ? <String>{
+                                            'clear-form',
+                                            'clear_form',
+                                            'clearform',
+                                            'reset-form',
+                                          }
+                                        : null,
+                                    onChanged: (key, value) {
+                                      setState(() {
+                                        _values[key] = value;
+                                        _recompute();
+                                      });
+                                      _scheduleAutosave();
+                                      _scheduleApprovalPreview();
+                                    },
+                                    onAction: _handleAction,
+                                  ),
                                 ],
                               ),
                             ),

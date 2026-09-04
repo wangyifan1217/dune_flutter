@@ -1,6 +1,7 @@
 import 'package:dunes_app/features/xflow/xflow_bill_cascade.dart';
 import 'package:dunes_app/features/xflow/xflow_bill_cascade_field.dart';
 import 'package:dunes_app/features/xflow/xflow_detail_logic.dart';
+import 'package:dunes_app/features/xflow/xflow_form_renderer.dart';
 import 'package:dunes_app/features/xflow/xflow_form_styles.dart';
 import 'package:dunes_app/features/xflow/xflow_linkage.dart';
 import 'package:dunes_app/features/xflow/xflow_models.dart';
@@ -28,18 +29,22 @@ void main() {
   });
 
   test('selected snapshot keeps billId and label', () {
-    final snap = xflowBillSnapshot({
-      'id': 184,
-      'billNo': 'AR-20260903-184',
-      'ourEntityName': '上海卓悦',
-      'counterpartyName': '湖北电信',
-      'billPeriod': '09.01-09.03',
-      'billAmount': 100,
-      'paidAmount': 0,
-      'remainingPayable': 100,
-      'remainingInvoiceable': 100,
-      'label': '上海卓悦 - 湖北电信 - 09.01-09.03',
-    }, remainingKind: 'payable', billDirection: 'AR');
+    final snap = xflowBillSnapshot(
+      {
+        'id': 184,
+        'billNo': 'AR-20260903-184',
+        'ourEntityName': '上海卓悦',
+        'counterpartyName': '湖北电信',
+        'billPeriod': '09.01-09.03',
+        'billAmount': 100,
+        'paidAmount': 0,
+        'remainingPayable': 100,
+        'remainingInvoiceable': 100,
+        'label': '上海卓悦 - 湖北电信 - 09.01-09.03',
+      },
+      remainingKind: 'payable',
+      billDirection: 'AR',
+    );
     expect(snap['billId'], 184);
     expect(snap['billDirection'], 'AR');
     expect(snap['label'], '上海卓悦 - 湖北电信 - 09.01-09.03');
@@ -48,17 +53,21 @@ void main() {
   });
 
   test('selected card keeps bill type and project', () {
-    final snap = xflowBillSnapshot({
-      'id': 184,
-      'billTypeCode': 'COUPON',
-      'billTypeName': '券包销售款',
-      'projectName': '吉林移动',
-      'ourEntityName': '宁波纵横',
-      'counterpartyName': '能链石化',
-      'billPeriod': '2026-07-31',
-      'billAmount': 100,
-      'remainingPayable': 100,
-    }, remainingKind: 'payable', billDirection: 'AP');
+    final snap = xflowBillSnapshot(
+      {
+        'id': 184,
+        'billTypeCode': 'COUPON',
+        'billTypeName': '券包销售款',
+        'projectName': '吉林移动',
+        'ourEntityName': '宁波纵横',
+        'counterpartyName': '能链石化',
+        'billPeriod': '2026-07-31',
+        'billAmount': 100,
+        'remainingPayable': 100,
+      },
+      remainingKind: 'payable',
+      billDirection: 'AP',
+    );
     expect(snap['billTypeName'], '券包销售款');
     expect(snap['projectName'], '吉林移动');
     expect(xflowBillTypeProjectLine(snap), '券包销售款 · 吉林移动');
@@ -88,11 +97,7 @@ void main() {
       {
         'linkedArBills': [
           val.first,
-          {
-            'billId': 2,
-            'label': '丙 - 丁 - 09月',
-            'remainingInvoiceable': 15,
-          },
+          {'billId': 2, 'label': '丙 - 丁 - 09月', 'remainingInvoiceable': 15},
         ],
       },
       const XflowProposalDetail(
@@ -126,10 +131,7 @@ void main() {
       xflowBillRemainingSummaryLabel('payable', billDirection: 'AP'),
       '剩余应付合计',
     );
-    expect(
-      xflowBillRemainingSummaryLabel('invoice'),
-      '剩余可开合计',
-    );
+    expect(xflowBillRemainingSummaryLabel('invoice'), '剩余可开合计');
     expect(
       xflowBillPreviewLine(rows.first, 'payable', billDirection: 'AP'),
       contains('剩余应付 80.00 元'),
@@ -273,45 +275,45 @@ void main() {
     expect(values['totalAmount'], '50.00');
   });
 
-  test('readonly totalAmount fills from bills when payment cards are empty', () {
-    final fields = [
-      XflowField.fromJson({
-        'key': 'paymentItems',
-        'type': 'dynamicList',
-        'itemLayout': 'card',
-        'columns': [
-          {'key': 'paymentAmount', 'type': 'money'},
+  test(
+    'readonly totalAmount fills from bills when payment cards are empty',
+    () {
+      final fields = [
+        XflowField.fromJson({
+          'key': 'paymentItems',
+          'type': 'dynamicList',
+          'itemLayout': 'card',
+          'columns': [
+            {'key': 'paymentAmount', 'type': 'money'},
+          ],
+        }),
+        XflowField.fromJson({
+          'key': 'totalAmount',
+          'type': 'money',
+          'readonly': true,
+        }),
+        XflowField.fromJson({
+          'key': 'linkedArBills',
+          'type': 'billCascade',
+          'billDirection': 'AR',
+          'remainingKind': 'payable',
+        }),
+      ];
+      final values = <String, dynamic>{
+        'paymentItems': [
+          {'paymentAmount': '0.00'},
         ],
-      }),
-      XflowField.fromJson({
-        'key': 'totalAmount',
-        'type': 'money',
-        'readonly': true,
-      }),
-      XflowField.fromJson({
-        'key': 'linkedArBills',
-        'type': 'billCascade',
-        'billDirection': 'AR',
-        'remainingKind': 'payable',
-      }),
-    ];
-    final values = <String, dynamic>{
-      'paymentItems': [
-        {'paymentAmount': '0.00'},
-      ],
-      'linkedArBills': [
-        {'remainingPayable': 100},
-      ],
-    };
-    XflowLinkage.recompute(fields, const {}, values);
-    expect(values['totalAmount'], '100.00');
-  });
+        'linkedArBills': [
+          {'remainingPayable': 100},
+        ],
+      };
+      XflowLinkage.recompute(fields, const {}, values);
+      expect(values['totalAmount'], '100.00');
+    },
+  );
 
   test('bill period start/end can be picked and swapped if reversed', () {
-    expect(
-      xflowBillFormatYmd(DateTime(2026, 9, 1)),
-      '2026-09-01',
-    );
+    expect(xflowBillFormatYmd(DateTime(2026, 9, 1)), '2026-09-01');
     expect(
       xflowBillNormalizePeriod(
         start: DateTime(2026, 9, 30),
@@ -326,14 +328,14 @@ void main() {
   });
 
   test('bill cycle query is a calendar month, display drops timestamps', () {
-    expect(
-      xflowBillMonthBounds(DateTime(2026, 9, 18)),
-      (start: DateTime(2026, 9, 1), end: DateTime(2026, 9, 30)),
-    );
-    expect(
-      xflowBillMonthBounds(DateTime(2026, 2, 1)),
-      (start: DateTime(2026, 2, 1), end: DateTime(2026, 2, 28)),
-    );
+    expect(xflowBillMonthBounds(DateTime(2026, 9, 18)), (
+      start: DateTime(2026, 9, 1),
+      end: DateTime(2026, 9, 30),
+    ));
+    expect(xflowBillMonthBounds(DateTime(2026, 2, 1)), (
+      start: DateTime(2026, 2, 1),
+      end: DateTime(2026, 2, 28),
+    ));
     expect(
       xflowBillCompactPeriod('2026-09-03 00:00:00 至 2026-09-03 23:59:59'),
       '2026-09-03',
@@ -400,4 +402,47 @@ void main() {
     expect(find.text('账单周期'), findsOneWidget);
     expect(find.text('关键词'), findsOneWidget);
   });
+
+  testWidgets(
+    'dynamic-list date cells open a date picker instead of text input',
+    (tester) async {
+      final values = <String, dynamic>{
+        'flightItems': [
+          {'fromCity': '上海', 'toCity': '北京', 'date': ''},
+        ],
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: XflowFormRenderer(
+              fields: [
+                XflowField.fromJson({
+                  'key': 'flightItems',
+                  'label': '机票行程',
+                  'type': 'dynamicList',
+                  'columns': [
+                    {'key': 'fromCity', 'label': '出发城市', 'type': 'text'},
+                    {'key': 'toCity', 'label': '到达城市', 'type': 'text'},
+                    {'key': 'date', 'label': '起飞日期', 'type': 'date'},
+                  ],
+                }),
+              ],
+              values: values,
+              layout: const {},
+              showProgressCard: false,
+              showActionBar: false,
+              onChanged: (key, value) => values[key] = value,
+            ),
+          ),
+        ),
+      );
+
+      final dateCell = find.byKey(const ValueKey('dyn_flightItems_0_date'));
+      expect(dateCell, findsOneWidget);
+      expect(find.byType(TextFormField), findsNWidgets(2));
+      await tester.tap(dateCell);
+      await tester.pumpAndSettle();
+      expect(find.byType(DatePickerDialog), findsOneWidget);
+    },
+  );
 }

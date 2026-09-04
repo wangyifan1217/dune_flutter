@@ -736,11 +736,14 @@ class ApprovalCommentAttachment {
   final int size;
   final String mimeType;
 
+  static final _imageExt = RegExp(
+    r'\.(jpg|jpeg|png|heic|heif|gif|webp|bmp)(\?|#|$)',
+  );
+
   bool get isImage {
     if (mimeType.toLowerCase().startsWith('image/')) return true;
-    return RegExp(
-      r'\.(jpg|jpeg|png|heic|heif|gif|webp|bmp)$',
-    ).hasMatch(name.trim().toLowerCase());
+    if (_imageExt.hasMatch(name.trim().toLowerCase())) return true;
+    return _imageExt.hasMatch(objectKey.trim().toLowerCase());
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -751,18 +754,30 @@ class ApprovalCommentAttachment {
       };
 
   /// 供 resolveFileUrl / openXflowAttachment 使用的通用 item 形态。
-  Map<String, dynamic> toFileItem() => <String, dynamic>{
-        'fileName': name,
-        'objectKey': objectKey,
-        if (mimeType.isNotEmpty) 'mimeType': mimeType,
-      };
+  Map<String, dynamic> toFileItem() {
+    final isHttp =
+        objectKey.startsWith('http://') || objectKey.startsWith('https://');
+    return <String, dynamic>{
+      'fileName': name,
+      'objectKey': objectKey,
+      if (isHttp) 'url': objectKey,
+      if (mimeType.isNotEmpty) 'mimeType': mimeType,
+    };
+  }
 
   factory ApprovalCommentAttachment.fromJson(Map<String, dynamic> json) {
+    final key = (json['objectKey'] ??
+            json['object_key'] ??
+            json['url'] ??
+            json['fileUrl'] ??
+            '')
+        .toString()
+        .trim();
     return ApprovalCommentAttachment(
       name: (json['name'] ?? json['fileName'] ?? '附件').toString(),
-      objectKey: (json['objectKey'] ?? '').toString(),
+      objectKey: key,
       size: _xflowInt(json['size']),
-      mimeType: (json['mimeType'] ?? '').toString(),
+      mimeType: (json['mimeType'] ?? json['contentType'] ?? '').toString(),
     );
   }
 }

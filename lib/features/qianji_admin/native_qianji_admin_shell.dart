@@ -17,6 +17,9 @@ import '../proposal_intake/native_proposal_intake_page.dart';
 import '../proposal_intake/proposal_intake_service.dart';
 import '../kpi/native_workbench_kpi_page.dart';
 import '../kpi/workbench_kpi_service.dart';
+import '../payroll/native_payroll_report_page.dart';
+import '../payroll/payroll_report_service.dart';
+import '../am_sso/am_sso_service.dart';
 import '../travel_import/native_travel_import_page.dart';
 import '../travel_import/travel_import_service.dart';
 import '../reconciliation/native_daily_reconciliation_page.dart';
@@ -29,6 +32,13 @@ import 'qianji_req_pool_pane.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
 const _hrbpAccent = Color(0xFF3D7A8C);
+const _ssoTileColors = <Color>[
+  Color(0xFFB45309),
+  Color(0xFF5B6FC4),
+  Color(0xFF0F766E),
+  Color(0xFF7B5CD8),
+  Color(0xFF3D7A8C),
+];
 
 /// 工作台：小名片概览 → 点进功能页（可左右滑回）。
 class NativeQianjiAdminShell extends StatefulWidget {
@@ -43,6 +53,7 @@ class NativeQianjiAdminShell extends StatefulWidget {
     this.dailyReconCardType = '',
     this.dailyReconOpenToken = 0,
     this.onDailyReconOpened,
+    this.onOpenSsoApp,
     this.active = true,
   });
 
@@ -56,6 +67,7 @@ class NativeQianjiAdminShell extends StatefulWidget {
   final String dailyReconCardType;
   final int dailyReconOpenToken;
   final VoidCallback? onDailyReconOpened;
+  final void Function(WorkbenchSsoApp app)? onOpenSsoApp;
 
   @override
   State<NativeQianjiAdminShell> createState() => _NativeQianjiAdminShellState();
@@ -78,6 +90,7 @@ enum _WorkbenchView {
   purchaseProposalIntake,
   travelImport,
   kpiPerformance,
+  payrollReports,
 }
 
 class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
@@ -101,6 +114,8 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   bool? _canSeeProposalIntake;
   bool? _canSeeTravelImport;
   bool? _canSeeKpiPerformance;
+  bool? _canSeePayrollReports;
+  List<WorkbenchSsoApp> _ssoApps = const [];
 
   static const _titles = {
     _WorkbenchView.tasks: '任务',
@@ -118,6 +133,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _WorkbenchView.purchaseProposalIntake: '采购提案',
     _WorkbenchView.travelImport: '差旅导入',
     _WorkbenchView.kpiPerformance: '业务绩效',
+    _WorkbenchView.payrollReports: '工资报表',
   };
 
   bool get _isQianjiAdmin => _session.effectiveQianjiAdminAccess;
@@ -136,6 +152,8 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_resolveProposalIntakeAccess());
     unawaited(_resolveTravelImportAccess());
     unawaited(_resolveKpiPerformanceAccess());
+    unawaited(_resolvePayrollReportAccess());
+    unawaited(_loadSsoApps());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (widget.active) _syncBackInterceptor();
@@ -152,7 +170,9 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         incoming.effectiveAdministrativeNoticeAccess !=
             _session.effectiveAdministrativeNoticeAccess ||
         incoming.effectiveBroadcastAccess !=
-            _session.effectiveBroadcastAccess) {
+            _session.effectiveBroadcastAccess ||
+        incoming.effectivePayrollReportAccess !=
+            _session.effectivePayrollReportAccess) {
       _session = incoming;
       unawaited(_resolveTaskSummaryAccess());
       unawaited(_resolveAdministrativeNoticeAccess());
@@ -161,7 +181,9 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
       unawaited(_resolveContractAccess());
       unawaited(_resolveProposalIntakeAccess());
       unawaited(_resolveTravelImportAccess());
-    unawaited(_resolveKpiPerformanceAccess());
+      unawaited(_resolveKpiPerformanceAccess());
+      unawaited(_resolvePayrollReportAccess());
+      unawaited(_loadSsoApps());
     }
     if (widget.active != oldWidget.active) {
       if (widget.active) {
@@ -201,6 +223,8 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_resolveProposalIntakeAccess());
     unawaited(_resolveTravelImportAccess());
     unawaited(_resolveKpiPerformanceAccess());
+    unawaited(_resolvePayrollReportAccess());
+    unawaited(_loadSsoApps());
   }
 
   Future<void> _resolveTaskSummaryAccess() async {
@@ -306,9 +330,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     }
     bool allowed = _session.effectiveTravelImportAccess;
     try {
-      final access = await TravelImportService(
-        session: _session,
-      ).fetchAccess();
+      final access = await TravelImportService(session: _session).fetchAccess();
       allowed = access.canImport;
     } catch (_) {
       allowed = _session.effectiveTravelImportAccess;
@@ -324,15 +346,45 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     }
     bool allowed = _session.effectiveKpiPerformanceAccess;
     try {
-      final access = await WorkbenchKpiService(
-        session: _session,
-      ).fetchAccess();
+      final access = await WorkbenchKpiService(session: _session).fetchAccess();
       allowed = access.allowed;
     } catch (_) {
       allowed = _session.effectiveKpiPerformanceAccess;
     }
     if (!mounted) return;
     setState(() => _canSeeKpiPerformance = allowed);
+  }
+
+  Future<void> _resolvePayrollReportAccess() async {
+    if (_session.isExternalUser) {
+      if (mounted) setState(() => _canSeePayrollReports = false);
+      return;
+    }
+    var allowed = _session.effectivePayrollReportAccess;
+    try {
+      allowed = await PayrollReportService(
+        session: _session,
+      ).fetchAccess().then((access) => access.allowed);
+    } catch (_) {
+      // Keep the session grant if the availability probe is temporarily unavailable.
+    }
+    if (!mounted) return;
+    setState(() => _canSeePayrollReports = allowed);
+  }
+
+  Future<void> _loadSsoApps() async {
+    if (_session.isExternalUser) {
+      if (mounted) setState(() => _ssoApps = const []);
+      return;
+    }
+    try {
+      final apps = await AmSsoService(_session).listApps();
+      if (!mounted) return;
+      setState(() => _ssoApps = apps);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _ssoApps = const []);
+    }
   }
 
   void _maybeOpenDailyRecon() {
@@ -657,6 +709,11 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           session: _session,
           onChromeChanged: _onTaskChrome,
         );
+      case _WorkbenchView.payrollReports:
+        return NativePayrollReportPage(
+          key: const ValueKey<String>('workbench-payroll-reports'),
+          session: _session,
+        );
       case _WorkbenchView.overview:
         return _buildOverviewPage();
     }
@@ -747,6 +804,16 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           enabled: true,
           onTap: () => widget.navigation.go('XR1'),
         ),
+      if (!_session.isExternalUser)
+        for (var i = 0; i < _ssoApps.length; i++)
+          _WorkbenchTile(
+            title: _ssoApps[i].title.isEmpty ? _ssoApps[i].appKey : _ssoApps[i].title,
+            subtitle: _ssoApps[i].subtitle.isEmpty ? '免登进入' : _ssoApps[i].subtitle,
+            icon: Icons.account_balance_outlined,
+            color: _ssoTileColors[i % _ssoTileColors.length],
+            enabled: true,
+            onTap: () => widget.onOpenSsoApp?.call(_ssoApps[i]),
+          ),
     ];
 
     final administrativeTiles = <_WorkbenchTile>[
@@ -785,6 +852,15 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           color: const Color(0xFF0F766E),
           enabled: true,
           onTap: () => _open(_WorkbenchView.kpiPerformance),
+        ),
+      if (!_session.isExternalUser && _canSeePayrollReports == true)
+        _WorkbenchTile(
+          title: '工资报表',
+          subtitle: '按月同步 · 查询与导出',
+          icon: Icons.payments_outlined,
+          color: const Color(0xFF3D7A8C),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.payrollReports),
         ),
     ];
 

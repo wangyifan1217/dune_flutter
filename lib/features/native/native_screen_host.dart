@@ -44,6 +44,7 @@ import '../ctrip/native_ctrip_h5_page_v2.dart';
 import '../ctrip/native_ctrip_pc_page.dart';
 import '../xrxs/native_xrxs_h5_page.dart';
 import '../xrxs/native_xrxs_pc_page.dart';
+import '../am_sso/native_am_sso_page.dart';
 import '../conversation/chat_dual_pane_shell.dart';
 import '../conversation/comm_unread_notifier.dart';
 import '../conversation/conversation_inbox_realtime.dart';
@@ -183,6 +184,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   int? _driveTargetItemId;
   String? _xrxsLoginSid;
   String? _xrxsLoginRole;
+  String? _ssoAppKey;
+  String _ssoAppTitle = '';
   ApprovalAssistantPickMode _approvalAssistantPickMode =
       ApprovalAssistantPickMode.browse;
 
@@ -3113,6 +3116,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             setState(() => _openDailyReconPending = false);
           }
         },
+        onOpenSsoApp: (app) {
+          setState(() {
+            _ssoAppKey = app.appKey;
+            _ssoAppTitle = app.title.isEmpty ? app.appKey : app.title;
+          });
+          widget.navigation.go('AM1');
+        },
       ),
     );
     return Positioned.fill(
@@ -3152,6 +3162,48 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     );
   }
 
+  Widget _buildDigitalEmployeeChat(String screen) {
+    if (!widget.session.effectiveDigitalEmployeeAccess) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.navigation.go('QJ');
+      });
+      return const Scaffold(
+        backgroundColor: DunesColors.bgApp,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    final item = _selectedDigitalEmployee;
+    final fallbackKey = switch (screen) {
+      'QJMA' => 'meeting-minutes',
+      'QJAM' => 'am-settlement',
+      _ => 'channel-dock',
+    };
+    final fallbackIcon = switch (screen) {
+      'QJMA' => 'auto_awesome',
+      'QJAM' => 'account_balance',
+      _ => 'oil_barrel',
+    };
+    final fallbackConfig = switch (screen) {
+      'QJMA' => DigitalAutoConfig.meetingMinutes,
+      'QJAM' => DigitalAutoConfig.amSettlement,
+      _ => DigitalAutoConfig.channelDock,
+    };
+    final matchesSelected = switch (screen) {
+      'QJMA' => item?.isMeetingMinutes == true,
+      'QJAM' => item?.isAmSettlement == true,
+      _ => item?.screenId == 'QJTO',
+    };
+    return NativeDigitalAutoChatPage(
+      key: ValueKey<String>(
+        '${screen.toLowerCase()}-${item?.employeeKey ?? fallbackKey}',
+      ),
+      session: widget.session,
+      onBack: widget.navigation.back,
+      iconKey: item?.iconKey ?? fallbackIcon,
+      configuration: matchesSelected ? item!.chatConfig : fallbackConfig,
+    );
+  }
+
   Widget _buildCurrentScreen(BuildContext context) {
     if (widget.session.isExternalUser &&
         _isRestrictedForExternalUser(widget.navigation.currentScreen)) {
@@ -3187,57 +3239,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             widget.navigation.go('QJR');
           },
           onOpenRobot: (role) => unawaited(_openRobotFromCatalog(role)),
-          onOpenMeetingAssistant: (item) {
+          onOpenDigitalEmployee: (item) {
             setState(() => _selectedDigitalEmployee = item);
-            widget.navigation.go('QJMA');
-          },
-          onOpenDigitalAuto: (item) {
-            setState(() => _selectedDigitalEmployee = item);
-            widget.navigation.go('QJTO');
+            switch (item.screenId) {
+              case 'QJMA':
+              case 'QJTO':
+              case 'QJAM':
+                widget.navigation.go(item.screenId);
+            }
           },
         );
       case 'QJMA':
-        if (!widget.session.effectiveDigitalEmployeeAccess) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) widget.navigation.go('QJ');
-          });
-          return const Scaffold(
-            backgroundColor: DunesColors.bgApp,
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        return NativeDigitalAutoChatPage(
-          key: ValueKey<String>(
-            'qjma-${_selectedDigitalEmployee?.employeeKey ?? 'meeting-minutes'}',
-          ),
-          session: widget.session,
-          onBack: widget.navigation.back,
-          iconKey: _selectedDigitalEmployee?.iconKey ?? 'auto_awesome',
-          configuration: _selectedDigitalEmployee?.isMeetingMinutes == true
-              ? _selectedDigitalEmployee!.chatConfig
-              : DigitalAutoConfig.meetingMinutes,
-        );
       case 'QJTO':
-        if (!widget.session.effectiveDigitalEmployeeAccess) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) widget.navigation.go('QJ');
-          });
-          return const Scaffold(
-            backgroundColor: DunesColors.bgApp,
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        return NativeDigitalAutoChatPage(
-          key: ValueKey<String>(
-            'qjto-${_selectedDigitalEmployee?.employeeKey ?? 'channel-dock'}',
-          ),
-          session: widget.session,
-          onBack: widget.navigation.back,
-          iconKey: _selectedDigitalEmployee?.iconKey ?? 'oil_barrel',
-          configuration: _selectedDigitalEmployee?.screenId == 'QJTO'
-              ? _selectedDigitalEmployee!.chatConfig
-              : DigitalAutoConfig.channelDock,
-        );
+      case 'QJAM':
+        return _buildDigitalEmployeeChat(widget.navigation.currentScreen);
       case 'QJR':
         if (!widget.session.effectiveRobotAccess) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -3574,6 +3589,29 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onBack: xrxsBack,
           loginSid: _xrxsLoginSid,
           loginRole: _xrxsLoginRole,
+        );
+      case 'AM1':
+        final amKey = ValueKey<String>(
+          'am-${widget.navigation.history.length}-'
+          '${widget.navigation.history.where((e) => e == 'AM1').length}-'
+          '${_ssoAppKey ?? ''}',
+        );
+        void amBack() {
+          if (widget.navigation.history.contains('QJA')) {
+            widget.navigation.popTo('QJA');
+          } else if (widget.navigation.canGoBack) {
+            widget.navigation.back();
+          } else {
+            widget.navigation.popTo(isDesktopCommOnly ? 'QJA' : 'B2');
+          }
+        }
+        return NativeAmSsoPage(
+          key: amKey,
+          session: widget.session,
+          navigation: widget.navigation,
+          appKey: _ssoAppKey ?? 'oa',
+          title: _ssoAppTitle.isEmpty ? '免登' : _ssoAppTitle,
+          onBack: amBack,
         );
       case 'QJD':
         final entity =
@@ -4624,6 +4662,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJMD',
       'QJMA',
       'QJTO',
+      'QJAM',
       'QJSS',
       'QJKB',
       'QJFS',
@@ -4692,7 +4731,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   String _mainTabScreenFor(String screen) {
     if (!isDesktopCommOnly &&
-        (screen == 'QJA' || screen == 'CT1' || screen == 'XR1')) {
+        (screen == 'QJA' ||
+            screen == 'CT1' ||
+            screen == 'XR1' ||
+            screen == 'AM1')) {
       return 'B2';
     }
     // 企业微盘从工作台进入：PC 归工作台 Tab，APP 归「我的」。
@@ -4709,6 +4751,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'QJMD' ||
         screen == 'QJMA' ||
         screen == 'QJTO' ||
+        screen == 'QJAM' ||
         screen == 'QJSS' ||
         screen == 'QJKB' ||
         screen == 'QJFS' ||
@@ -4725,7 +4768,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'QJTD') {
       return 'QJ';
     }
-    if (screen == 'QJA' || screen == 'CT1' || screen == 'XR1') return 'QJA';
+    if (screen == 'QJA' ||
+        screen == 'CT1' ||
+        screen == 'XR1' ||
+        screen == 'AM1') {
+      return 'QJA';
+    }
     if (screen == 'LH' || screen == 'LM') return 'LH';
     return 'C1';
   }
@@ -4799,6 +4847,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJMD',
       'QJMA',
       'QJTO',
+      'QJAM',
       'QJSS',
       'QJKB',
       'QJFS',
@@ -4844,6 +4893,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJMD' => const ['QJ', 'QJMM', 'QJMD'],
       'QJMA' => const ['QJ', 'QJMA'],
       'QJTO' => const ['QJ', 'QJTO'],
+      'QJAM' => const ['QJ', 'QJAM'],
       'QJSS' => const ['QJ', 'QJSS'],
       'QJKB' => const ['QJ', 'QJKB'],
       'QJTR' => const ['QJ', 'QJTR'],

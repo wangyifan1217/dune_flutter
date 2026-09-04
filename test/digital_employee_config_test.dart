@@ -48,6 +48,60 @@ void main() {
   test('catalog iconKey maps to the same Material icon on hub and chat', () {
     expect(digitalEmployeeIcon('auto_awesome'), Icons.auto_awesome_rounded);
     expect(digitalEmployeeIcon('oil_barrel'), Icons.oil_barrel_rounded);
+    expect(
+      digitalEmployeeIcon('account_balance'),
+      Icons.account_balance_outlined,
+    );
     expect(digitalEmployeeIcon(null), Icons.auto_awesome_rounded);
   });
+
+  test('uses am-settlement defaults and rejects unsafe mcp paths', () {
+    final item = DigitalEmployeeItem.fromApi({
+      'employeeKey': 'am-settlement',
+      'name': '资管.AI助理',
+      'screenId': 'QJAM',
+      'assistantConfig': {
+        'intro': {
+          'title': '你好，自定义资管助手',
+          'body': '查询结算行。',
+          'headerSubtitle': '结算字典',
+        },
+        'prompts': ['能源有哪些渠道'],
+        'runtime': {
+          'mcpServerName': 'am-settlement',
+          'mcpPath': 'unsafe-path',
+          'chatPath': '/qianji/am-settlement/chat',
+          'historyPath': '/qianji/am-settlement/history',
+          'scope': 'am.settlement.read',
+        },
+      },
+    });
+
+    expect(item.isAmSettlement, isTrue);
+    expect(item.chatConfig.welcomeTitle, '你好，自定义资管助手');
+    expect(item.chatConfig.headerSubtitle, '结算字典');
+    expect(item.chatConfig.welcomePrompts, ['能源有哪些渠道']);
+    expect(item.chatConfig.chatPath, '/qianji/am-settlement/chat');
+    expect(item.chatConfig.mcpPath, DigitalAutoConfig.amSettlement.mcpPath);
+    expect(
+      item.chatConfig.historyPath,
+      DigitalAutoConfig.amSettlement.historyPath,
+    );
+  });
+
+  test(
+    'falls back to am-settlement defaults for a malformed catalog config',
+    () {
+      final item = DigitalEmployeeItem.fromApi({
+        'employeeKey': 'am-settlement',
+        'name': '资管.AI助理',
+        'screenId': 'QJAM',
+        'assistantConfig': '{invalid json',
+      });
+
+      expect(item.chatConfig.headerTitle, '资管.AI助理');
+      expect(item.chatConfig.mcpPath, '/qianji/am-settlement/mcp');
+      expect(item.chatConfig.chatPath, '/qianji/am-settlement/chat');
+    },
+  );
 }

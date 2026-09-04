@@ -2009,20 +2009,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   Future<void> _loadChannelCategories() async {
-    try {
-      final data = await widget.service.fetchChannelCategories();
-      if (!mounted) return;
-      setState(() {
-        _channelCategoryL1 = data.l1;
-        _channelCategoryL2 = data.l2;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _channelCategoryL1 = const [];
-        _channelCategoryL2 = const [];
-      });
-    }
+    final results = await Future.wait([
+      _catalog.fetchChannelCategoryL1(),
+      _catalog.fetchChannelCategoryL2(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _channelCategoryL1 = results[0];
+      _channelCategoryL2 = results[1];
+    });
   }
 
   Future<void> _loadProductCatalog(CatalogRef? sector) async {

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -6,6 +7,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../conversation/conversation_service.dart';
+import 'im_cached_file_names.dart';
 import 'im_file_save_dir.dart';
 
 Future<Directory> _defaultDesktopSaveDir() async {
@@ -79,11 +81,7 @@ Future<List<Directory>> _cacheSearchDirs() async {
   return dirs;
 }
 
-String _safeFileName(String fileName) {
-  final trimmed = fileName.trim();
-  if (trimmed.isEmpty) return 'download';
-  return trimmed.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-}
+String _safeFileName(String fileName) => safeChatFileName(fileName);
 
 String _safeFolderName(String name) {
   final trimmed = name.trim();
@@ -92,18 +90,10 @@ String _safeFolderName(String name) {
 }
 
 String _uniqueFilePath(Directory dir, String fileName) {
-  final safe = _safeFileName(fileName);
-  var target = File('${dir.path}${Platform.pathSeparator}$safe');
-  if (!target.existsSync()) return target.path;
-  final dot = safe.lastIndexOf('.');
-  final base = dot > 0 ? safe.substring(0, dot) : safe;
-  final ext = dot > 0 ? safe.substring(dot) : '';
-  var i = 1;
-  while (true) {
-    final candidate = File('${dir.path}${Platform.pathSeparator}$base($i)$ext');
-    if (!candidate.existsSync()) return candidate.path;
-    i += 1;
-  }
+  final name = uniqueChatFileName(fileName, (candidate) {
+    return File('${dir.path}${Platform.pathSeparator}$candidate').existsSync();
+  });
+  return '${dir.path}${Platform.pathSeparator}$name';
 }
 
 /// 旧版：用 objectKey / url 的 FNV-1a 哈希做子目录（兼容已下载文件）。
@@ -164,6 +154,12 @@ Future<String?> _findInDir(
   int? conversationId,
 }) async {
   if (conversationId != null && conversationId > 0) {
+    final indexed = await _indexedCachedPath(
+      dir,
+      conversationId: conversationId,
+      cacheKey: cacheKey,
+    );
+    if (indexed != null) return indexed;
     if (cacheKey.isNotEmpty) {
       final hashed = _hashedConversationCachedFilePath(
         dir,
@@ -175,10 +171,12 @@ Future<String?> _findInDir(
       if (await hashedFile.exists() && await hashedFile.length() > 0) {
         return hashed;
       }
+      // cacheKey 在时不再用「仅文件名」命中，避免同名另一份附件打开成旧文件。
+    } else {
+      final flat = _conversationCachedFilePath(dir, conversationId, fileName);
+      final flatFile = File(flat);
+      if (await flatFile.exists() && await flatFile.length() > 0) return flat;
     }
-    final flat = _conversationCachedFilePath(dir, conversationId, fileName);
-    final flatFile = File(flat);
-    if (await flatFile.exists() && await flatFile.length() > 0) return flat;
   }
   if (cacheKey.isNotEmpty) {
     final legacy = _legacyCachedFilePath(dir, cacheKey, fileName);
@@ -186,6 +184,179 @@ Future<String?> _findInDir(
     if (await file.exists() && await file.length() > 0) return legacy;
   }
   return null;
+}
+
+const _imIndexFileName = '.dunes-im-index.json';
+
+File _imIndexFile(Directory convDir) {
+  return File('${convDir.path}${Platform.pathSeparator}$_imIndexFileName');
+}
+
+Future<Map<String, String>> _loadImIndex(Directory convDir) async {
+  final file = _imIndexFile(convDir);
+  try {
+    if (!await file.exists()) return <String, String>{};
+    final raw = jsonDecode(await file.readAsString());
+    if (raw is! Map) return <String, String>{};
+    final files = raw['files'];
+    if (files is! Map) return <String, String>{};
+    final out = <String, String>{};
+    files.forEach((key, value) {
+      final k = key.toString().trim();
+      final v = value.toString().trim();
+      if (k.isNotEmpty && v.isNotEmpty) out[k] = v;
+    });
+    return out;
+  } catch (_) {
+    return <String, String>{};
+  }
+}
+
+Future<void> _saveImIndex(Directory convDir, Map<String, String> index) async {
+  await convDir.create(recursive: true);
+  final payload = <String, dynamic>{'v': 1, 'files': index};
+  await _imIndexFile(convDir).writeAsString(jsonEncode(payload), flush: true);
+}
+
+Future<String?> _indexedCachedPath(
+  Directory root, {
+  required int conversationId,
+  required String cacheKey,
+}) async {
+  final key = cacheKey.trim();
+  if (key.isEmpty) return null;
+  final convDir = Directory(_conversationFolderPath(root, conversationId));
+  final index = await _loadImIndex(convDir);
+  final name = (index[key] ?? '').trim();
+  if (name.isEmpty) return null;
+  final path = '${convDir.path}${Platform.pathSeparator}$name';
+  final file = File(path);
+  if (await file.exists() && await file.length() > 0) return path;
+  return null;
+}
+
+bool _isFileBusyError(Object error) {
+  if (error is FileSystemException) {
+    final code = error.osError?.errorCode ?? 0;
+    // Win32: 32 sharing, 33 lock。POSIX: 16 EBUSY, 26 ETXTBSY。
+    if (code == 32 || code == 33 || code == 16 || code == 26) return true;
+    final msg = '${error.message} ${error.osError ?? ''}'.toLowerCase();
+    if (msg.contains('being used') ||
+        msg.contains('sharing violation') ||
+        msg.contains('cannot access the file') ||
+        msg.contains('locked')) {
+      return true;
+    }
+  }
+  final text = error.toString().toLowerCase();
+  return text.contains('being used') ||
+      text.contains('sharing violation') ||
+      text.contains('locked');
+}
+
+Future<void> _writeBytesAllowingRename({
+  required Directory dir,
+  required String basename,
+  required Uint8List bytes,
+}) async {
+  final path = '${dir.path}${Platform.pathSeparator}$basename';
+  await Directory(File(path).parent.path).create(recursive: true);
+  await File(path).writeAsBytes(bytes, flush: true);
+}
+
+Future<String> saveBytesAsCachedFileImpl(
+  Uint8List bytes,
+  String cacheKey,
+  String fileName, {
+  int? conversationId,
+}) async {
+  final key = cacheKey.trim();
+  if (key.isEmpty && (conversationId == null || conversationId <= 0)) {
+    return saveBytesAsFileImpl(bytes, fileName);
+  }
+  final dir = await _resolveSaveDir();
+  if (conversationId == null || conversationId <= 0) {
+    if (key.isEmpty) return saveBytesAsFileImpl(bytes, fileName);
+    final parent = Directory(File(_legacyCachedFilePath(dir, key, fileName)).parent.path);
+    return _writeWithBusyFallback(
+      dir: parent,
+      preferredName: _safeFileName(fileName),
+      originalFileName: fileName,
+      bytes: bytes,
+    );
+  }
+
+  final convDir = Directory(_conversationFolderPath(dir, conversationId));
+  await convDir.create(recursive: true);
+  final index = key.isEmpty ? <String, String>{} : await _loadImIndex(convDir);
+  var existsCache = <String, bool>{};
+  bool exists(String name) {
+    return existsCache.putIfAbsent(
+      name,
+      () => File('${convDir.path}${Platform.pathSeparator}$name').existsSync(),
+    );
+  }
+
+  var targetName = allocateCachedChatFileName(
+    fileName: fileName,
+    cacheKey: key,
+    index: index,
+    exists: exists,
+  );
+  try {
+    await _writeBytesAllowingRename(
+      dir: convDir,
+      basename: targetName,
+      bytes: bytes,
+    );
+  } catch (e) {
+    if (!_isFileBusyError(e)) rethrow;
+    existsCache[targetName] = true;
+    final renamed = uniqueChatFileName(fileName, exists);
+    if (renamed == targetName) rethrow;
+    await _writeBytesAllowingRename(
+      dir: convDir,
+      basename: renamed,
+      bytes: bytes,
+    );
+    targetName = renamed;
+  }
+  if (key.isNotEmpty) {
+    index[key] = targetName;
+    await _saveImIndex(convDir, index);
+  }
+  final path = '${convDir.path}${Platform.pathSeparator}$targetName';
+  await _deleteLegacyHashedCopy(
+    dir,
+    cacheKey: key,
+    fileName: fileName,
+    conversationId: conversationId,
+    keepPath: path,
+  );
+  return path;
+}
+
+Future<String> _writeWithBusyFallback({
+  required Directory dir,
+  required String preferredName,
+  required String originalFileName,
+  required Uint8List bytes,
+}) async {
+  try {
+    await _writeBytesAllowingRename(
+      dir: dir,
+      basename: preferredName,
+      bytes: bytes,
+    );
+    return '${dir.path}${Platform.pathSeparator}$preferredName';
+  } catch (e) {
+    if (!_isFileBusyError(e)) rethrow;
+    final renamed = uniqueChatFileName(originalFileName, (name) {
+      return File('${dir.path}${Platform.pathSeparator}$name').existsSync();
+    });
+    await _writeBytesAllowingRename(dir: dir, basename: renamed, bytes: bytes);
+    return '${dir.path}${Platform.pathSeparator}$renamed';
+  }
 }
 
 Future<String?> findCachedChatFileImpl(
@@ -205,37 +376,6 @@ Future<String?> findCachedChatFileImpl(
     if (hit != null) return hit;
   }
   return null;
-}
-
-Future<String> saveBytesAsCachedFileImpl(
-  Uint8List bytes,
-  String cacheKey,
-  String fileName, {
-  int? conversationId,
-}) async {
-  final key = cacheKey.trim();
-  if (key.isEmpty && (conversationId == null || conversationId <= 0)) {
-    return saveBytesAsFileImpl(bytes, fileName);
-  }
-  final dir = await _resolveSaveDir();
-  final String path;
-  if (conversationId != null && conversationId > 0) {
-    path = _conversationCachedFilePath(dir, conversationId, fileName);
-  } else if (key.isNotEmpty) {
-    path = _legacyCachedFilePath(dir, key, fileName);
-  } else {
-    return saveBytesAsFileImpl(bytes, fileName);
-  }
-  await Directory(File(path).parent.path).create(recursive: true);
-  await File(path).writeAsBytes(bytes, flush: true);
-  await _deleteLegacyHashedCopy(
-    dir,
-    cacheKey: key,
-    fileName: fileName,
-    conversationId: conversationId,
-    keepPath: path,
-  );
-  return path;
 }
 
 /// 新文件已落到会话文件夹后，清掉旧版「一文件一 hash 子目录」。

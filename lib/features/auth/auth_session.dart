@@ -40,6 +40,7 @@ class AuthSession {
     this.travelImportAccess = false,
     this.travelViewAll = false,
     this.kpiPerformanceAccess = false,
+    this.payrollReportAccess = false,
   });
 
   final String phone;
@@ -103,6 +104,9 @@ class AuthSession {
   /// 工作台行政「业务绩效」。
   final bool kpiPerformanceAccess;
 
+  /// 工作台行政「工资报表」。
+  final bool payrollReportAccess;
+
   /// 后端下发的「任务汇总」能力开关；未下发时工作台会走接口探测。
   final bool hrbpAccess;
 
@@ -159,6 +163,9 @@ class AuthSession {
 
   bool get effectiveKpiPerformanceAccess =>
       kpiPerformanceAccess || DunesDefaults.localLighthouseAccessBypass;
+
+  bool get effectivePayrollReportAccess =>
+      payrollReportAccess || DunesDefaults.localLighthouseAccessBypass;
 
   AuthSession withLocalDevGrants() {
     var next = this;
@@ -246,6 +253,7 @@ class AuthSession {
     bool? travelImportAccess,
     bool? travelViewAll,
     bool? kpiPerformanceAccess,
+    bool? payrollReportAccess,
   }) {
     return AuthSession(
       phone: phone ?? this.phone,
@@ -287,8 +295,8 @@ class AuthSession {
           proposalIntakeViewAll ?? this.proposalIntakeViewAll,
       travelImportAccess: travelImportAccess ?? this.travelImportAccess,
       travelViewAll: travelViewAll ?? this.travelViewAll,
-      kpiPerformanceAccess:
-          kpiPerformanceAccess ?? this.kpiPerformanceAccess,
+      kpiPerformanceAccess: kpiPerformanceAccess ?? this.kpiPerformanceAccess,
+      payrollReportAccess: payrollReportAccess ?? this.payrollReportAccess,
     );
   }
 
@@ -364,6 +372,7 @@ class AuthSession {
       travelImportAccess: data['travelImportAccess'] == true,
       travelViewAll: data['travelViewAll'] == true,
       kpiPerformanceAccess: data['kpiPerformanceAccess'] == true,
+      payrollReportAccess: data['payrollReportAccess'] == true,
     );
   }
 
@@ -417,6 +426,7 @@ class AuthSession {
       travelImportAccess: claims['travelImportAccess'] == true,
       travelViewAll: claims['travelViewAll'] == true,
       kpiPerformanceAccess: claims['kpiPerformanceAccess'] == true,
+      payrollReportAccess: claims['payrollReportAccess'] == true,
     );
   }
 
@@ -475,6 +485,7 @@ class AuthSession {
       'travelImportAccess': travelImportAccess,
       'travelViewAll': travelViewAll,
       'kpiPerformanceAccess': kpiPerformanceAccess,
+      'payrollReportAccess': payrollReportAccess,
     };
   }
 
@@ -522,6 +533,7 @@ class AuthSession {
       travelImportAccess: json['travelImportAccess'] == true,
       travelViewAll: json['travelViewAll'] == true,
       kpiPerformanceAccess: json['kpiPerformanceAccess'] == true,
+      payrollReportAccess: json['payrollReportAccess'] == true,
     );
   }
 

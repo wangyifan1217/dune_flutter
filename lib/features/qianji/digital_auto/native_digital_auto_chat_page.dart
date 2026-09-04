@@ -8,6 +8,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/layout/chat_layout.dart';
 import '../../../core/theme/dunes_theme.dart';
 import '../../auth/auth_session.dart';
+import '../../conversation/conversation_picker_sheet.dart';
+import '../../conversation/conversation_service.dart';
+import '../../shell/dunes_toast.dart';
 import 'digital_auto_agent.dart';
 import 'digital_auto_config.dart';
 import 'digital_auto_history_store.dart';
@@ -46,6 +49,7 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
     with WidgetsBindingObserver {
   late final DigitalAutoAgent _agent;
   late final DigitalAutoHistoryStore _history;
+  late final ConversationService _conversations;
   final _controller = TextEditingController();
   final _focus = FocusNode();
   final _scroll = ScrollController();
@@ -67,6 +71,7 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
       session: widget.session,
       configuration: widget.configuration,
     );
+    _conversations = ConversationService(session: widget.session);
     _connect(restoreHistory: true);
   }
 
@@ -180,6 +185,52 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
         _connecting = false;
         _connectError = _friendlyError(e);
       });
+    }
+  }
+
+  Future<void> _copyReply(_ChatLine line) async {
+    final markdown = line.text.trim();
+    if (markdown.isEmpty) {
+      showDunesToast(context, '暂无可复制内容');
+      return;
+    }
+    try {
+      await Clipboard.setData(ClipboardData(text: markdown));
+      if (mounted) showDunesToast(context, '已复制');
+    } catch (_) {
+      if (mounted) {
+        showDunesToast(context, '复制失败，请重试', kind: DunesToastKind.error);
+      }
+    }
+  }
+
+  Future<void> _forwardReply(_ChatLine line) async {
+    final markdown = line.text.trim();
+    if (markdown.isEmpty) {
+      showDunesToast(context, '暂无可转发内容');
+      return;
+    }
+    final conversationId = await showConversationPickerSheet(
+      context: context,
+      service: _conversations,
+      title: '转发到 IM',
+    );
+    if (conversationId == null || conversationId <= 0 || !mounted) return;
+    try {
+      await _conversations.sendText(
+        conversationId,
+        markdown,
+        payload: <String, dynamic>{
+          'forwardedFromDigitalEmployee': true,
+          'employeeKey': widget.configuration.employeeKey,
+          'employeeName': widget.configuration.headerTitle,
+        },
+      );
+      if (mounted) showDunesToast(context, '已转发到会话');
+    } catch (_) {
+      if (mounted) {
+        showDunesToast(context, '转发失败，请重试', kind: DunesToastKind.error);
+      }
     }
   }
 
@@ -330,6 +381,8 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
                             text: line.text,
                             toolStatus: line.toolStatus,
                             busy: _sending && identical(line, _lines.last),
+                            onCopy: () => unawaited(_copyReply(line)),
+                            onForward: () => unawaited(_forwardReply(line)),
                           ),
                       ],
                     ],
@@ -344,13 +397,19 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
     );
   }
 
-  IconData get _assistantIcon => digitalEmployeeIcon(
-    widget.iconKey ??
-        (widget.configuration.employeeKey ==
-                DigitalAutoConfig.meetingMinutes.employeeKey
-            ? 'auto_awesome'
-            : 'oil_barrel'),
-  );
+  IconData get _assistantIcon {
+    if (widget.iconKey != null && widget.iconKey!.trim().isNotEmpty) {
+      return digitalEmployeeIcon(widget.iconKey);
+    }
+    final key = widget.configuration.employeeKey;
+    if (key == DigitalAutoConfig.meetingMinutes.employeeKey) {
+      return digitalEmployeeIcon('auto_awesome');
+    }
+    if (key == DigitalAutoConfig.amSettlement.employeeKey) {
+      return digitalEmployeeIcon('account_balance');
+    }
+    return digitalEmployeeIcon('oil_barrel');
+  }
 
   Widget _buildHeader(BuildContext context) {
     final wide = isWideChatLayout(context);
@@ -373,11 +432,7 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
               color: _assistantPurple,
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              _assistantIcon,
-              color: Colors.white,
-              size: 20,
-            ),
+            child: Icon(_assistantIcon, color: Colors.white, size: 20),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -876,15 +931,20 @@ class _AssistantBubble extends StatelessWidget {
     required this.text,
     required this.toolStatus,
     required this.busy,
+    required this.onCopy,
+    required this.onForward,
   });
 
   final IconData icon;
   final String text;
   final String toolStatus;
   final bool busy;
+  final VoidCallback onCopy;
+  final VoidCallback onForward;
 
   @override
   Widget build(BuildContext context) {
+    final showActions = !busy && text.trim().isNotEmpty;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -895,11 +955,7 @@ class _AssistantBubble extends StatelessWidget {
             color: _assistantPurple,
             shape: BoxShape.circle,
           ),
-          child: Icon(
-            icon,
-            color: Colors.white,
-            size: 17,
-          ),
+          child: Icon(icon, color: Colors.white, size: 17),
         ),
         const SizedBox(width: 8),
         Flexible(
@@ -966,11 +1022,76 @@ class _AssistantBubble extends StatelessWidget {
                       color: DunesColors.text3,
                     ),
                   ),
+                if (showActions)
+                  _AssistantReplyActions(onCopy: onCopy, onForward: onForward),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _AssistantReplyActions extends StatelessWidget {
+  const _AssistantReplyActions({required this.onCopy, required this.onForward});
+
+  final VoidCallback onCopy;
+  final VoidCallback onForward;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _ActionChip(icon: Icons.copy_outlined, label: '复制', onTap: onCopy),
+          const SizedBox(width: 4),
+          _ActionChip(
+            icon: Icons.shortcut_rounded,
+            label: '转发到 IM',
+            onTap: onForward,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionChip extends StatelessWidget {
+  const _ActionChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: DunesColors.text3),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: DunesTypography.sans(
+                fontSize: 12,
+                color: DunesColors.text3,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

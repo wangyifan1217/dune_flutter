@@ -21,7 +21,10 @@ void main() {
     final session = AuthSession.fromJwt(
       phone: '13800138000',
       userId: 0,
-      token: _fakeJwt({'userId': 7, 'roles': ['ADMIN']}),
+      token: _fakeJwt({
+        'userId': 7,
+        'roles': ['ADMIN'],
+      }),
       apiBase: 'http://example/api/v1',
     );
     expect(session.isExternalUser, isFalse);
@@ -96,10 +99,44 @@ void main() {
     });
     expect(fromMe.kpiPerformanceAccess, isTrue);
   });
+
+  test('AuthSession reads, copies and persists payroll report access', () {
+    final fromJwt = AuthSession.fromJwt(
+      phone: '13800138000',
+      userId: 0,
+      token: _fakeJwt({'userId': 7, 'payrollReportAccess': true}),
+      apiBase: 'http://example/api/v1',
+    );
+    expect(fromJwt.payrollReportAccess, isTrue);
+    expect(fromJwt.effectivePayrollReportAccess, isTrue);
+    expect(
+      fromJwt.copyWith(payrollReportAccess: false).payrollReportAccess,
+      isFalse,
+    );
+    expect(AuthSession.fromJson(fromJwt.toJson()).payrollReportAccess, isTrue);
+
+    const base = AuthSession(
+      phone: '13800138000',
+      userId: 7,
+      token: 't',
+      apiBase: 'http://example/api/v1',
+      roles: [],
+    );
+    expect(
+      AuthSession.enrichFromUsersMe(base, {
+        'payrollReportAccess': true,
+      }).payrollReportAccess,
+      isTrue,
+    );
+  });
 }
 
 String _fakeJwt(Map<String, dynamic> claims) {
-  final header = base64Url.encode(utf8.encode('{"alg":"HS256"}')).replaceAll('=', '');
-  final payload = base64Url.encode(utf8.encode(jsonEncode(claims))).replaceAll('=', '');
+  final header = base64Url
+      .encode(utf8.encode('{"alg":"HS256"}'))
+      .replaceAll('=', '');
+  final payload = base64Url
+      .encode(utf8.encode(jsonEncode(claims)))
+      .replaceAll('=', '');
   return '$header.$payload.sig';
 }

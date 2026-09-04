@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../auth/auth_session.dart';
+import 'electronic_reimbursement_form.dart';
 import 'xflow_models.dart';
 import 'xflow_template_runtime.dart';
 
@@ -629,7 +630,10 @@ class XflowService {
             : null) ??
         (templateObj is Map<String, dynamic> ? templateObj['fields'] : null) ??
         const [];
-    var fields = _parseFields(fieldsRaw);
+    var fields = applyElectronicReimbursementFieldRules(
+      templateKey,
+      _parseFields(fieldsRaw),
+    );
     if (includeDictEnrich) {
       fields = await _enrichFieldOptions(fields);
     }
@@ -761,6 +765,10 @@ class XflowService {
         .toList(growable: false);
   }
 
+  Future<Map<String, dynamic>?> fetchOrgUser(int userId) async {
+    return fetchOrgUserProfile(userId: userId);
+  }
+
   String resolveProposalAssetUrl(String urlOrPath) {
     final value = urlOrPath.trim();
     if (value.isEmpty) return '';
@@ -884,9 +892,17 @@ class XflowService {
   }
 
   List<ApprovalCommentAttachment> _parseCommentAttachments(dynamic raw) {
-    if (raw is! List) return const [];
+    dynamic data = raw;
+    if (data is String && data.trim().isNotEmpty) {
+      try {
+        data = jsonDecode(data);
+      } catch (_) {
+        return const [];
+      }
+    }
+    if (data is! List) return const [];
     final out = <ApprovalCommentAttachment>[];
-    for (final e in raw) {
+    for (final e in data) {
       if (e is! Map) continue;
       final att = ApprovalCommentAttachment.fromJson(
         Map<String, dynamic>.from(e),
@@ -1129,16 +1145,32 @@ class XflowService {
     return _fetchAssigneeNames(null, extraUserIds: userIds);
   }
 
+  static const _publicStorageBase = 'https://image.heunion.com/zdfiles';
+
   Future<String> resolveFileUrl(Map<String, dynamic> item) async {
-    final direct = (item['url'] ?? '').toString();
-    if (direct.startsWith('http')) return direct;
-    final key = (item['objectKey'] ?? item['url'] ?? '').toString();
+    String takeHttp(String v) {
+      final s = v.trim();
+      if (s.startsWith('http://') || s.startsWith('https://')) return s;
+      return '';
+    }
+
+    final direct = takeHttp((item['url'] ?? '').toString());
+    if (direct.isNotEmpty) return direct;
+    final key = (item['objectKey'] ?? item['url'] ?? '').toString().trim();
     if (key.isEmpty) return '';
+    final keyHttp = takeHttp(key);
+    if (keyHttp.isNotEmpty) return keyHttp;
+    // 与 PC / 聊天一致：proposals/、im/ 走公网 CDN，避免手机 Image.network
+    // 打到内网预签名地址失败。
+    final rel = key.replaceFirst(RegExp(r'^/'), '');
+    if (rel.startsWith('proposals/') || rel.startsWith('im/')) {
+      return '$_publicStorageBase/$rel';
+    }
     try {
       final raw = await _request(
         '/storage/presigned-get?bucket=xflow-proposals&objectKey=${Uri.encodeQueryComponent(key)}',
       );
-      return (raw['url'] ?? '').toString();
+      return takeHttp((raw['url'] ?? '').toString());
     } catch (_) {
       return '';
     }
@@ -1409,6 +1441,69 @@ class XflowService {
     }
     final rows = await _requestList('/org/users?${params.join('&')}');
     return rows.whereType<Map<String, dynamic>>().toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>?> fetchOrgUserProfile({
+    required int userId,
+    String displayName = '',
+  }) async {
+    if (userId > 0) {
+      try {
+        final raw = await _request('/org/users/$userId');
+        if (raw.isNotEmpty) return raw;
+      } catch (_) {}
+      try {
+        final rows = await _requestList('/org/users?ids=$userId');
+        for (final row in rows.whereType<Map>()) {
+          final map = Map<String, dynamic>.from(row);
+          if (_int(map['userId'] ?? map['id']) == userId) return map;
+        }
+      } catch (_) {}
+    }
+    final q = displayName.trim();
+    if (q.isEmpty) return null;
+    final rows = await searchOrgUsers(q);
+    for (final row in rows) {
+      final id = _int(row['userId'] ?? row['id']);
+      if (id == userId) return row;
+    }
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<List<Map<String, dynamic>>> searchMyApprovedDocs({
+    String query = '',
+    Map<String, dynamic>? meta,
+  }) async {
+    final items = await fetchB14Initiated();
+    return [
+      for (final item in items)
+        if (isApprovedMineStatus(item.status) &&
+            matchesApprovedMineFilter({
+              'code': item.code,
+              'title': item.title,
+              'templateKey': item.templateKey,
+              'businessType': item.businessType,
+              'documentKind': item.documentKind,
+              'proposalType': item.proposalType,
+            }, meta) &&
+            matchesApprovedMineQuery({
+              'code': item.code,
+              'title': item.title,
+              'templateKey': item.templateKey,
+            }, query))
+          {
+            'id': item.id,
+            'proposalId': item.id,
+            'businessId': item.id,
+            'code': item.code,
+            'title': item.title,
+            'status': item.status,
+            'businessType': item.businessType,
+            'templateKey': item.templateKey,
+            'documentKind': item.documentKind,
+            'proposalType': item.proposalType,
+          },
+    ];
   }
 
   /// 通用远程搜索：按模板 `remoteSearch.path` 请求，不做业务分支。

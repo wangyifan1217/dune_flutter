@@ -10,6 +10,8 @@ void main() {
     final catalog = SettlementCatalogService.offline();
     expect(await catalog.fetchSyncSources(), isEmpty);
     expect(await catalog.fetchProductCategoryL1(), isEmpty);
+    expect(await catalog.fetchChannelCategoryL1(), isEmpty);
+    expect(await catalog.fetchChannelCategoryL2(parentCode: 'YH'), isEmpty);
     expect(await catalog.fetchProjects(keyword: '星和'), isEmpty);
     expect(
       await catalog.fetchBillTypes(syncSource: 'YD', productSource: 'CHANNEL'),
@@ -68,6 +70,68 @@ void main() {
     expect(ref.name, 'APP渠道');
     expect(ref.id, 2070026713580023809);
     expect(ref.isEmpty, isFalse);
+  });
+
+  test('fetchChannelCategoryL1 maps catalog rows', () async {
+    Uri? seen;
+    final client = MockClient((request) async {
+      seen = request.url;
+      return http.Response(
+        jsonEncode({
+          'code': 200,
+          'msg': '操作成功',
+          'data': [
+            {'id': 11, 'code': 'YH', 'name': '银行', 'level': 1},
+          ],
+        }),
+        200,
+        headers: const {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final catalog = SettlementCatalogService(client: client);
+    addTearDown(catalog.dispose);
+    final rows = await catalog.fetchChannelCategoryL1();
+    expect(seen?.path, contains('/out/shaqiu/catalog/channel-category/l1'));
+    expect(rows, hasLength(1));
+    expect(rows.single.code, 'YH');
+    expect(rows.single.name, '银行');
+    expect(rows.single.id, 11);
+  });
+
+  test('fetchChannelCategoryL2 filters by parentCode and keeps parent fields', () async {
+    Uri? seen;
+    final client = MockClient((request) async {
+      seen = request.url;
+      return http.Response(
+        jsonEncode({
+          'code': 200,
+          'msg': '操作成功',
+          'data': [
+            {
+              'id': 12,
+              'code': 'YH_YL',
+              'name': '银联',
+              'level': 2,
+              'parentId': 11,
+              'parentCode': 'YH',
+              'parentName': '银行',
+            },
+          ],
+        }),
+        200,
+        headers: const {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final catalog = SettlementCatalogService(client: client);
+    addTearDown(catalog.dispose);
+    final rows = await catalog.fetchChannelCategoryL2(parentCode: 'YH');
+    expect(seen?.path, contains('/out/shaqiu/catalog/channel-category/l2'));
+    expect(seen?.queryParameters['parentCode'], 'YH');
+    expect(rows, hasLength(1));
+    expect(rows.single.code, 'YH_YL');
+    expect(rows.single.parentCode, 'YH');
+    expect(rows.single.parentId, 11);
+    expect(rows.single.parentName, '银行');
   });
 
   test('catalog ref keeps displayPath in json snapshot', () {

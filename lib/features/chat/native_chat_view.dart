@@ -77,6 +77,7 @@ import 'chat_widgets.dart';
 import 'desktop_composer_pending.dart';
 import 'desktop_screenshot.dart';
 import 'file_download.dart' as file_dl;
+import 'im_cached_file_names.dart';
 import 'user_avatar_widget.dart';
 import 'native_audio_recorder.dart';
 
@@ -7065,20 +7066,24 @@ class _NativeChatViewState extends State<NativeChatView>
         cancelToken: cancel,
       );
       if (cacheKey.isNotEmpty || conversationId != null) {
-        return file_dl.saveBytesAsCachedFile(
+        final path = await file_dl.saveBytesAsCachedFile(
           bytes,
           cacheKey,
           fileName,
           conversationId: conversationId,
         );
+        _notifyIfFileSavedAsCopy(fileName, path);
+        return path;
       }
-      return file_dl.saveBytesAsFile(bytes, fileName);
+      final path = await file_dl.saveBytesAsFile(bytes, fileName);
+      _notifyIfFileSavedAsCopy(fileName, path);
+      return path;
     }
     final url = ConversationService.mediaDirectUrl(payload);
     if (url.isEmpty) {
       throw Exception('附件地址为空');
     }
-    return file_dl.openUrlAsFile(
+    final path = await file_dl.openUrlAsFile(
       url,
       fileName,
       onProgress: _setDownloadProgress,
@@ -7086,6 +7091,14 @@ class _NativeChatViewState extends State<NativeChatView>
       conversationId: conversationId,
       cancelToken: cancel,
     );
+    _notifyIfFileSavedAsCopy(fileName, path);
+    return path;
+  }
+
+  void _notifyIfFileSavedAsCopy(String originalName, String? savedPath) {
+    if (savedPath == null || savedPath.isEmpty) return;
+    if (!savedChatFileRenamed(originalName, savedPath)) return;
+    _showToast('原文件正在使用，已另存为 ${chatFileBasename(savedPath)}');
   }
 
   Future<bool> _confirmFileDownload(

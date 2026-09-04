@@ -17,6 +17,8 @@ IconData digitalEmployeeIcon(String? key) {
       return Icons.smart_toy_outlined;
     case 'hub':
       return Icons.hub_outlined;
+    case 'account_balance':
+      return Icons.account_balance_outlined;
     default:
       return Icons.auto_awesome_rounded;
   }
@@ -44,9 +46,14 @@ class DigitalEmployeeItem {
   bool get isMeetingMinutes =>
       screenId == 'QJMA' || employeeKey == 'meeting-minutes';
 
+  bool get isAmSettlement =>
+      screenId == 'QJAM' || employeeKey == 'am-settlement';
+
   DigitalAutoAssistantConfig get chatConfig {
     final defaults = isMeetingMinutes
         ? DigitalAutoConfig.meetingMinutes
+        : isAmSettlement
+        ? DigitalAutoConfig.amSettlement
         : DigitalAutoConfig.channelDock;
     return DigitalAutoAssistantConfig.fromJson(
       assistantConfig,

@@ -5,10 +5,12 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mime/mime.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/util/native_permissions.dart';
 import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
@@ -48,7 +50,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
   List<ApprovalStakeholderPerson> _people = const [];
   ApprovalCommentItem? _replyParent;
   final List<_PendingAttachment> _pendingAtts = [];
-  final Map<String, Future<String>> _attUrlFutures = {};
+  final Map<String, Future<Uint8List?>> _attBytesFutures = {};
   bool _loading = true;
   bool _sending = false;
   bool _picking = false;
@@ -349,7 +351,16 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
     setState(() => _picking = true);
     List<XFile> files = const [];
     try {
-      files = await openFiles();
+      if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+        if (!await ensurePhotosPermission()) {
+          if (mounted) showDunesToast(context, '需要相册权限才能添加图片');
+          return;
+        }
+        final picked = await ImagePicker().pickMultiImage();
+        files = [for (final f in picked) XFile(f.path, name: f.name)];
+      } else {
+        files = await openFiles();
+      }
     } catch (_) {
       files = const [];
     } finally {
@@ -439,7 +450,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
     final pending = _PendingAttachment(
       name: name,
       size: bytes.length,
-      mimeType: lookupMimeType(name) ?? '',
+      mimeType: lookupMimeType(name, headerBytes: bytes) ?? '',
     );
     setState(() => _pendingAtts.add(pending));
     try {
@@ -541,12 +552,19 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
     return '';
   }
 
-  /// 预签名 URL 按 objectKey 缓存，避免评论列表重建时反复请求。
-  Future<String> _attachmentUrl(ApprovalCommentAttachment att) {
-    return _attUrlFutures.putIfAbsent(
-      att.objectKey,
-      () => widget.service.resolveFileUrl(att.toFileItem()),
-    );
+  /// 按 objectKey 缓存附件字节，避免评论列表重建时反复下载。
+  /// 手机端用内存图而不是 Image.network，避免预签名/内网地址加载失败。
+  Future<Uint8List?> _attachmentBytes(ApprovalCommentAttachment att) {
+    return _attBytesFutures.putIfAbsent(att.objectKey, () async {
+      try {
+        return await fetchXflowAttachmentBytes(
+          service: widget.service,
+          item: att.toFileItem(),
+        );
+      } catch (_) {
+        return null;
+      }
+    });
   }
 
   Future<void> _openAttachment(ApprovalCommentAttachment att) {
@@ -928,7 +946,7 @@ class _XfDetCommentsSectionState extends State<XfDetCommentsSection> {
                 const SizedBox(height: 6),
                 _CommentAttachments(
                   attachments: c.attachments,
-                  urlOf: _attachmentUrl,
+                  bytesOf: _attachmentBytes,
                   onOpen: _openAttachment,
                 ),
               ],
@@ -1097,12 +1115,12 @@ class _PendingAttachmentChip extends StatelessWidget {
 class _CommentAttachments extends StatelessWidget {
   const _CommentAttachments({
     required this.attachments,
-    required this.urlOf,
+    required this.bytesOf,
     required this.onOpen,
   });
 
   final List<ApprovalCommentAttachment> attachments;
-  final Future<String> Function(ApprovalCommentAttachment) urlOf;
+  final Future<Uint8List?> Function(ApprovalCommentAttachment) bytesOf;
   final Future<void> Function(ApprovalCommentAttachment) onOpen;
 
   @override
@@ -1135,13 +1153,13 @@ class _CommentAttachments extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: SizedBox(
-          width: 72,
-          height: 72,
-          child: FutureBuilder<String>(
-            future: urlOf(att),
+          width: 96,
+          height: 96,
+          child: FutureBuilder<Uint8List?>(
+            future: bytesOf(att),
             builder: (context, snap) {
-              final url = snap.data ?? '';
-              if (url.isEmpty) {
+              final bytes = snap.data;
+              if (bytes == null || bytes.isEmpty) {
                 return Container(
                   color: DunesColors.bgSoft,
                   alignment: Alignment.center,
@@ -1153,20 +1171,21 @@ class _CommentAttachments extends StatelessWidget {
                         )
                       : const Icon(
                           Icons.broken_image_outlined,
-                          size: 20,
+                          size: 22,
                           color: DunesColors.text3,
                         ),
                 );
               }
-              return Image.network(
-                url,
+              return Image.memory(
+                bytes,
                 fit: BoxFit.cover,
+                gaplessPlayback: true,
                 errorBuilder: (_, _, _) => Container(
                   color: DunesColors.bgSoft,
                   alignment: Alignment.center,
                   child: const Icon(
                     Icons.broken_image_outlined,
-                    size: 20,
+                    size: 22,
                     color: DunesColors.text3,
                   ),
                 ),

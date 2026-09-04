@@ -543,6 +543,27 @@ class SettlementCatalogService {
     );
   }
 
+  Future<List<CatalogRef>> fetchChannelCategoryL1() async {
+    return _mapList(
+      '/out/shaqiu/catalog/channel-category/l1',
+      CatalogRef.fromJson,
+    );
+  }
+
+  Future<List<CatalogRef>> fetchChannelCategoryL2({
+    String parentCode = '',
+    int? parentId,
+  }) async {
+    return _mapList(
+      '/out/shaqiu/catalog/channel-category/l2',
+      CatalogRef.fromJson,
+      query: {
+        if (parentCode.trim().isNotEmpty) 'parentCode': parentCode.trim(),
+        if (parentId != null && parentId > 0) 'parentId': '$parentId',
+      },
+    );
+  }
+
   Future<List<CatalogRef>> fetchProjects({String keyword = ''}) async {
     return _mapList(
       '/out/shaqiu/catalog/project',

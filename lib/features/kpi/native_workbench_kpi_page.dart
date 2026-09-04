@@ -42,7 +42,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
   final ScrollController _scrollController = ScrollController();
   Timer? _keywordDebounce;
 
-  bool _countedOnly = false;
+  bool _countedOnly = true;
   bool _loading = true;
   bool _busy = false;
   String? _error;
@@ -127,7 +127,9 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
       );
       if (!mounted) return;
       setState(() {
-        _tasks = rows;
+        _tasks = _countedOnly
+            ? rows.where((task) => task.isCounted).toList(growable: false)
+            : rows;
         _loading = false;
       });
     } catch (e) {
@@ -174,8 +176,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => _KpiTaskEditorDialog(
-        initial: existing ??
-            const WorkbenchKpiTask(id: 0, userId: 0, name: ''),
+        initial: existing ?? const WorkbenchKpiTask(id: 0, userId: 0, name: ''),
         searchPeople: _service.searchPeople,
       ),
     );
@@ -219,7 +220,8 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
   Future<void> _deleteTask(WorkbenchKpiTask row) async {
     final ok = await _confirm(
       title: '确认删除任务？',
-      content: '将删除「${row.userName.isEmpty ? row.userId : row.userName} / ${row.name}」，删除后不可恢复。',
+      content:
+          '将删除「${row.userName.isEmpty ? row.userId : row.userName} / ${row.name}」，删除后不可恢复。',
       confirmLabel: '确认删除',
       danger: true,
     );
@@ -457,10 +459,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null) {
-      return _ErrorPane(
-        message: _error!,
-        onRetry: () => unawaited(_load()),
-      );
+      return _ErrorPane(message: _error!, onRetry: () => unawaited(_load()));
     }
     return ListView(
       controller: _scrollController,
@@ -474,10 +473,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 48),
             child: Center(
-              child: Text(
-                '暂无人员任务',
-                style: TextStyle(color: DunesColors.text3),
-              ),
+              child: Text('暂无人员任务', style: TextStyle(color: DunesColors.text3)),
             ),
           )
         else
@@ -501,8 +497,8 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
                     onPressed: _busy
                         ? null
                         : () => unawaited(
-                              _openDetail(group.userId, group.userName),
-                            ),
+                            _openDetail(group.userId, group.userName),
+                          ),
                     child: const Text('查看明细'),
                   ),
                 ],
@@ -513,9 +509,8 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
                 task: task,
                 onOpen: _busy
                     ? null
-                    : () => unawaited(
-                          _openDetail(group.userId, group.userName),
-                        ),
+                    : () =>
+                          unawaited(_openDetail(group.userId, group.userName)),
                 onEdit: _busy ? null : () => unawaited(_editTask(task)),
                 onDelete: _busy ? null : () => unawaited(_deleteTask(task)),
               ),
@@ -631,7 +626,9 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
               ],
             ),
           ),
-          Expanded(child: _detailUserId > 0 ? _buildDetailBody() : _buildListBody()),
+          Expanded(
+            child: _detailUserId > 0 ? _buildDetailBody() : _buildListBody(),
+          ),
         ],
       ),
     );
@@ -715,7 +712,10 @@ class _TaskCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: task.isCounted
                         ? const Color(0xFFEAEFDF)
@@ -974,7 +974,9 @@ class _KpiTaskEditorDialogState extends State<_KpiTaskEditorDialog> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('开始日期'),
-                subtitle: Text(_draft.startDate.isEmpty ? '不限' : _draft.startDate),
+                subtitle: Text(
+                  _draft.startDate.isEmpty ? '不限' : _draft.startDate,
+                ),
                 onTap: () => unawaited(_pickDate(start: true)),
               ),
               ListTile(
@@ -1114,24 +1116,25 @@ class _KpiUserPickerDialogState extends State<_KpiUserPickerDialog> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _error != null
-                      ? Center(child: Text(_error!))
-                      : _items.isEmpty
-                          ? const Center(child: Text('输入关键词搜索'))
-                          : ListView.builder(
-                              itemCount: _items.length,
-                              itemBuilder: (ctx, i) {
-                                final p = _items[i];
-                                return ListTile(
-                                  title: Text(p.displayName),
-                                  subtitle: Text(
-                                    [p.dept, p.title]
-                                        .where((e) => e.isNotEmpty)
-                                        .join(' · '),
-                                  ),
-                                  onTap: () => Navigator.pop(context, p),
-                                );
-                              },
-                            ),
+                  ? Center(child: Text(_error!))
+                  : _items.isEmpty
+                  ? const Center(child: Text('输入关键词搜索'))
+                  : ListView.builder(
+                      itemCount: _items.length,
+                      itemBuilder: (ctx, i) {
+                        final p = _items[i];
+                        return ListTile(
+                          title: Text(p.displayName),
+                          subtitle: Text(
+                            [
+                              p.dept,
+                              p.title,
+                            ].where((e) => e.isNotEmpty).join(' · '),
+                          ),
+                          onTap: () => Navigator.pop(context, p),
+                        );
+                      },
+                    ),
             ),
           ],
         ),

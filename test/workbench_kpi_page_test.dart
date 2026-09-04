@@ -27,7 +27,16 @@ class _FakeKpiService extends WorkbenchKpiService {
       name: '中石油',
       province: '广东',
     ),
+    WorkbenchKpiTask(
+      id: 3,
+      userId: 9,
+      userName: '李四',
+      name: '不计项目',
+      province: '广东',
+      isCounted: false,
+    ),
   ];
+  bool lastCountedOnly = false;
   int deleteCount = 0;
   int createCount = 0;
   int rerunCount = 0;
@@ -38,6 +47,10 @@ class _FakeKpiService extends WorkbenchKpiService {
     String q = '',
     bool countedOnly = false,
   }) async {
+    lastCountedOnly = countedOnly;
+    if (countedOnly) {
+      return tasks.where((task) => task.isCounted).toList(growable: false);
+    }
     return tasks;
   }
 
@@ -176,6 +189,13 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('中石油'), findsOneWidget);
+    expect(find.text('不计项目'), findsNothing);
+    expect(service.lastCountedOnly, isTrue);
+
+    await tester.tap(find.text('仅计入'));
+    await tester.pumpAndSettle();
+    expect(find.text('不计项目'), findsOneWidget);
+    expect(service.lastCountedOnly, isFalse);
 
     await tester.tap(find.byKey(const Key('kpi-delete-1')));
     await tester.pumpAndSettle();
@@ -237,7 +257,9 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
   });
 
-  testWidgets('fits a phone-sized APP viewport without overflow', (tester) async {
+  testWidgets('fits a phone-sized APP viewport without overflow', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -261,7 +283,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('monthly detail save requires a second confirmation', (tester) async {
+  testWidgets('monthly detail save requires a second confirmation', (
+    tester,
+  ) async {
     final service = _FakeKpiService();
     await tester.pumpWidget(
       MaterialApp(

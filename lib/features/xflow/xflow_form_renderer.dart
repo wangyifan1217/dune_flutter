@@ -10,6 +10,7 @@ import 'xflow_form_styles.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_upload_field.dart';
+import 'electronic_reimbursement_form.dart';
 
 typedef XflowFieldChanged = void Function(String key, dynamic value);
 typedef XflowFormAction = Future<void> Function(String actionKind);
@@ -621,6 +622,18 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
 
   bool _isRemoteSearchField(XflowField field) => field.remoteSearch != null;
 
+  Map<String, String> _rawFill(XflowField field) {
+    final nested = field.raw['remoteSearch'];
+    final raw = nested is Map ? nested['fill'] : field.raw['fill'];
+    if (raw is! Map) return const {};
+    return {
+      for (final entry in raw.entries)
+        if ('${entry.key}'.trim().isNotEmpty &&
+            '${entry.value}'.trim().isNotEmpty)
+          '${entry.key}': '${entry.value}',
+    };
+  }
+
   String? _userRoleFilter(XflowField field) {
     final raw = field.raw;
     for (final key in ['roleCode', 'allowedRole', 'userRoleCode']) {
@@ -633,7 +646,12 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
   }
 
   Widget _proposalField(XflowField field, {bool inRow = false}) {
-    final hint = field.placeholder.isEmpty ? '搜索已完成的协作提案' : field.placeholder;
+    final hint = field.placeholder.isEmpty
+        ? (field.raw['dataSource']?.toString() == kApprovedMineDataSource
+              ? '选择自己已通过的单据'
+              : '搜索已完成的协作提案')
+        : field.placeholder;
+    final meta = field.raw['meta'];
     return _fieldWrap(
       field,
       _XflowProposalPicker(
@@ -641,7 +659,12 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         value: widget.values[field.key],
         placeholder: hint,
         readonly: field.readonly,
+        mineApproved:
+            field.raw['dataSource']?.toString() == kApprovedMineDataSource,
+        meta: meta is Map ? Map<String, dynamic>.from(meta) : null,
+        fill: {...?field.remoteSearch?.fill, ..._rawFill(field)},
         onChanged: (v) => widget.onChanged(field.key, v),
+        onPatch: (patch) => patch.forEach(widget.onChanged),
       ),
       inRow: inRow,
     );
@@ -667,6 +690,9 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
 
   Widget _userField(XflowField field, {bool inRow = false}) {
     final roleCode = _userRoleFilter(field);
+    final locked =
+        field.readonly ||
+        field.raw['defaultFrom']?.toString() == 'current_user';
     final hint = field.placeholder.isEmpty
         ? (roleCode == 'TECH' ? '搜索技术审批人' : '搜索姓名/部门')
         : field.placeholder;
@@ -676,7 +702,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         service: widget.service,
         value: widget.values[field.key],
         placeholder: hint,
-        readonly: field.readonly,
+        readonly: locked,
         roleCode: roleCode,
         onChanged: (v) => widget.onChanged(field.key, v),
       ),
@@ -1015,7 +1041,10 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     return row;
   }
 
-  void _scheduleCardMinItems(String fieldKey, List<Map<String, dynamic>> groups) {
+  void _scheduleCardMinItems(
+    String fieldKey,
+    List<Map<String, dynamic>> groups,
+  ) {
     if (_cardMinPadScheduled.contains(fieldKey)) return;
     _cardMinPadScheduled.add(fieldKey);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1166,6 +1195,22 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         ),
       );
     }
+    if (col.type == 'date') {
+      return _fieldWrap(
+        col,
+        _dynamicDatePicker(
+          key: ValueKey('group_${listField.key}_${index}_${col.key}'),
+          value: group[col.key]?.toString() ?? '',
+          readonly: col.readonly,
+          decoration: _inputDecoration(
+            hint: col.placeholder,
+            readonly: col.readonly,
+          ),
+          style: xfInputTextStyle(),
+          onChanged: (value) => patch({col.key: value}),
+        ),
+      );
+    }
     final keyboardType = switch (col.type) {
       'number' ||
       'money' => const TextInputType.numberWithOptions(decimal: true),
@@ -1291,7 +1336,22 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         ? xfMatrixCellDecoration(hint: col['placeholder']?.toString())
         : xfDynCellDecoration(hint: col['placeholder']?.toString());
 
-    final input = col['type']?.toString() == 'select'
+    if (colField.type == 'date') {
+      final picker = _dynamicDatePicker(
+        key: ValueKey('dyn_${fieldKey}_${ri}_$colKey'),
+        value: value,
+        readonly: colField.readonly,
+        decoration: decoration,
+        style: matrix
+            ? DunesTypography.sans(fontSize: 11, color: DunesColors.text)
+            : xfDynInputTextStyle(),
+        onChanged: setVal,
+      );
+      if (matrix) return picker;
+      return XfDynCell(label: label, child: picker);
+    }
+
+    final input = colField.type == 'select'
         ? DropdownButtonFormField<String>(
             value: value.isEmpty ? null : value,
             isExpanded: true,
@@ -1324,6 +1384,68 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     if (matrix) return input;
 
     return XfDynCell(label: label, child: input);
+  }
+
+  Widget _dynamicDatePicker({
+    required Key key,
+    required String value,
+    required bool readonly,
+    required InputDecoration decoration,
+    required TextStyle style,
+    required ValueChanged<String> onChanged,
+  }) {
+    final date = DateTime.tryParse(value);
+    final label = date == null
+        ? '请选择日期'
+        : '${date.year} / ${date.month.toString().padLeft(2, '0')} / ${date.day.toString().padLeft(2, '0')}';
+    final control = xfFixedHeightControl(
+      child: InputDecorator(
+        decoration: decoration,
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: style.copyWith(
+                  color: date == null
+                      ? DunesColors.text3
+                      : (readonly ? DunesColors.text2 : DunesColors.text),
+                ),
+              ),
+            ),
+            Icon(
+              readonly
+                  ? Icons.lock_clock_outlined
+                  : Icons.calendar_today_outlined,
+              size: 14,
+              color: DunesColors.text3,
+            ),
+          ],
+        ),
+      ),
+    );
+    if (readonly) return control;
+    return InkWell(
+      key: key,
+      onTap: () async {
+        final now = DateTime.now();
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: date ?? now,
+          firstDate: DateTime(now.year - 5),
+          lastDate: DateTime(now.year + 10),
+        );
+        if (picked != null) {
+          onChanged(
+            '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}',
+          );
+        }
+      },
+      borderRadius: BorderRadius.circular(9),
+      child: control,
+    );
   }
 
   List<XflowFieldOption> _colOptions(Map<String, dynamic> col) {
@@ -1639,7 +1761,8 @@ class _XflowSelectPickerState extends State<_XflowSelectPicker> {
   @override
   void didUpdateWidget(covariant _XflowSelectPicker oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.value != widget.value || oldWidget.options != widget.options) {
+    if (oldWidget.value != widget.value ||
+        oldWidget.options != widget.options) {
       final next = _labelForValue(widget.value);
       if (_controller.text != next) {
         _controller.text = next;
@@ -1665,11 +1788,13 @@ class _XflowSelectPickerState extends State<_XflowSelectPicker> {
     final q = query.trim().toLowerCase();
     final out = q.isEmpty
         ? widget.options
-        : widget.options.where((o) {
-            final label = o.label.toLowerCase();
-            final value = o.value.toLowerCase();
-            return label.contains(q) || value.contains(q);
-          }).toList(growable: false);
+        : widget.options
+              .where((o) {
+                final label = o.label.toLowerCase();
+                final value = o.value.toLowerCase();
+                return label.contains(q) || value.contains(q);
+              })
+              .toList(growable: false);
     setState(() {
       _filtered = out;
       if (markTouched) _touched = true;
@@ -1722,96 +1847,100 @@ class _XflowSelectPickerState extends State<_XflowSelectPicker> {
               readOnly: true,
               enableInteractiveSelection: false,
               style: xfInputTextStyle(),
-              decoration: xfInputDecoration(
-                hint: widget.placeholder,
-                readonly: widget.readonly,
-              ).copyWith(
-                suffixIconConstraints: const BoxConstraints(minWidth: 72),
-                suffixIcon: widget.readonly
-                    ? const Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        size: 18,
-                        color: DunesColors.text3,
-                      )
-                    : Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (hasText)
-                            IconButton(
-                              tooltip: '清除',
-                              icon: const Icon(
-                                Icons.close_rounded,
-                                size: 18,
-                                color: DunesColors.text3,
+              decoration:
+                  xfInputDecoration(
+                    hint: widget.placeholder,
+                    readonly: widget.readonly,
+                  ).copyWith(
+                    suffixIconConstraints: const BoxConstraints(minWidth: 72),
+                    suffixIcon: widget.readonly
+                        ? const Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 18,
+                            color: DunesColors.text3,
+                          )
+                        : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (hasText)
+                                IconButton(
+                                  tooltip: '清除',
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    size: 18,
+                                    color: DunesColors.text3,
+                                  ),
+                                  onPressed: _clear,
+                                ),
+                              IconButton(
+                                tooltip: _expanded ? '收起' : '展开',
+                                icon: Icon(
+                                  _expanded
+                                      ? Icons.keyboard_arrow_up_rounded
+                                      : Icons.keyboard_arrow_down_rounded,
+                                  size: 18,
+                                  color: DunesColors.text3,
+                                ),
+                                onPressed: () {
+                                  if (_expanded) {
+                                    setState(() => _expanded = false);
+                                  } else {
+                                    setState(() => _expanded = true);
+                                    _applyFilter('', markTouched: false);
+                                  }
+                                },
                               ),
-                              onPressed: _clear,
-                            ),
-                          IconButton(
-                            tooltip: _expanded ? '收起' : '展开',
-                            icon: Icon(
-                              _expanded
-                                  ? Icons.keyboard_arrow_up_rounded
-                                  : Icons.keyboard_arrow_down_rounded,
-                              size: 18,
-                              color: DunesColors.text3,
-                            ),
-                            onPressed: () {
-                              if (_expanded) {
-                                setState(() => _expanded = false);
-                              } else {
-                                setState(() => _expanded = true);
-                                _applyFilter('', markTouched: false);
-                              }
-                            },
+                            ],
                           ),
-                        ],
-                      ),
+                  ),
+            ),
+          ),
+          if (showMenu) ...[
+            const SizedBox(height: 6),
+            Container(
+              constraints: const BoxConstraints(maxHeight: 220),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: DunesColors.border),
+              ),
+              child: ListView.separated(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: _filtered.length.clamp(0, 8),
+                separatorBuilder: (_, _) =>
+                    Divider(height: 1, color: DunesColors.borderSoft),
+                itemBuilder: (context, index) {
+                  final option = _filtered[index];
+                  return ListTile(
+                    dense: true,
+                    title: Text(
+                      option.label,
+                      style: DunesTypography.sans(fontSize: 12),
+                    ),
+                    trailing: const Icon(
+                      Icons.keyboard_arrow_right_rounded,
+                      size: 16,
+                      color: DunesColors.text3,
+                    ),
+                    onTap: () => _select(option),
+                  );
+                },
               ),
             ),
-          ),
-        if (showMenu) ...[
-          const SizedBox(height: 6),
-          Container(
-            constraints: const BoxConstraints(maxHeight: 220),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: DunesColors.border),
+          ] else if (!widget.readonly &&
+              _touched &&
+              _expanded &&
+              _controller.text.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              '未找到匹配选项，请换个关键词',
+              style: DunesTypography.sans(
+                fontSize: 11,
+                color: DunesColors.text3,
+              ),
             ),
-            child: ListView.separated(
-              padding: EdgeInsets.zero,
-              shrinkWrap: true,
-              itemCount: _filtered.length.clamp(0, 8),
-              separatorBuilder: (_, _) =>
-                  Divider(height: 1, color: DunesColors.borderSoft),
-              itemBuilder: (context, index) {
-                final option = _filtered[index];
-                return ListTile(
-                  dense: true,
-                  title: Text(
-                    option.label,
-                    style: DunesTypography.sans(fontSize: 12),
-                  ),
-                  trailing: const Icon(
-                    Icons.keyboard_arrow_right_rounded,
-                    size: 16,
-                    color: DunesColors.text3,
-                  ),
-                  onTap: () => _select(option),
-                );
-              },
-            ),
-          ),
-        ] else if (!widget.readonly &&
-            _touched &&
-            _expanded &&
-            _controller.text.trim().isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(
-            '未找到匹配选项，请换个关键词',
-            style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
-          ),
-        ],
+          ],
         ],
       ),
     );
@@ -1834,12 +1963,25 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
   }
 
   void _onFocusChange() {
-    if (!_focus.hasFocus || widget.readonly) return;
+    if (!_focus.hasFocus) {
+      _dismissSuggestions();
+      return;
+    }
+    if (widget.readonly) return;
     final role = widget.roleCode?.trim() ?? '';
     if (role.isEmpty) return;
     if (_controller.text.trim().isNotEmpty) return;
     if (_results.isNotEmpty || _loading) return;
     _search('');
+  }
+
+  void _dismissSuggestions() {
+    if (_results.isEmpty && !_searched && !_loading) return;
+    setState(() {
+      _results = const [];
+      _searched = false;
+      _loading = false;
+    });
   }
 
   @override
@@ -1914,14 +2056,16 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
         query,
         roleCode: widget.roleCode,
       );
-      if (!mounted || _controller.text.trim() != query) return;
+      if (!mounted || !_focus.hasFocus || _controller.text.trim() != query) {
+        return;
+      }
       setState(() {
         _results = rows;
         _searched = true;
         _loading = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || !_focus.hasFocus) return;
       setState(() {
         _loading = false;
         _searched = true;
@@ -1955,33 +2099,40 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
               editableTextState: editableTextState,
             );
           },
-          decoration: xfInputDecoration(hint: widget.placeholder).copyWith(
-            suffixIcon: _loading
-                ? const Padding(
-                    padding: EdgeInsets.all(10),
-                    child: SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : hasText && !widget.readonly
-                ? IconButton(
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      size: 18,
-                      color: DunesColors.text3,
-                    ),
-                    onPressed: _clearSelection,
-                    tooltip: '清除',
-                  )
-                : const Icon(
-                    Icons.search,
-                    size: 18,
-                    color: DunesColors.text3,
-                  ),
-          ),
+          decoration:
+              xfInputDecoration(
+                hint: widget.placeholder,
+                readonly: widget.readonly,
+              ).copyWith(
+                suffixIcon: widget.readonly
+                    ? null
+                    : _loading
+                    ? const Padding(
+                        padding: EdgeInsets.all(10),
+                        child: SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : hasText
+                    ? IconButton(
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          size: 18,
+                          color: DunesColors.text3,
+                        ),
+                        onPressed: _clearSelection,
+                        tooltip: '清除',
+                      )
+                    : const Icon(
+                        Icons.search,
+                        size: 18,
+                        color: DunesColors.text3,
+                      ),
+              ),
           style: xfInputTextStyle(),
+          onTapOutside: (_) => _focus.unfocus(),
           onChanged: widget.readonly ? null : _onQueryChanged,
         ),
         if (_results.isNotEmpty) ...[
@@ -2002,7 +2153,8 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
               itemBuilder: (context, index) {
                 final u = _results[index];
                 final name = (u['displayName'] ?? u['name'] ?? '').toString();
-                final dept = (u['departmentName'] ?? u['dept'] ?? '').toString();
+                final dept = (u['departmentName'] ?? u['dept'] ?? '')
+                    .toString();
                 return ListTile(
                   dense: true,
                   title: Text(
@@ -2112,6 +2264,10 @@ class _XflowProposalPicker extends StatefulWidget {
     required this.placeholder,
     required this.readonly,
     required this.onChanged,
+    this.mineApproved = false,
+    this.meta,
+    this.fill = const {},
+    this.onPatch,
   });
 
   final XflowService? service;
@@ -2119,6 +2275,10 @@ class _XflowProposalPicker extends StatefulWidget {
   final String placeholder;
   final bool readonly;
   final void Function(dynamic value) onChanged;
+  final bool mineApproved;
+  final Map<String, dynamic>? meta;
+  final Map<String, String> fill;
+  final void Function(Map<String, dynamic> patch)? onPatch;
 
   @override
   State<_XflowProposalPicker> createState() => _XflowProposalPickerState();
@@ -2140,10 +2300,23 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
   }
 
   void _onFocusChange() {
-    if (!_focus.hasFocus || widget.readonly) return;
+    if (!_focus.hasFocus) {
+      _dismissSuggestions();
+      return;
+    }
+    if (widget.readonly) return;
     if (_controller.text.trim().isNotEmpty) return;
     if (_results.isNotEmpty || _loading) return;
     _search('');
+  }
+
+  void _dismissSuggestions() {
+    if (_results.isEmpty && !_searched && !_loading) return;
+    setState(() {
+      _results = const [];
+      _searched = false;
+      _loading = false;
+    });
   }
 
   @override
@@ -2185,13 +2358,22 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
       _searched = false;
       _loading = false;
     });
+    if (widget.mineApproved &&
+        widget.onPatch != null &&
+        widget.fill.isNotEmpty) {
+      widget.onPatch!({for (final key in widget.fill.keys) key: ''});
+    }
     widget.onChanged(null);
   }
 
   void _selectProposal(Map<String, dynamic> row) {
-    final id = _int(row['proposalId'] ?? row['id']);
+    final id = _int(row['proposalId'] ?? row['id'] ?? row['businessId']);
     final code = (row['code'] ?? '').toString().trim();
     final title = (row['title'] ?? row['name'] ?? '').toString().trim();
+    if (widget.mineApproved) {
+      unawaited(_selectApprovedMine(row, id: id, code: code, title: title));
+      return;
+    }
     widget.onChanged(
       linkedProposalIntakePayload(id: id, code: code, title: title),
     );
@@ -2199,6 +2381,56 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
       _controller.text = code.isNotEmpty && title.isNotEmpty
           ? '$code · $title'
           : (code.isNotEmpty ? code : title);
+      _results = const [];
+      _searched = false;
+      _loading = false;
+    });
+    _focus.unfocus();
+  }
+
+  Future<void> _selectApprovedMine(
+    Map<String, dynamic> row, {
+    required int id,
+    required String code,
+    required String title,
+  }) async {
+    Map<String, dynamic>? formData;
+    final businessType = (row['businessType'] ?? '').toString().trim();
+    if (widget.service != null && id > 0 && businessType.isNotEmpty) {
+      try {
+        final detail = await widget.service!.fetchSubmissionDetail(
+          businessType: businessType,
+          businessId: id,
+        );
+        formData = detail.formData;
+      } catch (_) {
+        try {
+          final detail = await widget.service!.fetchProposalDetail(id);
+          formData = detail.formValues;
+        } catch (_) {}
+      }
+    }
+    final source = flattenApprovedDocSource(row, formData);
+    final payload = <String, dynamic>{
+      'proposalId': id,
+      'businessId': id,
+      'code': code.isNotEmpty ? code : '${source['code'] ?? ''}'.trim(),
+      'title': title.isNotEmpty ? title : '${source['title'] ?? ''}'.trim(),
+      'businessType': businessType,
+      'templateKey': '${row['templateKey'] ?? ''}',
+      'source': 'approved_mine',
+    };
+    final patch = <String, dynamic>{
+      ...fillFromApprovedDoc(widget.fill, source),
+    };
+    if (widget.onPatch != null) {
+      widget.onPatch!({...patch});
+      widget.onChanged(payload);
+    } else {
+      widget.onChanged(payload);
+    }
+    setState(() {
+      _controller.text = _displayText(payload);
       _results = const [];
       _searched = false;
       _loading = false;
@@ -2222,15 +2454,22 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
     }
     setState(() => _loading = true);
     try {
-      final rows = await widget.service!.searchCompletedProposalIntakes(q);
-      if (!mounted || _controller.text.trim() != q.trim()) return;
+      final rows = widget.mineApproved
+          ? await widget.service!.searchMyApprovedDocs(
+              query: q,
+              meta: widget.meta,
+            )
+          : await widget.service!.searchCompletedProposalIntakes(q);
+      if (!mounted || !_focus.hasFocus || _controller.text.trim() != q.trim()) {
+        return;
+      }
       setState(() {
         _results = rows;
         _searched = true;
         _loading = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || !_focus.hasFocus) return;
       setState(() {
         _loading = false;
         _searched = true;
@@ -2278,13 +2517,10 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
                     onPressed: _clearSelection,
                     tooltip: '清除',
                   )
-                : const Icon(
-                    Icons.search,
-                    size: 18,
-                    color: DunesColors.text3,
-                  ),
+                : const Icon(Icons.search, size: 18, color: DunesColors.text3),
           ),
           style: xfInputTextStyle(),
+          onTapOutside: (_) => _focus.unfocus(),
           onChanged: widget.readonly ? null : _onQueryChanged,
         ),
         if (_results.isNotEmpty) ...[
@@ -2311,10 +2547,7 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
                     : (code.isNotEmpty ? code : title);
                 return ListTile(
                   dense: true,
-                  title: Text(
-                    label,
-                    style: DunesTypography.sans(fontSize: 12),
-                  ),
+                  title: Text(label, style: DunesTypography.sans(fontSize: 12)),
                   onTap: () => _selectProposal(row),
                 );
               },
@@ -2383,6 +2616,7 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
     _fromFill =
         _useFillDisplay && _cfg.fillDisplayOf(widget.scopeValues).isNotEmpty;
     _controller.text = _resolvedDisplay();
+    _focus.addListener(_onFocusChange);
   }
 
   @override
@@ -2407,9 +2641,20 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _focus.removeListener(_onFocusChange);
     _focus.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (_focus.hasFocus) return;
+    if (_results.isEmpty && !_searched && !_loading) return;
+    setState(() {
+      _results = const [];
+      _searched = false;
+      _loading = false;
+    });
   }
 
   String _resolvedDisplay() {
@@ -2474,9 +2719,7 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
     final patch = <String, dynamic>{};
     final value = _cfg.valueOf(row);
     if (_cfg.storeObject) {
-      final obj = <String, dynamic>{
-        'label': _cfg.labelOf(row),
-      };
+      final obj = <String, dynamic>{'label': _cfg.labelOf(row)};
       if (value != null) obj['value'] = value;
       for (final key in <String>[
         ..._cfg.valueFields,
@@ -2497,10 +2740,7 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
     patch.addAll(_cfg.fillPatches(row));
     _fromFill = _useFillDisplay;
     if (_fromFill) {
-      final merged = <String, dynamic>{
-        ...?widget.scopeValues,
-        ...patch,
-      };
+      final merged = <String, dynamic>{...?widget.scopeValues, ...patch};
       _controller.text = _cfg.fillDisplayOf(merged);
     } else {
       _controller.text = _cfg.storeObject
@@ -2535,24 +2775,22 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
         queryParam: _cfg.queryParam,
         query: query,
       );
-      if (!mounted || _controller.text.trim() != query) return;
+      if (!mounted || !_focus.hasFocus || _controller.text.trim() != query) {
+        return;
+      }
       setState(() {
         _results = rows;
         _searched = true;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || !_focus.hasFocus) return;
       setState(() {
         _loading = false;
         _searched = true;
         _results = const [];
       });
-      showDunesToast(
-        context,
-        _errorMessage(e),
-        kind: DunesToastKind.error,
-      );
+      showDunesToast(context, _errorMessage(e), kind: DunesToastKind.error);
     }
   }
 
@@ -2609,13 +2847,10 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
                     onPressed: _clearSelection,
                     tooltip: '清除',
                   )
-                : const Icon(
-                    Icons.search,
-                    size: 18,
-                    color: DunesColors.text3,
-                  ),
+                : const Icon(Icons.search, size: 18, color: DunesColors.text3),
           ),
           style: xfInputTextStyle(),
+          onTapOutside: (_) => _focus.unfocus(),
           onChanged: widget.readonly ? null : _onQueryChanged,
         ),
         if (_results.isNotEmpty) ...[

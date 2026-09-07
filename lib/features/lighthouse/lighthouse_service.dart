@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../auth/auth_session.dart';
 import 'lighthouse_data.dart';
+import 'lighthouse_people.dart';
 
 const _lighthouseApiBaseOverride = String.fromEnvironment(
   'LIGHTHOUSE_API_BASE',
@@ -342,6 +343,33 @@ class LighthouseService {
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception('反馈提交失败: HTTP ${resp.statusCode}');
     }
+  }
+
+  /// 人效维度 —— 账本按「负责人 × 任务」分组。
+  ///
+  /// 与其余账本接口同形：粒度、同期窗口、分组、口径都是参数，环比与得分在
+  /// lighthouse-go 里算完下发；本地只在服务端没给 score 时用考评表公式兜底。
+  Future<LhPeopleBundle> fetchPeople({
+    String? period,
+    int? offset,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? group,
+    String? caliber,
+  }) async {
+    final g = (group ?? '').trim();
+    final data = await _getData(
+      '/lighthouse/people',
+      {
+        if (period != null && period.isNotEmpty) 'period': period,
+        if (offset != null && offset != 0) 'offset': '$offset',
+        ..._rangeQuery(startDate, endDate),
+        if (g.isNotEmpty && g != '全部') 'group': g,
+        if (caliber != null && caliber.isNotEmpty) 'caliber': caliber,
+      },
+      '人效数据加载失败',
+    );
+    return LhPeopleBundle.fromJson(data);
   }
 
   Future<Map<String, dynamic>> _getData(

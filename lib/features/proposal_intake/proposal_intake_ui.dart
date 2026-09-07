@@ -951,6 +951,27 @@ Future<void> showProposalIntakeProcessHelp(
                       ],
                     ),
                   ),
+                const Padding(
+                  padding: EdgeInsets.only(top: 4, bottom: 8),
+                  child: Text(
+                    '通知TA',
+                    style: TextStyle(
+                      color: ProposalPalette.text,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const Text(
+                  '以你本人身份，把提案名片发到本单相关同事的私聊（已指定的创建人、市场/科技/财务负责人、运营、最终确认人）。不经过审批助手，也不推进流程。\n'
+                  '和「转发」的区别：「转发」自己选会话；「通知TA」一次发给本单所有已指定的人。\n'
+                  '点「通知科技 / 提交复核 / 通知最终人」仍走审批助手，那是流程待办。',
+                  style: TextStyle(
+                    color: ProposalPalette.text,
+                    fontSize: 13,
+                    height: 1.45,
+                  ),
+                ),
               ],
             ),
           ),

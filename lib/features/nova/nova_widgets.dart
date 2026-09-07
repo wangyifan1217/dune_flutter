@@ -14,7 +14,8 @@ import 'nova_media.dart';
 import 'nova_file_utils.dart';
 import 'nova_models_service.dart';
 
-const kNovaName = 'τ管理';
+const kNovaName = '韬管理';
+const kNovaIdentityReply = '我是韬';
 const kNovaIntro = '你好，我是你的NOVA助手。可以帮你查审批、找合同、对账单、读文档；直接问我即可。';
 const kNovaInputPlaceholder = '问NOVA';
 const kNovaInputBusyHint = 'NOVA正在生成中，请稍候…';

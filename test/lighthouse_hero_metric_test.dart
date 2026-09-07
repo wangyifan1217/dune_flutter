@@ -1,15 +1,50 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_data.dart';
+import 'package:dunes_app/features/lighthouse/lighthouse_discount_metric.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_hero_metric.dart';
 
 void main() {
   group('lighthouseHeroMastheadKey', () {
-    test('always returns profit', () {
+    test('defaults to profit; follows expanded metric', () {
       expect(lighthouseHeroMastheadKey(null), 'profit');
       expect(lighthouseHeroMastheadKey(''), 'profit');
-      expect(lighthouseHeroMastheadKey('verifiedSales'), 'profit');
-      expect(lighthouseHeroMastheadKey('grossMargin'), 'profit');
-      expect(lighthouseHeroMastheadKey('rate'), 'profit');
+      expect(lighthouseHeroMastheadKey('verifiedSales'), 'verifiedSales');
+      expect(lighthouseHeroMastheadKey('sales'), 'sales');
+      expect(lighthouseHeroMastheadKey('totalCost'), 'totalCost');
+      expect(lighthouseHeroMastheadKey('costTotal'), 'totalCost');
+      expect(lighthouseHeroMastheadKey('grossMargin'), 'grossMargin');
+      expect(lighthouseHeroMastheadKey('rate'), 'rate');
+      expect(lighthouseHeroMastheadKey('revenue'), 'revenue');
+    });
+  });
+
+
+  group('lighthouseHeroSummaryAppliesTo', () {
+    test('全部 matches empty or 全部 filterGroup', () {
+      expect(
+        lighthouseHeroSummaryAppliesTo(
+          tab: 'product',
+          group: '全部',
+          filterGroup: null,
+        ),
+        isTrue,
+      );
+      expect(
+        lighthouseHeroSummaryAppliesTo(
+          tab: 'product',
+          group: '全部',
+          filterGroup: '全部',
+        ),
+        isTrue,
+      );
+      expect(
+        lighthouseHeroSummaryAppliesTo(
+          tab: 'product',
+          group: '全部',
+          filterGroup: '能源',
+        ),
+        isFalse,
+      );
     });
   });
 
@@ -51,6 +86,28 @@ void main() {
       expect(lighthouseHeroMetricIsRate('rate'), isTrue);
       expect(lighthouseHeroMetricIsRate('grossMargin'), isTrue);
       expect(lighthouseHeroMetricIsRate('verifiedSales'), isFalse);
+    });
+  });
+
+  group('人效 Hero 人数 / 分数格', () {
+    test('count / score 不走金额或百分率', () {
+      expect(lighthouseHeroMetricIsCount('peopleCount'), isTrue);
+      expect(lighthouseHeroMetricIsCount('passCount'), isTrue);
+      expect(lighthouseHeroMetricIsCount('riskCount'), isTrue);
+      expect(lighthouseHeroMetricIsCount('profit'), isFalse);
+      expect(lighthouseHeroMetricIsScore('avgScore'), isTrue);
+      expect(lighthouseHeroMetricIsScore('grossMargin'), isFalse);
+      expect(lighthouseHeroMetricIsRate('avgScore'), isFalse);
+    });
+
+    test('人数取整、均分一位小数', () {
+      expect(lighthouseHeroMetricPlainNumber('peopleCount', 12.4), '12');
+      expect(lighthouseHeroMetricPlainNumber('avgScore', 88.16), '88.2');
+      expect(lighthouseHeroMetricPlainNumber('profit', 120000), isNull);
+      expect(lighthouseHeroMetricPlainUnit('passCount'), '人');
+      expect(lighthouseHeroMetricPlainUnit('avgScore'), '分');
+      expect(lighthouseHeroMetricLabel('avgScore'), '加权均分');
+      expect(lighthouseHeroMetricPeriodLabel('month', 'avgScore'), '本月加权均分');
     });
   });
 
@@ -1707,12 +1764,15 @@ void main() {
       'supply',
       'channel',
       'netTa',
-      'analysis',
     ]);
     expect(lighthouseLedgerPrimaryTabLabels['netTa'], '净TA');
     expect(lighthouseLedgerTabShowsCategoryChips('product'), isTrue);
     expect(lighthouseLedgerTabShowsCategoryChips('netTa'), isFalse);
     expect(lighthouseLedgerTabShowsCategoryChips('analysis'), isFalse);
+    expect(lighthouseLedgerShowsAnalysisTab, isFalse);
+    expect(lighthouseLedgerShowsPeopleTab, isFalse);
+    expect(lighthouseLedgerShowsDiscountBoard, isFalse);
+    expect(lighthouseLedgerShowsDiscountUi, isFalse);
     expect(lighthouseLedgerPrimaryTabHeight, 44);
     expect(lighthouseLedgerFilterRowHeight, 42);
     expect(lighthouseLedgerFilterChipRadius, 8);

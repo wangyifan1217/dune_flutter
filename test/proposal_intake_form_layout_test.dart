@@ -231,6 +231,8 @@ void main() {
     expect(find.text('协作提案流程'), findsWidgets);
     expect(find.textContaining('通知科技部负责人填写科技内容'), findsOneWidget);
     expect(find.textContaining('财务部负责人一整板块复核财务'), findsOneWidget);
+    expect(find.text('通知TA'), findsOneWidget);
+    expect(find.textContaining('以你本人身份，把提案名片发到本单相关同事的私聊'), findsOneWidget);
     expect(find.text('知道了'), findsOneWidget);
   });
 
@@ -265,7 +267,44 @@ void main() {
     expect(find.textContaining('财务板块暂不复核'), findsWidgets);
     expect(find.textContaining('财务部负责人一整板块复核财务'), findsNothing);
     expect(find.textContaining('逐条复核财务'), findsNothing);
+    expect(find.text('通知TA'), findsOneWidget);
+    expect(find.textContaining('以你本人身份，把提案名片发到本单相关同事的私聊'), findsOneWidget);
     expect(find.text('知道了'), findsOneWidget);
+  });
+
+  testWidgets('notify TA lists related people and sends as current user', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'status': 'filling',
+          'createdBy': 11,
+          'form': {
+            'technologyOwnerUserId': 12,
+            'technologyOwner': '李思',
+          },
+          'review': <String, dynamic>{},
+        }),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('通知TA'), findsOneWidget);
+    await tester.tap(find.text('通知TA'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text('以你的身份通知相关人'), findsOneWidget);
+    expect(find.textContaining('发到以下同事的私聊'), findsOneWidget);
+    expect(find.textContaining('科技部负责人 李思'), findsOneWidget);
+    expect(find.text('确认发送'), findsOneWidget);
   });
 
   testWidgets(

@@ -8,6 +8,27 @@ bool lighthouseHeroMetricIsRate(String key) =>
     key == 'spreadRate' ||
     key == 'sharePct';
 
+/// 人效人数格：达标 / 风险 / 合计，不能走金额「万」。
+bool lighthouseHeroMetricIsCount(String key) =>
+    key == 'peopleCount' || key == 'passCount' || key == 'riskCount';
+
+/// 人效加权均分：一位小数 + 「分」，不是金额、也不是百分率。
+bool lighthouseHeroMetricIsScore(String key) => key == 'avgScore';
+
+/// 人数 / 分数的展示文本；金额和比率返回 null，交给页面自己的 `_fmtMoney`。
+String? lighthouseHeroMetricPlainNumber(String key, double value) {
+  if (lighthouseHeroMetricIsCount(key)) return value.round().toString();
+  if (lighthouseHeroMetricIsScore(key)) return value.toStringAsFixed(1);
+  return null;
+}
+
+/// 人数 / 分数的单位；金额和比率返回 null。
+String? lighthouseHeroMetricPlainUnit(String key) {
+  if (lighthouseHeroMetricIsCount(key)) return '人';
+  if (lighthouseHeroMetricIsScore(key)) return '分';
+  return null;
+}
+
 /// Shared compact Hero geometry for L1/L2/L3.
 const int lighthouseCompactHeroKpiFlex = 3;
 const int lighthouseCompactHeroTrendFlex = 7;
@@ -776,6 +797,8 @@ String lighthouseHeroTrendChartSlot(String key) {
     case 'netProfit':
     case 'spread':
       return 'profit';
+    case 'netTaBankBalance':
+      return 'stock';
     default:
       return 'scale';
   }
@@ -894,7 +917,6 @@ const lighthouseLedgerPrimaryTabs = <String>[
   'supply',
   'channel',
   'netTa',
-  'analysis',
 ];
 
 const lighthouseLedgerPrimaryTabLabels = <String, String>{
@@ -919,6 +941,9 @@ const double lighthouseLedgerFilterChipRadius = 8;
 const bool lighthouseLedgerCentersPrimaryDimensions = false;
 const bool lighthouseLedgerPrimaryDimensionsFillAvailableWidth = true;
 const bool lighthouseLedgerSeparatesAnalysisTab = false;
+const bool lighthouseLedgerShowsAnalysisTab = false;
+const bool lighthouseLedgerShowsPeopleTab = false;
+const bool lighthouseLedgerShowsDiscountBoard = false;
 const bool lighthouseLedgerPrimaryTabUsesPeriodSegment = true;
 const bool lighthouseLedgerUsesLavenderPanelFrame = true;
 const double lighthouseLedgerPanelBorderWidth = 0.8;
@@ -3594,6 +3619,11 @@ String lighthouseHeroMetricLabel(String key) {
     'netTaBizCost': '业务成本',
     'netTaProjectBiz': '项目+业务成本',
     'netTaUnmapped': '未映射金额',
+    'netTaBankBalance': '银行余额',
+    'avgScore': '加权均分',
+    'peopleCount': '人数',
+    'passCount': '达标人数',
+    'riskCount': '风险人数',
   };
   return labels[key] ?? key;
 }
@@ -3633,15 +3663,16 @@ String lighthouseHeroMetricPeriodLabel(String period, String metricKey) {
   return prefix.isEmpty ? metric : '$prefix$metric';
 }
 
-/// Masthead key is always 毛利润.
+/// Masthead follows the expanded Hero metric; default is 毛利润.
 ///
-/// Expanded metric cells / 核销·销售 chips only drive the sparkline panel or
-/// efficiency denominators (ROI / 毛利率); they must not change the hero number.
+/// 点底下任意指标格（销售额 / 核销额 / 成本合计 / 收入 / ROI…）时，
+/// 左侧大数标题、数值、环比一起切。
 String lighthouseHeroMastheadKey(String? expandedTrendKey) {
-  // Keep the parameter so call sites stay stable; intentionally unused.
-  // ignore: unused_parameter
-  final _ = expandedTrendKey;
-  return 'profit';
+  final key = (expandedTrendKey ?? '').trim();
+  if (key.isEmpty) return 'profit';
+  if (key == 'costTotal') return 'totalCost';
+  if (key == 'businessCost') return 'cost';
+  return key;
 }
 
 /// Every Hero sparkline point must receive a visible value label.
@@ -3792,10 +3823,13 @@ bool lighthouseHeroSummaryAppliesTo({
 }) {
   final g = group.trim().isEmpty ? '全部' : group.trim();
   final fg = (filterGroup ?? '').trim();
-  if (g == '全部') return fg.isEmpty;
-  if (fg != g) return false;
+  // 后端有时给 null，有时给「全部」——两种都表示未分类筛选。
+  final fgAll = fg.isEmpty || fg == '全部';
+  if (g == '全部') return fgAll;
+  if (!fgAll && fg != g) return false;
+  if (fgAll && g != '全部') return false;
   final ft = (filterTab ?? '').trim();
-  return ft.isEmpty || ft == tab;
+  return ft.isEmpty || ft == '全部' || ft == tab;
 }
 
 /// 切回「全部」时剥掉分类标记，才能立刻用上一份全量 Hero，不必等接口。

@@ -447,10 +447,15 @@ class ProposalStakeholderLine {
 }
 
 class ProposalIntakeListResult {
-  const ProposalIntakeListResult({required this.items, required this.total});
+  const ProposalIntakeListResult({
+    required this.items,
+    required this.total,
+    this.stats = const ProposalIntakeLibraryStats(),
+  });
 
   final List<ProposalIntakeRow> items;
   final int total;
+  final ProposalIntakeLibraryStats stats;
 
   factory ProposalIntakeListResult.fromJson(Map<String, dynamic> json) {
     final raw = json['items'] as List? ?? const [];
@@ -463,8 +468,79 @@ class ProposalIntakeListResult {
           )
           .toList(growable: false),
       total: (json['total'] as num?)?.toInt() ?? raw.length,
+      stats: ProposalIntakeLibraryStats.fromJson(json['stats']),
     );
   }
+}
+
+class ProposalIntakeLibraryStats {
+  const ProposalIntakeLibraryStats({
+    this.total = 0,
+    this.day = 0,
+    this.week = 0,
+    this.month = 0,
+    this.sectors = const [],
+  });
+
+  final int total;
+  final int day;
+  final int week;
+  final int month;
+  final List<ProposalIntakeSectorStat> sectors;
+
+  factory ProposalIntakeLibraryStats.fromJson(Object? raw) {
+    if (raw is! Map) return const ProposalIntakeLibraryStats();
+    final sectorsRaw = raw['sectors'];
+    return ProposalIntakeLibraryStats(
+      total: (raw['total'] as num?)?.toInt() ?? 0,
+      day: (raw['day'] as num?)?.toInt() ?? 0,
+      week: (raw['week'] as num?)?.toInt() ?? 0,
+      month: (raw['month'] as num?)?.toInt() ?? 0,
+      sectors: [
+        if (sectorsRaw is List)
+          for (final item in sectorsRaw)
+            if (item is Map)
+              ProposalIntakeSectorStat(
+                name: '${item['name'] ?? ''}'.trim(),
+                count: (item['count'] as num?)?.toInt() ?? 0,
+              ),
+      ],
+    );
+  }
+}
+
+class ProposalIntakeSectorStat {
+  const ProposalIntakeSectorStat({required this.name, required this.count});
+
+  final String name;
+  final int count;
+}
+
+/// 板块计数：配置里的板块按顺序都展示（没有则 0），额外名称和「未填写」跟在后面。
+List<(String, int)> proposalIntakeSectorCountRows({
+  required List<String> catalog,
+  required List<ProposalIntakeSectorStat> counts,
+}) {
+  final byName = <String, int>{
+    for (final item in counts)
+      if (item.name.trim().isNotEmpty) item.name.trim(): item.count,
+  };
+  final seen = <String>{};
+  final out = <(String, int)>[];
+  for (final raw in catalog) {
+    final name = raw.trim();
+    if (name.isEmpty || !seen.add(name)) continue;
+    out.add((name, byName[name] ?? 0));
+  }
+  final extras = byName.keys.where((name) => !seen.contains(name)).toList()
+    ..sort();
+  for (final name in extras) {
+    if (name == '未填写') continue;
+    out.add((name, byName[name] ?? 0));
+  }
+  final blank = byName['未填写'] ?? 0;
+  if (blank > 0) out.add(('未填写', blank));
+  return out;
 }
 
 class ProposalLinkedOption {
@@ -1242,25 +1318,648 @@ bool _valueHasUserInput(Object? value) {
   return true;
 }
 
-String proposalIntakeActionLabel(String action) {
+bool proposalIntakeOwnerFilled(Map<String, dynamic> form, String prefix) {
+  return proposalIntakeOwnerDisplayName(form, prefix).isNotEmpty ||
+      (int.tryParse('${form['${prefix}UserId'] ?? ''}'.trim()) ?? 0) > 0;
+}
+
+String proposalIntakeOwnerDisplayName(
+  Map<String, dynamic> form,
+  String prefix, {
+  List<ProposalPerson> people = const [],
+}) {
+  final fromForm = '${form[prefix] ?? ''}'.trim();
+  if (fromForm.isNotEmpty) return fromForm;
+  final id = int.tryParse('${form['${prefix}UserId'] ?? ''}'.trim()) ?? 0;
+  if (id <= 0) return '';
+  for (final person in people) {
+    if (person.userId == id && person.name.trim().isNotEmpty) {
+      return person.name.trim();
+    }
+  }
+  return '';
+}
+
+String proposalIntakeActionLabel(
+  String action, {
+  ProposalIntakeRow? row,
+  List<ProposalPerson> people = const [],
+}) {
+  final form = row?.form ?? const <String, dynamic>{};
+  String withOwner(String base, String prefix, {String fallback = ''}) {
+    if (!proposalIntakeOwnerFilled(form, prefix)) {
+      return fallback.isEmpty ? base : fallback;
+    }
+    final suffix = prefix.endsWith('1')
+        ? '负责人一'
+        : prefix.endsWith('2')
+        ? '负责人二'
+        : '';
+    final titled = suffix.isEmpty ? base : '$base$suffix';
+    final name = proposalIntakeOwnerDisplayName(
+      form,
+      prefix,
+      people: people,
+    );
+    if (name.isEmpty) return titled;
+    return '$titled $name';
+  }
+
+  String withName(String base, String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || trimmed == '未指定') return base;
+    return '$base $trimmed';
+  }
+
   return switch (action) {
-    'fill' => '待填写',
-    'fill_tech' => '待填写科技',
-    'fill_finance_interface' => '待填写财务技术接口',
+    'fill' => withName(
+        '待填写',
+        row?.initiatorDisplayName(people) ?? '',
+      ),
+    'fill_tech' => withOwner('待填写科技', 'technologyOwner'),
+    'fill_finance_interface' => withOwner(
+        '待填写财务技术接口',
+        'financeOwner2',
+      ),
     'start_review' => '待重新提交复核',
-    'review_market' => '待复核市场部',
-    'review_tech' => '待复核科技',
-    'review_finance' => '待复核财务',
-    'review_finance_interface' => '待复核财务技术接口',
-    'review_finance_module' => '待整板块复核财务',
-    'review_contract' => '待审核合同',
+    'review_market' => withOwner('待复核市场部', 'marketOwner1'),
+    'review_tech' => withOwner(
+        '待复核市场部',
+        'marketOwner2',
+        fallback: '待复核科技',
+      ),
+    'review_finance' => withOwner('待复核财务', 'financeOwner2'),
+    'review_finance_interface' => withOwner(
+        '待复核财务技术接口',
+        'technologyOwner',
+      ),
+    'review_finance_module' => withOwner(
+        '待复核财务',
+        'financeOwner1',
+        fallback: '待整板块复核财务',
+      ),
+    'review_contract' => withOwner('待审核合同', 'financeOwner2'),
     'submit_president' => '待通知最终人',
-    'president_confirm' => '待最终确认',
+    'president_confirm' => withName(
+        '待最终确认',
+        proposalIntakeOwnerDisplayName(form, 'president', people: people),
+      ),
     'start_tech_revision' => '待发起科技变更',
     'revise' => '最终人已驳回请从头填写',
     'revise_module' => '板块已驳回请修改',
     _ => '',
   };
+}
+
+bool proposalIntakeFinanceLineItemsReviewed(ProposalIntakeRow row) {
+  final keys = <String>[
+    for (final field in kProposalSalesFinanceFillFields) field.$1,
+    ...proposalIntakeLaunchModuleReviewKeys(row.form),
+    ...proposalIntakeSkuSettleReviewKeys(row.form),
+  ];
+  if (keys.isEmpty) return false;
+  final raw = row.review['financeItems'];
+  final items = raw is Map ? raw : const {};
+  for (final key in keys) {
+    if (items[key] != true) return false;
+  }
+  return true;
+}
+
+/// 列表上给所有人看的待复核对象：市场部/财务 + 已填写的负责人一或二。
+List<String> proposalIntakePendingReviewLabels(
+  ProposalIntakeRow row, {
+  List<ProposalPerson> people = const [],
+}) {
+  final stage = row.resolvedStage;
+  if (stage != 'reviewing' && stage != 'tech_reviewing') return const [];
+  final review = row.review;
+  bool done(String key) => review[key] == true;
+  String label(String action) =>
+      proposalIntakeActionLabel(action, row: row, people: people);
+  final labels = <String>[];
+  if (!done('marketCompleted')) {
+    labels.add(label('review_market'));
+  }
+  if (!done('technologyCompleted')) {
+    labels.add(label('review_tech'));
+  }
+  if (stage == 'reviewing' &&
+      !proposalIntakeIsPurchase(row.kind) &&
+      !done('financeCompleted')) {
+    if (!proposalIntakeFinanceLineItemsReviewed(row)) {
+      labels.add(label('review_finance'));
+    } else {
+      labels.add(label('review_finance_module'));
+    }
+  }
+  return [for (final item in labels) if (item.isNotEmpty) item];
+}
+
+String proposalIntakeListActionText(
+  ProposalIntakeRow row, {
+  List<ProposalPerson> people = const [],
+}) {
+  final pending = proposalIntakePendingReviewLabels(row, people: people);
+  final mine = proposalIntakeActionLabel(
+    row.myAction,
+    row: row,
+    people: people,
+  );
+  final labels = <String>[
+    ...pending,
+    if (mine.isNotEmpty && !pending.contains(mine)) mine,
+  ];
+  return labels.join('  ·  ');
+}
+
+class ProposalIntakeNotifyRecipient {
+  const ProposalIntakeNotifyRecipient({
+    required this.userId,
+    required this.role,
+    this.name = '',
+    this.task = '',
+  });
+
+  final int userId;
+  final String role;
+  final String name;
+  final String task;
+
+  String get line {
+    final who = name.isNotEmpty ? '$role $name' : role;
+    if (task.trim().isEmpty) return who;
+    return '$who · $task';
+  }
+
+  factory ProposalIntakeNotifyRecipient.fromJson(Map json) {
+    return ProposalIntakeNotifyRecipient(
+      userId: (json['userId'] as num?)?.toInt() ?? 0,
+      role: '${json['role'] ?? ''}'.trim(),
+      name: '${json['name'] ?? ''}'.trim(),
+      task: '${json['task'] ?? ''}'.trim(),
+    );
+  }
+}
+
+class ProposalIntakeWriteResult {
+  const ProposalIntakeWriteResult({
+    required this.row,
+    this.notified = const [],
+  });
+
+  final ProposalIntakeRow row;
+  final List<ProposalIntakeNotifyRecipient> notified;
+
+  factory ProposalIntakeWriteResult.fromJson(Map<String, dynamic> json) {
+    final raw = json['notified'];
+    return ProposalIntakeWriteResult(
+      row: ProposalIntakeRow.fromJson(json),
+      notified: [
+        if (raw is List)
+          for (final item in raw)
+            if (item is Map) ProposalIntakeNotifyRecipient.fromJson(item),
+      ].where((item) => item.userId > 0).toList(growable: false),
+    );
+  }
+}
+
+String proposalIntakeNotifiedToast(List<ProposalIntakeNotifyRecipient> items) {
+  if (items.isEmpty) return '';
+  return '已通知：${items.map((item) {
+    if (item.name.isNotEmpty) return '${item.name}（${item.role}）';
+    return item.role;
+  }).join('、')}';
+}
+
+ProposalIntakeNotifyRecipient? proposalIntakeNotifyOwner({
+  required Map<String, dynamic> form,
+  required List<ProposalPerson> people,
+  required String prefix,
+  required String role,
+  required String task,
+  int fallbackUserId = 0,
+}) {
+  var id = int.tryParse('${form['${prefix}UserId'] ?? ''}'.trim()) ?? 0;
+  if (id <= 0) id = fallbackUserId;
+  if (id <= 0) return null;
+  return ProposalIntakeNotifyRecipient(
+    userId: id,
+    role: role,
+    name: proposalIntakeOwnerDisplayName(form, prefix, people: people),
+    task: task,
+  );
+}
+
+List<ProposalIntakeNotifyRecipient> proposalIntakeNotifyRecipients({
+  required String action,
+  required ProposalIntakeRow row,
+  List<ProposalPerson> people = const [],
+  ProposalIntakeOptions? options,
+  List<String>? onlyFlags,
+}) {
+  final form = row.form;
+  ProposalIntakeNotifyRecipient? owner(
+    String prefix,
+    String role,
+    String task, {
+    int fallback = 0,
+  }) {
+    return proposalIntakeNotifyOwner(
+      form: form,
+      people: people,
+      prefix: prefix,
+      role: role,
+      task: task,
+      fallbackUserId: fallback,
+    );
+  }
+
+  List<ProposalIntakeNotifyRecipient> reviewers({List<String>? flags}) {
+    final want = flags;
+    bool has(String key) => want == null || want.contains(key);
+    final purchase = proposalIntakeIsPurchase(row.kind);
+    final out = <ProposalIntakeNotifyRecipient>[];
+    void add(ProposalIntakeNotifyRecipient? item) {
+      if (item == null) return;
+      out.add(item);
+    }
+
+    if (has('marketCompleted')) {
+      add(owner('marketOwner1', '市场部负责人一', '请复核市场部板块'));
+    }
+    if (has('technologyCompleted')) {
+      add(
+        owner(
+          'marketOwner2',
+          '市场部负责人二',
+          '请复核科技部内容',
+          fallback: row.createdBy,
+        ),
+      );
+    }
+    if (has('financeInterfaceCompleted')) {
+      add(owner('technologyOwner', '科技部负责人', '请复核财务技术接口'));
+    }
+    if (want == null && !purchase) {
+      add(owner('financeOwner2', '财务部负责人二', '请复核财务内容'));
+    }
+    if (has('financeCompleted') && !purchase) {
+      add(owner('financeOwner1', '财务部负责人一', '请复核财务整板块'));
+    }
+    final wantPurchase = has('purchaseContractCompleted');
+    final wantSales = !purchase && has('salesContractCompleted');
+    if (wantPurchase || wantSales) {
+      var task = '请审核合同';
+      if (wantPurchase && !wantSales) task = '请审核采购合同';
+      if (wantSales && !wantPurchase) task = '请审核销售合同';
+      add(owner('financeOwner2', '财务部负责人二', task));
+    }
+    return _dedupeNotifyRecipients(out);
+  }
+
+  switch (action) {
+    case 'notify_tech':
+      return _dedupeNotifyRecipients([
+        owner('technologyOwner', '科技部负责人', '请填写科技部内容'),
+        owner('financeOwner2', '财务部负责人二', '请填写财务技术接口'),
+      ].whereType<ProposalIntakeNotifyRecipient>().toList());
+    case 'notify_market2':
+    case 'confirm_tech':
+    case 'start_review':
+      if (onlyFlags != null) return reviewers(flags: onlyFlags);
+      final resume = row.review['reviewRejected'] == true;
+      final section = '${row.review['reviewRejectSection'] ?? ''}'.trim();
+      if (resume && section.isNotEmpty) {
+        return reviewers(flags: [section]);
+      }
+      return reviewers();
+    case 'confirm_tech_revision':
+      return _dedupeNotifyRecipients([
+        owner(
+          'marketOwner2',
+          '市场部负责人二',
+          '请复核本轮科技变更',
+          fallback: row.createdBy,
+        ),
+      ].whereType<ProposalIntakeNotifyRecipient>().toList());
+    case 'start_tech_revision':
+      return _dedupeNotifyRecipients([
+        owner('financeOwner2', '财务部负责人二', '本轮科技变更可填写财务技术接口'),
+      ].whereType<ProposalIntakeNotifyRecipient>().toList());
+    case 'submit_president':
+      final ids = options?.presidentUserIds ?? const <int>[];
+      if (ids.isNotEmpty) {
+        return [
+          for (final id in ids)
+            if (id > 0)
+              ProposalIntakeNotifyRecipient(
+                userId: id,
+                role: '最终确认人',
+                name: _presidentName(id, options, people),
+                task: '请查看提案并给出意见',
+              ),
+        ];
+      }
+      return _dedupeNotifyRecipients([
+        owner('president', '最终确认人', '请查看提案并给出意见'),
+      ].whereType<ProposalIntakeNotifyRecipient>().toList());
+    case 'remind':
+      return proposalIntakeRemindRecipients(
+        row: row,
+        people: people,
+        options: options,
+      );
+    default:
+      return const [];
+  }
+}
+
+String _presidentName(
+  int id,
+  ProposalIntakeOptions? options,
+  List<ProposalPerson> people,
+) {
+  for (final person in options?.presidents ?? const <ProposalPerson>[]) {
+    if (person.userId == id && person.name.trim().isNotEmpty) {
+      return person.name.trim();
+    }
+  }
+  for (final person in people) {
+    if (person.userId == id && person.name.trim().isNotEmpty) {
+      return person.name.trim();
+    }
+  }
+  return '';
+}
+
+List<ProposalIntakeNotifyRecipient> proposalIntakeRemindRecipients({
+  required ProposalIntakeRow row,
+  List<ProposalPerson> people = const [],
+  ProposalIntakeOptions? options,
+}) {
+  final stage = row.resolvedStage;
+  switch (stage) {
+    case 'filling':
+    case 'draft':
+      final name = row.initiatorDisplayName(people);
+      return [
+        if (row.createdBy > 0)
+          ProposalIntakeNotifyRecipient(
+            userId: row.createdBy,
+            role: '提交人',
+            name: name == '未指定' ? '' : name,
+            task: '请填写',
+          ),
+      ];
+    case 'awaiting_tech':
+    case 'tech_revising':
+      return proposalIntakeNotifyRecipients(
+        action: 'notify_tech',
+        row: row,
+        people: people,
+        options: options,
+      );
+    case 'awaiting_start_review':
+      final name = row.initiatorDisplayName(people);
+      return [
+        if (row.createdBy > 0)
+          ProposalIntakeNotifyRecipient(
+            userId: row.createdBy,
+            role: '提交人',
+            name: name == '未指定' ? '' : name,
+            task: '请重新提交复核',
+          ),
+      ];
+    case 'reviewing':
+    case 'tech_reviewing':
+      bool done(String key) => row.review[key] == true;
+      final purchase = proposalIntakeIsPurchase(row.kind);
+      final flags = <String>[
+        if (!done('marketCompleted')) 'marketCompleted',
+        if (!done('technologyCompleted')) 'technologyCompleted',
+        if (!done('financeInterfaceCompleted')) 'financeInterfaceCompleted',
+        if (!purchase && !done('financeCompleted')) 'financeCompleted',
+        if (!done('purchaseContractCompleted')) 'purchaseContractCompleted',
+        if (!purchase && !done('salesContractCompleted'))
+          'salesContractCompleted',
+      ];
+      final list = proposalIntakeNotifyRecipients(
+        action: 'notify_market2',
+        row: row,
+        people: people,
+        options: options,
+        onlyFlags: flags,
+      );
+      if (!purchase &&
+          !done('financeCompleted') &&
+          !proposalIntakeFinanceLineItemsReviewed(row)) {
+        final fin2 = proposalIntakeNotifyOwner(
+          form: row.form,
+          people: people,
+          prefix: 'financeOwner2',
+          role: '财务部负责人二',
+          task: '请复核财务内容',
+        );
+        if (fin2 != null) {
+          return _dedupeNotifyRecipients([...list, fin2]);
+        }
+      }
+      return list;
+    case 'awaiting_submit':
+      final name = row.initiatorDisplayName(people);
+      return [
+        if (row.createdBy > 0)
+          ProposalIntakeNotifyRecipient(
+            userId: row.createdBy,
+            role: '提交人',
+            name: name == '未指定' ? '' : name,
+            task: '请通知最终人',
+          ),
+      ];
+    case 'pending_president':
+      return proposalIntakeNotifyRecipients(
+        action: 'submit_president',
+        row: row,
+        people: people,
+        options: options,
+      );
+    default:
+      return const [];
+  }
+}
+
+List<ProposalIntakeNotifyRecipient> _dedupeNotifyRecipients(
+  List<ProposalIntakeNotifyRecipient> items,
+) {
+  final seen = <int>{};
+  final out = <ProposalIntakeNotifyRecipient>[];
+  for (final item in items) {
+    if (item.userId <= 0 || !seen.add(item.userId)) continue;
+    out.add(item);
+  }
+  return out;
+}
+
+/// 「通知TA」：本单已指定的相关人，以当前用户身份转发私聊名片。不含自己。
+List<ProposalIntakeNotifyRecipient> proposalIntakeForwardEveryoneRecipients({
+  required ProposalIntakeRow row,
+  List<ProposalPerson> people = const [],
+  ProposalIntakeOptions? options,
+  int excludeUserId = 0,
+}) {
+  final form = row.form;
+  final out = <ProposalIntakeNotifyRecipient>[];
+  void add(int id, String role, String name) {
+    if (id <= 0 || id == excludeUserId) return;
+    out.add(
+      ProposalIntakeNotifyRecipient(
+        userId: id,
+        role: role,
+        name: name == '未指定' ? '' : name,
+      ),
+    );
+  }
+
+  add(row.createdBy, '创建人', row.initiatorDisplayName(people));
+  const owners = <(String, String)>[
+    ('marketOwner2', '市场部负责人二'),
+    ('marketOwner1', '市场部负责人一'),
+    ('operator', '运营'),
+    ('technologyOwner', '科技部负责人'),
+    ('financeOwner1', '财务部负责人一'),
+    ('financeOwner2', '财务部负责人二'),
+    ('contractAdmin', '合同管理员'),
+    ('president', '最终确认人'),
+  ];
+  for (final owner in owners) {
+    final id =
+        int.tryParse('${form['${owner.$1}UserId'] ?? ''}'.trim()) ?? 0;
+    add(
+      id,
+      owner.$2,
+      proposalIntakeOwnerDisplayName(form, owner.$1, people: people),
+    );
+  }
+  for (final id in options?.presidentUserIds ?? const <int>[]) {
+    add(id, '最终确认人', _presidentName(id, options, people));
+  }
+  return _dedupeNotifyRecipients(out);
+}
+
+bool proposalIntakeReviewsComplete(ProposalIntakeRow row) {
+  bool done(String key) => row.review[key] == true;
+  if (!done('marketCompleted') ||
+      !done('technologyCompleted') ||
+      !done('financeInterfaceCompleted') ||
+      !done('purchaseContractCompleted')) {
+    return false;
+  }
+  if (proposalIntakeIsPurchase(row.kind)) return true;
+  return done('financeCompleted') && done('salesContractCompleted');
+}
+
+bool proposalIntakeTechRevisionReviewsComplete(ProposalIntakeRow row) {
+  if (row.review['technologyCompleted'] != true ||
+      row.review['marketCompleted'] != true) {
+    return false;
+  }
+  if (!proposalIntakeFinanceInterfacesUnchanged(
+        form: row.form,
+        review: row.review,
+      ) &&
+      row.review['financeInterfaceCompleted'] != true) {
+    return false;
+  }
+  return true;
+}
+
+ProposalIntakeNotifyRecipient? proposalIntakeSubmitterNotifyRecipient(
+  ProposalIntakeRow row, {
+  required String task,
+  List<ProposalPerson> people = const [],
+}) {
+  if (row.createdBy <= 0) return null;
+  final name = row.initiatorDisplayName(people);
+  return ProposalIntakeNotifyRecipient(
+    userId: row.createdBy,
+    role: '提交人',
+    name: name == '未指定' ? '' : name,
+    task: task,
+  );
+}
+
+/// 板块复核后会通知谁，和后端 notifyProposalIntakeReviewChange 对齐，仅用于确认框预览。
+List<ProposalIntakeNotifyRecipient> proposalIntakeAfterReviewNotifyRecipients({
+  required ProposalIntakeRow row,
+  required String flag,
+  required bool approved,
+  List<ProposalPerson> people = const [],
+}) {
+  ProposalIntakeNotifyRecipient? owner(String prefix, String role, String task) {
+    return proposalIntakeNotifyOwner(
+      form: row.form,
+      people: people,
+      prefix: prefix,
+      role: role,
+      task: task,
+    );
+  }
+
+  if (!approved) {
+    var item = proposalIntakeSubmitterNotifyRecipient(
+      row,
+      task: '请修改',
+      people: people,
+    );
+    if (flag.contains('financeInterface')) {
+      item = owner('financeOwner2', '财务部负责人二', '请修改');
+    } else if (row.techRevisionOpen || row.isTechRevising) {
+      item = owner('technologyOwner', '科技部负责人', '请修改');
+    } else if (flag.startsWith('technology')) {
+      item = owner('technologyOwner', '科技部负责人', '请修改');
+    }
+    return [if (item != null) item];
+  }
+
+  final after = row.copyWith(
+    review: {...row.review, flag: true},
+  );
+  if (row.techRevisionOpen || after.isTechReviewing || after.isTechRevising) {
+    final out = <ProposalIntakeNotifyRecipient>[];
+    if (flag == 'technologyCompleted' &&
+        after.review['technologyCompleted'] == true) {
+      final item = owner('marketOwner1', '市场部负责人一', '请复核本轮市场内容');
+      if (item != null) out.add(item);
+    }
+    if (flag == 'marketCompleted' &&
+        after.review['marketCompleted'] == true &&
+        !proposalIntakeFinanceInterfacesUnchanged(
+          form: after.form,
+          review: after.review,
+        ) &&
+        after.review['financeInterfaceCompleted'] != true) {
+      final item = owner('technologyOwner', '科技部负责人', '请复核财务技术接口');
+      if (item != null) out.add(item);
+    }
+    if (proposalIntakeTechRevisionReviewsComplete(after) &&
+        !proposalIntakeTechRevisionReviewsComplete(row)) {
+      final item = owner('technologyOwner', '科技部负责人', '本轮科技变更已完成');
+      if (item != null) out.add(item);
+    }
+    return _dedupeNotifyRecipients(out);
+  }
+
+  if (proposalIntakeReviewsComplete(after) &&
+      !proposalIntakeReviewsComplete(row)) {
+    final item = proposalIntakeSubmitterNotifyRecipient(
+      row,
+      task: '请通知最终人',
+      people: people,
+    );
+    return [if (item != null) item];
+  }
+  return const [];
 }
 
 String proposalIntakeStatusLabel(String status) {
@@ -1290,6 +1989,363 @@ String formatProposalIntakeDateTime(String raw) {
   String two(int n) => n.toString().padLeft(2, '0');
   return '${local.year}-${two(local.month)}-${two(local.day)} '
       '${two(local.hour)}:${two(local.minute)}';
+}
+
+DateTime? parseProposalIntakeInstant(String raw) {
+  final text = raw.trim();
+  if (text.isEmpty) return null;
+  return DateTime.tryParse(text);
+}
+
+DateTime? proposalIntakeOpenedAt(ProposalIntakeRow row) {
+  final created = parseProposalIntakeInstant(row.createdAt);
+  if (created != null) return created.toLocal();
+  final match = RegExp(r'(\d{8})').firstMatch(row.code);
+  if (match == null) return null;
+  final raw = match.group(1)!;
+  final y = int.tryParse(raw.substring(0, 4));
+  final m = int.tryParse(raw.substring(4, 6));
+  final d = int.tryParse(raw.substring(6, 8));
+  if (y == null || m == null || d == null) return null;
+  return DateTime(y, m, d);
+}
+
+/// 打开日到今天，含当天，方便老板一眼看老化。
+int proposalIntakeDaysOpen(ProposalIntakeRow row, {DateTime? now}) {
+  final opened = proposalIntakeOpenedAt(row);
+  if (opened == null) return 0;
+  final n = now ?? DateTime.now();
+  final start = DateTime(opened.year, opened.month, opened.day);
+  final end = DateTime(n.year, n.month, n.day);
+  final days = end.difference(start).inDays + 1;
+  return days < 1 ? 1 : days;
+}
+
+String proposalIntakeDaysOpenLabel(ProposalIntakeRow row, {DateTime? now}) {
+  final days = proposalIntakeDaysOpen(row, now: now);
+  if (days <= 0) return '';
+  if (days == 1) return '今天打开';
+  return '已开 $days 天';
+}
+
+DateTime? proposalIntakeListDay(ProposalIntakeRow row) {
+  final updated = parseProposalIntakeInstant(row.updatedAt);
+  if (updated != null) {
+    final local = updated.toLocal();
+    return DateTime(local.year, local.month, local.day);
+  }
+  final opened = proposalIntakeOpenedAt(row);
+  if (opened == null) return null;
+  return DateTime(opened.year, opened.month, opened.day);
+}
+
+String proposalIntakeDateSectionLabel(DateTime day, {DateTime? now}) {
+  final n = now ?? DateTime.now();
+  final today = DateTime(n.year, n.month, n.day);
+  final date = DateTime(day.year, day.month, day.day);
+  final diff = today.difference(date).inDays;
+  if (diff == 0) return '今天';
+  if (diff == 1) return '昨天';
+  return '${date.month}月${date.day}日';
+}
+
+class ProposalIntakeDateGroup {
+  const ProposalIntakeDateGroup({required this.label, required this.rows});
+
+  final String label;
+  final List<ProposalIntakeRow> rows;
+}
+
+/// 按最后更新日分组，组内保持传入顺序。
+List<ProposalIntakeDateGroup> groupProposalIntakeRowsByDate(
+  List<ProposalIntakeRow> rows, {
+  DateTime? now,
+}) {
+  final buckets = <DateTime, List<ProposalIntakeRow>>{};
+  final undated = <ProposalIntakeRow>[];
+  for (final row in rows) {
+    final day = proposalIntakeListDay(row);
+    if (day == null) {
+      undated.add(row);
+      continue;
+    }
+    buckets.putIfAbsent(day, () => []).add(row);
+  }
+  final days = buckets.keys.toList()
+    ..sort((a, b) => b.compareTo(a));
+  return [
+    for (final day in days)
+      ProposalIntakeDateGroup(
+        label: proposalIntakeDateSectionLabel(day, now: now),
+        rows: buckets[day]!,
+      ),
+    if (undated.isNotEmpty)
+      ProposalIntakeDateGroup(label: '更早', rows: undated),
+  ];
+}
+
+/// 列表筛「未填写业务板块」时传给后端的哨兵值。
+const kProposalIntakeSectorBlankFilter = '__blank';
+
+String proposalIntakeSectorName(ProposalIntakeRow row) {
+  final text = '${row.form['sector'] ?? ''}'.trim();
+  if (text.isNotEmpty) return text;
+  return (proposalIntakeFormRef(row.form, 'sectorRef')?.name ?? '').trim();
+}
+
+List<(String, String)> proposalIntakeSectorFilters(List<String> sectors) {
+  final seen = <String>{};
+  return [
+    ('', '全部板块'),
+    for (final raw in sectors)
+      if (raw.trim().isNotEmpty && seen.add(raw.trim()))
+        (raw.trim(), raw.trim()),
+    (kProposalIntakeSectorBlankFilter, '未填写'),
+  ];
+}
+
+bool proposalIntakeMatchesSectorFilter(ProposalIntakeRow row, String filter) {
+  final want = filter.trim();
+  if (want.isEmpty) return true;
+  final name = proposalIntakeSectorName(row);
+  if (want == kProposalIntakeSectorBlankFilter) return name.isEmpty;
+  return name == want;
+}
+
+class ProposalIntakeFillProgress {
+  const ProposalIntakeFillProgress({required this.filled, required this.total});
+
+  final int filled;
+  final int total;
+
+  int get missing {
+    final left = total - filled;
+    if (left < 0) return 0;
+    if (left > total) return total;
+    return left;
+  }
+
+  int get filledPercent {
+    if (total <= 0) return 0;
+    final pct = ((filled / total) * 100).round();
+    if (pct < 0) return 0;
+    if (pct > 100) return 100;
+    return pct;
+  }
+
+  String get label => '已填 $filledPercent%';
+}
+
+ProposalIntakeFillProgress proposalIntakeFillProgress(ProposalIntakeRow row) {
+  final tally = _ProposalFillTally();
+  final form = row.form;
+  if (proposalIntakeIsPurchase(row.kind)) {
+    _tallyPurchaseFill(tally, form);
+  } else {
+    _tallySalesFill(tally, form);
+  }
+  return ProposalIntakeFillProgress(filled: tally.filled, total: tally.total);
+}
+
+class _ProposalFillTally {
+  int filled = 0;
+  int total = 0;
+
+  void slot(bool ok) {
+    total++;
+    if (ok) filled++;
+  }
+
+  void text(Map<String, dynamic> form, String key) =>
+      slot(proposalIntakeFormHasText(form, key));
+
+  void list(Map<String, dynamic> form, String key) =>
+      slot(proposalIntakeFormHasList(form, key));
+
+  void ref(Map<String, dynamic> form, String refKey, String textKey) =>
+      slot(proposalIntakeFormHasRef(form, refKey, textKey));
+}
+
+void _tallyContractFill(
+  _ProposalFillTally tally,
+  Map<String, dynamic> form,
+  String prefix,
+) {
+  final mode = '${form['${prefix}Mode'] ?? ''}'.trim();
+  tally.slot(mode.isNotEmpty);
+  if (mode == '未签署合同') {
+    tally.slot(
+      proposalIntakeFormHasText(form, '${prefix}FileName') ||
+          proposalIntakeFormHasText(form, '${prefix}ObjectKey'),
+    );
+  } else if (mode.isNotEmpty) {
+    tally.slot(proposalIntakeFormHasText(form, '${prefix}No'));
+  }
+  tally.text(form, '${prefix}Name');
+  tally.text(form, '${prefix}SignDate');
+  tally.text(form, '${prefix}OurParty');
+  tally.text(form, '${prefix}Counterparty');
+  tally.text(form, '${prefix}ValidPeriod');
+  tally.text(form, '${prefix}CoreTerms');
+}
+
+void _tallyTechFill(_ProposalFillTally tally, Map<String, dynamic> form) {
+  tally.text(form, 'technologyPlatform');
+  tally.list(form, 'technologyCapabilities');
+  tally.list(form, 'outputForms');
+  tally.list(form, 'developmentTypes');
+  tally.text(form, 'hasRdCost');
+  if ('${form['hasRdCost'] ?? ''}'.trim() == '是') {
+    final amount = num.tryParse('${form['rdAmount'] ?? ''}'.trim()) ?? 0;
+    tally.slot(amount > 0);
+  }
+  tally.text(form, 'deliveryDate');
+}
+
+void _tallySalesFill(_ProposalFillTally tally, Map<String, dynamic> form) {
+  tally.ref(form, 'sectorRef', 'sector');
+  tally.text(form, 'proposalName');
+  tally.text(form, 'proposalType');
+  tally.ref(form, 'productRef', 'product');
+  tally.ref(form, 'projectRef', 'projectName');
+  tally.list(form, 'supplies');
+  tally.list(form, 'channels');
+  tally.text(form, 'supplierPolicy');
+  tally.text(form, 'channelPolicy');
+  tally.text(form, 'executionPlan');
+  tally.text(form, 'riskPoints');
+  tally.list(form, 'profitModes');
+  tally.text(form, 'profitFormula');
+  if (proposalIntakeHasExistingPurchaseProposal(form)) {
+    final linked = proposalIntakeLinkedPurchaseProposalId(form) > 0;
+    tally.slot(linked);
+    if (linked) _tallyContractFill(tally, form, 'purchase');
+  } else {
+    _tallyContractFill(tally, form, 'purchase');
+  }
+  _tallyContractFill(tally, form, 'sales');
+  _tallyTechFill(tally, form);
+  for (final field in kProposalSalesFinanceFillFields) {
+    tally.text(form, field.$1);
+  }
+  for (final module in proposalIntakeFinanceModules(form)) {
+    tally.slot(module.periodComplete);
+    tally.slot(module.revenueComplete);
+    tally.slot(module.costsComplete);
+  }
+  _tallySkuFill(tally, form);
+}
+
+void _tallySkuFill(_ProposalFillTally tally, Map<String, dynamic> form) {
+  final channel = proposalIntakeSkuDetails(form);
+  final existingBuilt = proposalIntakeExistingBuiltOverride(form) == true;
+  final couponPack = proposalIntakeIsCouponPack(form);
+  if (existingBuilt) {
+    if (couponPack) {
+      tally.slot(proposalIntakeCouponPacks(form).isNotEmpty);
+    } else {
+      tally.slot(channel.isNotEmpty);
+    }
+  }
+  for (final sku in channel) {
+    if (existingBuilt || sku.isExistingBuilt) {
+      tally.slot(sku.syncSourceCode.isNotEmpty);
+      tally.slot(sku.assetProduct != null && sku.assetProduct!.isNotEmpty);
+    }
+  }
+  if (couponPack) {
+    final packs = proposalIntakeCouponPacks(form);
+    final skuIds = {for (final sku in channel) sku.id};
+    for (final pack in packs) {
+      final existing = existingBuilt || pack.isExistingBuilt;
+      if (existing) {
+        tally.slot(pack.syncSourceCode.isNotEmpty);
+        tally.slot(pack.assetProduct != null && pack.assetProduct!.isNotEmpty);
+      } else if (proposalIntakePackStarted(pack)) {
+        tally.slot(pack.name.isNotEmpty);
+        tally.slot(pack.skuIds.any(skuIds.contains));
+      }
+      if (!existing && !proposalIntakePackStarted(pack)) continue;
+      for (final settle in proposalIntakePackSettlements(pack)) {
+        tally.slot(settle.terms.isSkuComplete);
+      }
+    }
+    return;
+  }
+  for (final sku in channel) {
+    if (!existingBuilt && !sku.isExistingBuilt && !proposalIntakeSkuStarted(sku)) {
+      continue;
+    }
+    for (final settle in proposalIntakeSkuSettlements(sku)) {
+      tally.slot(settle.terms.isSkuComplete);
+    }
+  }
+}
+
+void _tallyPurchaseFill(_ProposalFillTally tally, Map<String, dynamic> form) {
+  tally.text(form, 'proposalType');
+  tally.list(form, 'supplies');
+  tally.text(form, 'supplyBrand');
+  tally.text(form, 'bizContact');
+  tally.text(form, 'financeContact');
+  tally.list(form, 'invoiceTypes');
+  tally.text(form, 'supplierPolicy');
+  tally.text(form, 'salesPolicy');
+  tally.text(form, 'executionPlan');
+  tally.text(form, 'riskPoints');
+  tally.text(form, 'financeRemark');
+  _tallyContractFill(tally, form, 'purchase');
+  _tallyPurchaseSupplyFill(tally, form);
+  _tallyTechFill(tally, form);
+}
+
+void _tallyPurchaseSupplyFill(
+  _ProposalFillTally tally,
+  Map<String, dynamic> form,
+) {
+  final products = proposalIntakeSupplyProducts(form);
+  final existing =
+      proposalIntakeExistingSupplyOverride(form) == true ||
+      products.any((item) => item.isExistingBuilt);
+  if (existing && products.isEmpty) {
+    tally.slot(false);
+    return;
+  }
+  for (final product in products) {
+    final rowExisting = existing || product.isExistingBuilt;
+    if (!rowExisting && !proposalIntakeSupplyStarted(product)) continue;
+    tally.slot(product.syncSourceCode.isNotEmpty);
+    if (rowExisting) {
+      tally.slot(product.assetProduct != null && product.assetProduct!.isNotEmpty);
+    } else {
+      tally.slot(
+        product.supplierCode.trim().isNotEmpty ||
+            (product.supplierRef != null && product.supplierRef!.isNotEmpty),
+      );
+      tally.slot(product.productCode.trim().isNotEmpty);
+      tally.slot(product.thresholdAmount.trim().isNotEmpty);
+      tally.slot(product.isYuantongCoupon.trim().isNotEmpty);
+      tally.slot(product.isStandaloneRebate.trim().isNotEmpty);
+      tally.slot(product.isLowDiscountCoupon.trim().isNotEmpty);
+      tally.slot(product.rebateMode.trim().isNotEmpty);
+      tally.slot(
+        product.oilCategory.trim().isNotEmpty ||
+            (product.oilCategoryRef != null && product.oilCategoryRef!.isNotEmpty),
+      );
+      tally.slot(product.effectiveDate.trim().isNotEmpty);
+      tally.slot(product.expireDate.trim().isNotEmpty);
+    }
+    final settlements = proposalIntakeSupplySettlements(product);
+    if (settlements.isEmpty) {
+      tally.slot(false);
+      continue;
+    }
+    for (var j = 0; j < settlements.length; j++) {
+      final terms = settlements[j].terms;
+      if (j > 0 && terms.isBlank) continue;
+      tally.slot(proposalIntakePurchaseSettleComplete(terms));
+    }
+  }
 }
 
 class ProposalTechnologyRecord {

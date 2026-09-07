@@ -249,18 +249,9 @@ class _ProposalIntakeOverlayHostState
       onChanged: (next) => _row = next,
       onSaved: (next) {
         setState(() => _row = next);
-        showProposalCenterToast(context, '已保存');
       },
       onSubmit: (next) {
         setState(() => _row = next);
-        showProposalCenterToast(
-          context,
-          next.status == 'done'
-              ? '提案已通过'
-              : next.status == 'pending_president'
-              ? '已通知最终人'
-              : '已提交',
-        );
       },
       onError: (message) =>
           showProposalCenterToast(context, message, error: true),

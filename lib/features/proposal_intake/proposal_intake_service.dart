@@ -147,6 +147,7 @@ class ProposalIntakeService {
     String keyword = '',
     String status = '',
     String kind = '',
+    String sector = '',
     bool actionable = false,
     bool relatedOnly = false,
   }) async {
@@ -156,6 +157,7 @@ class ProposalIntakeService {
       if (keyword.trim().isNotEmpty) 'q': keyword.trim(),
       if (status.trim().isNotEmpty) 'status': status.trim(),
       if (kind.trim().isNotEmpty) 'kind': kind.trim(),
+      if (sector.trim().isNotEmpty) 'sector': sector.trim(),
       if (actionable) 'actionable': '1',
       if (relatedOnly) 'related': '1',
     };
@@ -211,7 +213,7 @@ class ProposalIntakeService {
     return ProposalIntakeRow.fromJson(_asMap(data));
   }
 
-  Future<ProposalIntakeRow> saveReview(
+  Future<ProposalIntakeWriteResult> saveReview(
     int id,
     String section,
     bool approved,
@@ -230,10 +232,10 @@ class ProposalIntakeService {
         }),
       ),
     );
-    return ProposalIntakeRow.fromJson(_asMap(data));
+    return ProposalIntakeWriteResult.fromJson(_asMap(data));
   }
 
-  Future<ProposalIntakeRow> submit(int id) async {
+  Future<ProposalIntakeWriteResult> submit(int id) async {
     final data = _unwrap(
       await http.post(
         _uri('/proposal-intakes/$id/submit'),
@@ -241,10 +243,10 @@ class ProposalIntakeService {
         body: '{}',
       ),
     );
-    return ProposalIntakeRow.fromJson(_asMap(data));
+    return ProposalIntakeWriteResult.fromJson(_asMap(data));
   }
 
-  Future<ProposalIntakeRow> handoff(int id, String action, int version) async {
+  Future<ProposalIntakeWriteResult> handoff(int id, String action, int version) async {
     final data = _unwrap(
       await http.post(
         _uri('/proposal-intakes/$id/handoff'),
@@ -252,10 +254,10 @@ class ProposalIntakeService {
         body: jsonEncode({'action': action, 'version': version}),
       ),
     );
-    return ProposalIntakeRow.fromJson(_asMap(data));
+    return ProposalIntakeWriteResult.fromJson(_asMap(data));
   }
 
-  Future<ProposalIntakeRow> decidePresident({
+  Future<ProposalIntakeWriteResult> decidePresident({
     required int id,
     required bool approved,
     required int version,
@@ -272,7 +274,7 @@ class ProposalIntakeService {
         }),
       ),
     );
-    return ProposalIntakeRow.fromJson(_asMap(data));
+    return ProposalIntakeWriteResult.fromJson(_asMap(data));
   }
 
   Future<void> delete(int id) async {

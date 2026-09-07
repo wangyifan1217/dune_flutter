@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../tasks/native_task_home_pane.dart';
+import '../conversation/conversation_service.dart';
 import '../xflow/approval_chat_forward.dart';
 import '../xflow/approval_chat_share.dart';
 import '../xflow/proposal_import_template.dart';
@@ -82,6 +83,8 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   bool _nextBusy = false;
   String? _error;
   String _statusFilter = '';
+  String _sectorFilter = '';
+  ProposalIntakeLibraryStats _libraryStats = const ProposalIntakeLibraryStats();
   List<ProposalIntakeRow> _actionQueue = const [];
   double _listScrollOffset = 0;
   bool _didOpenInitial = false;
@@ -138,6 +141,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           keyword: widget.assistantMode ? '' : _search.text,
           status: widget.assistantMode ? '' : _statusFilter,
           kind: widget.assistantMode ? '' : widget.kind,
+          sector: widget.assistantMode ? '' : _sectorFilter,
           actionable: widget.assistantMode,
           pageSize: widget.assistantMode ? 100 : 20,
         ),
@@ -145,7 +149,8 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         _service.fetchPeople(),
       ]);
       if (!mounted) return;
-      var items = (result[0] as ProposalIntakeListResult).items;
+      var list = result[0] as ProposalIntakeListResult;
+      var items = list.items;
       if (widget.assistantMode) {
         final q = _search.text.trim().toLowerCase();
         if (q.isNotEmpty) {
@@ -159,6 +164,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       }
       setState(() {
         _rows = items;
+        _libraryStats = list.stats;
         _options = result[1] as ProposalIntakeOptions;
         _people = result[2] as List<ProposalPerson>;
       });
@@ -238,6 +244,12 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   Future<void> _setStatusFilter(String status) async {
     if (_statusFilter == status) return;
     setState(() => _statusFilter = status);
+    await _load(resetScroll: true);
+  }
+
+  Future<void> _setSectorFilter(String sector) async {
+    if (_sectorFilter == sector) return;
+    setState(() => _sectorFilter = sector);
     await _load(resetScroll: true);
   }
 
@@ -507,17 +519,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       onChanged: (next) => _editing = next,
       onSaved: (next) {
         setState(() => _editing = next);
-        _toast('已保存');
       },
       onSubmit: (next) {
         setState(() => _editing = next);
-        _toast(
-          next.status == 'done'
-              ? '提案已通过'
-              : next.status == 'pending_president'
-              ? '已通知最终人'
-              : '已更新',
-        );
       },
       onError: (message) => _toast(message, error: true),
       onDeleted: () => unawaited(_backToList()),
@@ -539,6 +543,217 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     );
   }
 
+  ButtonStyle get _compactListButtonStyle => ButtonStyle(
+    visualDensity: VisualDensity.compact,
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    minimumSize: const WidgetStatePropertyAll(Size(0, 34)),
+    padding: const WidgetStatePropertyAll(
+      EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    ),
+    textStyle: const WidgetStatePropertyAll(
+      TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+    ),
+    shape: WidgetStatePropertyAll(
+      RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    ),
+  );
+
+  Widget _filterDropdown({
+    required String value,
+    required List<(String, String)> items,
+    required ValueChanged<String> onChanged,
+    required String hint,
+  }) {
+    final allowed = {for (final item in items) item.$1};
+    final selected = allowed.contains(value) ? value : '';
+    return InputDecorator(
+      decoration: proposalInputDecoration(hint: hint).copyWith(
+        contentPadding: const EdgeInsets.fromLTRB(10, 2, 4, 2),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: selected,
+          isExpanded: true,
+          isDense: true,
+          style: const TextStyle(
+            fontSize: 13,
+            color: ProposalPalette.text,
+            height: 1.2,
+          ),
+          icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+          items: [
+            for (final item in items)
+              DropdownMenuItem(value: item.$1, child: Text(item.$2)),
+          ],
+          onChanged: _loading
+              ? null
+              : (next) => onChanged(next ?? ''),
+        ),
+      ),
+    );
+  }
+
+  Widget _filterChips({
+    required String value,
+    required List<(String, String)> items,
+    required ValueChanged<String> onChanged,
+  }) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final item in items)
+          ChoiceChip(
+            label: Text(item.$2),
+            selected: value == item.$1,
+            selectedColor: ProposalPalette.purpleSoft,
+            labelStyle: TextStyle(
+              color: value == item.$1
+                  ? ProposalPalette.purpleDeep
+                  : ProposalPalette.text2,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+            side: BorderSide(
+              color: value == item.$1
+                  ? ProposalPalette.purpleLine
+                  : ProposalPalette.border,
+            ),
+            onSelected: _loading ? null : (_) => onChanged(item.$1),
+          ),
+      ],
+    );
+  }
+
+  Widget _libraryStatsRow({required bool compact}) {
+    Widget cell(String label, int value) {
+      return Expanded(
+        child: Column(
+          children: [
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: ProposalPalette.text3,
+                fontSize: compact ? 10 : 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '$value',
+              style: const TextStyle(
+                color: ProposalPalette.text,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                height: 1.1,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final sectorRows = proposalIntakeSectorCountRows(
+      catalog: _options?.sectors ?? const [],
+      counts: _libraryStats.sectors,
+    );
+    return Padding(
+      padding: EdgeInsets.only(bottom: compact ? 6 : 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              cell('库内提案', _libraryStats.total),
+              cell('本日提案', _libraryStats.day),
+              cell('本周提案', _libraryStats.week),
+              cell('本月提案', _libraryStats.month),
+            ],
+          ),
+          if (sectorRows.isNotEmpty) ...[
+            SizedBox(height: compact ? 6 : 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                for (final item in sectorRows)
+                  _sectorCountChip(
+                    name: item.$1,
+                    count: item.$2,
+                    compact: compact,
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _sectorCountChip({
+    required String name,
+    required int count,
+    required bool compact,
+  }) {
+    final filter = name == '未填写' ? kProposalIntakeSectorBlankFilter : name;
+    final selected = _sectorFilter == filter;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _loading
+            ? null
+            : () => unawaited(
+                _setSectorFilter(_sectorFilter == filter ? '' : filter),
+              ),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 7 : 9,
+            vertical: compact ? 3 : 4,
+          ),
+          decoration: BoxDecoration(
+            color: selected ? ProposalPalette.purpleSoft : ProposalPalette.soft,
+            border: Border.all(
+              color: selected
+                  ? ProposalPalette.purpleLine
+                  : ProposalPalette.borderSoft,
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: name,
+                  style: TextStyle(
+                    color: selected
+                        ? ProposalPalette.purpleDeep
+                        : ProposalPalette.text2,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                TextSpan(
+                  text: ' $count',
+                  style: TextStyle(
+                    color: selected
+                        ? ProposalPalette.purpleDeep
+                        : ProposalPalette.text,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildList() {
     return LayoutBuilder(
       builder: (context, constraints) =>
@@ -551,73 +766,63 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       controller: _search,
       onSubmitted: (_) => unawaited(_load(resetScroll: true)),
       onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-      style: const TextStyle(fontSize: 13),
+      style: const TextStyle(fontSize: 13, height: 1.2),
       decoration: proposalInputDecoration(
         hint: '搜索提案编号或名称',
-      ).copyWith(prefixIcon: const Icon(Icons.search, size: 19)),
+      ).copyWith(
+        prefixIcon: const Icon(Icons.search, size: 16),
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: 32,
+          minHeight: 32,
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      ),
     );
     final refresh = OutlinedButton.icon(
       onPressed: _loading ? null : _load,
-      icon: const Icon(Icons.refresh, size: 17),
+      style: _compactListButtonStyle,
+      icon: const Icon(Icons.refresh, size: 15),
       label: const Text('刷新'),
     );
     final create = widget.showCreate
         ? FilledButton.icon(
             onPressed: _saving || _options == null ? null : _create,
-            style: FilledButton.styleFrom(
-              backgroundColor: ProposalPalette.purple,
+            style: _compactListButtonStyle.copyWith(
+              backgroundColor: const WidgetStatePropertyAll(
+                ProposalPalette.purple,
+              ),
+              foregroundColor: const WidgetStatePropertyAll(Colors.white),
             ),
-            icon: const Icon(Icons.add, size: 18),
+            icon: const Icon(Icons.add, size: 15),
             label: Text(
               proposalIntakeIsPurchase(widget.kind) ? '新建采购提案' : '新建提案',
             ),
           )
         : null;
+    final sectorItems = proposalIntakeSectorFilters(_options?.sectors ?? const []);
     final statusFilter = compact
-        ? InputDecorator(
-            decoration: proposalInputDecoration(hint: '状态').copyWith(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _statusFilter,
-                isExpanded: true,
-                items: [
-                  for (final item in _proposalStatusFilters)
-                    DropdownMenuItem(value: item.$1, child: Text(item.$2)),
-                ],
-                onChanged: _loading
-                    ? null
-                    : (value) => unawaited(_setStatusFilter(value ?? '')),
-              ),
-            ),
+        ? _filterDropdown(
+            value: _statusFilter,
+            items: _proposalStatusFilters,
+            onChanged: (value) => unawaited(_setStatusFilter(value)),
+            hint: '状态',
           )
-        : Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final item in _proposalStatusFilters)
-                ChoiceChip(
-                  label: Text(item.$2),
-                  selected: _statusFilter == item.$1,
-                  selectedColor: ProposalPalette.purpleSoft,
-                  labelStyle: TextStyle(
-                    color: _statusFilter == item.$1
-                        ? ProposalPalette.purpleDeep
-                        : ProposalPalette.text2,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  side: BorderSide(
-                    color: _statusFilter == item.$1
-                        ? ProposalPalette.purpleLine
-                        : ProposalPalette.border,
-                  ),
-                  onSelected: _loading
-                      ? null
-                      : (_) => unawaited(_setStatusFilter(item.$1)),
-                ),
-            ],
+        : _filterChips(
+            value: _statusFilter,
+            items: _proposalStatusFilters,
+            onChanged: (value) => unawaited(_setStatusFilter(value)),
+          );
+    final sectorFilter = compact
+        ? _filterDropdown(
+            value: _sectorFilter,
+            items: sectorItems,
+            onChanged: (value) => unawaited(_setSectorFilter(value)),
+            hint: '业务板块',
+          )
+        : _filterChips(
+            value: _sectorFilter,
+            items: sectorItems,
+            onChanged: (value) => unawaited(_setSectorFilter(value)),
           );
     return GestureDetector(
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
@@ -634,21 +839,30 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           child: Column(
             children: [
               ProposalCard(
-                padding: EdgeInsets.all(compact ? 12 : 16),
+                padding: EdgeInsets.all(compact ? 8 : 16),
+                margin: EdgeInsets.only(bottom: compact ? 8 : 14),
                 child: compact
                     ? Column(
                         children: [
+                          if (!widget.assistantMode)
+                            _libraryStatsRow(compact: true),
                           search,
                           if (!widget.assistantMode) ...[
-                            const SizedBox(height: 10),
-                            statusFilter,
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Expanded(child: statusFilter),
+                                const SizedBox(width: 6),
+                                Expanded(child: sectorFilter),
+                              ],
+                            ),
                           ],
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 6),
                           Row(
                             children: [
                               Expanded(child: refresh),
                               if (create != null) ...[
-                                const SizedBox(width: 10),
+                                const SizedBox(width: 6),
                                 Expanded(child: create),
                               ],
                             ],
@@ -658,6 +872,8 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
                     : Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          if (!widget.assistantMode)
+                            _libraryStatsRow(compact: false),
                           Row(
                             children: [
                               Expanded(child: search),
@@ -672,6 +888,8 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
                           if (!widget.assistantMode) ...[
                             const SizedBox(height: 10),
                             statusFilter,
+                            const SizedBox(height: 8),
+                            sectorFilter,
                           ],
                         ],
                       ),
@@ -699,24 +917,53 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       return _ListMessage(
         icon: Icons.assignment_outlined,
         title: '暂无提案',
-        message: widget.showCreate
+        message: (_statusFilter.isNotEmpty || _sectorFilter.isNotEmpty)
+            ? '没有符合当前筛选的提案'
+            : widget.showCreate
             ? (proposalIntakeIsPurchase(widget.kind)
                   ? '点击右上角「新建采购提案」开始录入'
                   : '点击右上角「新建提案」开始录入')
             : '当前没有需要你处理的提案',
       );
     }
+    final entries = compact
+        ? [
+            for (final group in groupProposalIntakeRowsByDate(_rows)) ...[
+              _ProposalListEntry.header(group.label),
+              for (final row in group.rows) _ProposalListEntry.row(row),
+            ],
+          ]
+        : [for (final row in _rows) _ProposalListEntry.row(row)];
     final list = ListView.separated(
       key: const PageStorageKey('proposal-intake-list'),
       controller: _listScroll,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       physics: const AlwaysScrollableScrollPhysics(),
-      itemCount: _rows.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemCount: entries.length,
+      separatorBuilder: (_, index) {
+        final next = index + 1 < entries.length ? entries[index + 1] : null;
+        if (next?.isHeader == true) return const SizedBox(height: 6);
+        return const SizedBox(height: 10);
+      },
       itemBuilder: (_, index) {
-        final row = _rows[index];
+        final entry = entries[index];
+        if (entry.isHeader) {
+          return Padding(
+            padding: EdgeInsets.only(top: index == 0 ? 2 : 8, bottom: 2),
+            child: Text(
+              entry.label,
+              style: const TextStyle(
+                color: ProposalPalette.text2,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          );
+        }
+        final row = entry.row!;
         return _ProposalListTile(
           row: row,
+          people: _people,
           initiatorName: row.initiatorDisplayName(_people),
           canDelete: row.canDeleteBy(widget.session.userId),
           compact: compact,
@@ -742,9 +989,25 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   }
 }
 
+class _ProposalListEntry {
+  const _ProposalListEntry._({this.label = '', this.row});
+
+  factory _ProposalListEntry.header(String label) =>
+      _ProposalListEntry._(label: label);
+
+  factory _ProposalListEntry.row(ProposalIntakeRow row) =>
+      _ProposalListEntry._(row: row);
+
+  final String label;
+  final ProposalIntakeRow? row;
+
+  bool get isHeader => row == null;
+}
+
 class _ProposalListTile extends StatelessWidget {
   const _ProposalListTile({
     required this.row,
+    required this.people,
     required this.initiatorName,
     required this.canDelete,
     required this.compact,
@@ -755,6 +1018,7 @@ class _ProposalListTile extends StatelessWidget {
   });
 
   final ProposalIntakeRow row;
+  final List<ProposalPerson> people;
   final String initiatorName;
   final bool canDelete;
   final bool compact;
@@ -772,10 +1036,27 @@ class _ProposalListTile extends StatelessWidget {
       'filling' => ('填写中', ProposalChipKind.draft),
       _ => ('草稿', ProposalChipKind.draft),
     };
+    final daysLabel = proposalIntakeDaysOpenLabel(row);
+    final days = proposalIntakeDaysOpen(row);
     final updated = formatProposalIntakeDateTime(row.updatedAt);
+    final sectorName = proposalIntakeSectorName(row);
+    final fill = proposalIntakeFillProgress(row);
+    final actionText = proposalIntakeListActionText(row, people: people);
     final metaStyle = const TextStyle(
       color: ProposalPalette.text3,
       fontSize: 11,
+    );
+    final agingStyle = TextStyle(
+      color: days >= 7 ? ProposalPalette.coral : ProposalPalette.text3,
+      fontSize: 11,
+      fontWeight: days >= 7 ? FontWeight.w700 : FontWeight.w400,
+    );
+    final fillStyle = TextStyle(
+      color: fill.filledPercent < 50
+          ? ProposalPalette.coral
+          : ProposalPalette.text3,
+      fontSize: 11,
+      fontWeight: fill.filledPercent < 50 ? FontWeight.w700 : FontWeight.w400,
     );
     return Material(
       color: Colors.white,
@@ -823,25 +1104,65 @@ class _ProposalListTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     if (compact) ...[
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            if (sectorName.isNotEmpty) ...[
+                              TextSpan(text: sectorName, style: metaStyle),
+                              TextSpan(text: '  ·  ', style: metaStyle),
+                            ],
+                            TextSpan(text: fill.label, style: fillStyle),
+                            TextSpan(text: '  ·  ', style: metaStyle),
+                            TextSpan(
+                              text: '发起人 $initiatorName',
+                              style: metaStyle,
+                            ),
+                            if (daysLabel.isNotEmpty) ...[
+                              TextSpan(text: '  ·  ', style: metaStyle),
+                              TextSpan(text: daysLabel, style: agingStyle),
+                            ],
+                          ],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       Text(
-                        '${row.code}  ·  发起人 $initiatorName',
+                        row.code,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: metaStyle,
                       ),
-                      if (updated.isNotEmpty)
-                        Text('更新 $updated', style: metaStyle),
                     ] else
-                      Text(
-                        updated.isEmpty
-                            ? '${row.code}  ·  发起人 $initiatorName'
-                            : '${row.code}  ·  发起人 $initiatorName  ·  更新 $updated',
-                        style: metaStyle,
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            if (sectorName.isNotEmpty) ...[
+                              TextSpan(text: sectorName, style: metaStyle),
+                              TextSpan(text: '  ·  ', style: metaStyle),
+                            ],
+                            TextSpan(text: fill.label, style: fillStyle),
+                            TextSpan(text: '  ·  ', style: metaStyle),
+                            TextSpan(
+                              text: '发起人 $initiatorName',
+                              style: metaStyle,
+                            ),
+                            if (daysLabel.isNotEmpty) ...[
+                              TextSpan(text: '  ·  ', style: metaStyle),
+                              TextSpan(text: daysLabel, style: agingStyle),
+                            ],
+                            if (row.code.isNotEmpty)
+                              TextSpan(text: '  ·  ${row.code}', style: metaStyle),
+                            if (updated.isNotEmpty)
+                              TextSpan(text: '  ·  更新 $updated', style: metaStyle),
+                          ],
+                        ),
                       ),
-                    if (proposalIntakeActionLabel(row.myAction).isNotEmpty) ...[
+                    if (actionText.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
-                        proposalIntakeActionLabel(row.myAction),
+                        actionText,
+                        maxLines: compact ? 2 : 3,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: ProposalPalette.purpleDeep,
                           fontSize: 11,
@@ -1007,6 +1328,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   final Map<String, int> _costAmountStamp = {};
   bool _deleting = false;
   bool _forwarding = false;
+  bool _notifyingEveryone = false;
   List<ProposalContractChoice> _contractHits = const [];
   int _contractSearchSeq = 0;
   List<ProposalApprovedPurchaseHit> _purchaseProposalHits = const [];
@@ -1311,6 +1633,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   bool get _canSubmit =>
       _row.id > 0 && !_isLocked && _isSubmitter && _stage == 'awaiting_submit';
+
+  bool get _canNotifyEveryone {
+    if (_row.id <= 0) return false;
+    return proposalIntakeForwardEveryoneRecipients(
+      row: _row,
+      people: widget.people,
+      options: widget.options,
+      excludeUserId: _me,
+    ).isNotEmpty;
+  }
 
   bool get _canDelete => _row.id > 0 && _row.canDeleteBy(_me);
 
@@ -1636,12 +1968,45 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     required String title,
     required String message,
     String confirmLabel = '确认',
+    List<ProposalIntakeNotifyRecipient> recipients = const [],
+    String recipientsHeading = '即将通知',
   }) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(title),
-        content: Text(message),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(message),
+              if (recipients.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  recipientsHeading,
+                  style: const TextStyle(
+                    color: ProposalPalette.text,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                for (final item in recipients)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      '· ${item.line}',
+                      style: const TextStyle(
+                        color: ProposalPalette.text2,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -1658,6 +2023,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ),
     );
     return ok == true;
+  }
+
+  void _toastNotified(List<ProposalIntakeNotifyRecipient> notified, {String fallback = ''}) {
+    final text = proposalIntakeNotifiedToast(notified);
+    if (text.isNotEmpty) {
+      showProposalCenterToast(context, text);
+      return;
+    }
+    if (fallback.isNotEmpty) {
+      showProposalCenterToast(context, fallback);
+    }
   }
 
   Future<void> _setReview(String key, bool value) async {
@@ -1677,6 +2053,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       title: '确认本板块复核完成',
       message: '确认后该板块复核完成。这是本板块的最终确认，提交后不可直接撤回。',
       confirmLabel: '确认完成',
+      recipients: proposalIntakeAfterReviewNotifyRecipients(
+        row: _row,
+        flag: key,
+        approved: true,
+        people: widget.people,
+      ),
     );
     if (!confirmed) return;
     try {
@@ -1687,8 +2069,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         _row.version,
       );
       if (!mounted) return;
-      setState(() => _row = saved);
-      widget.onChanged(saved);
+      setState(() => _row = saved.row);
+      widget.onChanged(saved.row);
+      _toastNotified(saved.notified);
     } catch (error) {
       widget.onError(friendlyErrorText(error));
     }
@@ -1717,8 +2100,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       if (!mounted) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        setState(() => _row = saved);
-        widget.onChanged(saved);
+        setState(() => _row = saved.row);
+        widget.onChanged(saved.row);
+        _toastNotified(saved.notified, fallback: '已驳回');
       });
     } catch (error) {
       widget.onError(friendlyErrorText(error));
@@ -1740,8 +2124,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         _row.version,
       );
       if (!mounted) return;
-      setState(() => _row = saved);
-      widget.onChanged(saved);
+      setState(() => _row = saved.row);
+      widget.onChanged(saved.row);
+      _toastNotified(saved.notified);
     } catch (error) {
       widget.onError(friendlyErrorText(error));
     }
@@ -2539,17 +2924,25 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _scrollToTop();
       return;
     }
+    final recipients = proposalIntakeNotifyRecipients(
+      action: 'submit_president',
+      row: _row,
+      people: widget.people,
+      options: widget.options,
+    );
     final confirmed = await _confirmFinal(
       title: '确认通知最终人',
       message: '确认后提案将交给最终人，内容锁定，不可再改。这是通知最终人的最终确认。',
       confirmLabel: '确认通知',
+      recipients: recipients,
     );
     if (!confirmed) return;
     try {
       final submitted = await widget.service.submit(_row.id);
       if (!mounted) return;
-      setState(() => _row = submitted);
-      widget.onSubmit(submitted);
+      setState(() => _row = submitted.row);
+      widget.onSubmit(submitted.row);
+      _toastNotified(submitted.notified, fallback: '已通知最终人');
     } catch (error) {
       widget.onError(friendlyErrorText(error));
     }
@@ -2560,19 +2953,21 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       widget.onError('请先保存最新修改，再通知下一位');
       return;
     }
-    final missing = missingProposalReviewAssignees(
-      _form,
-      includeTech: action == 'notify_tech',
-      purchase: _isPurchase,
-    );
-    if (missing.isNotEmpty) {
-      final issues = [for (final name in missing) '请指定$name'];
-      setState(() => _issues = issues);
-      _scrollToTop();
-      widget.onError('请先指定：${missing.join('、')}');
-      return;
+    if (action != 'remind') {
+      final missing = missingProposalReviewAssignees(
+        _form,
+        includeTech: action == 'notify_tech',
+        purchase: _isPurchase,
+      );
+      if (missing.isNotEmpty) {
+        final issues = [for (final name in missing) '请指定$name'];
+        setState(() => _issues = issues);
+        _scrollToTop();
+        widget.onError('请先指定：${missing.join('、')}');
+        return;
+      }
     }
-    if (_isPurchase && action == 'notify_tech') {
+    if (action != 'remind' && _isPurchase && action == 'notify_tech') {
       final issues = proposalIntakePurchaseMarketIssues(_form);
       if (issues.isNotEmpty) {
         setState(() => _issues = issues);
@@ -2646,21 +3041,41 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         '确认后由市场部负责人二复核科技，再由市场部负责人一复核市场。财务技术接口有变则由科技部负责人复核。',
         '确认提交',
       ),
+      'remind' => (
+        '确认通知当前待办人',
+        '不会改变提案阶段，只把待办再发一次。',
+        '确认通知',
+      ),
       _ => ('', '', ''),
     };
+    final recipients = proposalIntakeNotifyRecipients(
+      action: action,
+      row: _row,
+      people: widget.people,
+      options: widget.options,
+    );
+    if (action == 'remind' && recipients.isEmpty) {
+      widget.onError('当前没有可通知的人');
+      return;
+    }
     if (title.isNotEmpty) {
       final confirmed = await _confirmFinal(
         title: title,
         message: message,
         confirmLabel: confirmLabel,
+        recipients: recipients,
       );
       if (!confirmed) return;
     }
     try {
       final next = await widget.service.handoff(_row.id, action, _row.version);
       if (!mounted) return;
-      setState(() => _row = next);
-      widget.onSaved(next);
+      setState(() {
+        _row = next.row;
+        _dirty = false;
+      });
+      widget.onSaved(next.row);
+      _toastNotified(next.notified, fallback: action == 'remind' ? '已发送通知' : '已通知');
     } catch (error) {
       widget.onError(friendlyErrorText(error));
     }
@@ -2682,10 +3097,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       }
       comment = typed;
     } else {
+      final submitter = proposalIntakeSubmitterNotifyRecipient(
+        _row,
+        task: '最终人已确认通过',
+        people: widget.people,
+      );
       final confirmed = await _confirmFinal(
         title: '确认通过提案',
         message: '确认后提案完成。这是最终人的最终确认，通过后不可再改。',
         confirmLabel: '确认通过',
+        recipients: [if (submitter != null) submitter],
       );
       if (!confirmed) return;
     }
@@ -2699,9 +3120,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       if (!mounted) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        setState(() => _row = next);
-        widget.onSubmit(next);
-        widget.onAfterFinalDecision?.call(next.id);
+        setState(() => _row = next.row);
+        widget.onSubmit(next.row);
+        widget.onAfterFinalDecision?.call(next.row.id);
+        _toastNotified(
+          next.notified,
+          fallback: approved ? '提案已通过' : '已驳回提交人',
+        );
       });
     } catch (error) {
       widget.onError(friendlyErrorText(error));
@@ -2731,6 +3156,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         _dirty = false;
       });
       widget.onSaved(saved);
+      showProposalCenterToast(context, '已保存');
     } catch (error) {
       widget.onError(friendlyErrorText(error));
     }
@@ -2754,6 +3180,77 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       );
     } finally {
       if (mounted) setState(() => _forwarding = false);
+    }
+  }
+
+  Future<void> _notifyEveryone() async {
+    if (_row.id <= 0 || _notifyingEveryone || _forwarding) return;
+    if (_dirty) {
+      widget.onError('请先保存最新修改后再通知TA');
+      return;
+    }
+    final recipients = proposalIntakeForwardEveryoneRecipients(
+      row: _row,
+      people: widget.people,
+      options: widget.options,
+      excludeUserId: _me,
+    );
+    if (recipients.isEmpty) {
+      widget.onError('当前没有可通知的人');
+      return;
+    }
+    final confirmed = await _confirmFinal(
+      title: '以你的身份通知相关人',
+      message: '将把本提案名片发到以下同事的私聊。不经过审批助手，也不改变提案阶段。',
+      confirmLabel: '确认发送',
+      recipients: recipients,
+      recipientsHeading: '即将发到私聊',
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _notifyingEveryone = true);
+    final share = ApprovalChatShare.fromProposalIntake(
+      id: _row.id,
+      title: _headerTitle,
+      status: _row.status,
+      code: _row.code,
+      submitterName: _row.initiatorDisplayName(widget.people),
+    );
+    final chat = ConversationService(session: widget.session);
+    final sent = <ProposalIntakeNotifyRecipient>[];
+    final failed = <String>[];
+    try {
+      for (final item in recipients) {
+        try {
+          final conversationId = await chat.ensurePrivateConversationForPeer(
+            item.userId,
+          );
+          if (conversationId == null || conversationId <= 0) {
+            failed.add(item.line);
+            continue;
+          }
+          await chat.sendText(
+            conversationId,
+            share.bodyText,
+            payload: share.toMessagePayload(),
+          );
+          sent.add(item);
+        } catch (_) {
+          failed.add(item.line);
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _notifyingEveryone = false);
+    }
+    if (!mounted) return;
+    if (sent.isNotEmpty) {
+      final who = sent.map((item) {
+        if (item.name.isNotEmpty) return '${item.name}（${item.role}）';
+        return item.role;
+      }).join('、');
+      showProposalCenterToast(context, '已转发到私聊：$who');
+    }
+    if (failed.isNotEmpty) {
+      widget.onError('未送达：${failed.join('、')}');
     }
   }
 
@@ -3271,6 +3768,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             : () => unawaited(_forwardToChat()),
       ),
     ];
+    if (_canNotifyEveryone) {
+      actions.add(
+        _topLabeledAction(
+          icon: Icons.notifications_active_outlined,
+          label: _notifyingEveryone ? '通知中…' : '通知TA',
+          filled: false,
+          compact: compact,
+          loading: _notifyingEveryone,
+          onPressed: _notifyingEveryone || _forwarding
+              ? null
+              : () => unawaited(_notifyEveryone()),
+        ),
+      );
+    }
     if (_canNotifyTech) {
       actions.add(
         btn(

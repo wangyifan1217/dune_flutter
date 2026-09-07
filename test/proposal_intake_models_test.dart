@@ -5,6 +5,223 @@ import 'package:dunes_app/features/xflow/approval_chat_share.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('list library stats parse total week month and sectors', () {
+    final result = ProposalIntakeListResult.fromJson({
+      'items': [],
+      'total': 2,
+      'stats': {
+        'total': 128,
+        'day': 2,
+        'week': 6,
+        'month': 22,
+        'sectors': [
+          {'name': '能源', 'count': 10},
+          {'name': '未填写', 'count': 2},
+        ],
+      },
+    });
+    expect(result.total, 2);
+    expect(result.stats.total, 128);
+    expect(result.stats.day, 2);
+    expect(result.stats.week, 6);
+    expect(result.stats.month, 22);
+    expect(
+      ProposalIntakeListResult.fromJson({'items': []}).stats.total,
+      0,
+    );
+    final chips = proposalIntakeSectorCountRows(
+      catalog: const ['能源', 'Fintech', '运营商', '公共出行', '未知'],
+      counts: result.stats.sectors,
+    );
+    expect(chips.map((item) => '${item.$1}:${item.$2}').toList(), [
+      '能源:10',
+      'Fintech:0',
+      '运营商:0',
+      '公共出行:0',
+      '未知:0',
+      '未填写:2',
+    ]);
+    expect(
+      proposalIntakeSectorCountRows(
+        catalog: const ['能源'],
+        counts: const [
+          ProposalIntakeSectorStat(name: '能源', count: 1),
+          ProposalIntakeSectorStat(name: '自定义', count: 4),
+          ProposalIntakeSectorStat(name: '未填写', count: 0),
+        ],
+      ).map((item) => '${item.$1}:${item.$2}').toList(),
+      ['能源:1', '自定义:4'],
+    );
+  });
+
+  test('mobile list groups by update day and counts open days', () {
+    final now = DateTime(2026, 9, 7, 13, 0);
+    final today = ProposalIntakeRow.fromJson({
+      'code': 'TA-20260907-000001',
+      'createdAt': '2026-09-07T10:00:00',
+      'updatedAt': '2026-09-07T15:32:00',
+      'form': {'createdByName': '黄永刚'},
+    });
+    final older = ProposalIntakeRow.fromJson({
+      'code': 'TA-20260903-000104',
+      'createdAt': '2026-09-03T09:00:00',
+      'updatedAt': '2026-09-04T15:32:00',
+      'form': {'createdByName': '朱子姝'},
+    });
+    expect(proposalIntakeDaysOpen(today, now: now), 1);
+    expect(proposalIntakeDaysOpenLabel(today, now: now), '今天打开');
+    expect(proposalIntakeDaysOpen(older, now: now), 5);
+    expect(proposalIntakeDaysOpenLabel(older, now: now), '已开 5 天');
+    final groups = groupProposalIntakeRowsByDate([older, today], now: now);
+    expect(groups.map((g) => g.label).toList(), ['今天', '9月4日']);
+    expect(groups.first.rows.single.code, 'TA-20260907-000001');
+    expect(groups.last.rows.single.code, 'TA-20260903-000104');
+  });
+
+  test('list sector filter reads form name or catalog ref', () {
+    expect(
+      proposalIntakeSectorName(
+        ProposalIntakeRow.fromJson({
+          'form': {'sector': '能源'},
+        }),
+      ),
+      '能源',
+    );
+    expect(
+      proposalIntakeSectorName(
+        ProposalIntakeRow.fromJson({
+          'form': {
+            'sectorRef': {'id': 1, 'code': 'NY', 'name': 'Fintech'},
+          },
+        }),
+      ),
+      'Fintech',
+    );
+    expect(proposalIntakeSectorName(ProposalIntakeRow.fromJson({})), '');
+    final filters = proposalIntakeSectorFilters(['能源', ' Fintech ', '能源']);
+    expect(filters.map((item) => item.$1).toList(), [
+      '',
+      '能源',
+      'Fintech',
+      kProposalIntakeSectorBlankFilter,
+    ]);
+    expect(filters.last.$2, '未填写');
+    final energy = ProposalIntakeRow.fromJson({
+      'form': {'sector': '能源'},
+    });
+    final blank = ProposalIntakeRow.fromJson({});
+    expect(proposalIntakeMatchesSectorFilter(energy, ''), isTrue);
+    expect(proposalIntakeMatchesSectorFilter(energy, '能源'), isTrue);
+    expect(proposalIntakeMatchesSectorFilter(energy, '运营商'), isFalse);
+    expect(
+      proposalIntakeMatchesSectorFilter(blank, kProposalIntakeSectorBlankFilter),
+      isTrue,
+    );
+    expect(
+      proposalIntakeMatchesSectorFilter(
+        energy,
+        kProposalIntakeSectorBlankFilter,
+      ),
+      isFalse,
+    );
+  });
+
+  test('list fill progress is 0% on empty sales and purchase rows', () {
+    final sales = ProposalIntakeRow.fromJson({'kind': 'sales', 'form': {}});
+    final purchase = ProposalIntakeRow.fromJson({
+      'kind': 'purchase',
+      'form': {},
+    });
+    final salesProgress = proposalIntakeFillProgress(sales);
+    final purchaseProgress = proposalIntakeFillProgress(purchase);
+    expect(salesProgress.total, _fillMissingCount(sales));
+    expect(purchaseProgress.total, _fillMissingCount(purchase));
+    expect(salesProgress.total, greaterThan(0));
+    expect(purchaseProgress.total, greaterThan(0));
+    expect(salesProgress.total, isNot(purchaseProgress.total));
+    expect(salesProgress.filled, 0);
+    expect(purchaseProgress.filled, 0);
+    expect(salesProgress.filledPercent, 0);
+    expect(purchaseProgress.filledPercent, 0);
+    expect(salesProgress.label, '已填 0%');
+    expect(const ProposalIntakeFillProgress(filled: 1, total: 3).filledPercent, 33);
+    expect(const ProposalIntakeFillProgress(filled: 2, total: 3).filledPercent, 67);
+  });
+
+  test('list fill progress counts filled sales fields and stays consistent', () {
+    final row = ProposalIntakeRow.fromJson({
+      'kind': 'sales',
+      'form': {
+        'sector': '能源',
+        'proposalName': '充电补贴',
+      },
+    });
+    final progress = proposalIntakeFillProgress(row);
+    expect(progress.filled, greaterThan(0));
+    expect(progress.filledPercent, greaterThan(0));
+    expect(progress.filledPercent, lessThan(100));
+    expect(progress.missing, _fillMissingCount(row));
+    expect(progress.filled + progress.missing, progress.total);
+    expect(progress.label, '已填 ${progress.filledPercent}%');
+  });
+
+  test('sales fill progress reaches 100% when required slots are filled', () {
+    final form = <String, dynamic>{
+      'sector': '能源',
+      'proposalName': '充电补贴',
+      'proposalType': '新增业务提案',
+      'product': '现金券',
+      'projectName': '项目甲',
+      'supplies': ['供给A'],
+      'channels': ['渠道A'],
+      'supplierPolicy': '供货政策',
+      'channelPolicy': '渠道政策',
+      'executionPlan': '执行计划',
+      'riskPoints': '风险点',
+      'profitModes': ['返点'],
+      'profitFormula': '公式',
+      'purchaseMode': '已签署合同',
+      'purchaseNo': 'CG-1',
+      'purchaseName': '采购合同',
+      'purchaseSignDate': '2026-01-01',
+      'purchaseOurParty': '我方',
+      'purchaseCounterparty': '对方',
+      'purchaseValidPeriod': '1年',
+      'purchaseCoreTerms': '条款',
+      'salesMode': '已签署合同',
+      'salesNo': 'XS-1',
+      'salesName': '销售合同',
+      'salesSignDate': '2026-01-01',
+      'salesOurParty': '我方',
+      'salesCounterparty': '对方',
+      'salesValidPeriod': '1年',
+      'salesCoreTerms': '条款',
+      'technologyPlatform': '能源平台',
+      'technologyCapabilities': ['发放'],
+      'outputForms': ['API'],
+      'developmentTypes': ['全新开发'],
+      'hasRdCost': '否',
+      'deliveryDate': '2026-12-01',
+    };
+    for (final field in kProposalSalesFinanceFillFields) {
+      form[field.$1] = '1';
+    }
+    final row = ProposalIntakeRow.fromJson({'kind': 'sales', 'form': form});
+    final progress = proposalIntakeFillProgress(row);
+    expect(_fillMissingCount(row), 0);
+    expect(progress.filledPercent, 100);
+    expect(progress.missing, 0);
+    expect(progress.label, '已填 100%');
+  });
+
+  test('open day can fall back to TA-YYYYMMDD in the code', () {
+    final row = ProposalIntakeRow.fromJson({'code': 'TA-20260901-000009'});
+    expect(
+      proposalIntakeDaysOpen(row, now: DateTime(2026, 9, 7)),
+      7,
+    );
+  });
+
   test('proposal intake kind normalizes sales vs purchase', () {
     expect(normalizeProposalIntakeKind(''), 'sales');
     expect(normalizeProposalIntakeKind('purchase-proposal'), 'purchase');
@@ -648,6 +865,198 @@ void main() {
     expect(proposalIntakeActionLabel('review_finance_interface'), '待复核财务技术接口');
     expect(proposalIntakeActionLabel('revise'), '最终人已驳回请从头填写');
     expect(proposalIntakeActionLabel('revise_module'), '板块已驳回请修改');
+  });
+
+  test('notify recipients list names for tech handoff', () {
+    final row = ProposalIntakeRow.fromJson({
+      'createdBy': 2,
+      'form': {
+        'technologyOwner': '张科技',
+        'technologyOwnerUserId': 3,
+        'financeOwner2': '李财务',
+        'financeOwner2UserId': 5,
+      },
+      'review': {'stage': 'filling'},
+    });
+    final items = proposalIntakeNotifyRecipients(
+      action: 'notify_tech',
+      row: row,
+    );
+    expect(items.map((item) => item.line).toList(), [
+      '科技部负责人 张科技 · 请填写科技部内容',
+      '财务部负责人二 李财务 · 请填写财务技术接口',
+    ]);
+    expect(
+      proposalIntakeNotifiedToast(items),
+      '已通知：张科技（科技部负责人）、李财务（财务部负责人二）',
+    );
+    final write = ProposalIntakeWriteResult.fromJson({
+      'id': 8,
+      'notified': [
+        {'userId': 3, 'role': '科技部负责人', 'name': '张科技', 'task': '请填写科技部内容'},
+      ],
+    });
+    expect(write.row.id, 8);
+    expect(write.notified.single.name, '张科技');
+  });
+
+  test('remind recipients skip finished reviewers', () {
+    final row = ProposalIntakeRow.fromJson({
+      'createdBy': 2,
+      'kind': 'sales',
+      'status': 'reviewing',
+      'form': {
+        'createdByName': '朱子姝',
+        'marketOwner1': '黄永刚',
+        'marketOwner1UserId': 4,
+        'marketOwner2UserId': 21,
+        'technologyOwnerUserId': 3,
+        'financeOwner2UserId': 5,
+        'financeOwner1UserId': 6,
+      },
+      'review': {
+        'stage': 'reviewing',
+        'technologyCompleted': true,
+        'financeInterfaceCompleted': true,
+        'purchaseContractCompleted': true,
+        'salesContractCompleted': true,
+      },
+    });
+    final items = proposalIntakeRemindRecipients(row: row);
+    expect(items.map((item) => item.userId).toSet(), {4, 5, 6});
+    expect(items.first.line, '市场部负责人一 黄永刚 · 请复核市场部板块');
+  });
+
+  test('forward everyone lists related people except self', () {
+    final row = ProposalIntakeRow.fromJson({
+      'createdBy': 1,
+      'form': {
+        'createdByName': '朱子姝',
+        'technologyOwner': '吴小姣',
+        'technologyOwnerUserId': 10,
+        'financeOwner2': '朱子姝',
+        'financeOwner2UserId': 1,
+        'marketOwner1': '黄永刚',
+        'marketOwner1UserId': 4,
+      },
+    });
+    final items = proposalIntakeForwardEveryoneRecipients(
+      row: row,
+      excludeUserId: 1,
+    );
+    expect(items.map((item) => item.userId).toSet(), {10, 4});
+    expect(items.map((item) => item.line).toList(), [
+      '市场部负责人一 黄永刚',
+      '科技部负责人 吴小姣',
+    ]);
+  });
+
+  test('review complete notifies submitter only after last flag', () {
+    final row = ProposalIntakeRow.fromJson({
+      'createdBy': 2,
+      'kind': 'sales',
+      'form': {'createdByName': '朱子姝'},
+      'review': {
+        'stage': 'reviewing',
+        'marketCompleted': true,
+        'technologyCompleted': true,
+        'financeInterfaceCompleted': true,
+        'financeCompleted': true,
+        'purchaseContractCompleted': true,
+      },
+    });
+    expect(
+      proposalIntakeAfterReviewNotifyRecipients(
+        row: row,
+        flag: 'salesContractCompleted',
+        approved: true,
+      ).single.line,
+      '提交人 朱子姝 · 请通知最终人',
+    );
+    expect(
+      proposalIntakeAfterReviewNotifyRecipients(
+        row: row,
+        flag: 'financeCompleted',
+        approved: true,
+      ),
+      isEmpty,
+    );
+  });
+
+  test('review action labels append owner one or two when filled', () {
+    expect(proposalIntakeActionLabel('review_market'), '待复核市场部');
+    expect(proposalIntakeActionLabel('review_finance'), '待复核财务');
+    expect(
+      proposalIntakeActionLabel(
+        'review_market',
+        row: ProposalIntakeRow.fromJson({
+          'form': {'marketOwner1': '黄永刚', 'marketOwner1UserId': 8},
+        }),
+      ),
+      '待复核市场部负责人一 黄永刚',
+    );
+    expect(
+      proposalIntakeActionLabel(
+        'review_tech',
+        row: ProposalIntakeRow.fromJson({
+          'form': {'marketOwner2UserId': 9},
+        }),
+        people: const [
+          ProposalPerson(userId: 9, name: '李市场', positionName: ''),
+        ],
+      ),
+      '待复核市场部负责人二 李市场',
+    );
+    expect(
+      proposalIntakeActionLabel(
+        'review_finance',
+        row: ProposalIntakeRow.fromJson({
+          'form': {'financeOwner2': '财务乙'},
+        }),
+      ),
+      '待复核财务负责人二 财务乙',
+    );
+    expect(
+      proposalIntakeActionLabel(
+        'review_finance_module',
+        row: ProposalIntakeRow.fromJson({
+          'form': {'financeOwner1UserId': 3},
+        }),
+      ),
+      '待复核财务负责人一',
+    );
+    final pending = proposalIntakePendingReviewLabels(
+      ProposalIntakeRow.fromJson({
+        'status': 'reviewing',
+        'kind': 'sales',
+        'form': {
+          'marketOwner1': '黄永刚',
+          'financeOwner2': '财务乙',
+        },
+        'review': {'stage': 'reviewing'},
+      }),
+    );
+    expect(pending, [
+      '待复核市场部负责人一 黄永刚',
+      '待复核科技',
+      '待复核财务负责人二 财务乙',
+    ]);
+    expect(
+      proposalIntakeListActionText(
+        ProposalIntakeRow.fromJson({
+          'status': 'reviewing',
+          'myAction': 'review_market',
+          'form': {'marketOwner1UserId': 8},
+          'review': {
+            'stage': 'reviewing',
+            'marketCompleted': false,
+            'technologyCompleted': true,
+            'financeCompleted': true,
+          },
+        }),
+      ),
+      '待复核市场部负责人一',
+    );
   });
 
   test('clearing contract review does not reset other modules', () {
@@ -1952,4 +2361,17 @@ void main() {
     expect(proposalIntakeSalesFinanceFillIssues(form), isEmpty);
     expect(proposalIntakeSkuSettleIssues(form), isEmpty);
   });
+}
+
+int _fillMissingCount(ProposalIntakeRow row) {
+  final form = row.form;
+  if (proposalIntakeIsPurchase(row.kind)) {
+    return proposalIntakePurchaseMarketIssues(form).length +
+        proposalIntakePurchaseTechIssues(form).length;
+  }
+  return proposalIntakeSalesMarketIssues(form).length +
+      proposalIntakeTechFillIssues(form, purchase: false).length +
+      proposalIntakeSalesFinanceFillIssues(form).length +
+      proposalIntakeLaunchFinanceIssues(form).length +
+      proposalIntakeSkuSettleIssues(form).length;
 }

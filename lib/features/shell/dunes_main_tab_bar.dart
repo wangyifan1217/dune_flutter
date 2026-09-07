@@ -3,10 +3,9 @@ import 'package:flutter/material.dart';
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../conversation/comm_unread_notifier.dart';
-import '../nova/nova_icon.dart';
 import '../workbench/workbench_badge_notifier.dart';
 
-/// 底部主 Tab：通讯 · 韬 · 灯塔 · 我的；PC 竖栏另外保留「工作台」。
+/// 底部主 Tab：通讯 · 饕 · 灯塔 · 我的；PC 竖栏另外保留「工作台」。
 /// 此为 Tab 内容区高度；iOS Home Indicator 的安全区由组件自身额外处理。
 const double kDunesMainTabBarHeight = 64;
 
@@ -87,7 +86,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
 
   bool get _showMyDot => (widget.workbenchBadge?.pendingForMe ?? 0) > 0;
 
-  /// 外部用户：不展示 韬 / 灯塔 / 工作台。
+  /// 外部用户：不展示 饕 / 灯塔 / 工作台。
   bool get _hideWorkbenchTabs => widget.chatOnlyMode;
 
   bool get _isVertical => widget.axis == Axis.vertical;
@@ -100,8 +99,8 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
   );
 
   /// 主区域 Tab。
-  /// APP 底栏：通讯 · 韬 · 灯塔 · 我的
-  /// PC 竖栏：通讯 / 韬 / 灯塔 / 工作台；「我的」单独沉底。
+  /// APP 底栏：通讯 · 饕 · 灯塔 · 我的
+  /// PC 竖栏：通讯 / 饕 / 灯塔 / 工作台；「我的」单独沉底。
   List<Widget> get _tabs => [
     _tab(
       icon: Icons.forum_outlined,
@@ -109,12 +108,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
       screen: 'C1',
       showRedDot: _showCommDot,
     ),
-    if (!_hideWorkbenchTabs)
-      _tab(
-        iconBuilder: (color) => _TauTabGlyph(color: color),
-        label: '韬',
-        screen: 'QJ',
-      ),
+    if (!_hideWorkbenchTabs) _tab(icon: Icons.people, label: '饕', screen: 'QJ'),
     if (!_hideWorkbenchTabs)
       _tab(icon: Icons.explore_outlined, label: '灯塔', screen: 'LH'),
     if (!_hideWorkbenchTabs && _isVertical)
@@ -227,11 +221,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                         ? SizedBox(
                             width: 24,
                             height: 24,
-                            child: OverflowBox(
-                              maxWidth: 40,
-                              maxHeight: 40,
-                              child: iconBuilder(color),
-                            ),
+                            child: iconBuilder(color),
                           )
                         : Icon(icon, size: 24, color: color),
                     if (showRedDot)
@@ -251,36 +241,6 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
       return body;
     }
     return Expanded(child: body);
-  }
-}
-
-/// 用原 τ 图形去底，再染成和其他 Tab 一样的灰 / 紫。
-class _TauTabGlyph extends StatelessWidget {
-  const _TauTabGlyph({required this.color});
-
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = (color.r * 255.0);
-    final g = (color.g * 255.0);
-    final b = (color.b * 255.0);
-    return ColorFiltered(
-      colorFilter: ColorFilter.matrix(<double>[
-        0, 0, 0, 0, r,
-        0, 0, 0, 0, g,
-        0, 0, 0, 0, b,
-        1, 1, 1, 0, 0,
-      ]),
-      child: Image.asset(
-        NovaIcon.tabAssetPath,
-        width: 40,
-        height: 40,
-        fit: BoxFit.contain,
-        gaplessPlayback: true,
-        filterQuality: FilterQuality.medium,
-      ),
-    );
   }
 }
 

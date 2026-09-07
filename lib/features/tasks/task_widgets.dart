@@ -722,6 +722,147 @@ class TaskListTileCard extends StatelessWidget {
   }
 }
 
+/// 工作台简化卡片：待我处理 / 我发起的，不展示主/子徽章。
+class TaskWorkbenchCard extends StatelessWidget {
+  const TaskWorkbenchCard({
+    super.key,
+    required this.task,
+    required this.onTap,
+    this.onProgress,
+    this.onApprove,
+    this.onReject,
+    this.groupMode = false,
+  });
+
+  final TaskItem task;
+  final VoidCallback onTap;
+  final VoidCallback? onProgress;
+  final VoidCallback? onApprove;
+  final VoidCallback? onReject;
+  final bool groupMode;
+
+  String? get _due {
+    final d = task.dueAt?.toLocal();
+    if (d == null) return null;
+    return '止 ${d.month}/${d.day}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = task.isPending;
+    final belong = task.parentTitle.trim();
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                task.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  height: 1.3,
+                ),
+              ),
+              if (groupMode) ...[
+                const SizedBox(height: 6),
+                Text(
+                  task.subtaskCount > 0
+                      ? '${task.subtaskCount} 项 · 汇总 ${task.progressPct}%'
+                      : '还没有事项',
+                  style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                ),
+              ] else ...[
+                if (belong.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '属于 $belong',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.text3,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 6),
+                Text(
+                  [
+                    if (_due != null) _due!,
+                    if (!pending) '${task.progressPct}%',
+                    if (pending && task.ownerName.isNotEmpty)
+                      '${task.ownerName}提交',
+                  ].join(' · '),
+                  style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+                ),
+              ],
+              if (!pending) ...[
+                const SizedBox(height: 10),
+                TaskProgressBar(
+                  progressPct: task.progressPct,
+                  overdue: task.overdue,
+                  completed: task.status == 'completed',
+                  height: 7,
+                  showLabel: false,
+                ),
+              ],
+              const SizedBox(height: 10),
+              if (pending)
+                Row(
+                  children: [
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: kTaskPurple,
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                      ),
+                      onPressed: onApprove,
+                      child: const Text('通过'),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      onPressed: onReject,
+                      child: const Text('驳回'),
+                    ),
+                  ],
+                )
+              else if (groupMode)
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: onTap,
+                  child: const Text('查看拆解'),
+                )
+              else if (onProgress != null)
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: kTaskPurple,
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                  ),
+                  onPressed: onProgress,
+                  child: const Text('更新进度'),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 MenuStyle get kTaskMenuStyle => MenuStyle(
   backgroundColor: const WidgetStatePropertyAll(Colors.white),
   elevation: const WidgetStatePropertyAll(8),

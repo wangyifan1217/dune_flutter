@@ -358,27 +358,56 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     if (children.length == 1) {
       return _fieldWidget(children.first, inRow: false);
     }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        for (var i = 0; i < children.length; i++) ...[
-          Expanded(child: _fieldWidget(children[i], inRow: true)),
-          if (connector.isNotEmpty && i < children.length - 1)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(2, 0, 2, 10),
-              child: Text(
-                connector,
-                style: DunesTypography.mono(
-                  fontSize: 11,
-                  color: DunesColors.text3,
-                  fontWeight: FontWeight.w600,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stack = _shouldStackCells(constraints.maxWidth, children.length);
+        if (!stack) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              for (var i = 0; i < children.length; i++) ...[
+                Expanded(child: _fieldWidget(children[i], inRow: true)),
+                if (connector.isNotEmpty && i < children.length - 1)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(2, 0, 2, 10),
+                    child: Text(
+                      connector,
+                      style: DunesTypography.mono(
+                        fontSize: 11,
+                        color: DunesColors.text3,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  )
+                else if (i != children.length - 1)
+                  const SizedBox(width: 8),
+              ],
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0) const SizedBox(height: 8),
+              if (i > 0 && connector.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    connector,
+                    textAlign: TextAlign.center,
+                    style: DunesTypography.mono(
+                      fontSize: 11,
+                      color: DunesColors.text3,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
-              ),
-            )
-          else if (i != children.length - 1)
-            const SizedBox(width: 8),
-        ],
-      ],
+              _fieldWidget(children[i], inRow: false),
+            ],
+          ],
+        );
+      },
     );
   }
 
@@ -817,27 +846,16 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              for (final col in cols)
-                Expanded(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 60),
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: _dynCell(field.key, col, rows, ri, null, -1),
-                    ),
-                  ),
-                ),
-              XfRemoveButton(
-                onTap: () {
-                  rows.removeAt(ri);
-                  widget.onChanged(field.key, rows);
-                  setState(() {});
-                },
-              ),
-            ],
+          _dynCellsBar(
+            field.key,
+            cols,
+            rows,
+            ri,
+            onRemove: () {
+              rows.removeAt(ri);
+              widget.onChanged(field.key, rows);
+              setState(() {});
+            },
           ),
           if (nestedCols.isNotEmpty) ...[
             const SizedBox(height: 6),
@@ -901,29 +919,19 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       for (var ti = 0; ti < tiers.length; ti++)
         Padding(
           padding: const EdgeInsets.only(bottom: 4),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              for (final col in nestedCols)
-                Expanded(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: 60),
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 4),
-                      child: _dynCell(fieldKey, col, tiers, ti, nestedKey, ri),
-                    ),
-                  ),
-                ),
-              XfRemoveButton(
-                size: 28,
-                onTap: () {
-                  tiers.removeAt(ti);
-                  rows[ri][nestedKey] = tiers;
-                  widget.onChanged(fieldKey, rows);
-                  setState(() {});
-                },
-              ),
-            ],
+          child: _dynCellsBar(
+            fieldKey,
+            nestedCols,
+            tiers,
+            ti,
+            nestedKey: nestedKey,
+            parentRi: ri,
+            onRemove: () {
+              tiers.removeAt(ti);
+              rows[ri][nestedKey] = tiers;
+              widget.onChanged(fieldKey, rows);
+              setState(() {});
+            },
           ),
         ),
     ];
@@ -1238,6 +1246,22 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     );
   }
 
+  /// 手机上并排选择框会被挤窄，宽度不够时改为竖排铺满。
+  static const double _dynComfortableCellWidth = 168;
+
+  bool _shouldStackCells(double maxWidth, int colCount, {double extra = 0}) {
+    if (colCount <= 1) return false;
+    if (!maxWidth.isFinite) return false;
+    const gap = 8.0;
+    final needed =
+        colCount * _dynComfortableCellWidth + (colCount - 1) * gap + extra;
+    return maxWidth < needed;
+  }
+
+  bool _shouldStackDynCells(double maxWidth, int colCount) {
+    return _shouldStackCells(maxWidth, colCount, extra: 28);
+  }
+
   Widget _dynRow(
     String fieldKey,
     List<Map<String, dynamic>> cols,
@@ -1255,22 +1279,77 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
           color: DunesColors.borderSoft.withValues(alpha: 0.6),
         ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
+      child: _dynCellsBar(fieldKey, cols, rows, ri, onRemove: onRemove),
+    );
+  }
+
+  Widget _dynCellsBar(
+    String fieldKey,
+    List<Map<String, dynamic>> cols,
+    List<Map<String, dynamic>> rows,
+    int ri, {
+    required VoidCallback onRemove,
+    String? nestedKey,
+    int parentRi = -1,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stack = _shouldStackDynCells(constraints.maxWidth, cols.length);
+        final cells = [
           for (final col in cols)
-            Expanded(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 60),
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: _dynCell(fieldKey, col, rows, ri, null, -1),
-                ),
-              ),
+            _dynCell(
+              fieldKey,
+              col,
+              rows,
+              ri,
+              nestedKey,
+              parentRi,
+              comfortable: stack,
             ),
-          XfRemoveButton(onTap: onRemove),
-        ],
-      ),
+        ];
+        if (!stack) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              for (final cell in cells)
+                Expanded(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 60),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: cell,
+                    ),
+                  ),
+                ),
+              XfRemoveButton(onTap: onRemove),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < cells.length; i++)
+              Padding(
+                padding: EdgeInsets.only(
+                  bottom: i == cells.length - 1 ? 0 : 10,
+                ),
+                child: i == 0
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: cells[i]),
+                          const SizedBox(width: 8),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 20),
+                            child: XfRemoveButton(onTap: onRemove),
+                          ),
+                        ],
+                      )
+                    : cells[i],
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -1282,6 +1361,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     String? nestedKey,
     int parentRi, {
     bool matrix = false,
+    bool comfortable = false,
   }) {
     final colKey = (col['key'] ?? '').toString();
     final label = (col['label'] ?? colKey).toString();
@@ -1329,7 +1409,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         onFieldChanged: (key, value) => patchRow({key: value}),
       );
       if (matrix) return picker;
-      return XfDynCell(label: label, child: picker);
+      return XfDynCell(label: label, comfortable: comfortable, child: picker);
     }
 
     final value = rows[ri][colKey]?.toString() ?? '';
@@ -1349,7 +1429,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         onChanged: setVal,
       );
       if (matrix) return picker;
-      return XfDynCell(label: label, child: picker);
+      return XfDynCell(label: label, comfortable: comfortable, child: picker);
     }
 
     final input = colField.type == 'select'
@@ -1384,7 +1464,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
 
     if (matrix) return input;
 
-    return XfDynCell(label: label, child: input);
+    return XfDynCell(label: label, comfortable: comfortable, child: input);
   }
 
   Widget _dynamicDatePicker({
@@ -1854,12 +1934,20 @@ class _XflowSelectPickerState extends State<_XflowSelectPicker> {
                     hint: widget.placeholder,
                     readonly: widget.readonly,
                   ).copyWith(
-                    suffixIconConstraints: const BoxConstraints(minWidth: 72),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.fromLTRB(11, 9, 4, 9),
+                    suffixIconConstraints: BoxConstraints(
+                      minWidth: hasText && !widget.readonly ? 56 : 32,
+                      minHeight: 32,
+                    ),
                     suffixIcon: widget.readonly
-                        ? const Icon(
-                            Icons.keyboard_arrow_down_rounded,
-                            size: 18,
-                            color: DunesColors.text3,
+                        ? const Padding(
+                            padding: EdgeInsets.only(right: 8),
+                            child: Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              size: 18,
+                              color: DunesColors.text3,
+                            ),
                           )
                         : Row(
                             mainAxisSize: MainAxisSize.min,
@@ -1867,6 +1955,9 @@ class _XflowSelectPickerState extends State<_XflowSelectPicker> {
                               if (hasText)
                                 IconButton(
                                   tooltip: '清除',
+                                  padding: EdgeInsets.zero,
+                                  visualDensity: VisualDensity.compact,
+                                  constraints: xfCompactSuffixConstraints,
                                   icon: const Icon(
                                     Icons.close_rounded,
                                     size: 18,
@@ -1876,6 +1967,9 @@ class _XflowSelectPickerState extends State<_XflowSelectPicker> {
                                 ),
                               IconButton(
                                 tooltip: _expanded ? '收起' : '展开',
+                                padding: EdgeInsets.zero,
+                                visualDensity: VisualDensity.compact,
+                                constraints: xfCompactSuffixConstraints,
                                 icon: Icon(
                                   _expanded
                                       ? Icons.keyboard_arrow_up_rounded
@@ -2118,38 +2212,18 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
               editableTextState: editableTextState,
             );
           },
-          decoration:
-              xfInputDecoration(
-                hint: widget.placeholder,
-                readonly: widget.readonly,
-              ).copyWith(
-                suffixIcon: widget.readonly
-                    ? null
-                    : _loading
-                    ? const Padding(
-                        padding: EdgeInsets.all(10),
-                        child: SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    : hasText
-                    ? IconButton(
-                        icon: const Icon(
-                          Icons.close_rounded,
-                          size: 18,
-                          color: DunesColors.text3,
-                        ),
-                        onPressed: _clearSelection,
-                        tooltip: '清除',
-                      )
-                    : const Icon(
-                        Icons.search,
-                        size: 18,
-                        color: DunesColors.text3,
-                      ),
-              ),
+          decoration: xfSearchPickerDecoration(
+            hint: widget.placeholder,
+            readonly: widget.readonly,
+            suffixIcon: widget.readonly
+                ? null
+                : xfSearchSuffixIcon(
+                    loading: _loading,
+                    hasText: hasText,
+                    readonly: widget.readonly,
+                    onClear: _clearSelection,
+                  ),
+          ),
           style: xfInputTextStyle(),
           onTap: widget.readonly
               ? null
@@ -2523,27 +2597,14 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
           controller: _controller,
           focusNode: _focus,
           readOnly: widget.readonly,
-          decoration: xfInputDecoration(hint: widget.placeholder).copyWith(
-            suffixIcon: _loading
-                ? const Padding(
-                    padding: EdgeInsets.all(10),
-                    child: SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : hasText && !widget.readonly
-                ? IconButton(
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      size: 18,
-                      color: DunesColors.text3,
-                    ),
-                    onPressed: _clearSelection,
-                    tooltip: '清除',
-                  )
-                : const Icon(Icons.search, size: 18, color: DunesColors.text3),
+          decoration: xfSearchPickerDecoration(
+            hint: widget.placeholder,
+            suffixIcon: xfSearchSuffixIcon(
+              loading: _loading,
+              hasText: hasText,
+              readonly: widget.readonly,
+              onClear: _clearSelection,
+            ),
           ),
           style: xfInputTextStyle(),
           onTapOutside: (_) => _focus.unfocus(
@@ -2555,32 +2616,35 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
           const SizedBox(height: 6),
           TextFieldTapRegion(
             child: Container(
-            constraints: const BoxConstraints(maxHeight: 220),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: DunesColors.border),
-            ),
-            child: ListView.separated(
-              padding: EdgeInsets.zero,
-              shrinkWrap: true,
-              itemCount: _results.length.clamp(0, 8),
-              separatorBuilder: (_, _) =>
-                  Divider(height: 1, color: DunesColors.borderSoft),
-              itemBuilder: (context, index) {
-                final row = _results[index];
-                final code = (row['code'] ?? '').toString();
-                final title = (row['title'] ?? row['name'] ?? '').toString();
-                final label = code.isNotEmpty && title.isNotEmpty
-                    ? '$code · $title'
-                    : (code.isNotEmpty ? code : title);
-                return ListTile(
-                  dense: true,
-                  title: Text(label, style: DunesTypography.sans(fontSize: 12)),
-                  onTap: () => _selectProposal(row),
-                );
-              },
-            ),
+              constraints: const BoxConstraints(maxHeight: 220),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: DunesColors.border),
+              ),
+              child: ListView.separated(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: _results.length.clamp(0, 8),
+                separatorBuilder: (_, _) =>
+                    Divider(height: 1, color: DunesColors.borderSoft),
+                itemBuilder: (context, index) {
+                  final row = _results[index];
+                  final code = (row['code'] ?? '').toString();
+                  final title = (row['title'] ?? row['name'] ?? '').toString();
+                  final label = code.isNotEmpty && title.isNotEmpty
+                      ? '$code · $title'
+                      : (code.isNotEmpty ? code : title);
+                  return ListTile(
+                    dense: true,
+                    title: Text(
+                      label,
+                      style: DunesTypography.sans(fontSize: 12),
+                    ),
+                    onTap: () => _selectProposal(row),
+                  );
+                },
+              ),
             ),
           ),
         ] else if (_searched && !_loading && hasText) ...[
@@ -2857,27 +2921,14 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
               editableTextState: editableTextState,
             );
           },
-          decoration: xfInputDecoration(hint: widget.placeholder).copyWith(
-            suffixIcon: _loading
-                ? const Padding(
-                    padding: EdgeInsets.all(10),
-                    child: SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : hasText && !widget.readonly
-                ? IconButton(
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      size: 18,
-                      color: DunesColors.text3,
-                    ),
-                    onPressed: _clearSelection,
-                    tooltip: '清除',
-                  )
-                : const Icon(Icons.search, size: 18, color: DunesColors.text3),
+          decoration: xfSearchPickerDecoration(
+            hint: widget.placeholder,
+            suffixIcon: xfSearchSuffixIcon(
+              loading: _loading,
+              hasText: hasText,
+              readonly: widget.readonly,
+              onClear: _clearSelection,
+            ),
           ),
           style: xfInputTextStyle(),
           onTapOutside: (_) => _focus.unfocus(

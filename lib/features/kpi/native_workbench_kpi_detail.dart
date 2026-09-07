@@ -203,8 +203,8 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
           const SizedBox(height: 4),
           Text(
             person.bonus == 0
-                ? '主营 ${person.mainScore.toStringAsFixed(2)}  · 通信 ${person.telecomScore.toStringAsFixed(1)}  · 能源 ${person.energyScore.toStringAsFixed(1)}'
-                : '主营 ${person.mainScore.toStringAsFixed(2)}  · 加减分 ${formatKpiAdj(person.bonus)}  · 通信 ${person.telecomScore.toStringAsFixed(1)}  · 能源 ${person.energyScore.toStringAsFixed(1)}',
+                ? '主营 ${person.mainScore.toStringAsFixed(2)}  · ${person.resolvedGrade.label}  · 通信 ${person.telecomScore.toStringAsFixed(1)}  · 能源 ${person.energyScore.toStringAsFixed(1)}'
+                : '主营 ${person.mainScore.toStringAsFixed(2)}  · ${person.resolvedGrade.label}  · 加减分 ${formatKpiAdj(person.bonus)}  · 通信 ${person.telecomScore.toStringAsFixed(1)}  · 能源 ${person.energyScore.toStringAsFixed(1)}',
             style: const TextStyle(fontSize: 13, color: DunesColors.text2),
           ),
           const SizedBox(height: 12),

@@ -5,6 +5,43 @@ import 'package:http/http.dart' as http;
 import '../../core/http/session_http.dart';
 import '../auth/auth_session.dart';
 
+class KpiGrade {
+  const KpiGrade({
+    required this.code,
+    required this.label,
+    required this.coefficient,
+  });
+
+  final String code;
+  final String label;
+  final double coefficient;
+}
+
+/// 优 95≤X≤100 1.1；良 85≤X<95 1；中 80≤X<85 0.9；普 75≤X<80 0.8；改 70≤X<75 0.7；辅 X<70 0.6.
+KpiGrade kpiGradeOf(double score) {
+  if (score >= 95) {
+    return const KpiGrade(code: '优', label: '优（优秀）', coefficient: 1.1);
+  }
+  if (score >= 85) {
+    return const KpiGrade(code: '良', label: '良（达到预期）', coefficient: 1);
+  }
+  if (score >= 80) {
+    return const KpiGrade(code: '中', label: '中（低于预期）', coefficient: 0.9);
+  }
+  if (score >= 75) {
+    return const KpiGrade(code: '普', label: '普（待提升）', coefficient: 0.8);
+  }
+  if (score >= 70) {
+    return const KpiGrade(code: '改', label: '改（重点改进）', coefficient: 0.7);
+  }
+  return const KpiGrade(code: '辅', label: '辅（专项改进）', coefficient: 0.6);
+}
+
+String formatKpiCoefficient(double v) {
+  if (v == v.roundToDouble()) return v.toInt().toString();
+  return v.toStringAsFixed(1);
+}
+
 class WorkProfileKpiMetric {
   const WorkProfileKpiMetric({
     required this.key,
@@ -164,12 +201,18 @@ class WorkProfileKpiPerson {
     required this.energyWeight,
     required this.telecomScore,
     required this.energyScore,
+    this.grade = '',
+    this.gradeLabel = '',
+    this.coefficient = 0,
     this.categories = const [],
   });
 
   final int userId;
   final String userName;
   final double mainScore;
+  final String grade;
+  final String gradeLabel;
+  final double coefficient;
   final double bonus;
   final double telecomWeight;
   final double energyWeight;
@@ -177,11 +220,25 @@ class WorkProfileKpiPerson {
   final double energyScore;
   final List<WorkProfileKpiCategory> categories;
 
+  KpiGrade get resolvedGrade {
+    if (gradeLabel.trim().isNotEmpty) {
+      return KpiGrade(
+        code: grade.trim().isEmpty ? kpiGradeOf(mainScore).code : grade.trim(),
+        label: gradeLabel.trim(),
+        coefficient: coefficient > 0 ? coefficient : kpiGradeOf(mainScore).coefficient,
+      );
+    }
+    return kpiGradeOf(mainScore);
+  }
+
   factory WorkProfileKpiPerson.fromJson(Map<String, dynamic> json) {
     return WorkProfileKpiPerson(
       userId: (json['userId'] as num?)?.toInt() ?? 0,
       userName: '${json['userName'] ?? ''}',
       mainScore: (json['mainScore'] as num?)?.toDouble() ?? 0,
+      grade: '${json['grade'] ?? ''}',
+      gradeLabel: '${json['gradeLabel'] ?? ''}',
+      coefficient: (json['coefficient'] as num?)?.toDouble() ?? 0,
       bonus: (json['bonus'] as num?)?.toDouble() ?? 0,
       telecomWeight: (json['telecomWeight'] as num?)?.toDouble() ?? 0,
       energyWeight: (json['energyWeight'] as num?)?.toDouble() ?? 0,

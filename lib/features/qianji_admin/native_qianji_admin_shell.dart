@@ -723,7 +723,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     final collaborationTiles = <_WorkbenchTile>[
       _WorkbenchTile(
         title: '任务',
-        subtitle: '主任务 · 子任务',
+        subtitle: '待我处理 · 我发起的',
         icon: Icons.task_alt_outlined,
         color: _themePurple,
         enabled: true,

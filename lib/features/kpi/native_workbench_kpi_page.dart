@@ -780,7 +780,7 @@ class _ScoreSummary extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(
-                '${person.userName}  主营 ${person.mainScore.toStringAsFixed(2)}  · 通信 ${person.telecomScore.toStringAsFixed(1)}  · 能源 ${person.energyScore.toStringAsFixed(1)}',
+                '${person.userName}  主营 ${person.mainScore.toStringAsFixed(2)}  · ${person.resolvedGrade.label}  · 通信 ${person.telecomScore.toStringAsFixed(1)}  · 能源 ${person.energyScore.toStringAsFixed(1)}',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 12, color: DunesColors.text2),

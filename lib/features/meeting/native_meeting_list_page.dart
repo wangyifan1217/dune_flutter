@@ -42,6 +42,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
   bool _loadingMore = false;
   bool _hasMore = true;
   int _page = 0;
+  int _totalCount = 0;
   static const int _pageSize = 20;
   String? _error;
   Timer? _scrollRestoreRetry;
@@ -62,8 +63,12 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       _rows = cached.rows;
       _page = cached.page;
       _hasMore = cached.hasMore;
+      _totalCount = cached.totalCount > 0
+          ? cached.totalCount
+          : cached.rows.length;
       _loading = false;
       _scheduleScrollRestore();
+      _scheduleLoadMoreIfShort();
     } else {
       unawaited(_load(reset: true));
     }
@@ -103,6 +108,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       rows: _rows,
       page: _page,
       hasMore: _hasMore,
+      totalCount: _totalCount,
     );
   }
 
@@ -164,6 +170,21 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
     }
   }
 
+  void _scheduleLoadMoreIfShort({int attempt = 0}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_hasMore || _loadingMore || _loading || _searching) {
+        return;
+      }
+      if (!_scrollController.hasClients) {
+        if (attempt < 8) _scheduleLoadMoreIfShort(attempt: attempt + 1);
+        return;
+      }
+      if (_scrollController.position.maxScrollExtent <= 80) {
+        unawaited(_loadMore());
+      }
+    });
+  }
+
   void _onKeywordChanged(String _) {
     setState(() {});
     _searchDebounce?.cancel();
@@ -185,19 +206,24 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
       });
     }
     try {
-      final rows = await _service.fetchList(
+      final result = await _service.fetchListPage(
         page: 0,
         size: _pageSize,
         keyword: keyword,
       );
       if (!mounted) return;
       if (keyword != _search.text.trim()) return;
+      final rows = result.items;
       setState(() {
         _rows = rows;
         _page = 0;
-        _hasMore = rows.length >= _pageSize;
+        _totalCount = result.totalCount < rows.length
+            ? rows.length
+            : result.totalCount;
+        _hasMore = _rows.length < _totalCount;
       });
       _persistListSnapshot();
+      _scheduleLoadMoreIfShort();
     } catch (e) {
       if (!mounted) return;
       if (keyword != _search.text.trim()) return;
@@ -218,18 +244,30 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
     setState(() => _loadingMore = true);
     try {
       final nextPage = _page + 1;
-      final rows = await _service.fetchList(
+      final result = await _service.fetchListPage(
         page: nextPage,
         size: _pageSize,
-        keyword: _search.text,
+        keyword: _search.text.trim(),
       );
       if (!mounted) return;
+      final existing = _rows.map((e) => e.meetingId).toSet();
+      final appended = result.items
+          .where((e) => !existing.contains(e.meetingId))
+          .toList(growable: false);
       setState(() {
-        _rows = <NativeMeetingSummary>[..._rows, ...rows];
+        _rows = <NativeMeetingSummary>[..._rows, ...appended];
         _page = nextPage;
-        _hasMore = rows.length >= _pageSize;
+        if (result.totalCount > _totalCount) {
+          _totalCount = result.totalCount;
+        } else if (_totalCount < _rows.length) {
+          _totalCount = _rows.length;
+        }
+        _hasMore = appended.isNotEmpty &&
+            result.items.length >= _pageSize &&
+            _rows.length < _totalCount;
       });
       _persistListSnapshot();
+      _scheduleLoadMoreIfShort();
     } catch (_) {
       // Keep silent on auto load more to avoid frequent interruptions.
     } finally {
@@ -391,7 +429,11 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
           : null,
       body: RefreshIndicator(
         onRefresh: () => _load(reset: true, silent: true),
-        child: _buildBody(canCreate: canCreate),
+        child: Scrollbar(
+          controller: _scrollController,
+          thumbVisibility: isDesktopCommOnly,
+          child: _buildBody(canCreate: canCreate),
+        ),
       ),
     );
   }
@@ -401,7 +443,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
     return ListView(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+      padding: EdgeInsets.fromLTRB(16, 8, 16, isDesktopCommOnly ? 148 : 100),
       children: [
         _buildHeroCard(),
         const SizedBox(height: 16),
@@ -437,8 +479,8 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
         else ...[
           Text(
             searching
-                ? '搜索结果 · ${_visibleRows.length} 场'
-                : '我的会议 · ${_visibleRows.length} 场',
+                ? '搜索结果 · ${_visibleRows.length}${_totalCount > _visibleRows.length ? ' / $_totalCount' : ''} 场'
+                : '我的会议 · ${_totalCount > _visibleRows.length ? _totalCount : _visibleRows.length} 场',
             style: DunesTypography.sans(
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -455,6 +497,19 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          else if (_hasMore)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Center(
+                child: Text(
+                  isDesktopCommOnly ? '滚动加载更多' : '下滑加载更多',
+                  style: DunesTypography.sans(
+                    fontSize: 11,
+                    color: DunesColors.text3,
+                  ),
                 ),
               ),
             ),
@@ -643,7 +698,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                     children: [
                       Text(
                         row.title.isEmpty ? '未命名会议' : row.title,
-                        maxLines: 1,
+                        maxLines: isDesktopCommOnly ? 2 : 1,
                         overflow: TextOverflow.ellipsis,
                         style: DunesTypography.sans(
                           fontSize: 14,

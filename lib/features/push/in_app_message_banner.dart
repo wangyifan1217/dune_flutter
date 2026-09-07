@@ -156,6 +156,25 @@ class _InAppMessageBannerOverlayState extends State<_InAppMessageBannerOverlay>
     final initial = _initial(
       conv?.title.trim().isNotEmpty == true ? conv!.title : title,
     );
+    if (conv?.isTaskAssistant == true || title == '任务助手') {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(size * .18),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF2F8F7E), Color(0xFF5EAEDE)],
+          ),
+        ),
+        child: const Icon(
+          Icons.assignment_turned_in_outlined,
+          color: Colors.white,
+          size: 17,
+        ),
+      );
+    }
     if (conv != null &&
         (conv.isGroup || conv.isWorkgroupApproval) &&
         conv.avatarMembers.isNotEmpty) {

@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>任务详情 · APP 静态预览</title>
+  <style>
+    :root {
+      --bg-app: #fbfaf6;
+      --bg-soft: #f2efe7;
+      --list: #f5f6f8;
+      --border: #dad5c7;
+      --border-soft: #e5e1d3;
+      --text: #1f2421;
+      --text2: #5a5c56;
+      --text3: #94938a;
+      --purple: #7b5cd8;
+      --purple-soft: #f3eefa;
+      --green: #5d8a4e;
+      --amber: #b07a2b;
+      --blue: #3b6e96;
+      --sans: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: var(--sans);
+      background: #e8e4dc;
+      color: var(--text);
+      padding: 28px 16px 48px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .stage { max-width: 420px; margin: 0 auto; }
+    .kicker {
+      font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+      color: #2f5d62; font-weight: 600; margin-bottom: 8px;
+    }
+    h1 { font-size: 22px; font-weight: 600; margin: 0 0 6px; letter-spacing: -.02em; }
+    .sub { font-size: 13px; color: var(--text2); line-height: 1.5; margin-bottom: 16px; }
+    .scenes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+    .scenes button {
+      border: 1px solid var(--border); background: #fff; color: var(--text2);
+      border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 12px;
+      font-family: inherit;
+    }
+    .scenes button.on { background: #1b3a3f; color: #fff; border-color: #1b3a3f; }
+    .phone {
+      width: 380px; height: 812px; margin: 0 auto; background: #1f1d1a;
+      border-radius: 46px; padding: 11px; position: relative;
+      box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 14px 28px -10px rgba(40,38,32,.18),
+        0 36px 80px -24px rgba(85,59,150,.25);
+    }
+    .notch {
+      position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
+      width: 92px; height: 26px; background: #1f1d1a; border-radius: 14px; z-index: 30;
+    }
+    .screen {
+      width: 100%; height: 100%; background: var(--list); border-radius: 36px;
+      overflow: hidden; position: relative; display: flex; flex-direction: column;
+    }
+    .status-bar {
+      height: 40px; flex-shrink: 0; display: flex; align-items: center;
+      justify-content: space-between; padding: 4px 24px 0; font-size: 12.5px;
+      font-weight: 600; background: var(--bg-app);
+    }
+    .app-bar {
+      flex-shrink: 0; display: flex; align-items: center; gap: 4px;
+      padding: 2px 8px 8px 4px; border-bottom: 1px solid var(--border-soft);
+      background: var(--bg-app);
+    }
+    .icon-hit {
+      width: 36px; height: 36px; border: 0; background: transparent; color: var(--text2);
+      display: flex; align-items: center; justify-content: center; cursor: pointer;
+    }
+    .title-box { flex: 1; min-width: 0; }
+    .title-box .name { font-size: 16px; font-weight: 650; letter-spacing: -.02em; }
+    .scroll { flex: 1; overflow-y: auto; padding: 12px 14px 20px; min-height: 0; }
+    .card {
+      background: #fff; border: 1px solid #e8eaed; border-radius: 14px;
+      padding: 14px; margin-bottom: 10px;
+    }
+    .card h2 { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.35; }
+    .belong {
+      margin-top: 8px; font-size: 12px; color: var(--purple); font-weight: 650;
+      background: none; border: 0; padding: 0; font-family: inherit; cursor: pointer;
+    }
+    .meta { margin-top: 8px; font-size: 12px; color: var(--text3); }
+    .desc { margin-top: 10px; font-size: 13.5px; color: var(--text2); line-height: 1.5; }
+    .bar { margin-top: 12px; height: 8px; background: #e8eaed; border-radius: 99px; overflow: hidden; }
+    .bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #2f8f7e, #7bcfbc); }
+    .bar.mid i { background: linear-gradient(90deg, #e0a020, #f5d08a); }
+    .btn {
+      border: 0; border-radius: 8px; padding: 8px 14px; font-size: 13px;
+      font-weight: 650; cursor: pointer; font-family: inherit;
+    }
+    .btn.primary { background: var(--purple); color: #fff; width: 100%; margin-top: 12px; }
+    .btn.ghost { background: var(--bg-soft); color: var(--text2); }
+    .btn.full { width: 100%; }
+    .sec { font-size: 12px; font-weight: 700; color: var(--text); margin: 14px 2px 8px; }
+    .row-item {
+      display: flex; align-items: center; gap: 10px; padding: 10px 0;
+      border-top: 1px solid var(--border-soft);
+    }
+    .row-item:first-of-type { border-top: 0; padding-top: 0; }
+    .row-item .t { flex: 1; min-width: 0; }
+    .row-item .t b { display: block; font-size: 13.5px; font-weight: 650; }
+    .row-item .t span { display: block; font-size: 11px; color: var(--text3); margin-top: 2px; }
+    .row-item .p { font-size: 12px; font-weight: 700; color: var(--text2); }
+    .log { font-size: 12.5px; color: var(--text2); line-height: 1.45; padding: 8px 0; border-top: 1px solid var(--border-soft); }
+    .log:first-of-type { border-top: 0; padding-top: 0; }
+    .log .w { color: var(--text3); font-size: 11px; margin-top: 3px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .chip {
+      font-size: 11px; font-weight: 650; padding: 2px 8px; border-radius: 99px;
+      background: var(--purple-soft); color: var(--purple);
+    }
+    .chip.sub { background: #e8f6f3; color: #2f8f7e; }
+    .chip.st { background: #eaefdf; color: var(--green); }
+    .old-btn {
+      display: flex; align-items: center; gap: 6px; width: 100%;
+      border: 1px solid #e8eaed; background: #fff; border-radius: 10px;
+      padding: 10px 12px; margin-top: 8px; font-size: 13px; color: var(--text2);
+      font-family: inherit;
+    }
+    .link { font-size: 12px; color: var(--text3); }
+    .home {
+      height: 22px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+      background: var(--list);
+    }
+    .home i { width: 110px; height: 4px; border-radius: 4px; background: #1f1d1a; opacity: .35; }
+    .mask { position: absolute; inset: 0; background: rgba(31,36,33,.35); z-index: 40; display: none; }
+    .mask.on { display: block; }
+    .sheet {
+      position: absolute; left: 0; right: 0; bottom: 0; z-index: 41;
+      background: var(--bg-app); border-radius: 18px 18px 36px 36px;
+      padding: 10px 16px 28px; transform: translateY(110%); transition: transform .22s ease;
+    }
+    .sheet.on { transform: translateY(0); }
+    .handle { width: 36px; height: 4px; border-radius: 4px; background: var(--border); margin: 4px auto 12px; }
+    .sheet h4 { margin: 0 0 10px; font-size: 15px; }
+    .slider-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .slider-row input { flex: 1; accent-color: var(--purple); }
+    .pct { font-size: 18px; font-weight: 700; width: 48px; text-align: right; color: var(--purple); }
+    .sheet-acts { display: flex; gap: 8px; }
+    .sheet-acts .btn { flex: 1; padding: 10px; margin: 0; }
+    .toast {
+      position: absolute; left: 50%; bottom: 54px; transform: translateX(-50%) translateY(12px);
+      background: rgba(31,36,33,.88); color: #fff; font-size: 12px;
+      padding: 8px 14px; border-radius: 999px; opacity: 0; pointer-events: none;
+      z-index: 50; transition: .18s ease; white-space: nowrap;
+    }
+    .toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .add-line {
+      width: 100%; border: 1px dashed var(--border); background: transparent;
+      border-radius: 10px; padding: 10px; margin-top: 4px; color: var(--purple);
+      font-weight: 650; font-size: 13px; cursor: pointer; font-family: inherit;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="kicker">Dunes · Task Detail</div>
+    <h1>任务详情 · 简化稿</h1>
+    <p class="sub">不要「子任务」这个词。日常是一条事；发起人看一组事。数据仍可挂在一组下面。</p>
+    <div class="scenes">
+      <button class="on" data-scene="item" type="button">一条事</button>
+      <button data-scene="group" type="button">一组事</button>
+      <button data-scene="old" type="button">对比现在</button>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="notch"></div>
+    <div class="screen">
+      <div class="status-bar"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="app-bar">
+        <button class="icon-hit" type="button" aria-label="返回">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
+        </button>
+        <div class="title-box"><div class="name" id="barTitle">事项</div></div>
+        <button class="icon-hit" type="button" id="moreBtn" aria-label="更多">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg>
+        </button>
+      </div>
+      <div class="scroll" id="body"></div>
+      <div class="home"><i></i></div>
+      <div class="mask" id="mask"></div>
+      <div class="sheet" id="sheet">
+        <div class="handle"></div>
+        <h4>更新进度</h4>
+        <div class="slider-row">
+          <input id="slider" type="range" min="0" max="100" value="40" />
+          <div class="pct" id="pct">40%</div>
+        </div>
+        <div class="sheet-acts">
+          <button class="btn ghost" type="button" id="sheetCancel">取消</button>
+          <button class="btn primary" type="button" id="sheetSave">保存</button>
+        </div>
+      </div>
+      <div class="toast" id="toast"></div>
+    </div>
+  </div>
+
+<script>
+function toast(t) {
+  const el = document.getElementById("toast");
+  el.textContent = t;
+  el.classList.add("on");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove("on"), 1500);
+}
+function setSheet(on) {
+  document.getElementById("mask").classList.toggle("on", on);
+  document.getElementById("sheet").classList.toggle("on", on);
+}
+
+const html = {
+  item: `
+    <div class="card">
+      <h2>本周完成客户反馈闭环方案</h2>
+      <button class="belong" type="button" data-go="group">属于 产品周会跟进 ›</button>
+      <div class="meta">止 9/12 · 负责人 你</div>
+      <div class="bar mid"><i style="width:40%"></i></div>
+      <div class="meta" style="margin-top:8px">当前 40%</div>
+      <div class="desc">把本周客户提出的交付节奏问题收成可执行闭环，周五前同步结论。</div>
+      <button class="btn primary" type="button" data-act="progress">更新进度</button>
+    </div>
+    <div class="sec">最近进展</div>
+    <div class="card">
+      <div class="log">已收集 3 条客户原话，待对齐产品口径。<div class="w">昨天 18:20 · 你</div></div>
+      <div class="log">开始整理闭环模板。<div class="w">9/5 11:02 · 你</div></div>
+    </div>
+  `,
+  group: `
+    <div class="card">
+      <h2>产品周会跟进</h2>
+      <div class="meta">9/5 – 9/12 · 3/5 已完成 · 汇总 62%</div>
+      <div class="bar"><i style="width:62%"></i></div>
+      <div class="desc" style="color:var(--text3);font-size:12px">来自会议纪要。进度由下面事项自动汇总，不用手改。</div>
+      <div class="link" style="margin-top:10px">关联纪要 · 产品周会 9月5日</div>
+    </div>
+    <div class="sec">事项</div>
+    <div class="card">
+      <div class="row-item">
+        <div class="t"><b>明确会议决策与责任落地机制</b><span>你 · 70%</span></div>
+        <div class="p">70%</div>
+      </div>
+      <div class="row-item">
+        <div class="t"><b>本周完成客户反馈闭环方案</b><span>你 · 40%</span></div>
+        <div class="p">40%</div>
+      </div>
+      <div class="row-item">
+        <div class="t"><b>同步财务对账口径</b><span>李华 · 待你审核</span></div>
+        <div class="p" style="color:var(--blue)">审</div>
+      </div>
+      <button class="add-line" type="button" data-act="add">+ 添加事项</button>
+    </div>
+  `,
+  old: `
+    <div class="card">
+      <h2>产品周会跟进</h2>
+      <div class="meta">进行中 · 高 · 负责人 王奕凡 · 9/5 - 9/12</div>
+      <div class="chips">
+        <span class="chip">主任务</span>
+        <span class="chip st">进行中</span>
+      </div>
+      <div class="bar"><i style="width:62%"></i></div>
+    </div>
+    <button class="old-btn" type="button">主任务进度由子任务汇总</button>
+    <button class="old-btn" type="button">任务评价</button>
+    <button class="old-btn" type="button">AI 分析</button>
+    <div class="sec">进度柱状图（按子任务）</div>
+    <div class="card" style="height:88px;color:var(--text3);font-size:12px;display:flex;align-items:center;justify-content:center">5 根柱 · 同一人多柱并排</div>
+    <div class="sec">关联</div>
+    <div class="card" style="font-size:12px;color:var(--text2)">会议 · 产品周会<br>知识库 · 周会纪要.md</div>
+    <div class="sec">子任务</div>
+    <div class="card">
+      <div class="chips"><span class="chip sub">子任务</span></div>
+      <h2 style="font-size:14px;margin-top:8px">本周完成客户反馈闭环方案</h2>
+      <div class="meta">王奕凡 · 止 9/12 · 40%</div>
+    </div>
+    <div class="sec">进展记录（含子任务）</div>
+    <div class="card"><div class="log">40% · 已收集客户原话<div class="w">子任务 · 昨天</div></div></div>
+    <div class="sec">评价记录（含子任务）</div>
+    <div class="card" style="color:var(--text3);font-size:13px">暂无评价记录</div>
+  `
+};
+
+function setScene(name) {
+  document.querySelectorAll(".scenes button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.scene === name);
+  });
+  document.getElementById("barTitle").textContent =
+    name === "group" ? "一组事" : name === "old" ? "任务详情" : "事项";
+  document.getElementById("body").innerHTML = html[name];
+  document.getElementById("body").scrollTop = 0;
+  setSheet(false);
+}
+
+document.querySelector(".scenes").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-scene]");
+  if (b) setScene(b.dataset.scene);
+});
+document.getElementById("body").addEventListener("click", (e) => {
+  if (e.target.closest("[data-go='group']")) {
+    setScene("group");
+    document.querySelectorAll(".scenes button").forEach((b) => {
+      b.classList.toggle("on", b.dataset.scene === "group");
+    });
+    return;
+  }
+  const act = e.target.closest("[data-act]");
+  if (!act) return;
+  if (act.dataset.act === "progress") setSheet(true);
+  if (act.dataset.act === "add") toast("正式版在这里添加一条事项");
+});
+document.getElementById("moreBtn").addEventListener("click", () => toast("删除等次要操作收进这里"));
+document.getElementById("mask").addEventListener("click", () => setSheet(false));
+document.getElementById("sheetCancel").addEventListener("click", () => setSheet(false));
+document.getElementById("slider").addEventListener("input", (e) => {
+  document.getElementById("pct").textContent = e.target.value + "%";
+});
+document.getElementById("sheetSave").addEventListener("click", () => {
+  setSheet(false);
+  toast("进度已更新");
+});
+setScene("item");
+</script>
+</body>
+</html>

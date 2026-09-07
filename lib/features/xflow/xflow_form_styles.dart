@@ -143,18 +143,23 @@ class _DashedRectPainter extends CustomPainter {
 
 /// WebView `.dr-lbl`
 class XfDynCellLabel extends StatelessWidget {
-  const XfDynCellLabel({super.key, required this.text});
+  const XfDynCellLabel({
+    super.key,
+    required this.text,
+    this.comfortable = false,
+  });
 
   final String text;
+  final bool comfortable;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
+      padding: EdgeInsets.only(bottom: comfortable ? 4 : 2),
       child: Text(
-        text.toUpperCase(),
+        comfortable ? text : text.toUpperCase(),
         style: DunesTypography.sans(
-          fontSize: 9,
+          fontSize: comfortable ? 11 : 9,
           fontWeight: FontWeight.w600,
           color: DunesColors.text3,
           height: 1.2,
@@ -226,11 +231,13 @@ class XfDynCell extends StatelessWidget {
     required this.label,
     required this.child,
     this.matrix = false,
+    this.comfortable = false,
   });
 
   final String label;
   final Widget child;
   final bool matrix;
+  final bool comfortable;
 
   @override
   Widget build(BuildContext context) {
@@ -239,7 +246,7 @@ class XfDynCell extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        XfDynCellLabel(text: label),
+        XfDynCellLabel(text: label, comfortable: comfortable),
         child,
       ],
     );
@@ -361,6 +368,59 @@ TextStyle xfInputTextStyle({bool mono = false}) {
   );
 }
 
+/// 避免 suffixIcon 默认 48×48 把城市/人员搜索框占满。
+const BoxConstraints xfCompactSuffixConstraints = BoxConstraints(
+  minWidth: 32,
+  minHeight: 32,
+);
+
+Widget xfSearchSuffixIcon({
+  required bool loading,
+  required bool hasText,
+  required bool readonly,
+  VoidCallback? onClear,
+}) {
+  if (loading) {
+    return const Padding(
+      padding: EdgeInsets.all(8),
+      child: SizedBox(
+        width: 14,
+        height: 14,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+    );
+  }
+  if (hasText && !readonly && onClear != null) {
+    return IconButton(
+      icon: const Icon(Icons.close_rounded, size: 18, color: DunesColors.text3),
+      onPressed: onClear,
+      tooltip: '清除',
+      padding: EdgeInsets.zero,
+      visualDensity: VisualDensity.compact,
+      constraints: xfCompactSuffixConstraints,
+    );
+  }
+  return const Padding(
+    padding: EdgeInsets.only(right: 8),
+    child: Icon(Icons.search, size: 18, color: DunesColors.text3),
+  );
+}
+
+InputDecoration xfSearchPickerDecoration({
+  required String? hint,
+  Widget? suffixIcon,
+  bool readonly = false,
+}) {
+  return xfInputDecoration(hint: hint, readonly: readonly).copyWith(
+    isDense: true,
+    contentPadding: const EdgeInsets.fromLTRB(11, 9, 8, 9),
+    suffixIconConstraints: suffixIcon == null
+        ? null
+        : xfCompactSuffixConstraints,
+    suffixIcon: suffixIcon,
+  );
+}
+
 /// 与 `.fld-in` 单行输入对齐的统一控件高度。
 const double xfControlHeight = 40;
 
@@ -434,11 +494,7 @@ class XflowApprovalSubmitButton extends StatelessWidget {
                 ),
               )
             else
-              Icon(
-                icon,
-                size: 14,
-                color: fgColor.withAlpha(fgAlpha),
-              ),
+              Icon(icon, size: 14, color: fgColor.withAlpha(fgAlpha)),
             const SizedBox(width: 7),
             Text(
               loading ? loadingLabel : label,

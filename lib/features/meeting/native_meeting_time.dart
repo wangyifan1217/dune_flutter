@@ -74,6 +74,8 @@ class NativeMeetingTime {
     return updated.isAfter(created) ? updated : created;
   }
 
+  static DateTime? tryParse(String? raw) => _parseToDateTime(raw);
+
   static DateTime? _parseToDateTime(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
     final value = raw.trim();
@@ -82,13 +84,11 @@ class NativeMeetingTime {
       final ms = epoch >= 1000000000000 ? epoch : epoch * 1000;
       return DateTime.fromMillisecondsSinceEpoch(ms);
     }
-    var normalized =
-        value.contains(' ') ? value.replaceFirst(' ', 'T') : value;
+    var normalized = value.contains(' ') ? value.replaceFirst(' ', 'T') : value;
     // 后端 formatDateTime 在 UTC 容器里输出的是不带时区的 UTC 墙上时间，
     // 若字符串既有时间又没有时区标记，则按 UTC 解析，再由调用方 toLocal()
     // 转成设备本地时间（避免比北京时间少 8 小时）。
-    final hasZone =
-        RegExp(r'([Zz]|[+\-]\d{2}:?\d{2})$').hasMatch(normalized);
+    final hasZone = RegExp(r'([Zz]|[+\-]\d{2}:?\d{2})$').hasMatch(normalized);
     if (!hasZone && normalized.contains('T')) {
       normalized = '${normalized}Z';
     }

@@ -17,8 +17,10 @@ import '../shell/dunes_toast.dart';
 import '../tasks/native_task_action_page.dart';
 import '../tasks/native_task_detail_page.dart';
 import '../tasks/task_api.dart';
+import '../tasks/task_link_models.dart';
 import '../tasks/task_models.dart';
 import '../tasks/task_widgets.dart';
+import 'meeting_suggestion_im_card.dart';
 
 /// 任务助手：只读通知流，入口仅展示当前用户负责的进行中子任务。
 class NativeTaskAssistantPage extends StatefulWidget {
@@ -612,9 +614,21 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
             }
             final m = _messages[_loadingOlder ? index - 1 : index];
             final payload = m.payload ?? const <String, dynamic>{};
+            final noticeType = (payload['type'] ?? '').toString();
             final title = (payload['taskTitle'] ?? '').toString();
             final parent = (payload['parentTitle'] ?? '').toString();
             final taskId = (payload['taskId'] as num?)?.toInt() ?? 0;
+            final meetingId = (payload['meetingId'] as num?)?.toInt() ?? 0;
+            final meetingTitle = (payload['meetingTitle'] ?? title).toString();
+            final snapshot = (payload['suggestions'] as List? ?? const [])
+                .whereType<Map>()
+                .map(
+                  (e) => MeetingTaskSuggestion.fromJson(
+                    Map<String, dynamic>.from(e),
+                  ),
+                )
+                .toList(growable: false);
+            final isSug = noticeType == 'meetingTaskSuggestions' && meetingId > 0;
             return ChatMessageRow(
               message: m,
               mine: false,
@@ -626,7 +640,17 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   ChatTextBubble(text: m.bodyText, mine: false),
-                  if (title.isNotEmpty)
+                  if (isSug)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: MeetingSuggestionImCard(
+                        session: widget.session,
+                        meetingId: meetingId,
+                        meetingTitle: meetingTitle,
+                        snapshot: snapshot,
+                      ),
+                    )
+                  else if (title.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
                       child: _TaskAssignmentCard(

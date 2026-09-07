@@ -345,26 +345,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
       setState(() => _dateError = '结束时间不能早于开始时间');
       return;
     }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(_isSub ? '确认创建子任务' : '确认创建主任务'),
-        content: Text(_isSub ? '确认保存该子任务吗？' : '确认保存该主任务吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: _themePurple),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('确认保存'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
+    if (!mounted) return;
     setState(() {
       _titleError = null;
       _dateError = null;
@@ -373,7 +354,9 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
     try {
       final body = <String, dynamic>{
         'title': title,
-        'description': _descCtrl.text.trim(),
+        'description': _descCtrl.text.trim().isEmpty
+            ? title
+            : _descCtrl.text.trim(),
         'priority': _priority,
         'category': _category,
         'acceptanceCriteria': _acceptCtrl.text.trim(),
@@ -561,7 +544,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
           const SizedBox(height: 8),
           Text(
             _parentSelfCreated
-                ? '仅可分配给自己或下级；主任务由你创建时，自建子任务无需审核。'
+                ? '仅可分配给自己或下级；这组事由你创建时，自己加的事项无需审核。'
                 : '仅可分配给自己或下级；分给自己时需上级审核。',
             style: const TextStyle(
               fontSize: 12,
@@ -588,7 +571,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                 ),
                 Expanded(
                   child: Text(
-                    _isSub ? '新建子任务' : '新建主任务',
+                    _isSub ? '添加事项' : '新建一组事',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
@@ -649,7 +632,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 22, 24, 0),
           child: Text(
-            _isSub ? '新建子任务' : '新建主任务',
+            _isSub ? '添加事项' : '新建一组事',
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
         ),

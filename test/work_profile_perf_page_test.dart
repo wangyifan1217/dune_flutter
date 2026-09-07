@@ -1,4 +1,5 @@
 import 'package:dunes_app/features/auth/auth_session.dart';
+import 'package:dunes_app/features/kpi/workbench_kpi_service.dart';
 import 'package:dunes_app/features/profile/native_work_profile_perf_page.dart';
 import 'package:dunes_app/features/profile/work_profile_kpi.dart';
 import 'package:flutter/material.dart';
@@ -191,6 +192,8 @@ void main() {
 
     expect(find.text('绩效发展'), findsOneWidget);
     expect(find.textContaining('主营 80.50'), findsOneWidget);
+    expect(find.textContaining('中（低于预期）'), findsOneWidget);
+    expect(find.byKey(const Key('work-profile-perf-add')), findsNothing);
     expect(find.textContaining('通信（2）'), findsOneWidget);
     expect(find.textContaining('能源（1）'), findsOneWidget);
     expect(find.text('权重 70.00%'), findsOneWidget);
@@ -333,5 +336,84 @@ void main() {
     );
     expect(find.byKey(const Key('work-profile-perf-empty')), findsOneWidget);
     expect(find.text('本月暂无计入任务'), findsOneWidget);
+    expect(find.byKey(const Key('work-profile-perf-add')), findsNothing);
+  });
+
+  test('maps main score to performance grade', () {
+    expect(kpiGradeOf(96).label, '优（优秀）');
+    expect(kpiGradeOf(96).coefficient, 1.1);
+    expect(kpiGradeOf(88).label, '良（达到预期）');
+    expect(kpiGradeOf(82).label, '中（低于预期）');
+    expect(kpiGradeOf(76).label, '普（待提升）');
+    expect(kpiGradeOf(72).label, '改（重点改进）');
+    expect(kpiGradeOf(60).label, '辅（专项改进）');
+  });
+
+  testWidgets('own counted tasks can be created and deleted with confirmation', (
+    tester,
+  ) async {
+    var createCount = 0;
+    var deleteCount = 0;
+    var tasks = [
+      const WorkbenchKpiTask(
+        id: 1,
+        userId: 1,
+        name: '中石油',
+        province: '广东',
+        tagName: '标签II',
+      ),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeWorkProfilePerfPage(
+          session: session,
+          onBack: () {},
+          now: DateTime(2026, 9, 3),
+          score: const WorkProfileKpiScore(
+            month: '2026-08',
+            prevMonth: '2026-07',
+          ),
+          listTasks: (_) async => tasks,
+          createTask: (draft) async {
+            createCount++;
+            return draft.copyWith(id: 2);
+          },
+          deleteTask: (id) async {
+            deleteCount++;
+            tasks = tasks.where((e) => e.id != id).toList();
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('中石油'), findsOneWidget);
+    expect(find.byKey(const Key('work-profile-perf-add')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('work-profile-perf-delete-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('确认删除任务？'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(deleteCount, 0);
+
+    await tester.tap(find.byKey(const Key('work-profile-perf-delete-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('work-profile-perf-confirm-ok')));
+    await tester.pump();
+    expect(deleteCount, 1);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 3));
+
+    await tester.tap(find.byKey(const Key('work-profile-perf-add')));
+    await tester.pumpAndSettle();
+    expect(find.text('新增任务'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, '小套-加油会员');
+    await tester.tap(find.byKey(const Key('work-profile-perf-editor-save')));
+    await tester.pumpAndSettle();
+    expect(find.text('确认新增任务？'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('work-profile-perf-confirm-ok')));
+    await tester.pump();
+    expect(createCount, 1);
+    await tester.pump(const Duration(seconds: 3));
   });
 }

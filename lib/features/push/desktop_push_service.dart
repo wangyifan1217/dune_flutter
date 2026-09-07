@@ -9,6 +9,7 @@ import 'package:windows_taskbar/windows_taskbar.dart';
 
 import '../desktop/desktop_badge.dart';
 import '../desktop/windows_desktop_tray.dart';
+import 'push_notification_event.dart';
 
 /// 桌面端本地系统通知（Win Toast / macOS 通知中心）。
 /// 形态类似企业微信：标题=发送者，正文=消息摘要。
@@ -18,6 +19,13 @@ final FlutterLocalNotificationsPlugin _plugin =
 bool _ready = false;
 Future<void>? _initInFlight;
 int _seq = 1000;
+void Function(PushNotificationClick event)? _clickHandler;
+
+void setPushNotificationClickHandlerImpl(
+  void Function(PushNotificationClick event)? handler,
+) {
+  _clickHandler = handler;
+}
 
 Future<void> ensurePushInitializedImpl() async {
   if (_ready) return;
@@ -63,8 +71,9 @@ Future<void> _ensurePushInitializedOnce() async {
         macOS: Platform.isMacOS ? darwin : null,
         windows: Platform.isWindows ? windows : null,
       ),
-      onDidReceiveNotificationResponse: (_) {
+      onDidReceiveNotificationResponse: (resp) {
         unawaited(_bringAppToFront());
+        _dispatchNotificationClick(resp.payload);
       },
     );
 
@@ -274,4 +283,23 @@ Future<void> _bringAppToFront() async {
       debugPrint('[DesktopPush] bring front failed: $e');
     }
   }
+}
+
+void _dispatchNotificationClick(String? payload) {
+  final raw = payload?.trim() ?? '';
+  var conversationId = 0;
+  if (raw.startsWith('conv:')) {
+    conversationId = int.tryParse(raw.substring(5)) ?? 0;
+  }
+  if (conversationId <= 0) return;
+  _clickHandler?.call(
+    PushNotificationClick(
+      messageId: 0,
+      title: '',
+      body: '',
+      customContent: '',
+      eventType: 'im',
+      conversationId: conversationId,
+    ),
+  );
 }

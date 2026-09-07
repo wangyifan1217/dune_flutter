@@ -96,6 +96,7 @@ flutter:
     - assets/images/app_logo.png
     - assets/images/lighthouse_logo.png
     - assets/images/tau_tab_icon.png
+    - assets/images/tao_tab_icon.png
     - assets/images/tau_voice_avatar_female.png
     - assets/images/tau_voice_avatar_male.png
     - assets/images/tray_icon.ico

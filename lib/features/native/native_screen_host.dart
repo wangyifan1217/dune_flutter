@@ -79,6 +79,7 @@ import '../nova/native_nova_page.dart';
 import '../nova/nova_background_coordinator.dart';
 import '../nova/nova_web_storage.dart';
 import '../push/push_service.dart';
+import '../push/in_app_message_banner.dart';
 import '../conversation/message_preview_text.dart';
 import '../qianji/native_qianji_cursor_account_detail_page.dart';
 import '../qianji/native_qianji_cursor_account_page.dart';
@@ -140,7 +141,10 @@ import '../xrxs/native_xrxs_assistant_page.dart';
 import '../administrative_notice/native_administrative_notice_page.dart';
 import '../profile/native_profile_tour.dart';
 import '../profile/native_user_work_profile_page.dart';
+import '../profile/native_work_profile_collaboration_page.dart';
+import '../profile/native_work_profile_detail_pages.dart';
 import '../profile/native_work_profile_perf_page.dart';
+import '../tasks/native_task_detail_page.dart';
 
 class NativeScreenHost extends StatefulWidget {
   const NativeScreenHost({
@@ -224,6 +228,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   NativeKbDocument? _kbSelectedDoc;
   String _kbChatKind = 'KB_ALL';
   String? _kbChatDocId;
+  DateTime? _workProfileMonth;
   int _selectedProposalId = 0;
   XflowTodoHint? _selectedTodoHint;
   String _b10BackScreen = 'P1';
@@ -939,9 +944,75 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           title = senderName.isEmpty ? '沙丘' : senderName;
           body = preview;
         }
+
+        final conversationKind =
+            (msg['conversationKind'] ??
+                    event.raw['conversationKind'] ??
+                    cachedConversation?.kind ??
+                    '')
+                .toString()
+                .trim()
+                .toUpperCase();
+        final isTaskAssistant =
+            cachedConversation?.isTaskAssistant == true ||
+            conversationKind == 'TASK_ASSISTANT' ||
+            kind.toUpperCase() == 'TASK_ASSISTANT';
+        if (isTaskAssistant) {
+          title = '任务助手';
+          body = _taskAssistantPushBody(msg, preview);
+        }
       }
     }
+    final desktopFocused = isDesktopCommOnly && !windowsTrayIsWindowInactive();
+    final isTaskNotice = title == '任务助手';
+    if (desktopFocused && isTaskNotice && mounted && convId > 0) {
+      final conv =
+          _commBadgeConversations[convId] ??
+          NativeConversation(
+            id: convId,
+            kind: 'TASK_ASSISTANT',
+            title: '任务助手',
+            unreadCount: 0,
+            preview: body,
+            updatedAt: null,
+          );
+      showInAppMessageBanner(
+        context: context,
+        conversationId: convId,
+        title: title,
+        body: body,
+        conversation: conv,
+        session: widget.session,
+        onTap: () => unawaited(_openTaskAssistant(conv)),
+      );
+      return;
+    }
     notifyPushRealtimeMessage(title: title, body: body, conversationId: convId);
+  }
+
+  Map<String, dynamic>? _mapPayload(Object? raw) {
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  String _taskAssistantPushBody(Map msg, String fallback) {
+    final payload = _mapPayload(msg['payload']);
+    final type = (payload?['type'] ?? '').toString();
+    if (type == 'meetingTaskSuggestions') {
+      final meeting = (payload?['meetingTitle'] ?? '').toString().trim();
+      final count = (payload?['suggestions'] as List?)?.length ?? 0;
+      if (meeting.isNotEmpty && count > 0) {
+        return '「$meeting」有 $count 条待创建任务';
+      }
+    }
+    return fallback.trim().isEmpty ? '你有新的任务通知' : fallback;
   }
 
   void _scheduleCommBadgeRefresh() {
@@ -3721,12 +3792,94 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return NativeUserWorkProfilePage(
           session: widget.session,
           onBack: widget.navigation.back,
-          onOpenPerformance: () => widget.navigation.go('B2PERF'),
+          initialMonth: _workProfileMonth,
+          onOpenWorkRhythmMonth: (month) {
+            _workProfileMonth = month;
+            widget.navigation.go('B2RHYTHM');
+          },
+          onOpenCollaborationMonth: (month) {
+            _workProfileMonth = month;
+            widget.navigation.go('B2COLLAB');
+          },
+          onOpenKnowledgeMonth: (month) {
+            _workProfileMonth = month;
+            widget.navigation.go('B2KNOWLEDGE');
+          },
+          onOpenBusinessMonth: (month) {
+            _workProfileMonth = month;
+            widget.navigation.go('B2BUSINESS');
+          },
+          onOpenPerformanceMonth: (month) {
+            _workProfileMonth = month;
+            widget.navigation.go('B2PERF');
+          },
+        );
+      case 'B2RHYTHM':
+        return NativeWorkProfileRhythmPage(
+          session: widget.session,
+          month: _workProfileMonth ?? DateTime.now(),
+          onBack: widget.navigation.back,
+          onOpenTask: (taskId) {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (routeContext) => Scaffold(
+                  body: SafeArea(
+                    child: NativeTaskDetailView(
+                      session: widget.session,
+                      taskId: taskId,
+                      onBack: () => Navigator.of(routeContext).pop(),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      case 'B2COLLAB':
+        return NativeWorkProfileCollaborationPage(
+          session: widget.session,
+          month: _workProfileMonth,
+          onBack: widget.navigation.back,
+          onOpenFavorites: () => widget.navigation.go('CF'),
+          onOpenConversation: (conversation) {
+            if (conversation.kind == 'PRIVATE') {
+              _openPrivateConversation(conversation);
+            } else {
+              _openGroupConversation(conversation);
+            }
+          },
+        );
+      case 'B2KNOWLEDGE':
+        return NativeWorkProfileKnowledgePage(
+          session: widget.session,
+          month: _workProfileMonth ?? DateTime.now(),
+          onBack: widget.navigation.back,
+          onOpenDocument: (doc) {
+            setState(() {
+              _kbSelectedDocId = doc.id;
+              _kbSelectedDoc = doc;
+            });
+            widget.navigation.go('K3');
+          },
+          onOpenMeeting: (meetingId) {
+            if (meetingId <= 0) return;
+            setState(() => _meetingId = meetingId);
+            widget.navigation.go('MM');
+          },
+        );
+      case 'B2BUSINESS':
+        return NativeWorkProfileBusinessPage(
+          session: widget.session,
+          month: _workProfileMonth ?? DateTime.now(),
+          onBack: widget.navigation.back,
+          onOpenProposal: (item) =>
+              _openProposalDetail(item, from: 'B2BUSINESS'),
         );
       case 'B2PERF':
         return NativeWorkProfilePerfPage(
           session: widget.session,
           onBack: widget.navigation.back,
+          initialMonth: _workProfileMonth,
         );
       case 'C1':
         return _buildConversationListPage();
@@ -4635,6 +4788,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     return const <String>{
       'B2',
       'B2P',
+      'B2RHYTHM',
+      'B2COLLAB',
+      'B2KNOWLEDGE',
+      'B2BUSINESS',
       'B2PERF',
       'B1',
       'B3',

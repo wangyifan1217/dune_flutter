@@ -6,11 +6,13 @@ class MeetingListSnapshot {
     required this.rows,
     required this.page,
     required this.hasMore,
+    this.totalCount = 0,
   });
 
   final List<NativeMeetingSummary> rows;
   final int page;
   final bool hasMore;
+  final int totalCount;
 }
 
 class MeetingListCache {
@@ -32,6 +34,7 @@ class MeetingListCache {
       rows: List<NativeMeetingSummary>.unmodifiable(snap.rows),
       page: snap.page,
       hasMore: snap.hasMore,
+      totalCount: snap.totalCount,
     );
   }
 
@@ -52,6 +55,7 @@ class MeetingListCache {
     required List<NativeMeetingSummary> rows,
     required int page,
     required bool hasMore,
+    int totalCount = 0,
   }) {
     if (userId <= 0) return;
     if (_userId != null && _userId != userId) {
@@ -63,6 +67,7 @@ class MeetingListCache {
       rows: List<NativeMeetingSummary>.unmodifiable(rows),
       page: page,
       hasMore: hasMore,
+      totalCount: totalCount,
     );
   }
 
@@ -92,6 +97,7 @@ class MeetingListCache {
       rows: List<NativeMeetingSummary>.unmodifiable(next),
       page: snap.page,
       hasMore: snap.hasMore,
+      totalCount: snap.totalCount > 0 ? snap.totalCount - 1 : next.length,
     );
   }
 

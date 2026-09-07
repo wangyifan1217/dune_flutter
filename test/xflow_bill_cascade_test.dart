@@ -445,4 +445,117 @@ void main() {
       expect(find.byType(DatePickerDialog), findsOneWidget);
     },
   );
+
+  testWidgets('dynamic-list itinerary stays usable on a phone-width screen', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final values = <String, dynamic>{
+      'flightItems': [
+        {'fromCity': '上海', 'toCity': '北京', 'date': ''},
+      ],
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: XflowFormRenderer(
+            fields: [
+              XflowField.fromJson({
+                'key': 'flightItems',
+                'label': '机票行程',
+                'type': 'dynamicList',
+                'columns': [
+                  {'key': 'fromCity', 'label': '出发城市', 'type': 'text'},
+                  {'key': 'toCity', 'label': '到达城市', 'type': 'text'},
+                  {'key': 'date', 'label': '起飞日期', 'type': 'date'},
+                ],
+              }),
+            ],
+            values: values,
+            layout: const {},
+            showProgressCard: false,
+            showActionBar: false,
+            onChanged: (key, value) => values[key] = value,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('出发城市'), findsOneWidget);
+    expect(find.text('到达城市'), findsOneWidget);
+    expect(find.text('起飞日期'), findsOneWidget);
+    expect(find.text('+ 添加一行'), findsOneWidget);
+    expect(find.byType(TextFormField), findsNWidgets(2));
+
+    final dateCell = find.byKey(const ValueKey('dyn_flightItems_0_date'));
+    expect(dateCell, findsOneWidget);
+    await tester.ensureVisible(dateCell);
+    await tester.tap(dateCell);
+    await tester.pumpAndSettle();
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+
+    Navigator.of(tester.element(find.byType(DatePickerDialog))).pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('+ 添加一行'));
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('dyn_flightItems_1_date')),
+      findsOneWidget,
+    );
+    expect((values['flightItems'] as List).length, 2);
+  });
+
+  testWidgets('row date fields stay usable on a phone-width screen', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final values = <String, dynamic>{'startDate': '', 'endDate': ''};
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: XflowFormRenderer(
+            fields: [
+              XflowField.fromJson({
+                'key': 'dateRange',
+                'type': 'row',
+                'connector': '至',
+                'children': ['startDate', 'endDate'],
+              }),
+              XflowField.fromJson({
+                'key': 'startDate',
+                'label': '开始日期',
+                'type': 'date',
+              }),
+              XflowField.fromJson({
+                'key': 'endDate',
+                'label': '结束日期',
+                'type': 'date',
+              }),
+            ],
+            values: values,
+            layout: const {},
+            showProgressCard: false,
+            showActionBar: false,
+            onChanged: (key, value) => values[key] = value,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('开始日期'), findsOneWidget);
+    expect(find.text('结束日期'), findsOneWidget);
+    expect(find.text('至'), findsOneWidget);
+
+    await tester.tap(find.text('年 / 月 / 日').first);
+    await tester.pumpAndSettle();
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+  });
 }

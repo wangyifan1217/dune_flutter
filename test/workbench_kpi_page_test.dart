@@ -246,6 +246,7 @@ void main() {
     await tester.pump();
     expect(service.rerunCount, 1);
     expect(find.textContaining('绩效结果'), findsOneWidget);
+    expect(find.textContaining('良（达到预期）'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('kpi-export')));
     await tester.pumpAndSettle();

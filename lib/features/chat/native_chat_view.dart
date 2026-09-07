@@ -542,7 +542,11 @@ class _NativeChatViewState extends State<NativeChatView>
       }
     }
     _syncBackgroundFileUpload();
-    _load(silent: _bootstrapped);
+    // _load 会按 MediaQuery 计算首屏消息数量；initState 阶段尚不能读取
+    // inherited widget，等首帧完成后再启动首次加载。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_load(silent: _bootstrapped));
+    });
     _bootRealtime();
     unawaited(VoiceAsrStore.instance.ensureLoaded());
     unawaited(

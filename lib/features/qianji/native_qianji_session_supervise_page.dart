@@ -307,7 +307,7 @@ class _NativeQianjiSessionSupervisePageState
                   ),
                   SizedBox(width: 2),
                   Text(
-                    'NOVA',
+                    '饕',
                     style: TextStyle(fontSize: 13, color: DunesColors.text2),
                   ),
                 ],

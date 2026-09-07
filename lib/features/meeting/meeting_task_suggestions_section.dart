@@ -324,6 +324,14 @@ class _MeetingTaskSuggestionsSectionState
                 ),
             ],
           ),
+          const SizedBox(height: 6),
+          Text(
+            '处理也会出现在任务助手，不必回到这场会议。',
+            style: DunesTypography.sans(
+              fontSize: 12,
+              color: DunesColors.text3,
+            ),
+          ),
           const SizedBox(height: 8),
           if (running)
             Padding(

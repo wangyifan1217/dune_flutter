@@ -184,6 +184,58 @@ class WorkbenchKpiService {
     return WorkbenchKpiAccess(allowed: map['allowed'] == true);
   }
 
+  Future<List<WorkbenchKpiTask>> listMyTasks({
+    String q = '',
+    bool countedOnly = false,
+    String month = '',
+  }) async {
+    final query = <String, String>{};
+    if (q.trim().isNotEmpty) query['q'] = q.trim();
+    if (countedOnly) query['counted'] = '1';
+    if (month.trim().isNotEmpty) query['month'] = month.trim();
+    final qs = query.isEmpty
+        ? ''
+        : '?${query.entries.map((e) => '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}').join('&')}';
+    final resp = await dunesHttpGet(session, '/kpi/my-tasks$qs', client: _client);
+    final data = _unwrap(resp);
+    final rows = data is List ? data : const [];
+    return rows
+        .whereType<Map>()
+        .map((e) => WorkbenchKpiTask.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  Future<WorkbenchKpiTask> createMyTask(WorkbenchKpiTask draft) async {
+    final resp = await dunesHttpPost(
+      session,
+      '/kpi/my-tasks',
+      body: jsonEncode(draft.toInputJson()),
+      client: _client,
+    );
+    final data = _unwrap(resp);
+    return WorkbenchKpiTask.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<WorkbenchKpiTask> updateMyTask(WorkbenchKpiTask draft) async {
+    final resp = await dunesHttpPatch(
+      session,
+      '/kpi/my-tasks/${draft.id}',
+      body: jsonEncode(draft.toInputJson()),
+      client: _client,
+    );
+    final data = _unwrap(resp);
+    return WorkbenchKpiTask.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<void> deleteMyTask(int id) async {
+    final resp = await dunesHttpDelete(
+      session,
+      '/kpi/my-tasks/$id',
+      client: _client,
+    );
+    _unwrap(resp);
+  }
+
   Future<List<WorkbenchKpiTask>> listTasks({
     String q = '',
     bool countedOnly = false,

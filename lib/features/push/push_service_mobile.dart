@@ -41,6 +41,8 @@ void setPushNotificationClickHandlerImpl(
     android.setPushNotificationClickHandlerImpl(handler);
   } else if (Platform.isIOS) {
     ios.setPushNotificationClickHandlerImpl(handler);
+  } else if (_isDesktop) {
+    desktop.setPushNotificationClickHandlerImpl(handler);
   }
 }
 

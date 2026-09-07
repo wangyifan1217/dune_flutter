@@ -177,7 +177,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
     final task = _detail?.task;
     if (task == null) return;
     if (task.isMain && (_detail?.subtasks.isNotEmpty ?? false)) {
-      showDunesCenterToast(context, '主任务进度由子任务自动汇总');
+      showDunesCenterToast(context, '进度由事项自动汇总');
       return;
     }
     widget.onOpenProgress?.call(task);
@@ -191,7 +191,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(pass ? '通过子任务' : '驳回子任务'),
+        title: Text(pass ? '通过事项' : '驳回事项'),
         content: TextField(controller: ctrl, decoration: _softDecoration('意见')),
         actions: [
           TextButton(
@@ -359,9 +359,9 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
   }
 
   String _activityKind(TaskDetail d, int logTaskId, bool isSubtask) {
-    if (!d.task.isMain) return '子任务';
-    if (isSubtask || logTaskId != d.task.id) return '子任务';
-    return '主任务';
+    if (!d.task.isMain) return '事项';
+    if (isSubtask || logTaskId != d.task.id) return '事项';
+    return '一组事';
   }
 
   InputDecoration _softDecoration(String hint) {
@@ -460,7 +460,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                     const SizedBox(width: 8),
                     const Expanded(
                       child: Text(
-                        '任务详情',
+                        '详情',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
@@ -472,7 +472,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                       TextButton.icon(
                         onPressed: _busy ? null : widget.onAddSubtask,
                         icon: const Icon(Icons.add_task_outlined, size: 18),
-                        label: const Text('子任务'),
+                        label: const Text('添加事项'),
                       ),
                     if (_canDelete)
                       IconButton(
@@ -543,6 +543,23 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                           ),
                         ],
                       ),
+                      if (!d.task.isMain &&
+                          d.task.parentTitle.trim().isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        InkWell(
+                          onTap: d.task.parentId == null
+                              ? null
+                              : () => widget.onOpenTask?.call(d.task.parentId!),
+                          child: Text(
+                            '属于 ${d.task.parentTitle}',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: _themePurple,
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 10),
                       Text(
                         [
@@ -606,8 +623,8 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                     icon: const Icon(Icons.tune, size: 18),
                     label: Text(
                       d.task.isMain && d.subtasks.isNotEmpty
-                          ? '主任务进度由子任务汇总'
-                          : '调整进度',
+                          ? '进度由事项汇总'
+                          : '更新进度',
                     ),
                   ),
                 ],
@@ -619,7 +636,9 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                     label: Text(d.task.hasEval ? '修改评价' : '任务评价'),
                   ),
                 ],
-                if (d.task.isMain && !d.task.isPending) ...[
+                if (d.task.isMain &&
+                    d.subtasks.isNotEmpty &&
+                    !d.task.isPending) ...[
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
@@ -636,7 +655,6 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                               session: widget.session,
                               task: d.task,
                             );
-                            // 面板关掉后立即刷新按钮上的「分析中」状态
                             unawaited(_refreshAnalysisRunning());
                           },
                     icon: _analysisRunning
@@ -652,23 +670,21 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                     label: Text(_analysisRunning ? 'AI 分析中，点击查看' : 'AI 分析'),
                   ),
                 ],
-                const SizedBox(height: 18),
-                Text(
-                  d.task.isMain && d.subtasks.isNotEmpty
-                      ? '进度柱状图（按子任务）'
-                      : '进度柱状图',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
+                if (d.task.isMain && d.subtasks.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  const Text(
+                    '事项进度',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                TaskMemberProgressChart(
-                  bars: buildTaskProgressBars(d),
-                  onBarTap: d.task.isMain
-                      ? (id) => widget.onOpenTask?.call(id)
-                      : null,
-                ),
+                  const SizedBox(height: 8),
+                  TaskMemberProgressChart(
+                    bars: buildTaskProgressBars(d),
+                    onBarTap: (id) => widget.onOpenTask?.call(id),
+                  ),
+                ],
                 if (d.attachments.isNotEmpty) ...[
                   const SizedBox(height: 18),
                   const Text(
@@ -691,7 +707,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                 if (d.task.isMain) ...[
                   const SizedBox(height: 18),
                   const Text(
-                    '子任务',
+                    '事项',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 8),
@@ -705,7 +721,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                         border: Border.all(color: const Color(0xFFE8EAED)),
                       ),
                       child: Text(
-                        _canAddSubtask ? '暂无子任务，可点右上角添加' : '暂无子任务',
+                        _canAddSubtask ? '还没有事项，可点右上角添加' : '还没有事项',
                         style: const TextStyle(color: DunesColors.text3),
                       ),
                     )
@@ -713,20 +729,19 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                     ...d.subtasks.map(
                       (s) => Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                        child: SizedBox(
-                          height: 148,
-                          child: TaskNameCard(
-                            session: widget.session,
-                            task: s,
-                            onTap: () => widget.onOpenTask?.call(s.id),
-                          ),
+                        child: TaskWorkbenchCard(
+                          task: s,
+                          onTap: () => widget.onOpenTask?.call(s.id),
+                          onProgress: s.isPending
+                              ? null
+                              : () => widget.onOpenProgress?.call(s),
                         ),
                       ),
                     ),
                 ],
                 const SizedBox(height: 18),
                 Text(
-                  d.task.isMain ? '进展记录（含子任务）' : '进展记录',
+                  d.task.isMain ? '最近进展' : '最近进展',
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -766,7 +781,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                     ),
                 const SizedBox(height: 18),
                 Text(
-                  d.task.isMain ? '评价记录（含子任务）' : '评价记录',
+                  d.task.isMain ? '评价' : '评价',
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -836,7 +851,7 @@ class _ActivityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final kindColor = taskKind == '子任务'
+    final kindColor = taskKind == '事项'
         ? const Color(0xFF2D8A5E)
         : _themePurple;
     return Padding(

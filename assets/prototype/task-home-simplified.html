@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>任务板块 · APP 静态预览</title>
+  <style>
+    :root {
+      --bg-app: #fbfaf6;
+      --bg-soft: #f2efe7;
+      --list: #f5f6f8;
+      --border: #dad5c7;
+      --border-soft: #e5e1d3;
+      --text: #1f2421;
+      --text2: #5a5c56;
+      --text3: #94938a;
+      --purple: #7b5cd8;
+      --purple-soft: #f3eefa;
+      --purple-line: #c2aee7;
+      --green: #5d8a4e;
+      --amber: #b07a2b;
+      --blue: #3b6e96;
+      --sans: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: var(--sans);
+      background: #e8e4dc;
+      color: var(--text);
+      padding: 28px 16px 48px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .stage { max-width: 420px; margin: 0 auto; }
+    .kicker {
+      font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+      color: #2f5d62; font-weight: 600; margin-bottom: 8px;
+    }
+    h1 { font-size: 22px; font-weight: 600; margin: 0 0 6px; letter-spacing: -.02em; }
+    .sub { font-size: 13px; color: var(--text2); line-height: 1.5; margin-bottom: 16px; }
+    .fld { margin-bottom: 10px; }
+    .fld label { display: block; font-size: 11px; color: var(--text3); margin-bottom: 4px; }
+    .fld input, .fld select {
+      width: 100%; border: 1px solid var(--border-soft); background: #fff;
+      border-radius: 10px; padding: 10px 12px; font-size: 14px; font-family: inherit;
+      color: var(--text);
+    }
+    .scenes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+    .scenes button {
+      border: 1px solid var(--border); background: #fff; color: var(--text2);
+      border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 12px;
+      font-family: inherit;
+    }
+    .scenes button.on { background: #1b3a3f; color: #fff; border-color: #1b3a3f; }
+    .phone {
+      width: 380px; height: 812px; margin: 0 auto; background: #1f1d1a;
+      border-radius: 46px; padding: 11px; position: relative;
+      box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 14px 28px -10px rgba(40,38,32,.18),
+        0 36px 80px -24px rgba(85,59,150,.25);
+    }
+    .notch {
+      position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
+      width: 92px; height: 26px; background: #1f1d1a; border-radius: 14px; z-index: 30;
+    }
+    .screen {
+      width: 100%; height: 100%; background: var(--bg-app); border-radius: 36px;
+      overflow: hidden; position: relative; display: flex; flex-direction: column;
+    }
+    .status-bar {
+      height: 40px; flex-shrink: 0; display: flex; align-items: center;
+      justify-content: space-between; padding: 4px 24px 0; font-size: 12.5px;
+      font-weight: 600;
+    }
+    .status-bar .right { display: flex; gap: 6px; align-items: center; }
+    .app-bar {
+      flex-shrink: 0; display: flex; align-items: center; gap: 4px;
+      padding: 2px 8px 8px 4px; border-bottom: 1px solid var(--border-soft);
+    }
+    .icon-hit {
+      width: 36px; height: 36px; border: 0; background: transparent; color: var(--text2);
+      display: flex; align-items: center; justify-content: center; cursor: pointer;
+    }
+    .title-box { flex: 1; min-width: 0; }
+    .title-box .name { font-size: 17px; font-weight: 650; letter-spacing: -.02em; }
+    .tabs {
+      display: flex; gap: 0; padding: 0 16px; border-bottom: 1px solid var(--border-soft);
+      flex-shrink: 0;
+    }
+    .tabs button {
+      flex: 1; border: 0; background: none; padding: 10px 0 9px;
+      font-size: 13.5px; color: var(--text3); font-family: inherit; cursor: pointer;
+      position: relative; font-weight: 500;
+    }
+    .tabs button.on { color: var(--text); font-weight: 650; }
+    .tabs button.on::after {
+      content: ""; position: absolute; left: 28%; right: 28%; bottom: 0;
+      height: 2px; background: var(--purple); border-radius: 2px;
+    }
+    .hint {
+      font-size: 12px; color: var(--text3); line-height: 1.4; padding: 10px 16px 0;
+    }
+    .list { flex: 1; overflow-y: auto; padding: 10px 14px 20px; min-height: 0; background: var(--list); }
+    .sec {
+      font-size: 11px; font-weight: 650; color: var(--text3);
+      letter-spacing: .04em; margin: 6px 2px 8px;
+    }
+    .card {
+      background: #fff; border: 1px solid #e8eaed; border-radius: 14px;
+      padding: 14px 14px 12px; margin-bottom: 10px;
+    }
+    .card h3 {
+      margin: 0; font-size: 15px; font-weight: 700; line-height: 1.35;
+    }
+    .belong { margin-top: 6px; font-size: 12px; color: var(--text3); }
+    .meta { margin-top: 8px; font-size: 12px; color: var(--text2); display: flex; gap: 10px; align-items: center; }
+    .bar {
+      margin-top: 10px; height: 7px; background: #e8eaed; border-radius: 99px; overflow: hidden;
+    }
+    .bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #2f8f7e, #7bcfbc); }
+    .bar.mid i { background: linear-gradient(90deg, #e0a020, #f5d08a); }
+    .bar.low i { background: linear-gradient(90deg, #e35d4c, #f0a08a); }
+    .acts { display: flex; align-items: center; margin-top: 10px; }
+    .btn {
+      border: 0; border-radius: 8px; padding: 6px 12px; font-size: 12px;
+      font-weight: 650; cursor: pointer; font-family: inherit;
+    }
+    .btn.primary { background: var(--purple); color: #fff; }
+    .btn.ghost { background: var(--bg-soft); color: var(--text2); }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .chip {
+      font-size: 11px; font-weight: 650; padding: 2px 8px; border-radius: 99px;
+    }
+    .chip.main { background: var(--purple-soft); color: var(--purple); }
+    .chip.sub { background: #e8f6f3; color: #2f8f7e; }
+    .chip.pri { background: #f4e8d2; color: var(--amber); }
+    .chip.st { background: #eaefdf; color: var(--green); }
+    .chip.wait { background: #e2ecf4; color: var(--blue); }
+    .home {
+      height: 22px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+      background: var(--list);
+    }
+    .home i { width: 110px; height: 4px; border-radius: 4px; background: #1f1d1a; opacity: .35; }
+    .mask {
+      position: absolute; inset: 0; background: rgba(31,36,33,.35);
+      z-index: 40; display: none;
+    }
+    .mask.on { display: block; }
+    .sheet {
+      position: absolute; left: 0; right: 0; bottom: 0; z-index: 41;
+      background: var(--bg-app); border-radius: 18px 18px 36px 36px;
+      padding: 10px 16px 28px; transform: translateY(110%);
+      transition: transform .22s ease;
+    }
+    .sheet.on { transform: translateY(0); }
+    .handle { width: 36px; height: 4px; border-radius: 4px; background: var(--border); margin: 4px auto 12px; }
+    .sheet h4 { margin: 0 0 4px; font-size: 15px; }
+    .sheet p { margin: 0 0 14px; font-size: 12px; color: var(--text3); }
+    .slider-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+    .slider-row input { flex: 1; accent-color: var(--purple); }
+    .pct { font-size: 18px; font-weight: 700; width: 48px; text-align: right; color: var(--purple); }
+    .sheet-acts { display: flex; gap: 8px; }
+    .sheet-acts .btn { flex: 1; padding: 10px; }
+    .toast {
+      position: absolute; left: 50%; bottom: 54px; transform: translateX(-50%) translateY(12px);
+      background: rgba(31,36,33,.88); color: #fff; font-size: 12px;
+      padding: 8px 14px; border-radius: 999px; opacity: 0; pointer-events: none;
+      z-index: 50; transition: .18s ease; white-space: nowrap;
+    }
+    .toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="kicker">Dunes · Workbench Tasks</div>
+    <h1>任务板块 · 简化稿</h1>
+    <p class="sub">工作台「任务」页静态预览。默认只看自己要做的事；主/子层级收到「我发起的」。</p>
+    <div class="scenes">
+      <button class="on" data-scene="todo" type="button">待我处理</button>
+      <button data-scene="progress" type="button">更新进度</button>
+      <button data-scene="mine" type="button">我发起的</button>
+      <button data-scene="create" type="button">新建</button>
+      <button data-scene="old" type="button">对比现在</button>
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="notch"></div>
+    <div class="screen">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="right">
+          <svg width="15" height="11" viewBox="0 0 15 11" fill="currentColor"><rect x="0" y="3" width="3" height="8" rx="0.6"/><rect x="4" y="1.5" width="3" height="9.5" rx="0.6"/><rect x="8" y="0" width="3" height="11" rx="0.6"/><rect x="12" y="4.5" width="3" height="6.5" rx="0.6" opacity=".35"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11" fill="none"><rect x="0.5" y="2.5" width="13" height="6" rx="1.4" stroke="currentColor"/><rect x="14.2" y="4" width="1.3" height="3" rx="0.4" fill="currentColor"/><rect x="2" y="4" width="8" height="3" rx="0.4" fill="currentColor"/></svg>
+        </span>
+      </div>
+      <div class="app-bar">
+        <button class="icon-hit" type="button" aria-label="返回">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
+        </button>
+        <div class="title-box"><div class="name">任务</div></div>
+        <button class="icon-hit" type="button" id="addBtn" aria-label="新建">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
+      <div class="tabs" id="tabs">
+        <button class="on" data-tab="todo" type="button">待我处理</button>
+        <button data-tab="mine" type="button">我发起的</button>
+      </div>
+      <div class="hint" id="hint"></div>
+      <div class="list" id="list"></div>
+      <div class="home"><i></i></div>
+      <div class="mask" id="mask"></div>
+      <div class="sheet" id="sheet">
+        <div class="handle"></div>
+        <div id="progressBody">
+          <h4 id="sheetTitle">更新进度</h4>
+          <p id="sheetHint">本周完成客户反馈闭环方案</p>
+          <div class="slider-row">
+            <input id="slider" type="range" min="0" max="100" value="40" />
+            <div class="pct" id="pct">40%</div>
+          </div>
+          <div class="sheet-acts" id="progressActs">
+            <button class="btn ghost" type="button" id="sheetCancel">取消</button>
+            <button class="btn primary" type="button" id="sheetSave">保存</button>
+          </div>
+        </div>
+        <div id="createBody" hidden>
+          <h4 id="createHead">新建事项</h4>
+          <p id="createHint" style="margin:0 0 10px;font-size:12px;color:var(--text3)">给自己记一条要做的事，不必先建组。</p>
+          <div class="fld">
+            <label id="createLabel">事项名称</label>
+            <input id="createTitle" type="text" placeholder="例如：周五前给客户闭环方案" />
+          </div>
+          <div class="fld" id="dueField">
+            <label>截止（可选）</label>
+            <input id="createDue" type="date" />
+          </div>
+          <div class="fld" id="groupField">
+            <label>属于哪一组（可选）</label>
+            <select id="createGroup">
+              <option value="">不挂组，只给自己做</option>
+              <option>产品周会跟进</option>
+              <option>三季度对账口径统一</option>
+            </select>
+          </div>
+          <div class="sheet-acts">
+            <button class="btn ghost" type="button" id="createCancel">取消</button>
+            <button class="btn primary" type="button" id="createSave">创建</button>
+          </div>
+        </div>
+      </div>
+      <div class="toast" id="toast"></div>
+    </div>
+  </div>
+
+<script>
+const mineItems = [
+  { title: "产品周会跟进", done: "3/5 已完成", pct: 62, bar: "" },
+  { title: "三季度对账口径统一", done: "1/3 已完成", pct: 28, bar: "low" }
+];
+
+let tab = "todo";
+let oldMode = false;
+let pctVal = 40;
+
+function toast(text) {
+  const el = document.getElementById("toast");
+  el.textContent = text;
+  el.classList.add("on");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove("on"), 1600);
+}
+
+function openProgressSheet() {
+  document.getElementById("progressBody").hidden = false;
+  document.getElementById("createBody").hidden = true;
+  setSheet(true);
+}
+
+function openCreateSheet() {
+  const asGroup = tab === "mine";
+  document.getElementById("progressBody").hidden = true;
+  document.getElementById("createBody").hidden = false;
+  document.getElementById("createHead").textContent = asGroup ? "新建一组事" : "新建事项";
+  document.getElementById("createHint").textContent = asGroup
+    ? "给这组起个名，进去后再添加事项、指派给别人。"
+    : "给自己记一条要做的事，不必先建组。";
+  document.getElementById("createLabel").textContent = asGroup ? "名称" : "事项名称";
+  document.getElementById("createTitle").placeholder = asGroup
+    ? "例如：产品周会跟进"
+    : "例如：周五前给客户闭环方案";
+  document.getElementById("dueField").hidden = asGroup;
+  document.getElementById("groupField").hidden = asGroup;
+  setSheet(true);
+}
+
+function setSheet(on) {
+  document.getElementById("mask").classList.toggle("on", on);
+  document.getElementById("sheet").classList.toggle("on", on);
+}
+
+function setTab(name, { fromScene } = {}) {
+  tab = name;
+  if (!fromScene) oldMode = false;
+  document.querySelectorAll("#tabs button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.tab === name);
+  });
+  render();
+}
+
+function todoHtml() {
+  if (oldMode) {
+    return `
+      <div class="card">
+        <h3>产品周会跟进</h3>
+        <div class="belong">王奕凡 · 9/5 - 9/12 · 5 子任务 · 62%</div>
+        <div class="chips">
+          <span class="chip main">主任务</span>
+          <span class="chip pri">高</span>
+          <span class="chip st">进行中</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>本周完成客户反馈闭环方案</h3>
+        <div class="belong">王奕凡 · 止 9/12 · 40%</div>
+        <div class="chips">
+          <span class="chip sub">子任务</span>
+          <span class="chip pri">中</span>
+          <span class="chip st">进行中</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>同步财务对账口径并更新任务描述</h3>
+        <div class="belong">王奕凡 · 止 9/6 · 0%</div>
+        <div class="chips">
+          <span class="chip sub">子任务</span>
+          <span class="chip pri">高</span>
+          <span class="chip wait">待审批</span>
+        </div>
+      </div>`;
+  }
+  return `
+    <div class="sec">今天要做</div>
+    <div class="card">
+      <h3>本周完成客户反馈闭环方案</h3>
+      <div class="belong">属于 产品周会跟进</div>
+      <div class="meta"><span>止 9/12</span><span>40%</span></div>
+      <div class="bar mid"><i style="width:40%"></i></div>
+      <div class="acts"><button class="btn primary" type="button" data-act="progress" data-title="本周完成客户反馈闭环方案" data-pct="40">更新进度</button></div>
+    </div>
+    <div class="card">
+      <h3>明确会议决策与责任落地机制</h3>
+      <div class="belong">属于 产品周会跟进</div>
+      <div class="meta"><span>止 9/8</span><span>70%</span></div>
+      <div class="bar"><i style="width:70%"></i></div>
+      <div class="acts"><button class="btn primary" type="button" data-act="progress" data-title="明确会议决策与责任落地机制" data-pct="70">更新进度</button></div>
+    </div>
+    <div class="sec">待我审核</div>
+    <div class="card">
+      <h3>同步财务对账口径并更新任务描述</h3>
+      <div class="belong">李华提交 · 属于 三季度对账口径统一</div>
+      <div class="meta"><span>止 9/6</span></div>
+      <div class="acts">
+        <button class="btn primary" type="button" data-act="pass">通过</button>
+        <button class="btn ghost" type="button" data-act="reject" style="margin-left:8px">驳回</button>
+      </div>
+    </div>`;
+}
+
+function mineHtml() {
+  if (oldMode) {
+    return `
+      <div class="card">
+        <h3>产品周会跟进</h3>
+        <div class="belong">王奕凡 · 5 子任务 · 62%</div>
+        <div class="chips"><span class="chip main">主任务</span><span class="chip st">进行中</span></div>
+      </div>
+      <div class="card">
+        <h3>三季度对账口径统一</h3>
+        <div class="belong">王奕凡 · 3 子任务 · 28%</div>
+        <div class="chips"><span class="chip main">主任务</span><span class="chip pri">高</span></div>
+      </div>`;
+  }
+  return mineItems.map((x) => `
+    <div class="card">
+      <h3>${x.title}</h3>
+      <div class="belong">${x.done}</div>
+      <div class="meta"><span>汇总进度 ${x.pct}%</span></div>
+      <div class="bar ${x.bar}"><i style="width:${x.pct}%"></i></div>
+      <div class="acts"><button class="btn ghost" type="button" data-act="break">查看拆解</button></div>
+    </div>`).join("");
+}
+
+function render() {
+  const hint = document.getElementById("hint");
+  if (oldMode) {
+    hint.textContent = "主任务可自建 · 子任务仅分给自己或下级 · 自建子任务需上级审核";
+  } else if (tab === "todo") {
+    hint.textContent = "只列出需要你动手的事";
+  } else {
+    hint.textContent = "你发起的一组事，进度由下面的事项汇总";
+  }
+  document.getElementById("list").innerHTML = tab === "todo" ? todoHtml() : mineHtml();
+}
+
+function setScene(name) {
+  document.querySelectorAll(".scenes button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.scene === name);
+  });
+  oldMode = name === "old";
+  if (name === "mine") setTab("mine", { fromScene: true });
+  else setTab("todo", { fromScene: true });
+  if (name === "progress") {
+    document.getElementById("sheetTitle").textContent = "更新进度";
+    document.getElementById("sheetHint").textContent = "本周完成客户反馈闭环方案";
+    document.getElementById("slider").value = 40;
+    document.getElementById("pct").textContent = "40%";
+    pctVal = 40;
+    openProgressSheet();
+  } else if (name === "create") {
+    openCreateSheet();
+  } else {
+    setSheet(false);
+  }
+}
+
+document.querySelector(".scenes").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-scene]");
+  if (b) setScene(b.dataset.scene);
+});
+
+document.getElementById("tabs").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-tab]");
+  if (!b) return;
+  oldMode = false;
+  document.querySelectorAll(".scenes button").forEach((x) => {
+    x.classList.toggle("on", x.dataset.scene === b.dataset.tab);
+  });
+  setTab(b.dataset.tab);
+});
+
+document.getElementById("list").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-act]");
+  if (!b) return;
+  if (b.dataset.act === "progress") {
+    document.getElementById("sheetTitle").textContent = "更新进度";
+    document.getElementById("sheetHint").textContent = b.dataset.title;
+    const p = Number(b.dataset.pct || 40);
+    document.getElementById("slider").value = p;
+    document.getElementById("pct").textContent = p + "%";
+    pctVal = p;
+    openProgressSheet();
+  } else if (b.dataset.act === "pass") {
+    toast("已通过");
+  } else if (b.dataset.act === "reject") {
+    toast("已驳回");
+  } else if (b.dataset.act === "break") {
+    toast("正式版进入该组事项的拆解");
+  }
+});
+
+document.getElementById("addBtn").addEventListener("click", () => {
+  document.querySelectorAll(".scenes button").forEach((x) => {
+    x.classList.toggle("on", x.dataset.scene === "create");
+  });
+  openCreateSheet();
+});
+document.getElementById("createCancel").addEventListener("click", () => setSheet(false));
+document.getElementById("createSave").addEventListener("click", () => {
+  const title = document.getElementById("createTitle").value.trim() || (tab === "mine" ? "未命名一组事" : "未命名事项");
+  setSheet(false);
+  toast(tab === "mine" ? `已创建一组事「${title}」` : `已创建「${title}」`);
+});
+
+document.getElementById("mask").addEventListener("click", () => setSheet(false));
+document.getElementById("sheetCancel").addEventListener("click", () => setSheet(false));
+document.getElementById("slider").addEventListener("input", (e) => {
+  pctVal = Number(e.target.value);
+  document.getElementById("pct").textContent = pctVal + "%";
+});
+document.getElementById("sheetSave").addEventListener("click", () => {
+  setSheet(false);
+  toast("进度已更新为 " + pctVal + "%");
+});
+
+setScene("todo");
+</script>
+</body>
+</html>

@@ -644,7 +644,7 @@ class _NativeQianjiCashFlowBoardPageState
             Icon(Icons.arrow_back_ios_new, size: 14, color: DunesColors.text2),
             SizedBox(width: 2),
             Text(
-              'τ管理',
+              '饕',
               style: TextStyle(fontSize: 13, color: DunesColors.text2),
             ),
           ],

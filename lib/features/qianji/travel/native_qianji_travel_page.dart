@@ -436,7 +436,7 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
                   ),
                   SizedBox(width: 2),
                   Text(
-                    'τ管理',
+                    '饕',
                     style: TextStyle(fontSize: 13, color: DunesColors.text2),
                   ),
                 ],

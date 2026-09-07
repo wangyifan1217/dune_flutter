@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/widgets/horizontal_drag_scroll_view.dart';
+import '../../core/platform/desktop_features.dart';
 import '../auth/auth_session.dart';
 import '../meeting/native_meeting_models.dart';
 import '../meeting/native_meeting_service.dart';
@@ -47,6 +48,7 @@ class _NativeQianjiMeetingSupervisePageState
   bool _superviseAll = false;
   int _page = 0;
   int _totalMeetings = 0;
+  int _listTotal = 0;
   static const int _pageSize = 20;
   String? _error;
   Timer? _keywordDebounce;
@@ -75,6 +77,19 @@ class _NativeQianjiMeetingSupervisePageState
     if (pos.pixels >= pos.maxScrollExtent - 220) {
       unawaited(_loadMore());
     }
+  }
+
+  void _scheduleLoadMoreIfShort({int attempt = 0}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_hasMore || _loadingMore || _loading) return;
+      if (!_scrollController.hasClients) {
+        if (attempt < 8) _scheduleLoadMoreIfShort(attempt: attempt + 1);
+        return;
+      }
+      if (_scrollController.position.maxScrollExtent <= 80) {
+        unawaited(_loadMore());
+      }
+    });
   }
 
   void _onKeywordChanged() {
@@ -111,14 +126,17 @@ class _NativeQianjiMeetingSupervisePageState
       setState(() {
         _rows = result.items;
         _page = 0;
-        _hasMore = result.items.length >= _pageSize &&
-            result.items.length < result.totalCount;
+        _listTotal = result.totalCount < result.items.length
+            ? result.items.length
+            : result.totalCount;
+        _hasMore = result.items.length < _listTotal;
         if (stats != null) {
           _deptStats = stats.departments;
           _totalMeetings = stats.totalMeetings;
           _superviseAll = stats.superviseAll;
         }
       });
+      _scheduleLoadMoreIfShort();
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString());
@@ -144,11 +162,23 @@ class _NativeQianjiMeetingSupervisePageState
         departmentId: _selectedDepartmentId,
       );
       if (!mounted) return;
+      final existing = _rows.map((e) => e.meetingId).toSet();
+      final appended = result.items
+          .where((e) => !existing.contains(e.meetingId))
+          .toList(growable: false);
       setState(() {
-        _rows = <NativeMeetingSummary>[..._rows, ...result.items];
+        _rows = <NativeMeetingSummary>[..._rows, ...appended];
         _page = nextPage;
-        _hasMore = result.items.length >= _pageSize;
+        if (result.totalCount > _listTotal) {
+          _listTotal = result.totalCount;
+        } else if (_listTotal < _rows.length) {
+          _listTotal = _rows.length;
+        }
+        _hasMore = appended.isNotEmpty &&
+            result.items.length >= _pageSize &&
+            _rows.length < _listTotal;
       });
+      _scheduleLoadMoreIfShort();
     } catch (_) {
       // silent
     } finally {
@@ -203,7 +233,11 @@ class _NativeQianjiMeetingSupervisePageState
             Expanded(
               child: RefreshIndicator(
                 onRefresh: () => _load(reset: true),
-                child: _buildBody(),
+                child: Scrollbar(
+                  controller: _scrollController,
+                  thumbVisibility: isDesktopCommOnly,
+                  child: _buildBody(),
+                ),
               ),
             ),
           ],
@@ -232,7 +266,7 @@ class _NativeQianjiMeetingSupervisePageState
                   ),
                   SizedBox(width: 2),
                   Text(
-                    'NOVA',
+                    '饕',
                     style: TextStyle(fontSize: 13, color: DunesColors.text2),
                   ),
                 ],
@@ -250,9 +284,9 @@ class _NativeQianjiMeetingSupervisePageState
               ),
             ),
           ),
-          if (_totalMeetings > 0)
+          if (_totalMeetings > 0 || _listTotal > 0)
             Text(
-              '合计 $_totalMeetings',
+              '合计 ${_listTotal > 0 ? _listTotal : _totalMeetings}',
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -409,18 +443,32 @@ class _NativeQianjiMeetingSupervisePageState
     return ListView.separated(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
-      itemCount: _rows.length + (_loadingMore ? 1 : 0),
+      padding: EdgeInsets.fromLTRB(16, 4, 16, isDesktopCommOnly ? 48 : 40),
+      itemCount: _rows.length + ((_loadingMore || _hasMore) ? 1 : 0),
       separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         if (index >= _rows.length) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
+          if (_loadingMore) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            );
+          }
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
             child: Center(
-              child: SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2),
+              child: Text(
+                isDesktopCommOnly ? '滚动加载更多' : '下滑加载更多',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: DunesColors.text3,
+                ),
               ),
             ),
           );
@@ -530,7 +578,7 @@ class _MeetingCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       title,
-                      maxLines: 1,
+                      maxLines: isDesktopCommOnly ? 2 : 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 15,

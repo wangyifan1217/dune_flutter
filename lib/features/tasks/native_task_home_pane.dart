@@ -8,6 +8,7 @@ import '../shell/dunes_toast.dart';
 import 'native_task_action_page.dart';
 import 'native_task_detail_page.dart';
 import 'native_task_form.dart';
+import 'native_task_quick_create.dart';
 import 'task_api.dart';
 import 'task_models.dart';
 import 'task_widgets.dart';
@@ -66,13 +67,8 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   String? _error;
   static const int _pageSize = 20;
 
-  int _mineTotal = 0;
-  int _mineActive = 0;
-  int _mineDone = 0;
-  int _pendingTotal = 0;
-
-  /// mine | pending
-  String _scope = 'mine';
+  /// actionable | initiated
+  String _scope = 'actionable';
   String? _status;
   String? _priority;
   DateTime? _dateFrom;
@@ -118,7 +114,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     });
   }
 
-  String get _apiScope => _scope == 'pending' ? 'pending_approval' : 'mine';
+  String get _apiScope => _scope;
 
   void _publishChrome() {
     if (_page == _TaskPage.detail || _page == _TaskPage.action) {
@@ -133,7 +129,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     widget.onChromeChanged?.call(
       TaskShellChrome(
         trailing: FilledButton.icon(
-          onPressed: () => _openCreate(),
+          onPressed: () => _openQuickCreate(),
           icon: const Icon(Icons.add, size: 18),
           label: const Text('新建'),
           style: FilledButton.styleFrom(
@@ -157,7 +153,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       _listPage = 0;
     });
     try {
-      final listFuture = _api.listTasksPage(
+      final list = await _api.listTasksPage(
         scope: _apiScope,
         status: _status,
         priority: _priority,
@@ -167,28 +163,11 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         page: 0,
         size: _pageSize,
       );
-      final mineStatsFuture = _api.listTasksPage(
-        scope: 'mine',
-        page: 0,
-        size: 1,
-      );
-      final pendingStatsFuture = _api.listTasksPage(
-        scope: 'pending_approval',
-        page: 0,
-        size: 1,
-      );
-      final list = await listFuture;
-      final mineStats = await mineStatsFuture;
-      final pendingStats = await pendingStatsFuture;
       if (!mounted) return;
       setState(() {
         _items = list.items;
         _listPage = 0;
         _hasMore = list.hasMore;
-        _mineTotal = mineStats.total;
-        _mineActive = mineStats.active;
-        _mineDone = mineStats.completed;
-        _pendingTotal = pendingStats.total;
         _loading = false;
         _loadingMore = false;
       });
@@ -306,6 +285,23 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     _publishChrome();
   }
 
+  Future<void> _openQuickCreate() async {
+    final created = await openTaskQuickCreate(
+      context,
+      session: widget.session,
+      asGroup: _scope == 'initiated',
+    );
+    if (created == null || !mounted) return;
+    showDunesCenterToast(
+      context,
+      _scope == 'initiated' ? '已创建一组事「${created.title}」' : '已创建「${created.title}」',
+    );
+    await _reload();
+    if (_scope == 'initiated' && mounted) {
+      _openDetail(created.id);
+    }
+  }
+
   Future<void> _openCreate({int? parentId, TaskItem? parentTask}) async {
     final created = await openTaskEditor(
       context,
@@ -318,22 +314,12 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
               : null),
     );
     if (created == null || !mounted) return;
-    showDunesCenterToast(context, parentId == null ? '主任务已创建' : '子任务已创建');
+    showDunesCenterToast(context, parentId == null ? '已创建' : '事项已添加');
     await _reload();
     if (parentId != null && mounted) {
       _openDetail(parentId);
     }
   }
-
-  int get _totalCount => _mineTotal;
-  int get _activeCount => _mineActive;
-  int get _pendingCount => _pendingTotal;
-  int get _doneCount => _mineDone;
-
-  String get _scopeLabel => switch (_scope) {
-    'pending' => '待我审核',
-    _ => '我的任务',
-  };
 
   String get _dateRangeLabel {
     if (_dateFrom == null && _dateTo == null) return '时间段';
@@ -432,14 +418,6 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     _ => '全部状态',
   };
 
-  String get _priorityLabel => switch (_priority) {
-    'low' => '低',
-    'medium' => '中',
-    'high' => '高',
-    'urgent' => '紧急',
-    _ => '全部优先级',
-  };
-
   Key get _pageKey => switch (_page) {
     _TaskPage.list => const ValueKey('task-list'),
     _TaskPage.detail => ValueKey('task-detail-$_detailId'),
@@ -535,20 +513,23 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
-                      '主任务可自建 · 子任务仅分给自己或下级 · 自建子任务需上级审核',
-                      style: TextStyle(
+                    Row(
+                      children: [
+                        _tabChip('actionable', '待我处理'),
+                        const SizedBox(width: 8),
+                        _tabChip('initiated', '我发起的'),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _scope == 'initiated'
+                          ? '你发起的一组事，进度由下面的事项汇总'
+                          : '只列出需要你动手的事',
+                      style: const TextStyle(
                         fontSize: 13,
                         color: DunesColors.text3,
                         height: 1.3,
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    TaskSummaryRow(
-                      total: _totalCount,
-                      active: _activeCount,
-                      pending: _pendingCount,
-                      done: _doneCount,
                     ),
                     const SizedBox(height: 12),
                     _buildToolbar(),
@@ -579,12 +560,37 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     );
   }
 
-  Widget _buildToolbar() {
-    const scopeItems = <(String, String)>[
-      ('mine', '我的任务'),
-      ('pending', '待我审核'),
-    ];
+  Widget _tabChip(String value, String label) {
+    final on = _scope == value;
+    return Expanded(
+      child: Material(
+        color: on ? kTaskPurple : Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () {
+            if (_scope == value) return;
+            setState(() => _scope = value);
+            unawaited(_reload());
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: on ? Colors.white : DunesColors.text2,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
+  Widget _buildToolbar() {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
@@ -592,112 +598,67 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFFE8EAED)),
       ),
-      child: LayoutBuilder(
-        builder: (context, c) {
-          final wrap = c.maxWidth < 860;
-          final search = Expanded(
-            child: TextField(
-              controller: _search,
-              decoration: InputDecoration(
-                hintText: '搜索标题 / 负责人 / 分类',
-                hintStyle: const TextStyle(
-                  color: DunesColors.text3,
-                  fontSize: 13,
-                ),
-                isDense: true,
-                filled: true,
-                fillColor: const Color(0xFFF5F6F8),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  size: 20,
-                  color: DunesColors.text3,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
+      child: Column(
+        children: [
+          TextField(
+            controller: _search,
+            decoration: InputDecoration(
+              hintText: '搜索标题',
+              hintStyle: const TextStyle(
+                color: DunesColors.text3,
+                fontSize: 13,
+              ),
+              isDense: true,
+              filled: true,
+              fillColor: const Color(0xFFF5F6F8),
+              prefixIcon: const Icon(
+                Icons.search,
+                size: 20,
+                color: DunesColors.text3,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
               ),
             ),
-          );
-          final filters = [
-            _dateRangeChip(),
-            TaskFilterChipDropdown<String>(
-              value: _scope,
-              label: _scopeLabel,
-              items: scopeItems,
-              onChanged: (v) {
-                setState(() => _scope = v);
-                unawaited(_reload());
-              },
-              minMenuWidth: 160,
-            ),
-            TaskFilterChipDropdown<String?>(
-              value: _status,
-              label: _statusLabel,
-              items: const [
-                (null, '全部状态'),
-                ('active', '进行中'),
-                ('pending_approval', '待审核'),
-                ('completed', '已完成'),
-                ('rejected', '已驳回'),
-              ],
-              onChanged: (v) {
-                setState(() => _status = v);
-                unawaited(_reload());
-              },
-              minMenuWidth: 160,
-            ),
-            TaskFilterChipDropdown<String?>(
-              value: _priority,
-              label: _priorityLabel,
-              items: const [
-                (null, '全部优先级'),
-                ('low', '低'),
-                ('medium', '中'),
-                ('high', '高'),
-                ('urgent', '紧急'),
-              ],
-              onChanged: (v) {
-                setState(() => _priority = v);
-                unawaited(_reload());
-              },
-              minMenuWidth: 160,
-            ),
-            IconButton(
-              tooltip: '刷新',
-              onPressed: _reload,
-              icon: const Icon(Icons.refresh_rounded, color: DunesColors.text2),
-            ),
-          ];
-
-          if (wrap) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(children: [search]),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: filters,
-                ),
-              ],
-            );
-          }
-
-          return Row(
+          ),
+          const SizedBox(height: 10),
+          Row(
             children: [
-              search,
-              const SizedBox(width: 10),
-              for (final w in filters) ...[const SizedBox(width: 8), w],
+              _dateRangeChip(),
+              const SizedBox(width: 8),
+              TaskFilterChipDropdown<String?>(
+                value: _status,
+                label: _statusLabel,
+                items: const [
+                  (null, '全部状态'),
+                  ('active', '进行中'),
+                  ('pending_approval', '待审核'),
+                  ('completed', '已完成'),
+                  ('rejected', '已驳回'),
+                ],
+                onChanged: (v) {
+                  setState(() => _status = v);
+                  unawaited(_reload());
+                },
+                minMenuWidth: 160,
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: '刷新',
+                onPressed: _reload,
+                icon: const Icon(
+                  Icons.refresh_rounded,
+                  color: DunesColors.text2,
+                ),
+              ),
             ],
-          );
-        },
+          ),
+        ],
       ),
     );
   }
@@ -791,7 +752,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                   ),
                   const SizedBox(height: 18),
                   Text(
-                    _scope == 'pending' ? '暂无待审核任务' : '还没有任务',
+                    _scope == 'initiated' ? '还没有你发起的一组事' : '还没有待处理的事项',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 17,
@@ -801,7 +762,9 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    _scope == 'pending' ? '下级自建的子任务会显示在这里' : '创建第一条主任务，开始拆解与跟进',
+                    _scope == 'initiated'
+                        ? '点右上角新建一组事，再往里面加事项'
+                        : '点右上角记一条要做的事，不必先建组',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 13,
@@ -809,24 +772,22 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                       height: 1.4,
                     ),
                   ),
-                  if (_scope == 'mine') ...[
-                    const SizedBox(height: 20),
-                    FilledButton.icon(
-                      onPressed: () => _openCreate(),
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('新建第一条'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: kTaskPurple,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: () => _openQuickCreate(),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('新建'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: kTaskPurple,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),
@@ -838,35 +799,90 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     return [
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-        sliver: SliverLayoutBuilder(
-          builder: (context, constraints) {
-            // 列数随容器宽度自适应：手机一行一张（卡片规格与详情页子任务一致），
-            // 中等宽度两张，PC 宽屏保持三张，避免窄屏挤压导致内容错位。
-            final width = constraints.crossAxisExtent;
-            final columns = width >= 920
-                ? 3
-                : width >= 600
-                ? 2
-                : 1;
-            return SliverGrid(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: columns,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 10,
-                mainAxisExtent: 148,
-              ),
-              delegate: SliverChildBuilderDelegate((context, i) {
-                final t = items[i];
-                return TaskNameCard(
-                  session: widget.session,
-                  task: t,
-                  onTap: () => _openDetail(t.id),
-                );
-              }, childCount: items.length),
-            );
-          },
+        sliver: SliverList(
+          delegate: SliverChildListDelegate(_buildItemCards(items)),
         ),
       ),
     ];
+  }
+
+  List<Widget> _buildItemCards(List<TaskItem> items) {
+    final groupMode = _scope == 'initiated';
+    if (groupMode) {
+      return [
+        for (final t in items) ...[
+          TaskWorkbenchCard(
+            task: t,
+            groupMode: true,
+            onTap: () => _openDetail(t.id),
+          ),
+          const SizedBox(height: 10),
+        ],
+      ];
+    }
+    final work = items.where((t) => !t.isPending).toList(growable: false);
+    final pending = items.where((t) => t.isPending).toList(growable: false);
+    final out = <Widget>[];
+    if (work.isNotEmpty) {
+      out.add(const Padding(
+        padding: EdgeInsets.only(bottom: 8),
+        child: Text(
+          '今天要做',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: DunesColors.text3,
+          ),
+        ),
+      ));
+      for (final t in work) {
+        out.add(TaskWorkbenchCard(
+          task: t,
+          onTap: () => _openDetail(t.id),
+          onProgress: () => _openAction(t, TaskActionMode.progress),
+        ));
+        out.add(const SizedBox(height: 10));
+      }
+    }
+    if (pending.isNotEmpty) {
+      out.add(const Padding(
+        padding: EdgeInsets.only(top: 4, bottom: 8),
+        child: Text(
+          '待我审核',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: DunesColors.text3,
+          ),
+        ),
+      ));
+      for (final t in pending) {
+        out.add(TaskWorkbenchCard(
+          task: t,
+          onTap: () => _openDetail(t.id),
+          onApprove: () => _decide(t, pass: true),
+          onReject: () => _decide(t, pass: false),
+        ));
+        out.add(const SizedBox(height: 10));
+      }
+    }
+    return out;
+  }
+
+  Future<void> _decide(TaskItem t, {required bool pass}) async {
+    try {
+      if (pass) {
+        await _api.approve(t.id);
+        if (!mounted) return;
+        showDunesCenterToast(context, '已通过');
+      } else {
+        await _api.reject(t.id);
+        if (!mounted) return;
+        showDunesCenterToast(context, '已驳回');
+      }
+      await _reload();
+    } catch (e) {
+      if (mounted) showDunesCenterToast(context, '$e');
+    }
   }
 }

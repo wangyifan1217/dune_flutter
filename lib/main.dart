@@ -21,6 +21,8 @@ import 'features/drive/native_drive_share_page.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'core/web/text_input_guard_stub.dart'
     if (dart.library.html) 'core/web/text_input_guard_web.dart';
+import 'core/util/android_photo_picker_stub.dart'
+    if (dart.library.io) 'core/util/android_photo_picker_io.dart';
 
 class DunesApp extends StatelessWidget {
   const DunesApp({super.key});
@@ -50,6 +52,14 @@ class DunesApp extends StatelessWidget {
             );
             if (isDesktopCommOnly) {
               wrapped = DesktopEscMinimize(child: wrapped);
+              // 仅隐藏/最小化冻动画；失焦不冻，避免双屏切窗看起来卡死。
+              wrapped = ValueListenableBuilder<bool>(
+                valueListenable: windowsTrayWindowObscuredListenable(),
+                builder: (context, obscured, child) {
+                  return TickerMode(enabled: !obscured, child: child!);
+                },
+                child: wrapped,
+              );
             }
             return MediaQuery(
               data: media.copyWith(textScaler: TextScaler.linear(scale)),
@@ -78,6 +88,7 @@ Widget _initialHome() {
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  enableAndroidPhotoPicker();
 
   // 桌面图片预览：desktop_multi_window 0.3 以独立 Engine 再进 main。
   if (isDesktopImagePreviewWindowArgs(args) ||

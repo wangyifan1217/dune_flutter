@@ -699,6 +699,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     return _fieldWrap(
       field,
       _XflowUserPicker(
+        key: ValueKey('xflow-user-${field.key}'),
         service: widget.service,
         value: widget.values[field.key],
         placeholder: hint,
@@ -1708,6 +1709,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
 
 class _XflowUserPicker extends StatefulWidget {
   const _XflowUserPicker({
+    super.key,
     required this.service,
     required this.value,
     required this.placeholder,
@@ -1964,7 +1966,11 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
 
   void _onFocusChange() {
     if (!_focus.hasFocus) {
-      _dismissSuggestions();
+      // 等 ListTile.onTap 先跑完，避免点结果时先失焦把名单拆掉。
+      Future<void>.delayed(const Duration(milliseconds: 80), () {
+        if (!mounted || _focus.hasFocus) return;
+        _dismissSuggestions();
+      });
       return;
     }
     if (widget.readonly) return;
@@ -1989,10 +1995,16 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.value != widget.value) {
       final next = _displayName(widget.value);
-      if (_controller.text != next) {
+      // 聚焦时不回写，避免选人后重搜/改人被草稿刷新盖掉。
+      if (!_focus.hasFocus && _controller.text != next) {
         _controller.text = next;
       }
     }
+  }
+
+  void _releaseFocus() {
+    // scope 会让整页 FocusScope 吃掉后续点击，表现为「选完人进不了输入框」。
+    _focus.unfocus(disposition: UnfocusDisposition.previouslyFocusedChild);
   }
 
   @override
@@ -2023,7 +2035,13 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
   }
 
   void _selectUser(Map<String, dynamic> u) {
-    final name = (u['displayName'] ?? u['name'] ?? '').toString();
+    final name = (u['displayName'] ?? u['name'] ?? '').toString().trim();
+    if (name.isEmpty) return;
+    _debounce?.cancel();
+    _controller.value = TextEditingValue(
+      text: name,
+      selection: TextSelection.collapsed(offset: name.length),
+    );
     widget.onChanged({
       'userId': u['userId'] ?? u['id'],
       'name': name,
@@ -2031,12 +2049,13 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
       'title': u['title'] ?? '',
     });
     setState(() {
-      _controller.text = name;
       _results = const [];
       _searched = false;
       _loading = false;
     });
-    _focus.unfocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _releaseFocus();
+    });
   }
 
   Future<void> _search(String q) async {
@@ -2132,43 +2151,50 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
                       ),
               ),
           style: xfInputTextStyle(),
-          onTapOutside: (_) => _focus.unfocus(),
+          onTap: widget.readonly
+              ? null
+              : () {
+                  if (!_focus.hasFocus) _focus.requestFocus();
+                },
+          onTapOutside: (_) => _releaseFocus(),
           onChanged: widget.readonly ? null : _onQueryChanged,
         ),
         if (_results.isNotEmpty) ...[
           const SizedBox(height: 6),
-          Container(
-            constraints: const BoxConstraints(maxHeight: 220),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: DunesColors.border),
-            ),
-            child: ListView.separated(
-              padding: EdgeInsets.zero,
-              shrinkWrap: true,
-              itemCount: _results.length.clamp(0, 8),
-              separatorBuilder: (_, _) =>
-                  Divider(height: 1, color: DunesColors.borderSoft),
-              itemBuilder: (context, index) {
-                final u = _results[index];
-                final name = (u['displayName'] ?? u['name'] ?? '').toString();
-                final dept = (u['departmentName'] ?? u['dept'] ?? '')
-                    .toString();
-                return ListTile(
-                  dense: true,
-                  title: Text(
-                    dept.isEmpty ? name : '$name · $dept',
-                    style: DunesTypography.sans(fontSize: 12),
-                  ),
-                  trailing: const Icon(
-                    Icons.person_add_alt_1_outlined,
-                    size: 16,
-                    color: DunesColors.text3,
-                  ),
-                  onTap: () => _selectUser(u),
-                );
-              },
+          TextFieldTapRegion(
+            child: Container(
+              constraints: const BoxConstraints(maxHeight: 220),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: DunesColors.border),
+              ),
+              child: ListView.separated(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: _results.length.clamp(0, 8),
+                separatorBuilder: (_, _) =>
+                    Divider(height: 1, color: DunesColors.borderSoft),
+                itemBuilder: (context, index) {
+                  final u = _results[index];
+                  final name = (u['displayName'] ?? u['name'] ?? '').toString();
+                  final dept = (u['departmentName'] ?? u['dept'] ?? '')
+                      .toString();
+                  return ListTile(
+                    dense: true,
+                    title: Text(
+                      dept.isEmpty ? name : '$name · $dept',
+                      style: DunesTypography.sans(fontSize: 12),
+                    ),
+                    trailing: const Icon(
+                      Icons.person_add_alt_1_outlined,
+                      size: 16,
+                      color: DunesColors.text3,
+                    ),
+                    onTap: () => _selectUser(u),
+                  );
+                },
+              ),
             ),
           ),
         ] else if (_searched && !_loading && hasText) ...[
@@ -2520,12 +2546,15 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
                 : const Icon(Icons.search, size: 18, color: DunesColors.text3),
           ),
           style: xfInputTextStyle(),
-          onTapOutside: (_) => _focus.unfocus(),
+          onTapOutside: (_) => _focus.unfocus(
+            disposition: UnfocusDisposition.previouslyFocusedChild,
+          ),
           onChanged: widget.readonly ? null : _onQueryChanged,
         ),
         if (_results.isNotEmpty) ...[
           const SizedBox(height: 6),
-          Container(
+          TextFieldTapRegion(
+            child: Container(
             constraints: const BoxConstraints(maxHeight: 220),
             decoration: BoxDecoration(
               color: Colors.white,
@@ -2551,6 +2580,7 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
                   onTap: () => _selectProposal(row),
                 );
               },
+            ),
             ),
           ),
         ] else if (_searched && !_loading && hasText) ...[
@@ -2850,36 +2880,40 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
                 : const Icon(Icons.search, size: 18, color: DunesColors.text3),
           ),
           style: xfInputTextStyle(),
-          onTapOutside: (_) => _focus.unfocus(),
+          onTapOutside: (_) => _focus.unfocus(
+            disposition: UnfocusDisposition.previouslyFocusedChild,
+          ),
           onChanged: widget.readonly ? null : _onQueryChanged,
         ),
         if (_results.isNotEmpty) ...[
           const SizedBox(height: 6),
-          Container(
-            constraints: const BoxConstraints(maxHeight: 220),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: DunesColors.border),
-            ),
-            child: ListView.separated(
-              padding: EdgeInsets.zero,
-              shrinkWrap: true,
-              itemCount: _results.length.clamp(0, 12),
-              separatorBuilder: (_, _) =>
-                  Divider(height: 1, color: DunesColors.borderSoft),
-              itemBuilder: (context, index) {
-                final row = _results[index];
-                final label = _cfg.labelOf(row);
-                return ListTile(
-                  dense: true,
-                  title: Text(
-                    label.isEmpty ? '（无标题）' : label,
-                    style: DunesTypography.sans(fontSize: 12),
-                  ),
-                  onTap: () => _selectRow(row),
-                );
-              },
+          TextFieldTapRegion(
+            child: Container(
+              constraints: const BoxConstraints(maxHeight: 220),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: DunesColors.border),
+              ),
+              child: ListView.separated(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: _results.length.clamp(0, 12),
+                separatorBuilder: (_, _) =>
+                    Divider(height: 1, color: DunesColors.borderSoft),
+                itemBuilder: (context, index) {
+                  final row = _results[index];
+                  final label = _cfg.labelOf(row);
+                  return ListTile(
+                    dense: true,
+                    title: Text(
+                      label.isEmpty ? '（无标题）' : label,
+                      style: DunesTypography.sans(fontSize: 12),
+                    ),
+                    onTap: () => _selectRow(row),
+                  );
+                },
+              ),
             ),
           ),
         ] else if (_searched && !_loading && hasText) ...[

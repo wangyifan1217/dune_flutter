@@ -1831,6 +1831,45 @@ void main() {
     );
   });
 
+  test('purchase supply settle lists only missing fields', () {
+    final form = <String, dynamic>{
+      'isExistingSupplyProduct': true,
+      'supplyProducts': [
+        {
+          'id': 's1',
+          'syncSource': 'P1',
+          'assetProduct': {
+            'id': 10,
+            'productName': '团油',
+            'supplierCode': 'SUP-1',
+            'supplierName': '中石油',
+          },
+          'settlements': [
+            {
+              'id': 'st-1',
+              'billType': '应付账单 / 采购款 / 团油采购款',
+              'settleMode': '按结算比例结算',
+              'settleModeRef': {'code': '1', 'name': '按结算比例结算'},
+              'settleRatio': '1%',
+              'formula': '团油供货价*结算比',
+              'invoiceType': '电子专用发票',
+              'taxRate': '6%',
+              'effectiveTime': '2025-12-20',
+            },
+          ],
+        },
+      ],
+    };
+    expect(
+      proposalIntakePurchaseSupplyIssues(form),
+      contains('供给产品 1 结算一未填完：失效时间'),
+    );
+    expect(
+      proposalIntakePurchaseSupplyIssues(form).join(),
+      isNot(contains('账单类型')),
+    );
+  });
+
   test('sales fill fields are required except optional products and packs', () {
     final empty = proposalIntakeSalesMarketIssues({});
     expect(empty, contains('请选择业务板块'));

@@ -133,9 +133,13 @@
 
   function uploadMetaFor(field) {
     var base = UPLOAD_META[field.key] || {};
+    var max = parseInt(field.maxFiles, 10);
+    if (!(max > 0)) max = 5;
+    var hint = base.hint || ('最多 ' + max + ' 个');
+    hint = String(hint).replace(/最多\s*\d+\s*个/, '最多 ' + max + ' 个');
     return {
       variant: base.variant || 'plan',
-      hint: base.hint || '最多 ' + (field.maxFiles || 5) + ' 个',
+      hint: hint,
       title: base.title || '点击选择或拖拽文件',
       desc: base.desc || '上传后自动保存到文件服务器',
       accept: base.accept || '*/*',

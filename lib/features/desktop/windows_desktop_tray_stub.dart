@@ -1,4 +1,8 @@
+import 'package:flutter/foundation.dart';
+
 import 'windows_tray_unread_item.dart';
+
+final ValueNotifier<bool> _windowObscured = ValueNotifier<bool>(false);
 
 Future<void> initWindowsDesktopTray() async {}
 
@@ -13,6 +17,10 @@ void windowsTraySetUserLabel(String name) {}
 void windowsTrayNotifyIncomingMessage() {}
 
 bool windowsTrayIsWindowInactive() => false;
+
+bool windowsTrayIsWindowObscured() => false;
+
+ValueListenable<bool> windowsTrayWindowObscuredListenable() => _windowObscured;
 
 void setWindowsTrayOnInactiveChanged(void Function(bool inactive)? callback) {}
 

@@ -24,17 +24,18 @@ Future<bool> ensurePhotosPermission() async {
     return _photosAccessGranted(result);
   }
   if (Platform.isAndroid) {
-    // Android 12 及以下走 READ_EXTERNAL_STORAGE；13+ 走 READ_MEDIA_IMAGES。
-    final storage = await Permission.storage.status;
-    if (storage.isGranted) return true;
-    final photos = await Permission.photos.status;
-    if (photos.isGranted) return true;
-
-    var result = await Permission.storage.request();
-    if (result.isGranted) return true;
-    result = await Permission.photos.request();
-    return result.isGranted;
+    // 选图走系统 Photo Picker，不需要 READ_MEDIA_* / 存储权限。
+    // 先申请的话：拒绝或「仅选择部分照片」(limited) 会把相册拦死。
+    // 保存到系统相册仍由 Gal 单独申请，不走这里。
+    return true;
   }
+  return true;
+}
+
+/// IM / 表单从系统相册选图、选视频。iOS 仍要相册权限；Android 交给 Photo Picker。
+Future<bool> ensureGalleryPickerReady() async {
+  if (kIsWeb) return true;
+  if (Platform.isIOS) return ensurePhotosPermission();
   return true;
 }
 

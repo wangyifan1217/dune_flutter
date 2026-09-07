@@ -2,6 +2,8 @@
 /// 非 Windows 平台为空实现。
 library;
 
+import 'package:flutter/foundation.dart';
+
 import 'windows_desktop_tray_stub.dart'
     if (dart.library.io) 'windows_desktop_tray_io.dart'
     as impl;
@@ -28,6 +30,13 @@ void windowsTrayNotifyIncomingMessage() =>
 
 /// 当前桌面窗口是否最小化、失焦或已隐藏到托盘。
 bool windowsTrayIsWindowInactive() => impl.windowsTrayIsWindowInactive();
+
+/// 窗口已隐藏到托盘或最小化（不含失焦）。看不见时才能冻动画。
+bool windowsTrayIsWindowObscured() => impl.windowsTrayIsWindowObscured();
+
+/// [windowsTrayIsWindowObscured] 的可监听版本，供根节点 TickerMode 使用。
+ValueListenable<bool> windowsTrayWindowObscuredListenable() =>
+    impl.windowsTrayWindowObscuredListenable();
 
 /// 窗口前后台状态变化（最小化 / 失焦 / 托盘隐藏 ↔ 恢复）。
 void setWindowsTrayOnInactiveChanged(void Function(bool inactive)? callback) =>

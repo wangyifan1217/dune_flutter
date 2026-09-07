@@ -45,6 +45,7 @@ class ChatAuthImageBubble extends StatefulWidget {
     required this.mine,
     this.conversationId,
     this.onTap,
+    this.onLongPressStart,
   });
 
   final ConversationService service;
@@ -54,6 +55,9 @@ class ChatAuthImageBubble extends StatefulWidget {
 
   /// 为空时默认打开图片预览。
   final VoidCallback? onTap;
+
+  /// 与单击预览放在同一手势器上，避免行级长按把安卓单击吞掉。
+  final GestureLongPressStartCallback? onLongPressStart;
 
   @override
   State<ChatAuthImageBubble> createState() => _ChatAuthImageBubbleState();
@@ -155,6 +159,15 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
     );
   }
 
+  Widget _withImageGestures(Widget child) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _openPreview,
+      onLongPressStart: widget.onLongPressStart,
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final publicUrl = _publicUrl;
@@ -164,6 +177,7 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
         isGif: _isGif,
         mine: widget.mine,
         onTap: _openPreview,
+        onLongPressStart: widget.onLongPressStart,
         error: () => _errorBubble(),
         placeholder: () => _isGif ? _gifPlaceholder() : _staticPlaceholder(),
       );
@@ -176,19 +190,24 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
           future: urlFuture,
           builder: (_, snap) {
             if (snap.connectionState != ConnectionState.done) {
-              return _isGif ? _gifPlaceholder() : _staticPlaceholder();
+              return _withImageGestures(
+                _isGif ? _gifPlaceholder() : _staticPlaceholder(),
+              );
             }
             if (snap.hasError || snap.data == null || snap.data!.isEmpty) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 _fallbackToBytes();
               });
-              return _isGif ? _gifPlaceholder() : _staticPlaceholder();
+              return _withImageGestures(
+                _isGif ? _gifPlaceholder() : _staticPlaceholder(),
+              );
             }
             return _ChatInlineImage(
               url: snap.data!,
               isGif: _isGif,
               mine: widget.mine,
               onTap: _openPreview,
+              onLongPressStart: widget.onLongPressStart,
               error: () => _errorBubble(),
               placeholder: () =>
                   _isGif ? _gifPlaceholder() : _staticPlaceholder(),
@@ -207,7 +226,9 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
       future: bytesFuture,
       builder: (_, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return _isGif ? _gifPlaceholder() : _staticPlaceholder();
+          return _withImageGestures(
+            _isGif ? _gifPlaceholder() : _staticPlaceholder(),
+          );
         }
         if (snap.hasError || snap.data == null || snap.data!.isEmpty) {
           return _errorBubble();
@@ -217,6 +238,7 @@ class _ChatAuthImageBubbleState extends State<ChatAuthImageBubble> {
           isGif: _isGif,
           mine: widget.mine,
           onTap: _openPreview,
+          onLongPressStart: widget.onLongPressStart,
           error: () => _errorBubble(),
           placeholder: () => _isGif ? _gifPlaceholder() : _staticPlaceholder(),
         );
@@ -322,6 +344,7 @@ class _ChatInlineImage extends StatefulWidget {
     this.url,
     this.bytes,
     this.onUrlError,
+    this.onLongPressStart,
   });
 
   final String? url;
@@ -332,6 +355,7 @@ class _ChatInlineImage extends StatefulWidget {
   final Widget Function() error;
   final Widget Function() placeholder;
   final VoidCallback? onUrlError;
+  final GestureLongPressStartCallback? onLongPressStart;
 
   @override
   State<_ChatInlineImage> createState() => _ChatInlineImageState();
@@ -500,7 +524,9 @@ class _ChatInlineImageState extends State<_ChatInlineImage> {
     // 桌面 / APP 均单击打开。Mac 触控板双击在 ListView 里极易丢手势，
     // 表现为「点了没反应」；独立预览窗由 showChatImagePreview 负责。
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: widget.onTap,
+      onLongPressStart: widget.onLongPressStart,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: ConstrainedBox(

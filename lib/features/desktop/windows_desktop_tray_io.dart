@@ -65,6 +65,13 @@ void windowsTrayNotifyIncomingMessage() {
 bool windowsTrayIsWindowInactive() =>
     WindowsDesktopTray.instance.isWindowInactive;
 
+/// 窗口已隐藏到托盘或最小化。失焦不算——双屏上窗口可能仍看得见。
+bool windowsTrayIsWindowObscured() =>
+    WindowsDesktopTray.instance.isWindowObscured;
+
+ValueListenable<bool> windowsTrayWindowObscuredListenable() =>
+    WindowsDesktopTray.instance.windowObscuredListenable;
+
 void windowsTrayReveal() {
   unawaited(WindowsDesktopTray.instance.reveal());
 }
@@ -109,6 +116,7 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   int _unread = 0;
   String _userLabel = '';
   bool? _lastInactiveNotified;
+  final ValueNotifier<bool> _windowObscured = ValueNotifier<bool>(false);
   Timer? _flashTimer;
   Future<void> _iconChain = Future<void>.value();
   bool _iconBusy = false;
@@ -125,18 +133,28 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   /// 最小化、失焦和关闭到托盘时，当前会话不应被视为“正在查看”。
   bool get isWindowInactive => _hidden || _minimized || !_focused;
 
+  /// 用户已经看不见窗口。仅此时才能冻 Ticker，避免双屏失焦把可见动画停掉。
+  bool get isWindowObscured => _hidden || _minimized;
+
+  ValueListenable<bool> get windowObscuredListenable => _windowObscured;
+
   bool get _supportsPeek => Platform.isWindows || Platform.isMacOS;
 
   bool get _shouldFlashTray =>
       !_flashSuppressed && (_unread > 0 || _pendingAlert);
 
   void _emitInactiveChanged() {
+    _emitObscuredChanged();
     final inactive = isWindowInactive;
     if (_lastInactiveNotified == inactive) return;
     _lastInactiveNotified = inactive;
     try {
       onInactiveChanged?.call(inactive);
     } catch (_) {}
+  }
+
+  void _emitObscuredChanged() {
+    _windowObscured.value = isWindowObscured;
   }
 
   Future<void> init() async {

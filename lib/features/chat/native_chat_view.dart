@@ -302,6 +302,14 @@ class _NativeChatViewState extends State<NativeChatView>
   /// 文本发送中（不阻塞媒体上传）。
   bool _sending = false;
 
+  /// 滚动中收到实时消息时只改内存，松手后再画。
+  bool _realtimePaintDeferred = false;
+
+  List<_ChatListEntry>? _cachedListEntries;
+  List<NativeChatMessage>? _cachedListEntriesSource;
+  int _cachedListEntriesLen = 0;
+  int _cachedListEntriesLastId = 0;
+
   /// 媒体/文件上传中（不阻塞文本继续发送）。
   bool _uploading = false;
   bool _showingBackgroundFileUpload = false;
@@ -1193,6 +1201,26 @@ class _NativeChatViewState extends State<NativeChatView>
     _clearStableHistoryViewport();
   }
 
+  void _rememberCachedMessages() {
+    final id = _conversation?.id ?? 0;
+    if (id <= 0 || _messages.isEmpty) return;
+    ChatMessageCache.instance.put(id, _messages);
+  }
+
+  void _flushDeferredRealtimePaint() {
+    if (!_realtimePaintDeferred) return;
+    _realtimePaintDeferred = false;
+    if (!mounted) return;
+    setState(() {});
+    if (_isBrowsingHistory || !_isNearBottom) return;
+    if (windowsTrayIsWindowInactive()) {
+      _pendingStickBottomAfterForeground = true;
+    } else {
+      _scrollToPreferredAnchor(gentle: true);
+    }
+    unawaited(_markReadIfNeeded());
+  }
+
   Future<void> _jumpToPendingMessages() async {
     if (_locatedMode) {
       await _jumpToLatest();
@@ -1280,7 +1308,7 @@ class _NativeChatViewState extends State<NativeChatView>
 
     final stickBottom = !_isBrowsingHistory && _isNearBottom;
     final prevNewestId = _newestMessageId;
-    setState(() {
+    void apply() {
       _messages = _mergeMessages(_messages, [msg]);
       if (stickBottom) {
         _clearPendingNewMessages();
@@ -1292,7 +1320,22 @@ class _NativeChatViewState extends State<NativeChatView>
             .where((m) => m.id > _bottomAnchorMessageId)
             .length;
       }
-    });
+    }
+
+    if (_userScrollActive) {
+      apply();
+      _realtimePaintDeferred = true;
+      _rememberCachedMessages();
+    } else {
+      setState(apply);
+      _rememberCachedMessages();
+    }
+    if (_userScrollActive) {
+      if (_isPrivate && msg.senderUserId != widget.session.userId) {
+        unawaited(_refreshPeerReadFromServer());
+      }
+      return true;
+    }
     if (stickBottom) {
       // 最小化/失焦时 gentle 贴底常空跑；记下来等恢复前台再强制滚到底。
       if (windowsTrayIsWindowInactive()) {
@@ -1535,6 +1578,7 @@ class _NativeChatViewState extends State<NativeChatView>
       }
     } else if (notification is ScrollEndNotification) {
       _userScrollActive = false;
+      _flushDeferredRealtimePaint();
       if (!_isBackgroundLayoutNoise) {
         _updateStickBottomState();
       }
@@ -1974,6 +2018,13 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   List<_ChatListEntry> _buildListEntries() {
+    final lastId = _messages.isEmpty ? 0 : _messages.last.id;
+    if (identical(_cachedListEntriesSource, _messages) &&
+        _cachedListEntries != null &&
+        _cachedListEntriesLen == _messages.length &&
+        _cachedListEntriesLastId == lastId) {
+      return _cachedListEntries!;
+    }
     final entries = <_ChatListEntry>[];
     String? lastDivider;
     for (final m in _messages) {
@@ -1986,6 +2037,10 @@ class _NativeChatViewState extends State<NativeChatView>
         _ChatListEntry.message(m, showSenderMeta: !_isSystemKind(m.kind)),
       );
     }
+    _cachedListEntries = entries;
+    _cachedListEntriesSource = _messages;
+    _cachedListEntriesLen = _messages.length;
+    _cachedListEntriesLastId = lastId;
     return entries;
   }
 
@@ -2032,7 +2087,16 @@ class _NativeChatViewState extends State<NativeChatView>
       setState(() => _locating = true);
     }
     try {
-      final conv = await _resolveConversation();
+      final hintId = widget.conversationHint?.id ?? 0;
+      final prefetchLatest = hintId > 0 && focusId <= 0;
+      final convFuture = _resolveConversation();
+      final pageFuture = prefetchLatest
+          ? _service.fetchMessagePage(
+              hintId,
+              size: _scrollMetricsForScreen().initialPageSize,
+            )
+          : null;
+      final conv = await convFuture;
       if (stale()) return;
       if (conv == null) {
         setState(() {
@@ -2075,6 +2139,8 @@ class _NativeChatViewState extends State<NativeChatView>
           focusId,
           hint: widget.focusMessageHint,
         );
+      } else if (pageFuture != null && conv.id == hintId) {
+        page = await pageFuture;
       } else {
         page = await _service.fetchMessagePage(
           conv.id,
@@ -2083,31 +2149,8 @@ class _NativeChatViewState extends State<NativeChatView>
       }
       if (stale()) return;
       if (!_isPrivate) {
-        try {
-          _groupMembers = await _service.fetchConversationMembers(conv.id);
-        } catch (_) {
-          if (stale()) return;
-          try {
-            final info = await _service.fetchGroupInfo(conv.id);
-            if (stale()) return;
-            _groupMembers = info.members
-                .map(
-                  (m) => <String, dynamic>{
-                    'userId': m.userId,
-                    'displayName': m.displayName,
-                    'name': m.displayName,
-                    'role': m.role,
-                    'roleLabel': m.roleLabel,
-                    'title': m.roleLabel,
-                    'avatarPreset': m.avatarPreset,
-                    'avatarObjectKey': m.avatarObjectKey,
-                  },
-                )
-                .toList(growable: false);
-          } catch (_) {}
-        }
-        if (stale()) return;
         unawaited(_refreshGroupReadMap(conv.id));
+        unawaited(_hydrateGroupMembers(conv.id, gen));
       }
       unawaited(_realtime.ensureConversationSubscription(conv.id));
       if (_isPrivate) {
@@ -2231,6 +2274,41 @@ class _NativeChatViewState extends State<NativeChatView>
         _locating = false;
       });
     }
+  }
+
+  Future<void> _hydrateGroupMembers(int convId, int gen) async {
+    List<Map<String, dynamic>> members = const <Map<String, dynamic>>[];
+    try {
+      members = await _service.fetchConversationMembers(convId);
+    } catch (_) {
+      if (!mounted || gen != _loadGeneration) return;
+      try {
+        final info = await _service.fetchGroupInfo(convId);
+        members = info.members
+            .map(
+              (m) => <String, dynamic>{
+                'userId': m.userId,
+                'displayName': m.displayName,
+                'name': m.displayName,
+                'role': m.role,
+                'roleLabel': m.roleLabel,
+                'title': m.roleLabel,
+                'avatarPreset': m.avatarPreset,
+                'avatarObjectKey': m.avatarObjectKey,
+              },
+            )
+            .toList(growable: false);
+      } catch (_) {
+        return;
+      }
+    }
+    if (!mounted || gen != _loadGeneration) return;
+    if ((_conversation?.id ?? 0) != convId) return;
+    _groupMembers = members;
+    if (_messages.isEmpty) return;
+    setState(() {
+      _messages = _enrichMessages(_messages);
+    });
   }
 
   int? _topVisibleMessageId() {
@@ -2357,23 +2435,11 @@ class _NativeChatViewState extends State<NativeChatView>
     final oldestId = _messages.first.id;
     if (oldestId <= 0) return;
     final anchorMessageId = _topVisibleMessageId() ?? oldestId;
-    final oldMax = _scrollController.hasClients
-        ? _scrollController.position.maxScrollExtent
-        : 0.0;
-    final oldPixels = _scrollController.hasClients
-        ? _scrollController.position.pixels
-        : 0.0;
     final batchSize = _scrollController.hasClients
         ? _ChatScrollMetrics.fromListViewport(
             _scrollController.position.viewportDimension,
           ).batchPageSize
         : _scrollMetricsForScreen().batchPageSize;
-    _olderScrollHold?.cancel();
-    if (_scrollController.hasClients) {
-      _olderScrollHold = _scrollController.position.hold(() {});
-      _olderScrollHoldPixels = oldPixels;
-      _olderScrollHoldMax = oldMax;
-    }
     setState(() => _loadingOlder = true);
     try {
       final page = await _service.fetchMessagePage(
@@ -2390,6 +2456,15 @@ class _NativeChatViewState extends State<NativeChatView>
       }
       final merged = _enrichMessages(_mergeMessages(page.items, _messages));
       if (!mounted) return;
+      // 网络请求期间允许用户继续滚动；响应回来后再以当前视口为锚点。
+      // ScrollHold 只覆盖 prepend 与锚点恢复，避免整个请求期间吞掉滚轮输入。
+      final restoreAnchorMessageId = _topVisibleMessageId() ?? anchorMessageId;
+      final restoreOldPixels = _scrollController.hasClients
+          ? _scrollController.position.pixels
+          : 0.0;
+      final restoreOldMax = _scrollController.hasClients
+          ? _scrollController.position.maxScrollExtent
+          : 0.0;
       // 贴底看最新时补历史：只钉在最新端，不要 ensureVisible 把视口往上拽。
       // 用户已上滑看历史时，绝不能走贴底分支（否则 APP 上滑加载会被拽回最新）。
       final stickBottom =
@@ -2414,7 +2489,14 @@ class _NativeChatViewState extends State<NativeChatView>
         _scheduleUnreadVisibilityCheck();
         return;
       }
-      _scrollRestoreAnchorId = anchorMessageId;
+      _scrollRestoreAnchorId = restoreAnchorMessageId;
+      _olderScrollHold?.cancel();
+      _olderScrollHoldPixels = restoreOldPixels;
+      _olderScrollHoldMax = restoreOldMax;
+      if (_scrollController.hasClients) {
+        _olderScrollHold = _scrollController.position.hold(() {});
+      }
+      _olderScrollRestorePending = true;
       setState(() {
         _messages = merged;
         _hasMore = page.hasMore;
@@ -2422,10 +2504,9 @@ class _NativeChatViewState extends State<NativeChatView>
         _refreshFirstUnreadAfterHistory(merged);
       });
       unawaited(_refreshDownloadedFileFlags());
-      _olderScrollRestorePending = true;
       _olderLoadCooldownUntilMs = DateTime.now().millisecondsSinceEpoch + 600;
       _ensureAnchorVisibleAfterOlderLoad(
-        anchorMessageId,
+        restoreAnchorMessageId,
         fallbackPixels: _olderScrollHoldPixels,
         fallbackOldMax: _olderScrollHoldMax,
         gen: _messageScrollGen,
@@ -2435,6 +2516,7 @@ class _NativeChatViewState extends State<NativeChatView>
       _olderScrollHold?.cancel();
       _olderScrollHold = null;
       _scrollRestoreAnchorId = null;
+      _olderScrollRestorePending = false;
       _showToast('加载历史失败：${friendlyErrorText(e)}');
     } finally {
       if (mounted && _loadingOlder) setState(() => _loadingOlder = false);
@@ -2587,7 +2669,12 @@ class _NativeChatViewState extends State<NativeChatView>
     // 作废进会话时已经排队的贴底 jumpTo，避免 50/150/350ms 后再把定位拽回最新。
     _scrollBottomGen++;
     _messageLocateSettling = true;
-    setState(() => _highlightMessageId = messageId);
+    setState(() {
+      // 让目标行使用 GlobalKey；粗定位把它构建出来后才能用
+      // Scrollable.ensureVisible 按真实行高精确对准。
+      _scrollRestoreAnchorId = messageId;
+      _highlightMessageId = messageId;
+    });
     _highlightTimer?.cancel();
     _highlightTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) setState(() => _highlightMessageId = null);
@@ -2633,6 +2720,9 @@ class _NativeChatViewState extends State<NativeChatView>
       if (gen == _messageScrollGen) {
         _messageLocateSettling = false;
         _olderLoadCooldownUntilMs = DateTime.now().millisecondsSinceEpoch + 800;
+        if (mounted && _scrollRestoreAnchorId == messageId) {
+          setState(() => _scrollRestoreAnchorId = null);
+        }
       }
     }
   }
@@ -3221,6 +3311,23 @@ class _NativeChatViewState extends State<NativeChatView>
     unawaited(_scrollToLatestForInput(userInitiated: true));
   }
 
+  bool _tryApplySentTextMessage(
+    NativeChatMessage? sent, {
+    required int conversationId,
+    required bool locating,
+  }) {
+    if (locating) return false;
+    if (sent == null || sent.id <= 0) return false;
+    if ((_conversation?.id ?? 0) != conversationId) return false;
+    final enriched = _enrichMessages([sent]);
+    final msg = enriched.isEmpty ? sent : enriched.first;
+    setState(() {
+      _messages = _mergeMessages(_messages, [msg]);
+    });
+    _rememberCachedMessages();
+    return true;
+  }
+
   Future<void> _send() async {
     if (_desktopComposerAttachments.isNotEmpty) {
       await _sendDesktopStagedBundle();
@@ -3253,7 +3360,12 @@ class _NativeChatViewState extends State<NativeChatView>
         // 首次建会话的 await 后补一次焦点，防止键盘被系统收起。
         if (keepKeyboard && mounted) _inputFocusNode.requestFocus();
       }
-      await _service.sendText(conv.id, text, payload: payloadOrNull);
+      final locating = _locatedMode || (_effectiveFocusMessageId > 0);
+      final sent = await _service.sendText(
+        conv.id,
+        text,
+        payload: payloadOrNull,
+      );
       _inputController.clear();
       _clearComposeDraft();
       setState(() {
@@ -3261,7 +3373,13 @@ class _NativeChatViewState extends State<NativeChatView>
         _locatedMode = false;
         _quoteDraft = null;
       });
-      await _load(silent: true);
+      if (!_tryApplySentTextMessage(
+        sent,
+        conversationId: conv.id,
+        locating: locating,
+      )) {
+        await _load(silent: true);
+      }
       if (mounted) {
         setState(_clearPendingNewMessages);
         _scrollToPreferredAnchor(force: true);
@@ -3427,7 +3545,7 @@ class _NativeChatViewState extends State<NativeChatView>
 
   Future<bool> _ensurePhotosPermission() async {
     if (kIsWeb) return true;
-    if (await ensurePhotosPermission()) return true;
+    if (await ensureGalleryPickerReady()) return true;
     _showToast(photosPermissionHint(await Permission.photos.status));
     return false;
   }
@@ -3969,7 +4087,14 @@ class _NativeChatViewState extends State<NativeChatView>
       try {
         picked = await _imagePicker.pickMultipleMedia();
       } catch (_) {
-        picked = await _imagePicker.pickMultiImage();
+        try {
+          picked = await _imagePicker.pickMultiImage();
+        } catch (e) {
+          if (mounted) {
+            _showToast('无法打开相册：${friendlyErrorText(e)}', error: true);
+          }
+          return;
+        }
       }
     }
     if (picked.isEmpty) return;
@@ -7623,6 +7748,15 @@ class _NativeChatViewState extends State<NativeChatView>
             mine: mine,
             conversationId: _chatConversationId,
             onTap: () => unawaited(_openChatImageGallery(m)),
+            onLongPressStart: _messageMultiSelectMode
+                ? null
+                : (details) => unawaited(
+                    _onMessageActions(
+                      m,
+                      mine,
+                      anchor: details.globalPosition,
+                    ),
+                  ),
           ),
         ),
       );
@@ -7787,7 +7921,8 @@ class _NativeChatViewState extends State<NativeChatView>
         );
       },
       enableSelection: !_messageMultiSelectMode,
-      selectAllOnLongPress: !isDesktopCommOnly,
+      selectAllOnLongPress: false,
+      preferPartialTextCopy: !isDesktopCommOnly,
     );
   }
 
@@ -8924,6 +9059,8 @@ class _NativeChatViewState extends State<NativeChatView>
                                           final desktop = isDesktopCommOnly;
                                           final textMessage =
                                               m.kind.toUpperCase() == 'TEXT';
+                                          final imageMessage =
+                                              m.kind.toUpperCase() == 'IMAGE';
                                           final isForwardMessage =
                                               _forwardBundleFromPayload(
                                                 m.payload,
@@ -8936,6 +9073,7 @@ class _NativeChatViewState extends State<NativeChatView>
                                           // 纯文字气泡由 ChatTextBubble.onActionsMenu
                                           // 走与文件相同的深色宫格，并保留选区信息；
                                           // 行级手势不再接管，避免 PC 右键抢先导致选区丢失。
+                                          // 图片单击/长按放在气泡上，避免行级长按吞掉安卓单击。
                                           final useTextBubbleMenu =
                                               textMessage &&
                                               !isForwardMessage &&
@@ -8945,7 +9083,8 @@ class _NativeChatViewState extends State<NativeChatView>
                                               !_isSystemKind(m.kind);
                                           final enableLongPress =
                                               canShowActions &&
-                                              !useTextBubbleMenu;
+                                              !useTextBubbleMenu &&
+                                              !imageMessage;
                                           final enableSecondaryTap =
                                               canShowActions &&
                                               desktop &&

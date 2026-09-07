@@ -6,7 +6,7 @@ import '../conversation/comm_unread_notifier.dart';
 import '../nova/nova_icon.dart';
 import '../workbench/workbench_badge_notifier.dart';
 
-/// 底部主 Tab：通讯 · τ管理 · 灯塔 · 我的；PC 竖栏另外保留「工作台」。
+/// 底部主 Tab：通讯 · 饕 · 灯塔 · 我的；PC 竖栏另外保留「工作台」。
 /// 此为 Tab 内容区高度；iOS Home Indicator 的安全区由组件自身额外处理。
 const double kDunesMainTabBarHeight = 64;
 
@@ -87,7 +87,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
 
   bool get _showMyDot => (widget.workbenchBadge?.pendingForMe ?? 0) > 0;
 
-  /// 外部用户：不展示 τ管理 / 灯塔 / 工作台。
+  /// 外部用户：不展示 饕 / 灯塔 / 工作台。
   bool get _hideWorkbenchTabs => widget.chatOnlyMode;
 
   bool get _isVertical => widget.axis == Axis.vertical;
@@ -100,8 +100,8 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
   );
 
   /// 主区域 Tab。
-  /// APP 底栏：通讯 · τ管理 · 灯塔 · 我的
-  /// PC 竖栏：通讯 / τ管理 / 灯塔 / 工作台；「我的」单独沉底。
+  /// APP 底栏：通讯 · 饕 · 灯塔 · 我的
+  /// PC 竖栏：通讯 / 饕 / 灯塔 / 工作台；「我的」单独沉底。
   List<Widget> get _tabs => [
     _tab(
       icon: Icons.forum_outlined,
@@ -112,7 +112,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
     if (!_hideWorkbenchTabs)
       _tab(
         iconBuilder: (color) => _TauTabGlyph(color: color),
-        label: 'τ管理',
+        label: '饕',
         screen: 'QJ',
       ),
     if (!_hideWorkbenchTabs)

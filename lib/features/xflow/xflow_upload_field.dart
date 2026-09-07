@@ -72,20 +72,26 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
 
   Map<String, dynamic> get _uploadMeta {
     final base = _meta[widget.field.key] ?? const {};
-    final maxFiles = widget.field.raw['maxFiles'];
     final fromField = _extensionsFromField(widget.field);
     final extensions = fromField.isNotEmpty
         ? fromField
         : (base['extensions'] as List?)?.cast<String>() ?? const <String>[];
     return {
       'variant': base['variant'] ?? 'plan',
-      'hint': base['hint'] ?? '最多 ${maxFiles ?? 5} 个',
+      'hint': _hintWithMaxFiles(base['hint'] as String?),
       'title': base['title'] ?? '点击选择或拖拽文件',
       'desc': base['desc'] ?? '上传后自动保存到文件服务器',
       'extensions': extensions,
       'maxBytes': base['maxBytes'] ?? 20 * 1024 * 1024,
       'icon': base['icon'] ?? Icons.upload_outlined,
     };
+  }
+
+  /// 文案里的「最多 N 个」跟字段 [maxFiles] 走，避免后端配 10、界面仍写 5。
+  String _hintWithMaxFiles(String? baseHint) {
+    final max = _maxFiles;
+    if (baseHint == null || baseHint.trim().isEmpty) return '最多 $max 个';
+    return baseHint.replaceFirst(RegExp(r'最多\s*\d+\s*个'), '最多 $max 个');
   }
 
   List<String> _extensionsFromField(XflowField field) {
@@ -99,7 +105,14 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
 
   int get _maxFiles {
     final v = widget.field.raw['maxFiles'];
-    if (v is num) return v.toInt();
+    if (v is num) {
+      final n = v.toInt();
+      return n > 0 ? n : 5;
+    }
+    if (v is String) {
+      final n = int.tryParse(v.trim());
+      if (n != null && n > 0) return n;
+    }
     return 5;
   }
 

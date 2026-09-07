@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../../core/http/session_http.dart';
 import '../auth/auth_session_coordinator.dart';
 import '../auth/auth_session.dart';
+import '../desktop/windows_desktop_tray.dart';
 
 class ConversationRealtimeEvent {
   ConversationRealtimeEvent({
@@ -130,6 +131,8 @@ class ConversationRealtimeService {
         unawaited(refreshOnlinePresence());
         _presenceTimer?.cancel();
         _presenceTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+          // 窗口看不见时跳过；恢复时由 Host 立刻补拉，在线绿点不丢。
+          if (windowsTrayIsWindowObscured()) return;
           unawaited(refreshOnlinePresence());
         });
       });

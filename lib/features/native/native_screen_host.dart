@@ -467,6 +467,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     );
     registerPushLifecycleObserver();
     setWindowsTrayOnInactiveChanged(_onDesktopWindowInactiveChanged);
+    windowsTrayWindowObscuredListenable().addListener(
+      _onDesktopWindowObscuredChanged,
+    );
     setWindowsTrayOnPeekOpen(_onWindowsTrayPeekOpen);
     windowsTraySetUserLabel((widget.session.displayName ?? '').trim());
   }
@@ -502,6 +505,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     _syncActiveViewReport();
     _scheduleCommBadgeRefresh();
+  }
+
+  void _onDesktopWindowObscuredChanged() {
+    if (!mounted || windowsTrayIsWindowObscured()) return;
+    // 隐藏/最小化期间跳过了 presence 轮询，窗口重新可见时立刻补一次。
+    unawaited(
+      ConversationRealtimeHub.instance
+          .of(widget.session)
+          .refreshOnlinePresence(),
+    );
   }
 
   void _requestCommBadgeRefreshFromServer() {
@@ -716,6 +729,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     setWindowsTrayOnInactiveChanged(null);
+    windowsTrayWindowObscuredListenable().removeListener(
+      _onDesktopWindowObscuredChanged,
+    );
     setWindowsTrayOnPeekOpen(null);
     setPushBadgeRefreshHandler(null);
     setPushNotificationClickHandler(null);

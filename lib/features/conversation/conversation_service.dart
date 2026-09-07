@@ -490,7 +490,7 @@ class ConversationService {
     return buf.toString();
   }
 
-  Future<void> sendText(
+  Future<NativeChatMessage?> sendText(
     int conversationId,
     String text, {
     Map<String, dynamic>? payload,
@@ -518,11 +518,35 @@ class ConversationService {
         if (body['success'] == false) {
           throw Exception((body['message'] ?? '发送失败').toString());
         }
-        return;
+        return tryMapSentMessage(body);
       } catch (_) {
         if (attempt >= _maxSendAttempts) rethrow;
         await _delayForRetry(attempt);
       }
+    }
+    return null;
+  }
+
+  /// 从发送接口成功体里取出已落库消息。解不出返回 null，不改变失败语义。
+  NativeChatMessage? tryMapSentMessage(Map<String, dynamic> body) {
+    if (body['success'] == false) return null;
+    final data = body['data'];
+    Map<String, dynamic>? raw;
+    if (data is Map) {
+      final map = Map<String, dynamic>.from(data);
+      final nested = map['message'];
+      if (nested is Map) {
+        raw = Map<String, dynamic>.from(nested);
+      } else if (map['id'] != null) {
+        raw = map;
+      }
+    }
+    if (raw == null) return null;
+    try {
+      final msg = _mapMessage(raw);
+      return msg.id > 0 ? msg : null;
+    } catch (_) {
+      return null;
     }
   }
 

@@ -1415,6 +1415,7 @@ class ChatTextBubble extends StatelessWidget {
     this.onActionsMenu,
     this.enableSelection = true,
     this.selectAllOnLongPress = false,
+    this.preferPartialTextCopy = false,
   });
 
   final String text;
@@ -1428,10 +1429,13 @@ class ChatTextBubble extends StatelessWidget {
   final VoidCallback? onSelectionRecall;
 
   /// 与文件消息一致的操作菜单（深色图标宫格）。
-  /// 提供后将不再弹出系统文字选区工具条。
+  /// 桌面仍拦截系统选区工具条；APP 在 [preferPartialTextCopy] 时先出复制/全选/更多。
   final void Function(Offset anchor, String selectedText)? onActionsMenu;
   final bool enableSelection;
   final bool selectAllOnLongPress;
+
+  /// APP：长按先出选区手柄，可拖选片段再复制；「更多」才打开宫格菜单。
+  final bool preferPartialTextCopy;
 
   String _selectedText(TextEditingValue value) {
     final selection = value.selection;
@@ -1550,7 +1554,7 @@ class ChatTextBubble extends StatelessWidget {
                 SelectableText.rich(
                   _buildMentionTextSpan(),
                   contextMenuBuilder: (context, editableTextState) {
-                    // APP 端长按消息时直接选中整条文本，和微信的消息操作习惯一致。
+                    // APP 默认可拖选片段复制；仅在显式要求时才强制全选。
                     final selection =
                         editableTextState.textEditingValue.selection;
                     final needsSelectAll =
@@ -1558,6 +1562,7 @@ class ChatTextBubble extends StatelessWidget {
                         selection.start != 0 ||
                         selection.end != text.length;
                     if (selectAllOnLongPress &&
+                        !preferPartialTextCopy &&
                         needsSelectAll &&
                         text.isNotEmpty) {
                       editableTextState.selectAll(
@@ -1570,9 +1575,49 @@ class ChatTextBubble extends StatelessWidget {
                     // 桌面（尤其 macOS）右键会先选中光标下单词；转发/引用若沿用该选区
                     // 只会带走一词。无明确拖选时按整条消息处理。
                     if (!selectAllOnLongPress &&
+                        !preferPartialTextCopy &&
                         selected.isNotEmpty &&
                         !_isExplicitTextSelection(text, selection)) {
                       selected = '';
+                    }
+                    // APP：先留系统选区工具条，方便拖手柄截取一段再复制。
+                    if (preferPartialTextCopy && onActionsMenu != null) {
+                      final anchor =
+                          editableTextState.contextMenuAnchors.primaryAnchor;
+                      return AdaptiveTextSelectionToolbar.buttonItems(
+                        anchors: editableTextState.contextMenuAnchors,
+                        buttonItems: <ContextMenuButtonItem>[
+                          ContextMenuButtonItem(
+                            label: '复制',
+                            onPressed: () async {
+                              final value = selected.isNotEmpty
+                                  ? selected
+                                  : text.trim();
+                              if (value.isNotEmpty) {
+                                await Clipboard.setData(
+                                  ClipboardData(text: value),
+                                );
+                              }
+                              editableTextState.hideToolbar();
+                            },
+                          ),
+                          ContextMenuButtonItem(
+                            label: '全选',
+                            onPressed: () {
+                              editableTextState.selectAll(
+                                SelectionChangedCause.toolbar,
+                              );
+                            },
+                          ),
+                          ContextMenuButtonItem(
+                            label: '更多',
+                            onPressed: () {
+                              editableTextState.hideToolbar();
+                              onActionsMenu!(anchor, selected);
+                            },
+                          ),
+                        ],
+                      );
                     }
                     // 与文件消息共用深色宫格菜单：拦截系统选区工具条。
                     // selected 为空时由上层按整条消息处理，避免把「未选中」误当成「全选」。

@@ -3264,18 +3264,41 @@ List<String> proposalIntakeTechFillIssues(
 }
 
 bool proposalIntakePurchaseSettleComplete(ProposalFinanceSettleTerms terms) {
+  return proposalIntakePurchaseSettleGaps(terms).isEmpty;
+}
+
+/// 采购供给结算还缺哪些项。按比例结算不要求单价；单价结算不要求比例。
+List<String> proposalIntakePurchaseSettleGaps(ProposalFinanceSettleTerms terms) {
+  final gaps = <String>[];
   final billType =
       (terms.billTypeRef != null && terms.billTypeRef!.isNotEmpty) ||
       terms.billType.trim().isNotEmpty;
+  if (!billType) gaps.add('账单类型');
   final settleMode =
       (terms.settleModeRef != null && terms.settleModeRef!.isNotEmpty) ||
       terms.settleMode.trim().isNotEmpty;
-  return billType &&
-      settleMode &&
-      terms.invoiceType.trim().isNotEmpty &&
-      terms.effectiveTime.trim().isNotEmpty &&
-      terms.expireTime.trim().isNotEmpty &&
-      terms.isSkuComplete;
+  if (!settleMode) gaps.add('结算方式');
+  if (proposalIntakeSettleIsTier(terms)) {
+    if (terms.settleRule.trim().isEmpty && terms.displayFormula.isEmpty) {
+      gaps.add('阶梯价格');
+    }
+  } else if (proposalIntakeSettleUsesRatio(terms) &&
+      proposalIntakeSettleUsesUnitPrice(terms)) {
+    if (terms.displayRatio.isEmpty) gaps.add('结算比例');
+    if (terms.displayUnitPrice.isEmpty) gaps.add('结算单价');
+  } else if (proposalIntakeSettleUsesUnitPrice(terms)) {
+    if (terms.displayUnitPrice.isEmpty && terms.resolvedPrice.isEmpty) {
+      gaps.add('结算单价');
+    }
+  } else if (terms.resolvedPrice.isEmpty) {
+    gaps.add(proposalIntakeSettleUsesRatio(terms) ? '结算比例' : '结算金额');
+  }
+  if (terms.displayFormula.isEmpty) gaps.add('计算公式');
+  if (terms.invoiceType.trim().isEmpty) gaps.add('发票类型');
+  if (terms.taxRate.trim().isEmpty) gaps.add('税率');
+  if (terms.effectiveTime.trim().isEmpty) gaps.add('生效时间');
+  if (terms.expireTime.trim().isEmpty) gaps.add('失效时间');
+  return gaps;
 }
 
 List<String> proposalIntakePurchaseSupplyIssues(Map<String, dynamic> form) {
@@ -3347,8 +3370,9 @@ List<String> proposalIntakePurchaseSupplyIssues(Map<String, dynamic> form) {
       final terms = settlements[j].terms;
       if (j > 0 && terms.isBlank) continue;
       if (!proposalIntakePurchaseSettleComplete(terms)) {
+        final gaps = proposalIntakePurchaseSettleGaps(terms);
         issues.add(
-          '$label ${proposalIntakeSettleLabel(j)}未填完账单类型、结算方式、金额、计算公式、发票类型、税率和生效失效时间',
+          '$label ${proposalIntakeSettleLabel(j)}未填完：${gaps.join('、')}',
         );
       }
     }

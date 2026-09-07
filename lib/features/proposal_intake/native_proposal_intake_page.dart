@@ -6681,6 +6681,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String reviewItemPrefix = 'financeItem',
     String? itemReviewLabel,
     bool showItemReview = true,
+    bool requireSchedule = false,
   }) {
     return Container(
       width: double.infinity,
@@ -6727,6 +6728,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               showItemReview: showItemReview,
               syncSource: syncSource,
               productSource: productSource,
+              requireSchedule: requireSchedule,
               onRemove: () => onRemove(settlements[i].id),
               onPatch: (terms) => onPatch(settlements[i].id, terms),
             ),
@@ -6751,6 +6753,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     required String productSource,
     required VoidCallback onRemove,
     required ValueChanged<ProposalFinanceSettleTerms> onPatch,
+    bool requireSchedule = false,
   }) {
     return Container(
       width: double.infinity,
@@ -6817,6 +6820,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   includeChannel: false,
                   syncSource: syncSource,
                   productSource: productSource,
+                  requireSchedule: requireSchedule,
                   onChanged: onPatch,
                 ),
               ],
@@ -7147,6 +7151,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     bool includeChannel = true,
     String syncSource = '',
     String productSource = 'CHANNEL',
+    bool requireSchedule = false,
   }) {
     if (syncSource.trim().isNotEmpty) {
       _prefetchSettle(syncSource, productSource);
@@ -7238,6 +7243,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         display: parsed == null ? value : _fmtDate(parsed),
         empty: value.trim().isEmpty,
         enabled: enabled,
+        required: requireSchedule,
         onTap: !enabled
             ? null
             : () async {
@@ -10006,6 +10012,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             reviewItemPrefix: 'technologyItem',
             itemReviewLabel: _techReviewLabel,
             showItemReview: false,
+            requireSchedule: true,
             settlements: proposalIntakeSupplySettlements(row),
             wide: wide,
             enabled: _canEditMarket && !_showSelectedAsText,

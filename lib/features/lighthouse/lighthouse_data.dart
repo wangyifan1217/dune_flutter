@@ -7,6 +7,7 @@ class LighthouseDataBundle {
     required this.supplyDetail,
     required this.channelDetail,
     required this.metrics,
+    this.peopleDetail = const <String, dynamic>{},
   });
 
   final Map<String, dynamic> data;
@@ -15,12 +16,17 @@ class LighthouseDataBundle {
   final Map<String, dynamic> channelDetail;
   final Map<String, dynamic> metrics;
 
+  /// 人效 L2 —— 接口不随 overview 下发，只由 withDetail 逐个人回填。
+  /// 单独开一格而不是塞进 productDetail：人名和产品名撞了就是串档。
+  final Map<String, dynamic> peopleDetail;
+
   factory LighthouseDataBundle.empty() {
     return LighthouseDataBundle(
       data: <String, dynamic>{
         'product': <Map<String, dynamic>>[],
         'supply': <Map<String, dynamic>>[],
         'channel': <Map<String, dynamic>>[],
+        'people': <Map<String, dynamic>>[],
         'province': <Map<String, dynamic>>[],
       },
       productDetail: <String, dynamic>{},
@@ -61,6 +67,7 @@ class LighthouseDataBundle {
     Map<String, dynamic>? supplyDetail,
     Map<String, dynamic>? channelDetail,
     Map<String, dynamic>? metrics,
+    Map<String, dynamic>? peopleDetail,
   }) {
     return LighthouseDataBundle(
       data: data ?? this.data,
@@ -68,6 +75,7 @@ class LighthouseDataBundle {
       supplyDetail: supplyDetail ?? this.supplyDetail,
       channelDetail: channelDetail ?? this.channelDetail,
       metrics: metrics ?? this.metrics,
+      peopleDetail: peopleDetail ?? this.peopleDetail,
     );
   }
 
@@ -125,6 +133,9 @@ class LighthouseDataBundle {
       case 'channel':
         final next = Map<String, dynamic>.from(channelDetail)..[key] = detail;
         return copyWith(channelDetail: next);
+      case 'people':
+        final next = Map<String, dynamic>.from(peopleDetail)..[key] = detail;
+        return copyWith(peopleDetail: next);
       default:
         final next = Map<String, dynamic>.from(productDetail)..[key] = detail;
         return copyWith(productDetail: next);

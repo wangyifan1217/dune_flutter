@@ -111,9 +111,74 @@ void main() {
     });
   });
 
+  test('supply ledger drops 资管对账 confirmed and reject chips', () {
+    expect(lighthouseTabHasRecon('supply'), isFalse);
+    expect(lighthouseReconStatusForRow('supply', null), isNull);
+    expect(
+      lighthouseReconStatusForRow('supply', {
+        'state': 'partial',
+        'confirmedCount': 9,
+        'totalCount': 10,
+        'comments': [
+          {'content': '折扣对不上', 'isReject': true},
+        ],
+      }),
+      isNull,
+    );
+    expect(
+      lighthouseReconRawOrPreview(
+        tab: 'supply',
+        index: 0,
+        raw: null,
+        preview: true,
+      ),
+      isNull,
+    );
+  });
+
+  test('channel ledger drops 日清月结确认 and 资管对账 chips', () {
+    expect(lighthouseTabHasRecon('channel'), isFalse);
+    expect(lighthouseTabHasDailyClose('channel'), isFalse);
+    expect(lighthouseReconUsesLocalPreview, isFalse);
+    expect(lighthouseReconStatusForRow('channel', null), isNull);
+    expect(
+      lighthouseReconStatusForRow('channel', {
+        'state': 'partial',
+        'confirmedCount': 9,
+        'totalCount': 10,
+        'pendingStageLabel': '业务',
+        'owner': {'name': '卢笛', 'role': '业务'},
+        'comments': [
+          {'content': '折扣对不上', 'isReject': true},
+        ],
+      }),
+      isNull,
+    );
+    expect(
+      lighthouseDailyCloseForRow('channel', {
+        'lastDay': {'date': '2026-09-01', 'scale': 81600.0, 'profit': 12100.0},
+        'approval': {
+          'finance': 'done',
+          'business': 'pending',
+          'operation': 'pending',
+        },
+      }),
+      isNull,
+    );
+    expect(
+      lighthouseReconRawOrPreview(
+        tab: 'channel',
+        index: 0,
+        raw: null,
+        preview: true,
+      ),
+      isNull,
+    );
+  });
+
   test('tag3 recon: project-count score, reject wins, who to chase', () {
     LighthouseReconStatus st(Map<String, dynamic> extra) =>
-        lighthouseReconStatusForRow('channel', {
+        lighthouseParseReconStatus({
           'state': 'partial',
           ...extra,
         })!;
@@ -163,7 +228,7 @@ void main() {
     // 一个都没确认时说 0/10 —— 比「未对账」多告诉一件事：一共几个。
     expect(
       lighthouseReconChipLabel(
-        lighthouseReconStatusForRow('channel', {
+        lighthouseParseReconStatus({
           'state': 'none',
           'confirmedCount': 0,
           'totalCount': 10,
@@ -194,7 +259,7 @@ void main() {
         raw: null,
         preview: true,
       ),
-      isNotNull,
+      isNull,
     );
     expect(
       lighthouseReconRawOrPreview(
@@ -274,16 +339,13 @@ void main() {
     expect(rows[0].containsKey('daily'), isFalse);
     expect(lighthouseReconStatusForRow('product', null), isNull);
     for (final row in rows) {
-      final status = lighthouseReconStatusForRow('supply', row['recon']);
-      expect(status, isNotNull);
-      expect(lighthouseReconChipLabel(status!), '未对账');
-      expect(status.hasComments, isFalse);
+      expect(lighthouseReconStatusForRow('supply', row['recon']), isNull);
     }
     expect(lighthouseParseDailyClose(rows[0]['daily']), isNull);
     final overview = lighthouseSummarizeRecon([
-      lighthouseReconStatusForRow('supply', rows[0]['recon']),
-      lighthouseReconStatusForRow('supply', rows[1]['recon']),
-      lighthouseReconStatusForRow('supply', rows[2]['recon']),
+      lighthouseReconStatusForRow('channel', rows[0]['recon']),
+      lighthouseReconStatusForRow('channel', rows[1]['recon']),
+      lighthouseReconStatusForRow('channel', rows[2]['recon']),
     ]);
     expect(overview.doneRows, 0);
     expect(lighthouseReconOverviewLabel(overview), '');
@@ -400,10 +462,7 @@ void main() {
     expect(lighthouseReconChipLabel(none), isNot(contains('待回款')));
     expect(lighthouseReconChipLabel(st('done', 'D', 2)), '已对账');
     expect(lighthouseReconChipLabel(st('partial', 'D', 2)), '对账 100%');
-    expect(
-      lighthouseReconChipLabel(lighthouseReconStatusForRow('supply', null)!),
-      '未对账',
-    );
+    expect(lighthouseReconStatusForRow('channel', null), isNull);
   });
 
   test('recon owner: who to chase, separate from who signed off', () {
@@ -499,13 +558,10 @@ void main() {
       lighthouseReconCommentMax,
     );
 
-    // 字段没接的行按未对账呈现，不再灌备注假数据。
+    // 字段没接的行不灌备注假数据。渠道 / 供给都不挂对账 chip。
     expect(lighthouseParseReconStatus({'comments': []}), isNull);
-    expect(lighthouseReconStatusForRow('supply', null)!.hasComments, isFalse);
-    expect(
-      lighthouseReconChipLabel(lighthouseReconStatusForRow('supply', null)!),
-      '未对账',
-    );
+    expect(lighthouseReconStatusForRow('channel', null), isNull);
+    expect(lighthouseReconStatusForRow('supply', null), isNull);
   });
 
   test('hero metric expand shows all trend charts without formulas', () {
@@ -971,11 +1027,13 @@ void main() {
     expect(lighthouseFundPoolVouchersSection.flowStartIndex, isNull);
     expect(lighthouseFundPoolReconSection.flowStartIndex, isNull);
     expect(lighthouseFundPoolInvoiceSection.flowStartIndex, isNull);
-    // 对账状态：只有供给 / 渠道有，产品维不对账。
-    expect(lighthouseTabHasRecon('supply'), isTrue);
-    expect(lighthouseTabHasRecon('channel'), isTrue);
+    // 对账状态：账本维都不挂已确认 / 有驳回 / 日清月结确认。
+    expect(lighthouseTabHasRecon('supply'), isFalse);
+    expect(lighthouseTabHasRecon('channel'), isFalse);
     expect(lighthouseTabHasRecon('product'), isFalse);
     expect(lighthouseTabHasRecon('netTa'), isFalse);
+    expect(lighthouseTabHasDailyClose('channel'), isFalse);
+    expect(lighthouseTabHasDailyClose('supply'), isFalse);
     // 字段缺失 → null → 整块不渲染。「没有状态」和「未对账」是两件事，
     // 混成一个会让联调前所有行全变红。
     expect(lighthouseParseReconStatus(null), isNull);
@@ -1230,23 +1288,13 @@ void main() {
       {'name': '云南'},
     ]);
     expect(demo[0].containsKey('recon'), isFalse);
-    expect(
-      lighthouseReconChipLabel(
-        lighthouseReconStatusForRow('supply', demo[0]['recon'])!,
-      ),
-      '未对账',
-    );
-    expect(
-      lighthouseReconChipLabel(
-        lighthouseReconStatusForRow('supply', demo[2]['recon'])!,
-      ),
-      '未对账',
-    );
+    expect(lighthouseReconStatusForRow('supply', demo[0]['recon']), isNull);
+    expect(lighthouseReconStatusForRow('supply', demo[2]['recon']), isNull);
     expect(lighthouseParseDailyClose(demo[0]['daily']), isNull);
     final overview = lighthouseSummarizeRecon([
-      lighthouseReconStatusForRow('supply', demo[0]['recon']),
-      lighthouseReconStatusForRow('supply', demo[1]['recon']),
-      lighthouseReconStatusForRow('supply', demo[2]['recon']),
+      lighthouseReconStatusForRow('channel', demo[0]['recon']),
+      lighthouseReconStatusForRow('channel', demo[1]['recon']),
+      lighthouseReconStatusForRow('channel', demo[2]['recon']),
     ]);
     expect(overview.hasOverdue, isFalse);
     expect(overview.overdueRows, 0);
@@ -1763,14 +1811,43 @@ void main() {
       'product',
       'supply',
       'channel',
+      'people',
       'netTa',
     ]);
     expect(lighthouseLedgerPrimaryTabLabels['netTa'], '净TA');
+    expect(lighthouseLedgerPrimaryTabLabels['people'], '人效');
+    expect(lighthouseDetailSubTabsFor('product'), [
+      'supply',
+      'channel',
+      'project',
+      'people',
+    ]);
+    expect(lighthouseDetailSubTabsFor('supply'), [
+      'product',
+      'channel',
+      'project',
+      'people',
+    ]);
+    expect(lighthouseDetailSubTabsFor('channel'), [
+      'product',
+      'supply',
+      'project',
+      'people',
+    ]);
+    expect(lighthouseDetailSubTabsFor('people'), [
+      'product',
+      'supply',
+      'channel',
+    ]);
     expect(lighthouseLedgerTabShowsCategoryChips('product'), isTrue);
     expect(lighthouseLedgerTabShowsCategoryChips('netTa'), isFalse);
+    // 人效 = 账本按负责人分组，行上带板块，所以跟其余账本维一样吃分类 chip。
+    expect(lighthouseLedgerTabShowsCategoryChips('people'), isTrue);
     expect(lighthouseLedgerTabShowsCategoryChips('analysis'), isFalse);
     expect(lighthouseLedgerShowsAnalysisTab, isFalse);
-    expect(lighthouseLedgerShowsPeopleTab, isFalse);
+    expect(lighthouseLedgerShowsPeopleTab, isTrue);
+    expect(lighthousePeopleTabVisible(kpiPerformanceAccess: true), isTrue);
+    expect(lighthousePeopleTabVisible(kpiPerformanceAccess: false), isFalse);
     expect(lighthouseLedgerShowsDiscountBoard, isFalse);
     expect(lighthouseLedgerShowsDiscountUi, isFalse);
     expect(lighthouseLedgerPrimaryTabHeight, 44);
@@ -1813,11 +1890,13 @@ void main() {
     expect(lighthouseHeroSummaryIconKey('产品汇总'), 'product');
     expect(lighthouseHeroSummaryIconKey('供给方汇总'), 'supply');
     expect(lighthouseHeroSummaryIconKey('渠道汇总'), 'channel');
+    expect(lighthouseHeroSummaryIconKey('人效汇总'), 'people');
     expect(lighthouseHeroSummaryIconKey('分析总览'), 'analysis');
     expect(lighthouseHeroSummaryIconKey('某产品详情'), 'overview');
     expect(lighthouseHeroSummaryIconKey('产品 · 中石油现金券'), 'product');
     expect(lighthouseHeroSummaryIconKey('供给 · 广东省'), 'supply');
     expect(lighthouseHeroSummaryIconKey('渠道 · 产险'), 'channel');
+    expect(lighthouseHeroSummaryIconKey('人效 · 王轩'), 'people');
   });
 
   test('hero summary range matches the selected interval control', () {
@@ -1948,9 +2027,20 @@ void main() {
     expect(lighthouseNetTAHeroSparkHeightFor(390), 216);
     expect(lighthouseNetTAHeroSparkHeightFor(800), 180);
     expect(lighthouseNetTABankBalanceExtraHeight, 40);
+    expect(lighthouseHeroBiButtonReserveHeight, 32);
     expect(
       lighthouseNetTAHeroSparkHeightFor(800, hasBankBalance: true),
       180 + lighthouseNetTABankBalanceExtraHeight,
+    );
+    expect(
+      lighthouseNetTAHeroSparkHeightFor(
+        390,
+        hasBankBalance: true,
+        hasBiButton: true,
+      ),
+      216 +
+          lighthouseNetTABankBalanceExtraHeight +
+          lighthouseHeroBiButtonReserveHeight,
     );
     expect(lighthouseCompactHeroChartMaxHeightFor(390), 112);
     expect(lighthouseCompactHeroChartMaxHeightFor(800), 84);
@@ -2032,21 +2122,6 @@ void main() {
     );
   });
 
-  test('ledger highlight tool has one compact label for each mode', () {
-    expect(
-      lighthouseLedgerHighlightModeLabel(rowMode: false, cellMode: false),
-      '标记',
-    );
-    expect(
-      lighthouseLedgerHighlightModeLabel(rowMode: true, cellMode: false),
-      '行标记',
-    );
-    expect(
-      lighthouseLedgerHighlightModeLabel(rowMode: false, cellMode: true),
-      '格标记',
-    );
-  });
-
   group('lighthouseHeroTrendPanes', () {
     test('keeps scale and pnl on separate axes', () {
       expect(
@@ -2085,59 +2160,6 @@ void main() {
       expect(ticks.length, 3);
       expect(ticks.first, lessThan(100));
       expect(ticks.last, greaterThan(100));
-    });
-  });
-
-  group('lighthouseLedgerHighlightKey', () {
-    test('is stable for the same business row', () {
-      final row = <String, dynamic>{
-        'name': '中石油',
-        'group': '能源',
-        'supplierProductCode': 'CNPC-001',
-      };
-      expect(
-        lighthouseLedgerHighlightKey('supply', row),
-        lighthouseLedgerHighlightKey('supply', Map.of(row)),
-      );
-    });
-
-    test('separates tabs and business identities', () {
-      final row = <String, dynamic>{'name': '中石油', 'group': '能源'};
-      expect(
-        lighthouseLedgerHighlightKey('product', row),
-        isNot(lighthouseLedgerHighlightKey('supply', row)),
-      );
-      expect(
-        lighthouseLedgerHighlightKey('supply', row),
-        isNot(
-          lighthouseLedgerHighlightKey('supply', {
-            'name': '中石油',
-            'group': '运营商',
-          }),
-        ),
-      );
-    });
-  });
-
-  group('lighthouseLedgerCellHighlightKey', () {
-    final row = <String, dynamic>{
-      'name': '中石化现金券',
-      'group': '能源',
-      'supplierProductCode': 'SINOPEC-001',
-    };
-
-    test('is stable for the same row and metric', () {
-      expect(
-        lighthouseLedgerCellHighlightKey('product', row, 'revenue'),
-        lighthouseLedgerCellHighlightKey('product', Map.of(row), 'revenue'),
-      );
-    });
-
-    test('separates metrics in the same row', () {
-      expect(
-        lighthouseLedgerCellHighlightKey('product', row, 'revenue'),
-        isNot(lighthouseLedgerCellHighlightKey('product', row, 'totalCost')),
-      );
     });
   });
 
@@ -2204,6 +2226,39 @@ void main() {
       expect(lighthouseDisplayRatePct(double.infinity), isNull);
     });
 
+    test('operator gross margin uses sales, not verified', () {
+      expect(lighthouseGrossMarginUsesSales('运营商'), isTrue);
+      expect(lighthouseGrossMarginUsesSales('能源'), isFalse);
+      expect(lighthouseGrossMarginFormulaText('运营商'), '毛利润 ÷ 销售额');
+      expect(lighthouseGrossMarginFormulaText('能源'), '毛利润 ÷ 核销额');
+      expect(
+        lighthouseGrossMarginDisplayPct(
+          profit: 412300,
+          verifiedSales: 80,
+          sales: 3843000,
+          group: '运营商',
+        ),
+        closeTo(10.73, 0.05),
+      );
+      expect(
+        lighthouseGrossMarginSeries(
+          profit: [40, 30],
+          verifiedSales: [10, 10],
+          sales: [200, 150],
+          group: '运营商',
+        ),
+        [20, 20],
+      );
+      expect(
+        lighthouseHeroFormulaForKey('grossMargin', group: '运营商')?.expression,
+        '毛利润 ÷ 销售额',
+      );
+      expect(
+        lighthouseHeroFormulaForKey('grossMargin')?.expression,
+        '毛利润 ÷ 核销额',
+      );
+    });
+
     test('normal product margins remain displayable', () {
       expect(
         lighthouseGrossMarginDisplayPct(
@@ -2250,6 +2305,7 @@ void main() {
       expect(lighthouseCanFallbackToRootTrend(isDrill: true), isFalse);
       expect(lighthouseCanFallbackToChildTrend(isDrill: true), isTrue);
       expect(lighthouseTrendTabForSubDim('supply'), 'supply');
+      expect(lighthouseTrendTabForSubDim('people'), 'people');
       expect(lighthouseTrendTabForSubDim('productName'), isNull);
       expect(
         lighthouseTrendMapUsable({
@@ -2302,6 +2358,7 @@ void main() {
       expect(lighthouseDefaultGroupFilter('product'), '全部');
       expect(lighthouseDefaultGroupFilter('supply'), '全部');
       expect(lighthouseDefaultGroupFilter('channel'), '全部');
+      expect(lighthouseDefaultGroupFilter('people'), '全部');
     });
 
     test('use backend summary when no filter', () {
@@ -2806,7 +2863,9 @@ void main() {
       expect(lighthouseTrendSoloAfterTap('revenue', ''), isNull);
     });
 
-    test('solo hides every other series that actually has data', () {
+    test('solo keeps every series with data on screen (v15)', () {
+      // v15 · solo 不再藏线，只把强调色改判给被点的那条；可见性 == 有没有数据。
+      expect(lighthouseTrendSoloKeepsContext, isTrue);
       expect(
         lighthouseTrendVisibleFlags(
           hasRevenue: true,
@@ -2816,7 +2875,7 @@ void main() {
           hasScaleAlt: true,
           soloKey: 'profit',
         ),
-        [false, false, true, false, false, false, false],
+        [true, true, true, true, true, false, false],
       );
       // 图例可点性看「有没有数据」，不受单线规则影响。
       expect(
@@ -2863,7 +2922,7 @@ void main() {
           hasCostAlt: true,
           soloKey: 'costAlt',
         ),
-        [false, false, false, false, false, true, false],
+        [true, true, true, true, true, true, false],
       );
       expect(
         lighthouseTrendVisibleFlags(
@@ -2875,7 +2934,7 @@ void main() {
           hasStock: true,
           soloKey: 'stock',
         ),
-        [false, false, false, false, false, false, true],
+        [true, true, true, true, true, false, true],
       );
     });
 
@@ -2909,6 +2968,56 @@ void main() {
         ]),
         6,
       );
+    });
+  });
+
+  group('lighthouseRangeDraft', () {
+    final d2 = DateTime(2026, 9, 2);
+    final d8 = DateTime(2026, 9, 8);
+
+    test('open with only start focuses end', () {
+      final draft = lighthouseRangeDraftOpen(start: d2);
+      expect(draft.start, d2);
+      expect(draft.end, isNull);
+      expect(draft.focus, LighthouseRangeFocus.end);
+    });
+
+    test('tap 开始 / 结束 switches which day the calendar writes', () {
+      var draft = lighthouseRangeDraftOpen(start: d2);
+      draft = lighthouseRangeDraftTapChip(draft, LighthouseRangeFocus.start);
+      draft = lighthouseRangeDraftTapDay(draft, DateTime(2026, 9, 1));
+      expect(draft.start, DateTime(2026, 9, 1));
+      expect(draft.end, isNull);
+      expect(draft.focus, LighthouseRangeFocus.end);
+
+      draft = lighthouseRangeDraftTapChip(draft, LighthouseRangeFocus.end);
+      draft = lighthouseRangeDraftTapDay(draft, d8);
+      expect(draft.start, DateTime(2026, 9, 1));
+      expect(draft.end, d8);
+      expect(draft.canConfirm, isTrue);
+    });
+
+    test('changing start after a full range keeps the end', () {
+      var draft = lighthouseRangeDraftOpen(start: d2, end: d8);
+      draft = lighthouseRangeDraftTapChip(draft, LighthouseRangeFocus.start);
+      draft = lighthouseRangeDraftTapDay(draft, DateTime(2026, 9, 3));
+      expect(draft.start, DateTime(2026, 9, 3));
+      expect(draft.end, d8);
+    });
+
+    test('start after end swaps so the range stays valid', () {
+      var draft = lighthouseRangeDraftOpen(start: d2, end: d8);
+      draft = lighthouseRangeDraftTapChip(draft, LighthouseRangeFocus.start);
+      draft = lighthouseRangeDraftTapDay(draft, DateTime(2026, 9, 10));
+      expect(draft.start, d8);
+      expect(draft.end, DateTime(2026, 9, 10));
+    });
+
+    test('end before start swaps so the range stays valid', () {
+      var draft = lighthouseRangeDraftOpen(start: d8);
+      draft = lighthouseRangeDraftTapDay(draft, d2);
+      expect(draft.start, d2);
+      expect(draft.end, d8);
     });
   });
 }

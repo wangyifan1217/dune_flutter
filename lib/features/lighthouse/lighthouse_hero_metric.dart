@@ -55,12 +55,19 @@ double lighthouseCompactHeroSparkHeightFor(double width) =>
 /// 24px 不够，「本月净TA」的环比行会 BOTTOM OVERFLOW ~13px。
 const double lighthouseNetTABankBalanceExtraHeight = 40;
 
+/// L1 大数卡底「BI 视图」通栏底座高度。净TA 左侧已有银行余额时，
+/// 这截不进原 40px extra，会 BOTTOM OVERFLOW ~31px。
+const double lighthouseHeroBiButtonHeight = 32;
+const double lighthouseHeroBiButtonReserveHeight = lighthouseHeroBiButtonHeight;
+
 double lighthouseNetTAHeroSparkHeightFor(
   double width, {
   bool hasBankBalance = false,
+  bool hasBiButton = false,
 }) =>
     lighthouseCompactHeroSparkHeightFor(width) +
-    (hasBankBalance ? lighthouseNetTABankBalanceExtraHeight : 0);
+    (hasBankBalance ? lighthouseNetTABankBalanceExtraHeight : 0) +
+    (hasBiButton ? lighthouseHeroBiButtonReserveHeight : 0);
 
 double lighthouseCompactHeroChartMaxHeightFor(double width) =>
     lighthouseCompactHeroIsNarrow(width)
@@ -280,6 +287,22 @@ String? lighthouseTrendSoloAfterTap(String? current, String tapped) {
 /// 时共用同一根 Y，两线之间的面积就是未核销差额，是真实可读的量。
 const bool lighthouseTrendDrawsSingleLine = false;
 
+/// v15 · solo（点中某个指标）不再把其余序列藏掉，只把它们降成中性上下文线。
+///
+///   「点一下别的线全没了」是这张图最常被抱怨的地方：读者同时失去了参照系
+///   和形状对比 —— 单看一条线，既不知道它相对其他几条是高是低，也不知道
+///   这个拐点是它自己的还是全盘的。
+///   规则没变，仍然是 **任何时刻画面上最多一个强调色**：solo 只是把强调色
+///   从「优先级挑出来的主线」改判给被点的那条，其余照旧走中性阶。
+///   想回到「只画一条」把这里改回 false 即可。
+const bool lighthouseTrendSoloKeepsContext = true;
+
+/// 非焦点内容的统一淡化度 —— 走势上下文线、未选中的指标格共用同一个值。
+///
+///   淡化在全页必须是同一种语言：一处 0.34、一处 0.5、一处换个颜色，
+///   读者就得为每个区域重新学一遍「什么叫没被选中」。
+const double lighthouseHeroContextOpacity = 0.45;
+
 /// 「哪几条有数据」。图例的可点性看这个，不受单线规则影响 ——
 /// 没画在图上不等于点不了，恰恰相反：点它就是为了把它换上去。
 List<bool> lighthouseTrendBaseFlags({
@@ -326,6 +349,8 @@ List<bool> lighthouseTrendVisibleFlags({
       : lighthouseTrendSeriesKeys.indexOf(soloKey);
   final soloValid = i >= 0 && i < base.length && base[i];
   if (soloValid) {
+    // 保留全部基线，只是强调色改判给 solo 那条（见 lighthouseTrendSoloKeepsContext）。
+    if (lighthouseTrendSoloKeepsContext) return base;
     return <bool>[for (var k = 0; k < n; k++) k == i];
   }
   if (!lighthouseTrendDrawsSingleLine) return base;
@@ -476,32 +501,6 @@ List<double> lighthouseHeroAxisTicks(List<double> values) {
   }
   return <double>[minValue, (minValue + maxValue) / 2, maxValue];
 }
-
-/// Stable persisted identity for a ledger row.
-String lighthouseLedgerHighlightKey(String tab, Map<String, dynamic> row) {
-  const identityFields = <String>[
-    'name',
-    'group',
-    'key',
-    'productCode',
-    'supplierProductCode',
-    'channelProductId',
-    'projectId',
-  ];
-  String clean(Object? value) =>
-      (value?.toString().trim() ?? '').replaceAll('\u001f', ' ');
-  return <String>[
-    clean(tab),
-    for (final field in identityFields) clean(row[field]),
-  ].join('\u001f');
-}
-
-/// Stable persisted identity for one metric cell in a ledger row.
-String lighthouseLedgerCellHighlightKey(
-  String tab,
-  Map<String, dynamic> row,
-  String metricKey,
-) => '${lighthouseLedgerHighlightKey(tab, row)}\u001f${metricKey.trim()}';
 
 class LighthouseHeroVerticalSection {
   const LighthouseHeroVerticalSection(this.key, this.title, this.metricKeys);
@@ -916,19 +915,59 @@ const lighthouseLedgerPrimaryTabs = <String>[
   'product',
   'supply',
   'channel',
+  'people',
   'netTa',
 ];
+
+/// 产品 / 供给 / 渠道二级页的交叉维。人效是「这个实体按负责人拆开」。
+const lighthouseProductDetailSubTabs = <String>[
+  'supply',
+  'channel',
+  'project',
+  'people',
+];
+const lighthouseSupplyDetailSubTabs = <String>[
+  'product',
+  'channel',
+  'project',
+  'people',
+];
+const lighthouseChannelDetailSubTabs = <String>[
+  'product',
+  'supply',
+  'project',
+  'people',
+];
+
+List<String> lighthouseDetailSubTabsFor(String type) {
+  switch (type) {
+    case 'supply':
+      return lighthouseSupplyDetailSubTabs;
+    case 'channel':
+      return lighthouseChannelDetailSubTabs;
+    case 'people':
+      return const ['product', 'supply', 'channel'];
+    default:
+      return lighthouseProductDetailSubTabs;
+  }
+}
 
 const lighthouseLedgerPrimaryTabLabels = <String, String>{
   'product': '产品',
   'supply': '供给方',
   'channel': '渠道',
   'netTa': '净TA',
+  'people': '人效',
   'analysis': '分析',
 };
 
+/// 人效也吃分类 chip：行上的板块是「这个人毛利最大的那块」，
+/// 与产品维的 product_line_group 同一套取值，筛选语义一致。
 bool lighthouseLedgerTabShowsCategoryChips(String tab) =>
-    tab == 'product' || tab == 'supply' || tab == 'channel';
+    tab == 'product' ||
+    tab == 'supply' ||
+    tab == 'channel' ||
+    tab == 'people';
 
 const lighthouseLedgerNavigationLevels = <String>[
   'primaryTab',
@@ -942,7 +981,11 @@ const bool lighthouseLedgerCentersPrimaryDimensions = false;
 const bool lighthouseLedgerPrimaryDimensionsFillAvailableWidth = true;
 const bool lighthouseLedgerSeparatesAnalysisTab = false;
 const bool lighthouseLedgerShowsAnalysisTab = false;
-const bool lighthouseLedgerShowsPeopleTab = false;
+const bool lighthouseLedgerShowsPeopleTab = true;
+
+/// 人效跟工作台「业务绩效」同一张牌：有 kpiPerformanceAccess 才出入口。
+bool lighthousePeopleTabVisible({required bool kpiPerformanceAccess}) =>
+    lighthouseLedgerShowsPeopleTab && kpiPerformanceAccess;
 const bool lighthouseLedgerShowsDiscountBoard = false;
 const bool lighthouseLedgerPrimaryTabUsesPeriodSegment = true;
 const bool lighthouseLedgerUsesLavenderPanelFrame = true;
@@ -966,6 +1009,21 @@ const bool lighthouseAppBarPutsDateOnTitleRow = false;
 const bool lighthouseHeroShowsLiveMetadata = false;
 
 /// 同步胶囊时间戳：日期 + 时分，强制由调用方传入 CST 时刻。
+/// 顶栏同步戳 —— 同一天只报时刻，跨天才补月日。
+///
+/// 「2026.09.08 18:04」在顶栏是 16 个字符的低价值文本：年份永远是今年，
+/// 月日在当天也是废话，读者真正要判断的只有「这数据是不是刚才的」。
+/// 砍到「18:04」之后胶囊短了一半，那个绿点才有位置说话。
+String lighthouseSyncedAtCompact(DateTime t, {required DateTime now}) {
+  final hh = t.hour.toString().padLeft(2, '0');
+  final mm = t.minute.toString().padLeft(2, '0');
+  final sameDay = t.year == now.year && t.month == now.month && t.day == now.day;
+  if (sameDay) return '$hh:$mm';
+  final mo = t.month.toString().padLeft(2, '0');
+  final dd = t.day.toString().padLeft(2, '0');
+  return '$mo.$dd $hh:$mm';
+}
+
 String lighthouseSyncedAtStamp(DateTime t) {
   final y = t.year.toString();
   final mo = t.month.toString().padLeft(2, '0');
@@ -998,6 +1056,113 @@ String lighthouseRangeLabel(DateTime start, DateTime end) {
 }
 
 DateTime lighthouseDateOnly(DateTime t) => DateTime(t.year, t.month, t.day);
+
+bool lighthouseSameCalendarDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
+/// 选区间弹层：点「开始」/「结束」决定日历下一步改哪一头。
+enum LighthouseRangeFocus { start, end }
+
+class LighthouseRangeDraft {
+  const LighthouseRangeDraft({
+    this.start,
+    this.end,
+    this.focus = LighthouseRangeFocus.start,
+  });
+
+  final DateTime? start;
+  final DateTime? end;
+  final LighthouseRangeFocus focus;
+
+  bool get canConfirm => start != null && end != null;
+}
+
+LighthouseRangeDraft lighthouseRangeDraftOpen({
+  DateTime? start,
+  DateTime? end,
+}) {
+  final s = start == null ? null : lighthouseDateOnly(start);
+  final e = end == null ? null : lighthouseDateOnly(end);
+  if (s == null) {
+    return LighthouseRangeDraft(start: s, end: e);
+  }
+  if (e == null) {
+    return LighthouseRangeDraft(
+      start: s,
+      end: e,
+      focus: LighthouseRangeFocus.end,
+    );
+  }
+  return LighthouseRangeDraft(
+    start: s,
+    end: e,
+    focus: LighthouseRangeFocus.start,
+  );
+}
+
+LighthouseRangeDraft lighthouseRangeDraftTapChip(
+  LighthouseRangeDraft draft,
+  LighthouseRangeFocus focus,
+) => LighthouseRangeDraft(start: draft.start, end: draft.end, focus: focus);
+
+/// 日历点一天：写入当前焦点字段。起止颠倒时对调，已选完整区间时不整段重来。
+LighthouseRangeDraft lighthouseRangeDraftTapDay(
+  LighthouseRangeDraft draft,
+  DateTime day,
+) {
+  final d = lighthouseDateOnly(day);
+  if (draft.focus == LighthouseRangeFocus.start) {
+    var start = d;
+    var end = draft.end == null ? null : lighthouseDateOnly(draft.end!);
+    if (end != null && start.isAfter(end)) {
+      final swapped = end;
+      end = start;
+      start = swapped;
+      return LighthouseRangeDraft(
+        start: start,
+        end: end,
+        focus: LighthouseRangeFocus.end,
+      );
+    }
+    return LighthouseRangeDraft(
+      start: start,
+      end: end,
+      focus: end == null ? LighthouseRangeFocus.end : LighthouseRangeFocus.start,
+    );
+  }
+
+  if (draft.start == null) {
+    return LighthouseRangeDraft(
+      start: d,
+      end: d,
+      focus: LighthouseRangeFocus.end,
+    );
+  }
+  final start = lighthouseDateOnly(draft.start!);
+  if (d.isBefore(start)) {
+    return LighthouseRangeDraft(
+      start: d,
+      end: start,
+      focus: LighthouseRangeFocus.start,
+    );
+  }
+  return LighthouseRangeDraft(
+    start: start,
+    end: d,
+    focus: LighthouseRangeFocus.end,
+  );
+}
+
+String lighthouseRangeDraftHint(LighthouseRangeDraft draft) {
+  if (draft.start == null) return '点「开始」，再在日历里选起始日';
+  if (draft.end == null) {
+    return draft.focus == LighthouseRangeFocus.end
+        ? '点日历选择结束日期，或点「开始」改起始'
+        : '点「结束」后在日历里选结束日';
+  }
+  final days = draft.end!.difference(draft.start!).inDays + 1;
+  return '共 $days 天 · 点开始/结束可改';
+}
 
 /// 上个月同一天；3/31 → 2/28（闰年 2/29），不会滚到 3/3。
 DateTime lighthouseSameDayPrevMonth(DateTime ref) {
@@ -1181,6 +1346,10 @@ String lighthouseHeroSummaryIconKey(String title) {
       normalized.contains('净TA') ||
       normalized.toLowerCase().contains('netta')) {
     return 'netTa';
+  }
+  if (normalized.startsWith('人效') ||
+      (normalized.contains('汇总') && normalized.contains('人效'))) {
+    return 'people';
   }
   if (normalized.contains('分析')) return 'analysis';
   return 'overview';
@@ -2178,6 +2347,19 @@ const lighthouseHeroFormulas = <LighthouseHeroFormula>[
   ),
 ];
 
+const lighthouseGrossMarginFormulaSales = LighthouseHeroFormula(
+  resultKey: 'grossMargin',
+  result: '毛利率',
+  expression: '毛利润 ÷ 销售额',
+  sources: [
+    LighthouseHeroFormulaSource(
+      'profit',
+      LighthouseHeroFormulaRole.numerator,
+    ),
+    LighthouseHeroFormulaSource('sales', LighthouseHeroFormulaRole.denominator),
+  ],
+);
+
 String lighthouseHeroFormulaCanonicalKey(String metricKey) =>
     switch (metricKey) {
       'costTotal' => 'totalCost',
@@ -2185,8 +2367,14 @@ String lighthouseHeroFormulaCanonicalKey(String metricKey) =>
       _ => metricKey,
     };
 
-LighthouseHeroFormula? lighthouseHeroFormulaForKey(String metricKey) {
+LighthouseHeroFormula? lighthouseHeroFormulaForKey(
+  String metricKey, {
+  String? group,
+}) {
   final canonical = lighthouseHeroFormulaCanonicalKey(metricKey);
+  if (canonical == 'grossMargin' && lighthouseGrossMarginUsesSales(group)) {
+    return lighthouseGrossMarginFormulaSales;
+  }
   for (final f in lighthouseHeroFormulas) {
     if (f.resultKey == canonical) return f;
   }
@@ -2207,10 +2395,11 @@ LighthouseHeroFormula? lighthouseHeroFormulaForKey(String metricKey) {
 /// 追溯中这一格扮演什么角色；不参与返回 null。
 LighthouseHeroFormulaRole? lighthouseHeroTraceRole(
   String? traced,
-  String metricKey,
-) {
+  String metricKey, {
+  String? group,
+}) {
   if (traced == null) return null;
-  final formula = lighthouseHeroFormulaForKey(traced);
+  final formula = lighthouseHeroFormulaForKey(traced, group: group);
   if (formula == null) return null;
   for (final source in formula.sources) {
     if (source.key == metricKey) return source.role;
@@ -2220,12 +2409,16 @@ LighthouseHeroFormulaRole? lighthouseHeroTraceRole(
 
 /// 追溯时无关的格子压暗 —— 只加亮的话，13 个里亮 2 个还是要找。
 /// 取数项没有来源格，压暗整屏没有信息量，只出式子。
-bool lighthouseHeroTraceDims(String? traced, String metricKey) {
+bool lighthouseHeroTraceDims(
+  String? traced,
+  String metricKey, {
+  String? group,
+}) {
   if (traced == null) return false;
   if (traced == metricKey) return false;
-  final formula = lighthouseHeroFormulaForKey(traced);
+  final formula = lighthouseHeroFormulaForKey(traced, group: group);
   if (formula == null || formula.sources.isEmpty) return false;
-  return lighthouseHeroTraceRole(traced, metricKey) == null;
+  return lighthouseHeroTraceRole(traced, metricKey, group: group) == null;
 }
 
 /// 点同一格收起；点另一个结果格切过去；点没有公式的键不动。
@@ -2551,25 +2744,31 @@ LighthouseReconStatus? lighthouseParseReconStatus(dynamic raw) {
   );
 }
 
-/// 只有供给（标签二）和渠道（标签三）有对账状态。产品维（标签一）不对账。
-bool lighthouseTabHasRecon(String tab) {
-  final t = tab.trim();
-  return t == 'supply' || t == 'channel';
-}
+/// 账本维都不挂对账状态。渠道日清月结确认、已确认 / 有驳回一并关掉。
+/// 空集合：要临时打开某个维，把 tab 名加回来即可。
+const lighthouseReconTabs = <String>{};
+
+bool lighthouseTabHasRecon(String tab) =>
+    lighthouseReconTabs.contains(tab.trim());
+
+/// 日清明细 / 三步确认（财务→业务→运营）也不再挂在账本行上。
+const lighthouseDailyCloseTabs = <String>{};
+
+bool lighthouseTabHasDailyClose(String tab) =>
+    lighthouseDailyCloseTabs.contains(tab.trim());
 
 const lighthouseUnconfirmedRecon = LighthouseReconStatus(
   state: LighthouseReconState.none,
 );
 
-/// 供给 / 渠道缺 `recon` 时按未对账呈现。资管未接真数据前全部如此。
+/// 账本维都不走对账呈现。解析函数仍留给单测。
 LighthouseReconStatus? lighthouseReconStatusForRow(String tab, Object? raw) {
   if (!lighthouseTabHasRecon(tab)) return null;
   return lighthouseParseReconStatus(raw) ?? lighthouseUnconfirmedRecon;
 }
 
-/// 本地 debug 预览对账 chip / 对账人 / 驳回。发版 `kDebugMode` 为 false，不会带上。
-/// 看完改回 `false`。
-const bool lighthouseReconUsesLocalPreview = true;
+/// 本地 debug 预览对账 chip。渠道 / 供给都关掉后不再灌假数据。
+const bool lighthouseReconUsesLocalPreview = false;
 
 const lighthouseReconPreviewFixtures = <Map<String, dynamic>>[
   {
@@ -2927,6 +3126,11 @@ LighthouseDailyClose? lighthouseParseDailyClose(dynamic raw) {
     business: lighthouseParseApprovalStep(step('business')),
     operation: lighthouseParseApprovalStep(step('operation')),
   );
+}
+
+LighthouseDailyClose? lighthouseDailyCloseForRow(String tab, Object? raw) {
+  if (!lighthouseTabHasDailyClose(tab)) return null;
+  return lighthouseParseDailyClose(raw);
 }
 
 /// `2026-09-01` → `9/1`。冻结列和明细里都放不下完整日期。
@@ -3559,15 +3763,6 @@ List<List<String>> lighthouseLedgerSummaryMetricRowsForTab(String tab) {
   return lighthouseLedgerSummaryMetricRows;
 }
 
-String lighthouseLedgerHighlightModeLabel({
-  required bool rowMode,
-  required bool cellMode,
-}) {
-  if (rowMode) return '行标记';
-  if (cellMode) return '格标记';
-  return '标记';
-}
-
 /// Resolve a totals value with key aliases used across L1/L2 payloads.
 double? lighthouseHeroMetricValue(Map<String, double> totals, String key) {
   switch (key) {
@@ -3713,34 +3908,59 @@ double? lighthouseDisplayRatePct(
   return pct;
 }
 
-/// 列表/Hero 共用的毛利率展示值：毛利润 ÷ 核销额 × 100%。
-/// 核销过小或结果爆炸时返回 null（UI 显示 —）。
+/// 运营商项目不怎么核销：毛利率分母改用销售额。
+bool lighthouseGrossMarginUsesSales(String? group) =>
+    (group ?? '').trim() == '运营商';
+
+double lighthouseGrossMarginBase({
+  required double verifiedSales,
+  double sales = 0,
+  String? group,
+  double minimumBase = 50,
+}) {
+  final raw = lighthouseGrossMarginUsesSales(group) ? sales : verifiedSales;
+  return lighthouseValidRateBase(raw, minimumBase: minimumBase);
+}
+
+String lighthouseGrossMarginFormulaText(String? group) =>
+    lighthouseGrossMarginUsesSales(group) ? '毛利润 ÷ 销售额' : '毛利润 ÷ 核销额';
+
+/// 列表/Hero 共用的毛利率展示值。默认毛利润 ÷ 核销额；运营商改用销售额。
+/// 分母过小或结果爆炸时返回 null（UI 显示 —）。
 double? lighthouseGrossMarginDisplayPct({
   required double profit,
   required double verifiedSales,
+  double sales = 0,
+  String? group,
   double minimumVerified = 50,
   double maxAbsPct = lighthouseMaxDisplayRatePct,
 }) {
-  final base = lighthouseValidRateBase(
-    verifiedSales,
+  final base = lighthouseGrossMarginBase(
+    verifiedSales: verifiedSales,
+    sales: sales,
+    group: group,
     minimumBase: minimumVerified,
   );
   if (base <= 0) return null;
   return lighthouseDisplayRatePct(profit / base * 100, maxAbs: maxAbsPct);
 }
 
-/// 毛利率走势 = 毛利润 ÷ 核销额，单位为百分点。
+/// 毛利率走势。运营商按销售额做分母，其余按核销额。
 List<double> lighthouseGrossMarginSeries({
   required List<double> profit,
   required List<double> verifiedSales,
+  List<double> sales = const [],
+  String? group,
   double minimumBase = 50,
 }) {
-  final count = profit.length < verifiedSales.length
-      ? profit.length
-      : verifiedSales.length;
+  final useSales = lighthouseGrossMarginUsesSales(group);
+  final denom = useSales && sales.isNotEmpty ? sales : verifiedSales;
+  final count = profit.length < denom.length ? profit.length : denom.length;
   return List<double>.generate(count, (index) {
-    final base = verifiedSales[index];
-    final validBase = lighthouseValidRateBase(base, minimumBase: minimumBase);
+    final validBase = lighthouseValidRateBase(
+      denom[index],
+      minimumBase: minimumBase,
+    );
     if (validBase <= 0) return 0;
     final pct = profit[index] / validBase * 100;
     return lighthouseDisplayRatePct(pct) ?? 0;
@@ -3760,6 +3980,8 @@ String? lighthouseTrendTabForSubDim(String dim) {
     case 'channel':
     case 'province':
     case 'project':
+      return dim;
+    case 'people':
       return dim;
     default:
       return null;
@@ -3872,6 +4094,7 @@ String lighthouseDefaultGroupFilter(String tab) {
     case 'product':
     case 'supply':
     case 'channel':
+    case 'people':
       return '全部';
     default:
       return '全部';

@@ -29,4 +29,16 @@ void main() {
     expect(out['中石油返费'], closeTo(0.87, 0.1));
     expect(out['中石化现金券'], closeTo(0.59, 0.1));
   });
+
+  test('运营商毛利率用销售额，不被核销额打成空', () {
+    expect(
+      lighthouseGrossMarginDisplayPct(
+        profit: 412262.1463,
+        verifiedSales: 80,
+        sales: 3843000,
+        group: '运营商',
+      ),
+      closeTo(10.73, 0.05),
+    );
+  });
 }

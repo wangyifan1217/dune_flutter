@@ -951,6 +951,44 @@ void main() {
     ]);
   });
 
+  test('forward everyone skips 许总 and configured presidents', () {
+    final options = ProposalIntakeOptions.fromJson({
+      'people': {
+        'presidentUserIds': [88],
+        'presidents': [
+          {'userId': 88, 'name': '许正阳'},
+        ],
+      },
+    });
+    const people = [
+      ProposalPerson(userId: 88, name: '许正阳', positionName: '总裁'),
+      ProposalPerson(userId: 10, name: '吴小姣', positionName: '科技部负责人'),
+    ];
+    for (final kind in ['sales', 'purchase']) {
+      final row = ProposalIntakeRow.fromJson({
+        'kind': kind,
+        'createdBy': 1,
+        'form': {
+          'createdByName': '朱子姝',
+          'technologyOwner': '吴小姣',
+          'technologyOwnerUserId': 10,
+          'president': '许总',
+          'presidentUserId': 88,
+          'operator': '许正阳',
+          'operatorUserId': 88,
+        },
+      });
+      final items = proposalIntakeForwardEveryoneRecipients(
+        row: row,
+        people: people,
+        options: options,
+        excludeUserId: 1,
+      );
+      expect(items.map((item) => item.userId).toSet(), {10}, reason: kind);
+      expect(items.map((item) => item.line).toList(), ['科技部负责人 吴小姣']);
+    }
+  });
+
   test('review complete notifies submitter only after last flag', () {
     final row = ProposalIntakeRow.fromJson({
       'createdBy': 2,

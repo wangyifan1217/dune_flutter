@@ -1,0 +1,3552 @@
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import 'lighthouse_hero_metric.dart';
+import 'lighthouse_theme.dart';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 灯塔 · BI 视图 (v2 · 并入灯塔视觉体系)
+//
+//   入口：列表控制条「选区间」右侧的 BI 视图按钮 → 全屏 push。
+//
+//   v2 的全部工作是「不要看起来像另一个 App」。所有壳子级 token 直接引用
+//   lighthouse_hero_metric.dart 里 Hero 已经定好的那套，一个都不新造：
+//     · 卡片圆角          lighthouseHeroCardRadius (12)
+//     · 分区图标块        lighthouseHeroSectionIconSize (18) + 圆角 5
+//     · 分区四色          lighthouseHeroSectionAccentValues  紫/琥珀/绿/品红
+//     · 分区淡底 / 描边 / 标题色
+//       lighthouseHeroSectionTintValues / EdgeValues / TitleValues
+//     · 指标格三段        标签 sans 9 · 数值 number 13 · 单位 sans 7.5 ·
+//                        环比 mono 8，且沿用灯塔的涨红跌绿
+//   紫（_LhPlum.primary）在这一页同样只做「线」和「字」，唯一的有色面是
+//   顶部那张 hero 卡 —— 与主页 v14.1 的结论一致。
+//
+//   图表配色也不是另起炉灶：环形图那四个色就是 Hero 走势图的
+//   紫 / 琥珀 / 绿 / 品红（lighthouseHeroSectionAccentValues 原值），
+//   过了 CVD 校验（明度带 / 彩度下限 / 对比度全 PASS，相邻最差 ΔE 7.4
+//   落在 6–8 带内 —— 图例每片都直标了名称和数值，二次编码到位）。
+//   盈亏发散图用「紫 ↔ 珊瑚」双极而不是绿红：这个 App 里绿是「跌」和
+//   「现金流」的语义色，拿它表示盈利会和格子里的 ↓ 环比撞含义。
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// 与 native_lighthouse_page 的 `_LhPlum` 同值 —— 那个类是 page 私有的，
+/// 这里镜像一份，改色时两处一起改。
+abstract final class LhBiPlum {
+  static const Color primary = Color(0xFF7B5CD8);
+  static const Color deep = Color(0xFF5A458F);
+  static const Color heroNum = Color(0xFF4A3A7A);
+  static const Color lavender = Color(0xFFF0ECF6);
+  static const Color mist = Color(0xFFF5F2FA);
+  static const Color line = Color(0xFFE4DCF4);
+  static const Color heroFill = Color(0xFFF7F3FC);
+  static const Color heroEdge = Color(0xFFE2D8F0);
+}
+
+/// 分区 token 取用口 —— 全部转发到 Hero 已有的常量表，不新造值。
+abstract final class LhBiSection {
+  static Color accent(String key) =>
+      Color(lighthouseHeroSectionAccentValues[key] ?? 0xFF7B5CD8);
+  static Color tint(String key) =>
+      Color(lighthouseHeroSectionTintValues[key] ?? 0xFFF6F3FD);
+  static Color edge(String key) =>
+      Color(lighthouseHeroSectionEdgeValues[key] ?? 0xFFDCD1F5);
+  static Color title(String key) =>
+      Color(lighthouseHeroSectionTitleValues[key] ?? 0xFF5B3FB0);
+
+  static IconData icon(String key) => switch (key) {
+    'scale' => Icons.show_chart_rounded,
+    'cost' => Icons.receipt_long_rounded,
+    'cash' => Icons.account_balance_wallet_outlined,
+    _ => Icons.trending_up_rounded,
+  };
+}
+
+/// 环形图分类槽 —— 与 Hero 走势图同一组四色，按序循环，不再折进「其他」。
+abstract final class LhBiPalette {
+  static const List<Color> cat = <Color>[
+    Color(0xFF7B5CD8), // 紫 · scale
+    Color(0xFFC4791C), // 琥珀 · cost
+    Color(0xFF1E9E72), // 绿 · cash
+    Color(0xFFB8478F), // 品红 · profit
+  ];
+
+  /// 旧「其他」聚合片仍用中性灰，避免跟真实实体抢色。
+  static const Color other = Color(0xFF9A988E);
+
+  /// 盈亏双极：暖冷对立 + 中性零点。绿留给「跌 / 现金流」。
+  static const Color gain = Color(0xFF7B5CD8);
+  static const Color loss = LhColors.neg;
+
+  static Color slot(int i) => cat[i % cat.length];
+}
+
+/// 当前维要看清的另外三维。产品 / 供给 / 渠道 / 人效是同一套账本换分组键，
+/// 点开任何一个实体，另外三个都该在这儿切得出来。
+///
+/// 净TA 给空：它是资金流水的五类映射，跟业务账本不同源也不同粒度，
+/// 硬拆只会拆出看着像真的假数 —— 宁可不给，也不给编的。
+const lhBiLedgerCrossDims = <({String key, String label})>[
+  (key: 'product', label: '产品'),
+  (key: 'supply', label: '供给'),
+  (key: 'channel', label: '渠道'),
+  (key: 'people', label: '人效'),
+];
+
+List<({String key, String label})> lhBiCrossDims(String dim) {
+  if (dim == 'netTa') return const [];
+  return [
+    for (final d in lhBiLedgerCrossDims)
+      if (d.key != dim) d,
+  ];
+}
+
+/// BI 视图能选的一个指标。
+@immutable
+class LhBiMetric {
+  const LhBiMetric({
+    required this.key,
+    required this.label,
+    this.isRate = false,
+  });
+
+  final String key;
+  final String label;
+  final bool isRate;
+}
+
+/// 一个维度上的一条实体读数。
+@immutable
+class _BiItem {
+  const _BiItem({
+    required this.name,
+    required this.value,
+    required this.scale,
+    required this.profit,
+    this.group = '',
+    this.delta,
+    this.profitDelta,
+  });
+
+  final String name;
+
+  /// 所属分类（能源 / 运营商 …），排行榜用它做二级标识。
+  final String group;
+
+  /// 当前指标的环比（%）。null = 后端没给同期对齐值。
+  final double? delta;
+
+  /// 净利环比（%）。
+  final double? profitDelta;
+
+  /// 当前选中指标的值。
+  final double value;
+
+  /// 规模口径的值（构成图用；选中指标是比率时，占比只能按规模算）。
+  final double scale;
+
+  /// 净利，盈亏诊断图用。
+  final double profit;
+}
+
+// ── 数字格式（与 Hero 同口径：数值和单位分开排，单位小一号且发灰）─────────
+
+({String text, String unit}) lhBiParts(double v, {required bool isRate}) {
+  if (isRate) return (text: v.toStringAsFixed(2), unit: '%');
+  final abs = v.abs();
+  if (abs >= 1e8) return (text: (v / 1e8).toStringAsFixed(2), unit: '亿');
+  final wan = v / 1e4;
+  if (wan == 0) return (text: '0', unit: '');
+  if (wan.abs() >= 100) return (text: wan.toStringAsFixed(0), unit: '万');
+  if (wan.abs() >= 1) return (text: wan.toStringAsFixed(1), unit: '万');
+  return (text: wan.toStringAsFixed(2), unit: '万');
+}
+
+String lhBiMoney(double v) {
+  final p = lhBiParts(v, isRate: false);
+  return '${p.text}${p.unit}';
+}
+
+String lhBiLegendKey(String name, int index) => 'bi-legend-$index-$name';
+
+/// 构成图按名字合并规模。同名（常见是「未分类」）合成一片，避免图例撞 key。
+/// 默认列出全部实体，不再把尾巴折进「其他 N 项」。
+List<({String name, double value})> lhBiBuildCompositionSlices(
+  Iterable<({String name, double scale})> items, {
+  int? maxSlice,
+}) {
+  final merged = <String, double>{};
+  for (final item in items) {
+    if (item.scale <= 0) continue;
+    final name = item.name.trim().isEmpty ? '未分类' : item.name.trim();
+    merged[name] = (merged[name] ?? 0) + item.scale;
+  }
+  final ranked = merged.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  if (ranked.isEmpty) return const [];
+
+  final limit = maxSlice ?? ranked.length;
+  final slices = <({String name, double value})>[];
+  for (var i = 0; i < ranked.length && i < limit; i++) {
+    slices.add((name: ranked[i].key, value: ranked[i].value));
+  }
+  if (maxSlice != null && ranked.length > maxSlice) {
+    final rest = ranked.skip(maxSlice).fold<double>(0, (s, e) => s + e.value);
+    slices.add((name: '其他 ${ranked.length - maxSlice} 项', value: rest));
+  }
+  return slices;
+}
+
+String lhBiValue(double v, {required bool isRate}) {
+  final p = lhBiParts(v, isRate: isRate);
+  return '${p.text}${p.unit}';
+}
+
+String lhBiPct(double v) => '${v.toStringAsFixed(1)}%';
+
+/// 轴刻度：只到「万 / 亿」，不带小数尾巴。
+String lhBiTick(double v, {required bool isRate}) {
+  if (isRate) return v.toStringAsFixed(0);
+  final abs = v.abs();
+  if (abs >= 1e8) return '${(v / 1e8).toStringAsFixed(1)}亿';
+  if (abs >= 1e4) return '${(v / 1e4).toStringAsFixed(0)}万';
+  if (abs == 0) return '0';
+  return v.toStringAsFixed(0);
+}
+
+/// 环比文案 —— 沿用灯塔的涨红跌绿。
+Color lhBiDeltaColor(double pct) => pct >= 0 ? LhColors.neg : LhColors.pos;
+
+String lhBiDeltaText(double pct, {bool pp = false}) {
+  final a = pct.abs();
+  return '${pct >= 0 ? '↑' : '↓'}'
+      '${a.toStringAsFixed(a >= 10 ? 0 : 1)}'
+      '${pp ? 'pp' : '%'}';
+}
+
+// ── 画笔小工具 ──────────────────────────────────────────────────────────────
+
+TextPainter _tp(
+  String text,
+  TextStyle style, {
+  double maxWidth = double.infinity,
+}) {
+  final p = TextPainter(
+    text: TextSpan(text: text, style: style),
+    textDirection: TextDirection.ltr,
+    maxLines: 1,
+    ellipsis: '…',
+  );
+  p.layout(maxWidth: maxWidth);
+  return p;
+}
+
+TextStyle _mono({
+  double size = 9,
+  Color color = LhColors.mute2,
+  FontWeight weight = FontWeight.w600,
+  double spacing = 0.2,
+}) => LhTypography.mono(
+  size: size,
+  color: color,
+  weight: weight,
+  letterSpacing: spacing,
+  height: 1.0,
+);
+
+TextStyle _sans({
+  double size = 11,
+  Color color = LhColors.ink,
+  FontWeight weight = FontWeight.w600,
+  double spacing = 0,
+}) => LhTypography.sans(
+  size: size,
+  color: color,
+  weight: weight,
+  letterSpacing: spacing,
+  height: 1.1,
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 页面
+// ═══════════════════════════════════════════════════════════════════════════
+
+class LhBiViewPage extends StatefulWidget {
+  const LhBiViewPage({
+    super.key,
+    required this.initialDim,
+    this.dims,
+    required this.initialMetric,
+    required this.rangeLabel,
+    required this.periodLabel,
+    required this.rowsFor,
+    required this.metricsFor,
+    required this.metricValue,
+    required this.dimLabel,
+    required this.categoriesFor,
+    required this.metricDelta,
+    required this.breakdownFor,
+    this.requestBreakdown,
+    this.seriesFor,
+    this.onDimChanged,
+    this.onClose,
+    this.topChrome,
+    this.periodBar,
+  });
+
+  /// 打开时停在哪个维度。
+  final String initialDim;
+
+  /// 顶部出哪几个视角。宿主按权限裁（没有净TA权限就不该出现净TA视角）。
+  /// 不传则五个全出。
+  final List<String>? dims;
+
+  /// 打开时选中哪个指标（跟随主列表的排序字段）。
+  final String initialMetric;
+
+  /// 「09.01–09.08」这类区间文案，直接复用主页口径。
+  final String rangeLabel;
+
+  /// 「本月 · 2026.09」这类周期文案。
+  final String periodLabel;
+
+  final List<Map<String, dynamic>> Function(String dim) rowsFor;
+  final List<LhBiMetric> Function(String dim) metricsFor;
+  final double Function(Map<String, dynamic> row, String key) metricValue;
+  final String Function(String dim) dimLabel;
+
+  /// 该维度下的分类（能源 / 公共出行 / 运营商 / 未分类…），与主列表同一份。
+  final List<String> Function(String dim) categoriesFor;
+
+  /// 单行某指标的环比。返回 null = 后端没给同期对齐的值，显示「—」而不是编一个。
+  final ({double pct, bool isUp})? Function(Map<String, dynamic> row, String key)
+  metricDelta;
+
+  /// 某个实体拆到交叉维（产品/供给/渠道）。[breakKey] 是要看的那一维。
+  final ({String label, List<Map<String, dynamic>> rows}) Function(
+    String dim,
+    String name,
+    String breakKey,
+  )
+  breakdownFor;
+
+  /// 拆分数据要现取时调它（宿主去打详情接口），拿到后 setState 会自然刷新。
+  final Future<void> Function(String dim, String name)? requestBreakdown;
+
+  /// 宿主直供的期内序列。人效和净TA 的行上没有 trend：
+  /// 人效的加总就是公司总量（人是账本的一种分组），净TA 的序列在 metrics 里，
+  /// 都不是「把行上的 trend 逐位相加」能拼出来的，所以留一个口子给宿主直给。
+  /// 返回 null 时退回按行 trend 相加的老路。
+  final ({List<double> values, List<String> labels})? Function(
+    String dim,
+    String metricKey,
+  )?
+  seriesFor;
+
+  /// 顶栏换维时通知宿主去拉该维列表（供给进 BI 也能看到产品/渠道）。
+  final ValueChanged<String>? onDimChanged;
+
+  /// 灯塔是 keep-alive 叠层，不能 Navigator.push。关页由宿主收。
+  final VoidCallback? onClose;
+
+  /// 二级页顶栏（退出 · 灯塔 · 工具）。有则替代本页自带 masthead。
+  final Widget? topChrome;
+
+  /// 与一级/二级同款的日周月季年条。切粒度由宿主改 period 再灌数。
+  final Widget? periodBar;
+
+  @override
+  State<LhBiViewPage> createState() => _LhBiViewPageState();
+}
+
+class _LhBiViewPageState extends State<LhBiViewPage>
+    with SingleTickerProviderStateMixin {
+  /// 五个视角：账本三维 + 人效（账本按负责人分组）+ 净TA（资金流五类）。
+  /// 前四个同源同口径、可互相拆；净TA 单独挂在最后，只看自己。
+  static const List<String> kAllDims = <String>[
+    'product',
+    'supply',
+    'channel',
+    'people',
+    'netTa',
+  ];
+
+  List<String> get _dims {
+    final given = widget.dims;
+    if (given == null || given.isEmpty) return kAllDims;
+    final out = [for (final d in kAllDims) if (given.contains(d)) d];
+    return out.isEmpty ? kAllDims : out;
+  }
+
+  bool get _isNetTa => _dim == 'netTa';
+
+  late String _dim = _dims.contains(widget.initialDim)
+      ? widget.initialDim
+      : 'product';
+  late String _metricKey = widget.initialMetric;
+  late String _breakKey = _firstCrossKey(_dim);
+
+  static String _firstCrossKey(String dim) {
+    final crosses = lhBiCrossDims(dim);
+    return crosses.isEmpty ? '' : crosses.first.key;
+  }
+
+  /// 分类筛选，与主列表的 _groupFilter 同语义。
+  String _group = '全部';
+
+  /// 当前展开省份拆分的实体名；null = 没展开。
+  String? _drillName;
+  bool _drillBusy = false;
+
+  bool _showTable = false;
+
+  late final AnimationController _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _anim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 720),
+    )..forward();
+  }
+
+  @override
+  void didUpdateWidget(LhBiViewPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.rangeLabel != widget.rangeLabel ||
+        oldWidget.periodLabel != widget.periodLabel) {
+      _anim
+        ..reset()
+        ..forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _anim.dispose();
+    super.dispose();
+  }
+
+  // ── 数据 ─────────────────────────────────────────────────────────────────
+
+  List<LhBiMetric> get _metrics {
+    final list = widget.metricsFor(_dim);
+    if (list.isEmpty) {
+      return const <LhBiMetric>[
+        LhBiMetric(key: 'sales', label: '销售额'),
+        LhBiMetric(key: 'profit', label: '净利润'),
+      ];
+    }
+    return list;
+  }
+
+  LhBiMetric get _metric {
+    final list = _metrics;
+    for (final m in list) {
+      if (m.key == _metricKey) return m;
+    }
+    return list.first;
+  }
+
+  /// 构成图用的规模口径：选中指标本身可加总就用它，是比率就退回销售额。
+  String get _scaleKey => _metric.isRate ? 'sales' : _metric.key;
+
+  /// 分类条：全部 + 该维度真实存在的分类。只有一个分类时不值得占一行。
+  List<String> get _categories {
+    final raw = widget.categoriesFor(_dim);
+    final out = <String>['全部'];
+    for (final c in raw) {
+      final t = c.trim();
+      if (t.isEmpty || t == '全部' || out.contains(t)) continue;
+      out.add(t);
+    }
+    return out.length <= 2 ? const <String>[] : out;
+  }
+
+  List<_BiItem> get _items {
+    final rows = widget.rowsFor(_dim);
+    final out = <_BiItem>[];
+    for (final r in rows) {
+      final name = r['name']?.toString().trim() ?? '';
+      if (name.isEmpty) continue;
+      final group = r['group']?.toString().trim() ?? '';
+      if (_group != '全部' && group != _group) continue;
+      final value = widget.metricValue(r, _metric.key);
+      final scale = widget.metricValue(r, _scaleKey);
+      out.add(
+        _BiItem(
+          name: name,
+          group: group,
+          value: value,
+          // 净TA 五类里三类天然为负；构成图只吃正值，直接用净额会把流出侧
+          // 整片吞掉，只剩两片。取绝对值 → 环形读作「资金在这五类里怎么流动」。
+          scale: _isNetTa ? scale.abs() : scale,
+          // 净TA 没有 profit 字段，它的「盈亏」就是净额本身。
+          profit: _isNetTa
+              ? ((r['netTa'] as num?)?.toDouble() ?? value)
+              : ((r['profit'] as num?)?.toDouble() ?? 0),
+          delta: widget.metricDelta(r, _metric.key)?.pct,
+          profitDelta: widget.metricDelta(r, _isNetTa ? 'netTa' : 'profit')?.pct,
+        ),
+      );
+    }
+    return out;
+  }
+
+  /// 点构成图的扇区 / 排行柱 → 展开该项的省份柱状图；再点一次收起。
+  Future<void> _toggleDrill(String name) async {
+    // 净TA 没有交叉维，点扇区不该进入一个永远空着的下钻面板。
+    if (lhBiCrossDims(_dim).isEmpty) return;
+    HapticFeedback.selectionClick();
+    if (_drillName == name) {
+      setState(() => _drillName = null);
+      return;
+    }
+    setState(() {
+      _drillName = name;
+      _drillBusy = true;
+    });
+    final req = widget.requestBreakdown;
+    if (req != null) {
+      try {
+        await req(_dim, name);
+      } catch (_) {
+        // 取不到就退回「暂无拆分」文案，不打断整页。
+      }
+    }
+    if (!mounted) return;
+    setState(() => _drillBusy = false);
+  }
+
+  /// 走势：把当前维度所有行的 trend 序列按位相加。
+  /// 比率指标不能相加 —— 退回销售额序列，卡片抬头会写明。
+  _BiSeries? _series() {
+    final key = _metric.isRate ? 'sales' : _metric.key;
+    final host = widget.seriesFor?.call(_dim, key);
+    if (host != null && host.values.length >= 2) {
+      return _BiSeries(
+        values: host.values,
+        labels: host.labels,
+        // 净TA 只有一条净额序列，流入/流出没有各自的时间序列 ——
+        // 标题要写清楚画的是净额，别让人以为这是流入的曲线。
+        fallback: _metric.isRate || (_isNetTa && _metric.key != 'netTa'),
+      );
+    }
+    final rows = widget.rowsFor(_dim);
+    List<double>? acc;
+    List<String> labels = const <String>[];
+    for (final r in rows) {
+      final t = r['trend'];
+      if (t is! Map) continue;
+      dynamic raw = t[key];
+      if (raw is! List || raw.isEmpty) {
+        if (key == 'profit') raw = t['points'];
+      }
+      if (raw is! List || raw.isEmpty) continue;
+      final pts = <double>[];
+      for (final e in raw) {
+        pts.add(e is num ? e.toDouble() : 0);
+      }
+      final a = acc;
+      if (a == null) {
+        acc = pts;
+      } else {
+        if (pts.length != a.length) continue;
+        for (var i = 0; i < pts.length; i++) {
+          a[i] = a[i] + pts[i];
+        }
+      }
+      if (labels.isEmpty) {
+        final l = t['labels'] ?? t['xLabels'];
+        if (l is List && l.isNotEmpty) {
+          labels = l.map((e) => e.toString()).toList();
+        }
+      }
+    }
+    final values = acc;
+    if (values == null || values.length < 2) return null;
+    return _BiSeries(
+      values: values,
+      labels: labels,
+      fallback: _metric.isRate,
+    );
+  }
+
+  void _pick(void Function() mutate) {
+    HapticFeedback.selectionClick();
+    final prevDim = _dim;
+    setState(() {
+      mutate();
+      // 换了口径，上一个实体的交叉拆分就不再是同一件事了。
+      _drillName = null;
+      _drillBusy = false;
+      if (_dim != prevDim) {
+        _breakKey = _firstCrossKey(_dim);
+        // 分类是「上一个视角的分类」——净TA 根本没有分类条，人效的板块也未必
+        // 和供给的分类同名。带着旧值切过去会把整页筛成空，且没有控件能改回来。
+        if (_group != '全部' && !_categories.contains(_group)) {
+          _group = '全部';
+        }
+      }
+    });
+    if (_dim != prevDim) widget.onDimChanged?.call(_dim);
+    _anim
+      ..reset()
+      ..forward();
+  }
+
+  void _pickBreak(String key) {
+    if (key == _breakKey) return;
+    HapticFeedback.selectionClick();
+    setState(() => _breakKey = key);
+  }
+
+  // ── build ────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    final items = _items;
+
+    return Scaffold(
+      backgroundColor: LhColors.mist,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _masthead(),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 40),
+                physics: const BouncingScrollPhysics(),
+                children: [
+                  _controlCard(),
+                  const SizedBox(height: lighthouseHeroCardGap),
+                  if (items.isEmpty)
+                    _emptyCard()
+                  // 净TA 走自己那套仪表：它问的是「钱怎么流的」，
+                  // 不是「谁占多少份额」，套账本那四张图只会越看越糊。
+                  else if (_isNetTa) ...[
+                    ..._netTaCards(items),
+                  ] else ...[
+                    _heroCard(items),
+                    const SizedBox(height: lighthouseHeroCardGap),
+                    _statRow(items),
+                    const SizedBox(height: lighthouseHeroCardGap),
+                    _compositionCard(items),
+                    const SizedBox(height: lighthouseHeroCardGap),
+                    _rankingCard(items),
+                    const SizedBox(height: lighthouseHeroCardGap),
+                    _trendCard(),
+                    const SizedBox(height: lighthouseHeroCardGap),
+                    _pnlCard(items),
+                    if (_showTable) ...[
+                      const SizedBox(height: lighthouseHeroCardGap),
+                      _tableCard(items),
+                    ],
+                  ],
+                  const SizedBox(height: 14),
+                  _footnote(),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── 顶栏：有宿主 chrome 时跟 L2 一样（退出 · 灯塔 · 日周月季年）────────
+
+  Widget _masthead() {
+    final chrome = widget.topChrome;
+    if (chrome != null) {
+      return ColoredBox(
+        color: LhColors.paper,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            chrome,
+            if (widget.periodBar != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 0, 10, 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: widget.periodBar!),
+                    const SizedBox(width: 8),
+                    _roundIcon(
+                      icon: _showTable
+                          ? Icons.bar_chart_rounded
+                          : Icons.table_rows_rounded,
+                      active: _showTable,
+                      onTap: () => setState(() => _showTable = !_showTable),
+                    ),
+                  ],
+                ),
+              ),
+            const ColoredBox(
+              color: LhColors.line2,
+              child: SizedBox(height: 0.5),
+            ),
+          ],
+        ),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 10, 11),
+      decoration: const BoxDecoration(
+        color: LhColors.paper,
+        border: Border(
+          bottom: BorderSide(color: LhColors.line2, width: 0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text(
+            'BI 视图',
+            style: LhTypography.sans(
+              size: 17,
+              color: LhBiPlum.primary,
+              weight: FontWeight.w800,
+              letterSpacing: 0.4,
+              height: 1.0,
+            ),
+          ),
+          const SizedBox(width: 7),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              'ANALYTICS',
+              style: _mono(size: 8.5, color: LhColors.mute2, spacing: 1.5),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: _rangePill(),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _roundIcon(
+            icon: _showTable
+                ? Icons.bar_chart_rounded
+                : Icons.table_rows_rounded,
+            active: _showTable,
+            onTap: () => setState(() => _showTable = !_showTable),
+          ),
+          const SizedBox(width: 6),
+          _roundIcon(
+            icon: Icons.close_rounded,
+            active: false,
+            onTap: () {
+              if (widget.onClose != null) {
+                widget.onClose!();
+                return;
+              }
+              Navigator.of(context).maybePop();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _rangePill() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: LhBiPlum.lavender,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: LhBiPlum.heroEdge, width: 0.7),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 5,
+            height: 5,
+            decoration: const BoxDecoration(
+              color: LhBiPlum.primary,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              widget.rangeLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _mono(size: 9.5, color: LhBiPlum.deep, spacing: 0.2),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _roundIcon({
+    required IconData icon,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: active ? LhBiPlum.mist : LhColors.paper,
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(
+            color: active ? LhBiPlum.primary : LhColors.line2,
+            width: active ? 1 : 0.7,
+          ),
+        ),
+        child: Icon(
+          icon,
+          size: 15,
+          color: active ? LhBiPlum.primary : LhColors.mute,
+        ),
+      ),
+    );
+  }
+
+  // ── 唯一的一条筛选条：维度 + 指标（与「日 周 月 季 年」同款） ────────────
+
+  Widget _controlCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: LhColors.paper,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: LhColors.line2, width: 0.7),
+      ),
+      padding: EdgeInsets.fromLTRB(6, 6, 6, _isNetTa ? 6 : 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              for (final d in _dims) Expanded(child: _dimCell(d)),
+            ],
+          ),
+          // 净TA 之下没有分类条也没有指标条，那条分隔线就没有东西可分隔了。
+          if (_categories.isNotEmpty || !_isNetTa) ...[
+            const SizedBox(height: 7),
+            Container(height: 0.5, color: LhColors.line2),
+          ],
+          if (_categories.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _chipRow('分类', [
+              for (final c in _categories) ...[
+                _pillChip(
+                  label: c,
+                  on: c == _group,
+                  onTap: () => _pick(() => _group = c),
+                ),
+                const SizedBox(width: 6),
+              ],
+            ]),
+            const SizedBox(height: 7),
+            Container(height: 0.5, color: LhColors.line2),
+          ],
+          // 净TA 不出指标条：净额 / 流入 / 流出 在 hero 上一次给全，
+          // 让人在三个读数之间来回点，本身就是分析效率的损耗。
+          if (!_isNetTa) ...[
+            const SizedBox(height: 8),
+            _chipRow('指标', [
+              for (final m in _metrics) ...[
+                _pillChip(
+                  label: m.label,
+                  on: m.key == _metric.key,
+                  onTap: () => _pick(() => _metricKey = m.key),
+                ),
+                const SizedBox(width: 6),
+              ],
+            ]),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 一条横滚的 chip 行：左边一个 mono 小标，右边一串药丸。
+  Widget _chipRow(String label, List<Widget> chips) {
+    return SizedBox(
+      height: 25,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        physics: const ClampingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        children: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8, left: 2),
+              child: Text(label, style: _mono(size: 9, spacing: 0.6)),
+            ),
+          ),
+          ...chips,
+        ],
+      ),
+    );
+  }
+
+  Widget _dimCell(String dim) {
+    final on = dim == _dim;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: on ? null : () => _pick(() => _dim = dim),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: on ? LhBiPlum.lavender : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (on) ...[
+              Container(
+                width: 5,
+                height: 5,
+                decoration: const BoxDecoration(
+                  color: LhBiPlum.primary,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              widget.dimLabel(dim),
+              style: _sans(
+                size: 12.5,
+                color: on ? LhBiPlum.deep : LhColors.mute,
+                weight: on ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 下钻维度切换 —— 一条等分分段控件。
+  ///
+  /// 原来是一排药丸挤在 Wrap 里：没有高度约束，行高塌到文字本身，
+  /// 点击区只有十来个像素，手指够不着。分段控件把整条宽度等分给每一维，
+  /// 每格 36 高、整格可点 —— 这是这一页上唯一需要反复点的控件，
+  /// 它的命中区不该是全页最小的那个。
+  Widget _breakSegment(
+    List<({String key, String label})> crosses,
+    String breakKey,
+  ) {
+    return Container(
+      height: 36,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: LhColors.paper,
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: LhColors.line2, width: 0.7),
+      ),
+      child: Row(
+        children: [
+          for (final c in crosses)
+            Expanded(
+              child: KeyedSubtree(
+                key: ValueKey('bi-break-${c.key}'),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: c.key == breakKey ? null : () => _pickBreak(c.key),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 140),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: c.key == breakKey
+                          ? LhBiPlum.lavender
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: c.key == breakKey
+                            ? LhBiPlum.primary
+                            : Colors.transparent,
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      c.label,
+                      style: _sans(
+                        size: 11.5,
+                        color: c.key == breakKey
+                            ? LhBiPlum.deep
+                            : LhColors.mute,
+                        weight: c.key == breakKey
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _pillChip({
+    required String label,
+    required bool on,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: on ? null : onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: on ? LhBiPlum.mist : LhColors.paper,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: on ? LhBiPlum.primary : LhColors.line2,
+            width: on ? 1 : 0.7,
+          ),
+        ),
+        child: Text(
+          label,
+          style: _sans(
+            size: 11,
+            color: on ? LhBiPlum.deep : LhColors.ink2,
+            weight: on ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Hero 卡：全页唯一一块有色面 ──────────────────────────────────────────
+
+  Widget _heroCard(List<_BiItem> items) {
+    final total = items.fold<double>(0, (s, e) => s + e.value);
+    final headline = _metric.isRate
+        ? (items.isEmpty ? 0.0 : total / items.length)
+        : total;
+    final parts = lhBiParts(headline, isRate: _metric.isRate);
+
+    final scaleTotal = items.fold<double>(0, (s, e) => s + e.scale.abs());
+    final sorted = List<_BiItem>.from(items)
+      ..sort((a, b) => b.scale.abs().compareTo(a.scale.abs()));
+    final cr3 = sorted.take(3).fold<double>(0, (s, e) => s + e.scale.abs());
+    final concentration = scaleTotal > 0 ? cr3 / scaleTotal * 100 : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
+      decoration: BoxDecoration(
+        color: LhBiPlum.heroFill,
+        borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
+        border: Border.all(color: LhBiPlum.heroEdge, width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: lighthouseHeroMastheadLabelIconSize,
+                height: lighthouseHeroMastheadLabelIconSize,
+                decoration: BoxDecoration(
+                  color: LhBiPlum.primary,
+                  borderRadius: BorderRadius.circular(
+                    lighthouseHeroMastheadLabelRadius,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.insights_rounded,
+                  size: 11,
+                  color: LhColors.paper,
+                ),
+              ),
+              const SizedBox(width: 7),
+              Flexible(
+                child: LhScrollText(
+                  '${widget.dimLabel(_dim)} · ${_metric.label}'
+                  '${_metric.isRate ? ' 均值' : ' 合计'}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _sans(
+                    size: lighthouseHeroMastheadLabelFontSize,
+                    color: LhColors.ink,
+                    weight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 11),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                parts.text,
+                style: LhTypography.number(size: 30, color: LhBiPlum.heroNum),
+              ),
+              if (parts.unit.isNotEmpty) ...[
+                const SizedBox(width: 2),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    parts.unit,
+                    style: _sans(
+                      size: 11,
+                      color: LhColors.mute,
+                      weight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 9),
+          Text(
+            '共 ${items.length} 项 · 前三名占规模 ${lhBiPct(concentration)}'
+            ' · ${widget.periodLabel}',
+            style: _mono(size: 9.5, color: LhColors.mute, spacing: 0.1),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statRow(List<_BiItem> items) {
+    final ranked = List<_BiItem>.from(items)
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final top = ranked.isEmpty ? null : ranked.first;
+
+    final winners = items.where((e) => e.profit > 0).toList();
+    final losers = items.where((e) => e.profit < 0).toList();
+    final scored = winners.length + losers.length;
+    final winRate = scored > 0 ? winners.length / scored * 100 : null;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: _sectionTile(
+            sectionKey: 'scale',
+            title: '头名',
+            caption: top?.name ?? '—',
+            headline: top == null
+                ? (text: '—', unit: '')
+                : lhBiParts(top.value, isRate: _metric.isRate),
+          ),
+        ),
+        const SizedBox(width: lighthouseHeroCardGap),
+        Expanded(
+          child: _sectionTile(
+            sectionKey: 'profit',
+            title: _isNetTa ? '流入面' : '盈利面',
+            caption: '${winners.length} / $scored 项${_isNetTa ? '为正' : '盈利'}',
+            headline: winRate == null
+                ? (text: '—', unit: '')
+                : (text: winRate.toStringAsFixed(0), unit: '%'),
+          ),
+        ),
+        const SizedBox(width: lighthouseHeroCardGap),
+        Expanded(
+          child: _sectionTile(
+            sectionKey: 'cost',
+            title: _isNetTa ? '流出面' : '亏损面',
+            caption: losers.isEmpty
+                ? (_isNetTa ? '本期无流出项' : '本期无亏损项')
+                : '${losers.length} / $scored 项${_isNetTa ? '为负' : '亏损'}',
+            headline: (text: '${losers.length}', unit: '项'),
+            headlineColor: losers.isEmpty ? null : LhColors.neg,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionTile({
+    required String sectionKey,
+    required String title,
+    required String caption,
+    required ({String text, String unit}) headline,
+    Color? headlineColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(9, 9, 8, 10),
+      decoration: BoxDecoration(
+        color: LhBiSection.tint(sectionKey),
+        borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
+        border: Border.all(color: LhBiSection.edge(sectionKey), width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _sectionHeader(sectionKey, title),
+          const SizedBox(height: 9),
+          LhScrollText(
+            caption,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _sans(
+              size: lighthouseHeroMetricLabelFontSize,
+              color: LhColors.mute,
+              weight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Flexible(
+                child: LhScrollText(
+                  headline.text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: LhTypography.number(
+                    size: lighthouseHeroMetricValueFontSize + 2,
+                    color: headlineColor ?? LhColors.ink,
+                  ),
+                ),
+              ),
+              if (headline.unit.isNotEmpty) ...[
+                const SizedBox(width: 1),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 1),
+                  child: Text(
+                    headline.unit,
+                    style: _sans(
+                      size: 8,
+                      color: LhColors.mute,
+                      weight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionHeader(String sectionKey, String title) {
+    return Row(
+      children: [
+        Container(
+          width: lighthouseHeroSectionIconSize,
+          height: lighthouseHeroSectionIconSize,
+          decoration: BoxDecoration(
+            color: LhBiSection.accent(sectionKey),
+            borderRadius: BorderRadius.circular(5),
+          ),
+          child: Icon(
+            LhBiSection.icon(sectionKey),
+            size: 10.5,
+            color: LhColors.paper,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: LhScrollText(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: LhTypography.sans(
+              size: lighthouseHeroGroupTitleFontSize,
+              color: LhBiSection.title(sectionKey),
+              weight: FontWeight.w700,
+              letterSpacing: 0.2,
+              height: 1.0,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── 图卡外壳：白卡 + 分区图标 + 分区淡底结论条 ───────────────────────────
+
+  Widget _chartCard({
+    required String sectionKey,
+    required String title,
+    required String subtitle,
+    required Widget child,
+    String? insight,
+  }) {
+    final radius = BorderRadius.circular(lighthouseHeroCardRadius);
+    return Container(
+      decoration: BoxDecoration(
+        color: LhColors.paper,
+        borderRadius: radius,
+        border: Border.all(color: LhColors.line2, width: 0.7),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+            child: Row(
+              children: [
+                Container(
+                  width: lighthouseHeroSectionIconSize,
+                  height: lighthouseHeroSectionIconSize,
+                  decoration: BoxDecoration(
+                    color: LhBiSection.accent(sectionKey),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Icon(
+                    LhBiSection.icon(sectionKey),
+                    size: 10.5,
+                    color: LhColors.paper,
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Flexible(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _sans(
+                      size: 12.5,
+                      color: LhColors.ink,
+                      weight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: LhScrollText(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: _mono(size: 9, spacing: 0.1),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          child,
+          if (insight != null) ...[
+            // 分隔线单独一根，不挂在下面那块的 decoration 上。
+            //
+            //   Border(top: ...) 是「非 uniform border」，Flutter 的 Border.paint
+            //   对它断言 borderRadius == null —— 两者写在同一个 BoxDecoration 里，
+            //   build 能过，paint 一定抛。整张 BI 页四张图卡都吃这个结论，
+            //   于是页面开得出来却什么都画不出来，看上去就是「打不开」。
+            Container(height: 0.6, color: LhBiSection.edge(sectionKey)),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(12, 9, 12, 11),
+              decoration: BoxDecoration(
+                color: LhBiSection.tint(sectionKey),
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(lighthouseHeroCardRadius),
+                  bottomRight: Radius.circular(lighthouseHeroCardRadius),
+                ),
+              ),
+              child: Text(
+                insight,
+                style: _mono(
+                  size: 9.5,
+                  color: LhBiSection.title(sectionKey),
+                  weight: FontWeight.w500,
+                  spacing: 0.1,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ── 图 1 · 构成环形图 ────────────────────────────────────────────────────
+
+  Widget _compositionCard(List<_BiItem> items) {
+    final built = lhBiBuildCompositionSlices(
+      items.map((e) => (name: e.name, scale: e.scale)),
+    );
+    if (built.isEmpty) {
+      return _chartCard(
+        sectionKey: 'scale',
+        title: '维度构成',
+        subtitle: '无正值数据',
+        child: _noData('当前口径下没有可拆分的正值，构成图不显示。'),
+      );
+    }
+
+    final slices = <_Slice>[
+      for (var i = 0; i < built.length; i++)
+        _Slice(
+          name: built[i].name,
+          value: built[i].value,
+          color: built[i].name.startsWith('其他 ')
+              ? LhBiPalette.other
+              : LhBiPalette.slot(i),
+        ),
+    ];
+    final total = slices.fold<double>(0, (s, e) => s + e.value);
+    final positiveCount = items.where((e) => e.scale > 0).length;
+
+    final top = slices.first;
+    final topPct = total > 0 ? top.value / total * 100 : 0.0;
+    final scaleLabel = _metric.isRate ? '销售额' : _metric.label;
+
+    return _chartCard(
+      sectionKey: 'scale',
+      title: '${widget.dimLabel(_dim)}构成',
+      subtitle: _isNetTa
+          ? '按净额绝对值 · $positiveCount 类'
+          : (_metric.isRate
+                ? '比率不可加总 · 按销售额拆'
+                : '按$scaleLabel · $positiveCount 项'),
+      insight:
+          '头部「${top.name}」占 ${lhBiPct(topPct)}'
+          '${slices.length > 1 ? '，前 ${math.min(3, slices.length)} 名合计 ${lhBiPct(_headPct(slices, total, 3))}' : ''}。',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              height: 172,
+              child: LayoutBuilder(
+                builder: (context, box) => GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: (d) => _hitDonut(
+                    d.localPosition,
+                    Size(box.maxWidth, box.maxHeight),
+                    slices,
+                    total,
+                  ),
+                  child: AnimatedBuilder(
+                    animation: _anim,
+                    builder: (_, _) => CustomPaint(
+                      painter: _DonutPainter(
+                        slices: slices,
+                        total: total,
+                        progress: Curves.easeOutCubic.transform(_anim.value),
+                        centerLabel: scaleLabel,
+                        centerParts: lhBiParts(total, isRate: false),
+                        selected: _drillName,
+                      ),
+                      size: Size.infinite,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (lhBiCrossDims(_dim).isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                '点扇区或下面任一行，看它拆到'
+                '${lhBiCrossDims(_dim).map((e) => e.label).join(' / ')}',
+                textAlign: TextAlign.center,
+                style: _mono(size: 8.5, color: LhColors.mute2, spacing: 0.2),
+              ),
+            ],
+            const SizedBox(height: 10),
+            for (var i = 0; i < slices.length; i++)
+              _legendRow(slices[i], total, i),
+            _drillPanel(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 扇区命中：把点击位置换成极角，再沿累计角度找出落在哪一片。
+  /// 圆心那块（半径小于内圈）不算命中 —— 那里是总量读数，不是数据区。
+  void _hitDonut(Offset p, Size size, List<_Slice> slices, double total) {
+    if (total <= 0 || slices.isEmpty) return;
+    final center = Offset(size.width / 2, size.height / 2);
+    final outer = math.min(size.width, size.height) / 2 - 6;
+    if (outer <= 0) return;
+    const stroke = 28.0;
+    final v = p - center;
+    final dist = v.distance;
+    if (dist < outer - stroke || dist > outer + 2) return;
+    // atan2 以三点钟为 0、逆时针为负；环从十二点开始顺时针画，换算成同一起点。
+    var a = math.atan2(v.dy, v.dx) + math.pi / 2;
+    if (a < 0) a += math.pi * 2;
+    var acc = 0.0;
+    for (final s in slices) {
+      final sweep = (s.value / total) * math.pi * 2;
+      if (a >= acc && a < acc + sweep) {
+        if (s.color == LhBiPalette.other) return; // 「其他」是聚合，没有实体可钻
+        _toggleDrill(s.name);
+        return;
+      }
+      acc += sweep;
+    }
+  }
+
+  /// 下钻面板：某个实体拆到另外三维（产品↔供给↔渠道↔人效）。
+  Widget _drillPanel() {
+    final name = _drillName;
+    if (name == null) return const SizedBox.shrink();
+
+    final crosses = lhBiCrossDims(_dim);
+    if (crosses.isEmpty) return const SizedBox.shrink();
+    final breakKey = crosses.any((e) => e.key == _breakKey)
+        ? _breakKey
+        : crosses.first.key;
+    final b = widget.breakdownFor(_dim, name, breakKey);
+    final rows = <_BiItem>[];
+    for (final r in b.rows) {
+      final n = r['name']?.toString().trim() ?? '';
+      if (n.isEmpty) continue;
+      rows.add(
+        _BiItem(
+          name: n,
+          value: widget.metricValue(r, _metric.key),
+          scale: widget.metricValue(r, _scaleKey),
+          profit: (r['profit'] as num?)?.toDouble() ?? 0,
+        ),
+      );
+    }
+    rows.sort((a, c) => c.value.abs().compareTo(a.value.abs()));
+    final shown = rows.take(12).toList();
+    final maxAbs = shown.fold<double>(
+      0,
+      (m, e) => math.max(m, e.value.abs()),
+    );
+
+    Widget body;
+    if (_drillBusy && shown.isEmpty) {
+      body = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 18),
+        child: Center(
+          child: Text(
+            '正在取${b.label}明细…',
+            style: _mono(size: 9.5, color: LhColors.mute2),
+          ),
+        ),
+      );
+    } else if (shown.isEmpty || maxAbs <= 0) {
+      body = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Text(
+          '「$name」在当前区间没有${b.label}拆分数据。\n'
+          '后端 detail 未下发该维度时这里就是空的，不做估算。',
+          style: _mono(size: 9.5, color: LhColors.mute2, spacing: 0.1),
+        ),
+      );
+    } else {
+      body = SizedBox(
+        height: shown.length * 26.0 + 20,
+        child: AnimatedBuilder(
+          animation: _anim,
+          builder: (_, _) => CustomPaint(
+            painter: _RankBarPainter(
+              items: shown,
+              maxAbs: maxAbs,
+              isRate: _metric.isRate,
+              progress: Curves.easeOutCubic.transform(_anim.value),
+              rowHeight: 26,
+            ),
+            size: Size.infinite,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
+      decoration: BoxDecoration(
+        color: LhBiPlum.mist,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: LhBiPlum.heroEdge, width: 0.7),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(width: 2, height: 10, color: LhBiPlum.primary),
+              const SizedBox(width: 6),
+              Flexible(
+                child: LhScrollText(
+                  '$name · ${b.label}分布',
+                  key: ValueKey('bi-drill-$name-$breakKey'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _sans(
+                    size: 11,
+                    color: LhBiPlum.deep,
+                    weight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _metric.label,
+                style: _mono(size: 8.5, color: LhColors.mute2),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _drillName = null),
+                child: const Icon(
+                  Icons.close_rounded,
+                  size: 14,
+                  color: LhColors.mute2,
+                ),
+              ),
+            ],
+          ),
+          if (crosses.length > 1) ...[
+            const SizedBox(height: 8),
+            _breakSegment(crosses, breakKey),
+          ],
+          const SizedBox(height: 8),
+          body,
+          if (shown.length < rows.length)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                '共 ${rows.length} 个${b.label}，按 ${_metric.label} 取前 ${shown.length} 个',
+                style: _mono(size: 8.5, color: LhColors.mute2),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  double _headPct(List<_Slice> slices, double total, int n) {
+    if (total <= 0) return 0;
+    var acc = 0.0;
+    for (var i = 0; i < slices.length && i < n; i++) {
+      acc += slices[i].value;
+    }
+    return acc / total * 100;
+  }
+
+  Widget _legendRow(_Slice s, double total, int index) {
+    final pct = total > 0 ? s.value / total * 100 : 0.0;
+    final drillable = s.color != LhBiPalette.other;
+    final on = drillable && _drillName == s.name;
+    return GestureDetector(
+      key: ValueKey(lhBiLegendKey(s.name, index)),
+      behavior: HitTestBehavior.opaque,
+      onTap: drillable ? () => _toggleDrill(s.name) : null,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+        decoration: BoxDecoration(
+          color: on ? LhBiPlum.lavender : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+        ),
+        child: Row(
+        children: [
+          Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(
+              color: s.color,
+              borderRadius: BorderRadius.circular(2.5),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: LhScrollText(
+              s.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _sans(
+                size: 11,
+                color: LhColors.ink2,
+                weight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            lhBiMoney(s.value),
+            style: _mono(size: 10.5, color: LhColors.ink, spacing: 0),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 44,
+            child: Text(
+              lhBiPct(pct),
+              textAlign: TextAlign.right,
+              style: _mono(size: 10.5, color: LhColors.mute, spacing: 0),
+            ),
+          ),
+          if (drillable) ...[
+            const SizedBox(width: 2),
+            Icon(
+              on ? Icons.expand_less_rounded : Icons.chevron_right_rounded,
+              size: 14,
+              color: on ? LhBiPlum.primary : LhColors.mute2,
+            ),
+          ] else
+            const SizedBox(width: 16),
+        ],
+        ),
+      ),
+    );
+  }
+
+  // ── 图 2 · Top N 排行柱 ──────────────────────────────────────────────────
+
+  /// 净TA 的排行换成二级分类：五个桶在构成图和诊断图上已经各出现一次，
+  /// 再排一次同样五行是浪费一整屏。真正要问的是「具体哪一笔科目在动」。
+  List<_BiItem> _rankingSource(List<_BiItem> items) {
+    if (!_isNetTa) return items;
+    final out = <_BiItem>[];
+    for (final r in widget.rowsFor(_dim)) {
+      final parent = r['name']?.toString().trim() ?? '';
+      final subs = r['secondaries'];
+      if (subs is! List) continue;
+      for (final raw in subs) {
+        if (raw is! Map) continue;
+        final sub = Map<String, dynamic>.from(raw);
+        final name = sub['name']?.toString().trim() ?? '';
+        if (name.isEmpty) continue;
+        final v = (sub['netTa'] as num?)?.toDouble() ?? 0;
+        if (v == 0) continue;
+        if (_group != '全部' && parent != _group) continue;
+        out.add(
+          _BiItem(
+            name: name,
+            group: parent,
+            value: v,
+            scale: v.abs(),
+            profit: v,
+          ),
+        );
+      }
+    }
+    return out.isEmpty ? items : out;
+  }
+
+  Widget _rankingCard(List<_BiItem> allItems) {
+    final items = _rankingSource(allItems);
+    // 账本三维排「谁最大」；净TA 排「谁动得最狠」—— 流出是负数，
+    // 按原值排会把最大的一笔流出压到榜尾，那正是最该被看见的一行。
+    final ranked = List<_BiItem>.from(items)
+      ..sort(
+        _isNetTa
+            ? (a, b) => b.value.abs().compareTo(a.value.abs())
+            : (a, b) => b.value.compareTo(a.value),
+      );
+    final take = ranked.take(15).toList();
+    if (take.isEmpty) {
+      return _chartCard(
+        sectionKey: 'scale',
+        title: 'Top 排行',
+        subtitle: '无数据',
+        child: _noData('当前筛选下没有可排名的行。'),
+      );
+    }
+
+    final maxAbs = take.fold<double>(0, (m, e) => math.max(m, e.value.abs()));
+    final first = take.first;
+    final second = take.length > 1 ? take[1] : null;
+    final gap = second == null
+        ? ''
+        : '，领先第二名 '
+              '${lhBiValue((first.value - second.value).abs(), isRate: _metric.isRate)}';
+
+    return _chartCard(
+      sectionKey: 'scale',
+      title: _isNetTa ? '二级分类 Top ${take.length}' : 'Top ${take.length} 排行',
+      subtitle: _isNetTa
+          ? '按净额绝对值 · 共 ${items.length} 项'
+          : '${_metric.label} · 共 ${items.length} 项',
+      insight:
+          '第一名「${first.name}」'
+          '${lhBiValue(first.value, isRate: _metric.isRate)}$gap。',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              height: take.length * 30.0 + 20,
+              child: LayoutBuilder(
+                builder: (context, box) => GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: (d) {
+                    final i = (d.localPosition.dy / 30).floor();
+                    if (i >= 0 && i < take.length) _toggleDrill(take[i].name);
+                  },
+                  child: AnimatedBuilder(
+                    animation: _anim,
+                    builder: (_, _) => CustomPaint(
+                      painter: _RankBarPainter(
+                        items: take,
+                        maxAbs: maxAbs,
+                        isRate: _metric.isRate,
+                        progress: Curves.easeOutCubic.transform(_anim.value),
+                        selected: _drillName,
+                      ),
+                      size: Size.infinite,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            _drillPanel(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── 图 3 · 走势柱线图 ────────────────────────────────────────────────────
+
+  Widget _trendCard() {
+    final s = _series();
+    if (s == null) {
+      return _chartCard(
+        sectionKey: 'scale',
+        title: '期内走势',
+        subtitle: '后端未下发序列',
+        child: _noData('当前维度的行没有 trend 序列，走势图不显示。'),
+      );
+    }
+
+    final v = s.values;
+    final first = v.first;
+    final delta = first != 0 ? (v.last - first) / first.abs() * 100 : 0.0;
+    var peak = 0;
+    for (var i = 1; i < v.length; i++) {
+      if (v[i] > v[peak]) peak = i;
+    }
+
+    return _chartCard(
+      sectionKey: 'scale',
+      title: s.fallback
+          ? '期内走势 · ${_isNetTa ? '净额' : '销售额'}'
+          : '期内走势 · ${_metric.label}',
+      subtitle: '柱＝当期 · 线＝3 期均值',
+      insight:
+          '末点较首点 ${lhBiDeltaText(delta)}，'
+          '峰值在第 ${peak + 1} 期（${lhBiMoney(v[peak])}）。',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 2, 12, 14),
+        child: SizedBox(
+          height: 178,
+          child: AnimatedBuilder(
+            animation: _anim,
+            builder: (_, _) => CustomPaint(
+              painter: _TrendPainter(
+                values: v,
+                labels: s.labels,
+                progress: Curves.easeOutCubic.transform(_anim.value),
+              ),
+              size: Size.infinite,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── 图 4 · 盈亏诊断 ──────────────────────────────────────────────────────
+
+  Widget _pnlCard(List<_BiItem> items) {
+    final withProfit = items.where((e) => e.profit != 0).toList()
+      ..sort((a, b) => b.profit.compareTo(a.profit));
+    if (withProfit.isEmpty) {
+      return _chartCard(
+        sectionKey: 'profit',
+        title: _isNetTa ? '净额诊断' : '盈亏诊断',
+        subtitle: _isNetTa ? '无净额数据' : '无净利数据',
+        child: _noData(_isNetTa ? '当前口径没有净额读数。' : '当前口径没有净利读数。'),
+      );
+    }
+
+    final winners = withProfit.where((e) => e.profit > 0).toList();
+    final losers = withProfit.where((e) => e.profit < 0).toList();
+    final lossSum = losers.fold<double>(0, (s, e) => s + e.profit);
+    // 净TA 这一维上，正负不是「盈亏」而是「流入 / 流出」——
+    // 经营成本天然为负，把它叫成「亏损」会读出一个不存在的结论。
+    final negNoun = _isNetTa ? '流出' : '亏损';
+
+    // 上 5 盈 + 下 5 亏：中间的近零项对诊断没有信息量。
+    final shown = <_BiItem>[
+      ...winners.take(8),
+      ...losers.reversed.take(8).toList().reversed,
+    ];
+    final maxAbs = shown.fold<double>(
+      0,
+      (m, e) => math.max(m, e.profit.abs()),
+    );
+
+    return _chartCard(
+      sectionKey: 'profit',
+      title: _isNetTa ? '净额诊断' : '盈亏诊断',
+      subtitle: _isNetTa
+          ? '五类净额 · 流入 ${winners.length} / 流出 ${losers.length}'
+          : '净利 · 盈 ${winners.length} / 亏 ${losers.length}',
+      insight: losers.isEmpty
+          ? '当前口径没有$negNoun项。'
+          : '$negNoun ${losers.length} 项合计 ${lhBiMoney(lossSum)}，'
+                '最深「${losers.last.name}」${lhBiMoney(losers.last.profit)}'
+                '${losers.last.profitDelta == null ? '' : '（环比 ${lhBiDeltaText(losers.last.profitDelta!)}）'}。',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+        child: SizedBox(
+          height: shown.length * 28.0 + 24,
+          child: AnimatedBuilder(
+            animation: _anim,
+            builder: (_, _) => CustomPaint(
+              painter: _DivergingPainter(
+                items: shown,
+                maxAbs: maxAbs,
+                progress: Curves.easeOutCubic.transform(_anim.value),
+              ),
+              size: Size.infinite,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 净TA 视角 —— 另一套仪表，不是同一套图换标签
+  //
+  //   前四个视角问的是同一个问题：「这门生意里，谁贡献了多少」。构成 / 排行 /
+  //   走势 / 盈亏 是围绕「份额」组织的，因为账本上的钱都是同向的。
+  //
+  //   净TA 问的是完全不同的问题：「这段时间钱怎么流的，最后剩下多少」。
+  //   它的五个桶天生有正有负，份额没有意义 —— 把三个负桶塞进环形图，
+  //   要么消失、要么取绝对值假装是份额，两种读法都是错的。
+  //
+  //   所以这一维换掉整套版式：
+  //     · 深墨 hero + 对冲条：一眼看清流入 / 流出 / 净下来多少
+  //     · 五类瀑布：从 0 出发逐类累加，最后收口到净额 —— 资金流唯一正确的图
+  //     · 二级科目双向柱：具体哪一笔在动
+  //     · 存量 / 流量双栏走势：上栏累计净额（钱攒下来没有），下栏每期净额
+  //   配色也换：账本是紫，资金流是 青(流入) ↔ 珊瑚(流出)，不共用一套语义。
+  // ═══════════════════════════════════════════════════════════════════════
+
+  List<_FlowBucket> get _flowBuckets {
+    final out = <_FlowBucket>[];
+    for (final r in widget.rowsFor('netTa')) {
+      final name = r['name']?.toString().trim() ?? '';
+      if (name.isEmpty) continue;
+      final net = (r['netTa'] as num?)?.toDouble() ?? 0;
+      final inflow =
+          (r['inflow'] as num?)?.toDouble() ?? (net > 0 ? net : 0.0);
+      // outflow 在数据层就是负数（见 lighthousePrepareNetTARows），别再取反。
+      final outflow =
+          (r['outflow'] as num?)?.toDouble() ?? (net < 0 ? net : 0.0);
+      final subs = <_FlowSub>[];
+      final raw = r['secondaries'];
+      if (raw is List) {
+        for (final e in raw) {
+          if (e is! Map) continue;
+          final m = Map<String, dynamic>.from(e);
+          final sn = m['name']?.toString().trim() ?? '';
+          final sv = (m['netTa'] as num?)?.toDouble() ?? 0;
+          if (sn.isEmpty || sv == 0) continue;
+          subs.add(_FlowSub(name: sn, parent: name, net: sv));
+        }
+      }
+      out.add(
+        _FlowBucket(
+          name: name,
+          net: net,
+          inflow: inflow,
+          outflow: outflow,
+          subs: subs,
+        ),
+      );
+    }
+    return out;
+  }
+
+  List<Widget> _netTaCards(List<_BiItem> items) {
+    final buckets = _flowBuckets;
+    if (buckets.isEmpty) return [_emptyCard()];
+    return [
+      _flowHero(buckets),
+      const SizedBox(height: lighthouseHeroCardGap),
+      _flowWaterfallCard(buckets),
+      const SizedBox(height: lighthouseHeroCardGap),
+      _flowSubRankCard(buckets),
+      const SizedBox(height: lighthouseHeroCardGap),
+      _flowTrendCard(),
+      if (_showTable) ...[
+        const SizedBox(height: lighthouseHeroCardGap),
+        _tableCard(items),
+      ],
+    ];
+  }
+
+  // ── 深墨 hero：净额 + 对冲条 ─────────────────────────────────────────────
+
+  Widget _flowHero(List<_FlowBucket> buckets) {
+    var totalIn = 0.0;
+    var totalOut = 0.0;
+    var net = 0.0;
+    for (final b in buckets) {
+      totalIn += b.inflow;
+      totalOut += b.outflow.abs();
+      // 净额以 netTa 字段为准，不用 流入−流出 反推：后端两者都下发时
+      // 未必分毫对齐，hero 上的大数必须和列表里那个数字一模一样。
+      net += b.net;
+    }
+    final gross = totalIn + totalOut;
+    final retention = gross > 0 ? net.abs() / gross * 100 : 0.0;
+    // 符号单独画，数字取绝对值 —— 否则负数会出现「−-12.3」。
+    final parts = lhBiParts(net.abs(), isRate: false);
+    final netColor = net >= 0 ? LhBiFlow.inflowOn : LhBiFlow.outflowOn;
+    final inFlex = gross > 0 ? (totalIn / gross * 1000).round() : 1;
+    final outFlex = gross > 0 ? (totalOut / gross * 1000).round() : 1;
+
+    Widget read(String label, String value, Color color) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: _mono(size: 8.5, color: LhBiFlow.mute, spacing: 0.8)),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: LhTypography.number(size: 15, color: color),
+        ),
+      ],
+    );
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(15, 14, 15, 15),
+      decoration: BoxDecoration(
+        color: LhBiFlow.ink,
+        borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: lighthouseHeroMastheadLabelIconSize,
+                height: lighthouseHeroMastheadLabelIconSize,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: LhBiFlow.inflow,
+                  borderRadius: BorderRadius.circular(
+                    lighthouseHeroMastheadLabelRadius,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.swap_vert_rounded,
+                  size: 12,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 7),
+              Text(
+                '净TA · 资金流',
+                style: _sans(
+                  size: lighthouseHeroMastheadLabelFontSize,
+                  color: Colors.white,
+                  weight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                widget.rangeLabel,
+                style: _mono(size: 9, color: LhBiFlow.mute, spacing: 0.4),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${net >= 0 ? '' : '−'}${parts.text}',
+                style: LhTypography.number(size: 32, color: netColor),
+              ),
+              if (parts.unit.isNotEmpty) ...[
+                const SizedBox(width: 3),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 5),
+                  child: Text(
+                    parts.unit,
+                    style: _sans(
+                      size: 11,
+                      color: LhBiFlow.mute,
+                      weight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  net >= 0 ? '净流入' : '净流出',
+                  style: _mono(size: 9.5, color: netColor, spacing: 0.6),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 13),
+          // 对冲条：整条宽度＝这段时间的资金总流动，左流出右流入，
+          // 中间那道缝就是净额 —— 两边差多少，一眼看得出。
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: SizedBox(
+              height: 8,
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: outFlex < 1 ? 1 : outFlex,
+                    child: const ColoredBox(color: LhBiFlow.outflowOn),
+                  ),
+                  const SizedBox(width: 2),
+                  Expanded(
+                    flex: inFlex < 1 ? 1 : inFlex,
+                    child: const ColoredBox(color: LhBiFlow.inflowOn),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 11),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: read('流出', lhBiMoney(totalOut), LhBiFlow.outflowOn),
+              ),
+              Expanded(
+                child: read('流入', lhBiMoney(totalIn), LhBiFlow.inflowOn),
+              ),
+              Expanded(
+                child: read(
+                  '净留存率',
+                  '${retention.toStringAsFixed(1)}%',
+                  Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 9),
+          Text(
+            '净留存率＝净额 ÷ 资金总流动（${lhBiMoney(gross)}）'
+            '，衡量这段时间流过的钱最后留下多少。',
+            style: _mono(size: 8.5, color: LhBiFlow.mute, spacing: 0.1),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── 五类瀑布 ────────────────────────────────────────────────────────────
+
+  Widget _flowWaterfallCard(List<_FlowBucket> buckets) {
+    final steps = <_WaterfallStep>[];
+    var cum = 0.0;
+    var lo = 0.0;
+    var hi = 0.0;
+    for (final b in buckets) {
+      final start = cum;
+      cum += b.net;
+      lo = math.min(lo, math.min(start, cum));
+      hi = math.max(hi, math.max(start, cum));
+      steps.add(
+        _WaterfallStep(
+          name: b.name,
+          value: b.net,
+          start: start,
+          end: cum,
+          isTotal: false,
+        ),
+      );
+    }
+    steps.add(
+      _WaterfallStep(
+        name: '净额',
+        value: cum,
+        start: 0,
+        end: cum,
+        isTotal: true,
+      ),
+    );
+    if (hi - lo < 1e-9) {
+      return _flowCard(
+        title: '五类资金瀑布',
+        subtitle: '无净额数据',
+        child: _noData('当前区间五类净额全为 0。'),
+      );
+    }
+
+    final biggest = buckets.isEmpty
+        ? null
+        : (List<_FlowBucket>.from(buckets)
+                ..sort((a, b) => b.net.abs().compareTo(a.net.abs())))
+              .first;
+
+    return _flowCard(
+      title: '五类资金瀑布',
+      subtitle: '从 0 逐类累加 · 收口到净额',
+      insight: biggest == null
+          ? null
+          : '影响最大的是「${biggest.name}」${lhBiMoney(biggest.net)}'
+                '，${biggest.net >= 0 ? '把净额往上抬' : '把净额往下拉'}。',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 2, 12, 14),
+        child: SizedBox(
+          height: steps.length * 30.0 + 16,
+          child: AnimatedBuilder(
+            animation: _anim,
+            builder: (_, _) => CustomPaint(
+              painter: _WaterfallPainter(
+                steps: steps,
+                lo: lo,
+                hi: hi,
+                progress: Curves.easeOutCubic.transform(_anim.value),
+              ),
+              size: Size.infinite,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── 二级科目双向柱 ──────────────────────────────────────────────────────
+
+  Widget _flowSubRankCard(List<_FlowBucket> buckets) {
+    final subs = <_FlowSub>[];
+    for (final b in buckets) {
+      subs.addAll(b.subs);
+    }
+    if (subs.isEmpty) {
+      return _flowCard(
+        title: '二级科目',
+        subtitle: '无明细',
+        child: _noData('后端未下发二级分类，这里不做拆分。'),
+      );
+    }
+    subs.sort((a, b) => b.net.abs().compareTo(a.net.abs()));
+    final shown = subs.take(14).toList();
+    final items = [
+      for (final e in shown)
+        _BiItem(
+          name: e.name,
+          group: e.parent,
+          value: e.net,
+          scale: e.net.abs(),
+          profit: e.net,
+        ),
+    ];
+    final maxAbs = items.fold<double>(
+      0,
+      (m, e) => math.max(m, e.profit.abs()),
+    );
+    final top = shown.first;
+
+    return _flowCard(
+      title: '二级科目 Top ${shown.length}',
+      subtitle: '按净额绝对值 · 共 ${subs.length} 项',
+      insight:
+          '动得最狠的是「${top.name}」${lhBiMoney(top.net)}'
+          '（归${top.parent}）。',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+        child: SizedBox(
+          height: items.length * 28.0 + 24,
+          child: AnimatedBuilder(
+            animation: _anim,
+            builder: (_, _) => CustomPaint(
+              painter: _DivergingPainter(
+                items: items,
+                maxAbs: maxAbs,
+                progress: Curves.easeOutCubic.transform(_anim.value),
+                gain: LhBiFlow.inflow,
+                loss: LhBiFlow.outflow,
+                gainLabel: '流入',
+                lossLabel: '流出',
+              ),
+              size: Size.infinite,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── 存量 / 流量双栏走势 ─────────────────────────────────────────────────
+
+  Widget _flowTrendCard() {
+    final host = widget.seriesFor?.call('netTa', 'netTa');
+    final values = host?.values ?? const <double>[];
+    if (values.length < 2) {
+      return _flowCard(
+        title: '资金流走势',
+        subtitle: '后端未下发序列',
+        child: _noData('当前区间没有净TA 时间序列。'),
+      );
+    }
+    var cum = 0.0;
+    final cumulative = <double>[];
+    for (final v in values) {
+      cum += v;
+      cumulative.add(cum);
+    }
+    var turn = -1;
+    for (var i = 1; i < cumulative.length; i++) {
+      if ((cumulative[i - 1] < 0) != (cumulative[i] < 0)) turn = i;
+    }
+
+    return _flowCard(
+      title: '资金流走势',
+      subtitle: '上：累计净额（存量）· 下：每期净额（流量）',
+      insight: turn > 0
+          ? '累计净额在第 ${turn + 1} 期由'
+                '${cumulative[turn] >= 0 ? '负转正' : '正转负'}。'
+          : '累计净额全程${cum >= 0 ? '为正' : '为负'}，'
+                '期末 ${lhBiMoney(cum)}。',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 2, 12, 14),
+        child: SizedBox(
+          height: 208,
+          child: AnimatedBuilder(
+            animation: _anim,
+            builder: (_, _) => CustomPaint(
+              painter: _FlowTrendPainter(
+                values: values,
+                cumulative: cumulative,
+                labels: host?.labels ?? const <String>[],
+                progress: Curves.easeOutCubic.transform(_anim.value),
+              ),
+              size: Size.infinite,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 净TA 的卡壳 —— 与账本四维的 [_chartCard] 同结构、不同身份：
+  /// 图标块和标题走青色，一眼能看出「这不是刚才那套图」。
+  Widget _flowCard({
+    required String title,
+    required String subtitle,
+    String? insight,
+    required Widget child,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: LhColors.paper,
+        borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
+        border: Border.all(color: LhBiFlow.edge, width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 11, 12, 9),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: lighthouseHeroSectionIconSize,
+                  height: lighthouseHeroSectionIconSize,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: LhBiFlow.tint,
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(color: LhBiFlow.edge, width: 0.8),
+                  ),
+                  child: const Icon(
+                    Icons.water_drop_outlined,
+                    size: 11,
+                    color: LhBiFlow.inflow,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: _sans(
+                          size: 12.5,
+                          color: LhColors.ink,
+                          weight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        style: _mono(size: 8.5, color: LhColors.mute2),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (insight != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(9, 7, 9, 8),
+                decoration: BoxDecoration(
+                  color: LhBiFlow.tint,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  insight,
+                  style: _sans(
+                    size: 10.5,
+                    color: LhColors.ink2,
+                    weight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          child,
+        ],
+      ),
+    );
+  }
+
+  // ── 数据表（每张图的无障碍孪生） ─────────────────────────────────────────
+
+  Widget _tableCard(List<_BiItem> items) {
+    final rows = List<_BiItem>.from(items)
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final total = rows.fold<double>(0, (s, e) => s + e.scale.abs());
+    final radius = BorderRadius.circular(lighthouseHeroCardRadius);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: LhColors.paper,
+        borderRadius: radius,
+        border: Border.all(color: LhColors.line2, width: 0.7),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+            child: _sectionHeader('cash', '数据表 · ${_metric.label}'),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+            decoration: BoxDecoration(
+              color: LhColors.mist,
+              border: const Border(
+                top: BorderSide(color: LhColors.line2, width: 0.5),
+                bottom: BorderSide(color: LhColors.line2, width: 0.5),
+              ),
+            ),
+            child: Row(
+              children: [
+                SizedBox(width: 22, child: Text('#', style: _mono(size: 9))),
+                Expanded(child: Text('名称', style: _mono(size: 9))),
+                SizedBox(
+                  width: 64,
+                  child: Text(
+                    _metric.label,
+                    textAlign: TextAlign.right,
+                    style: _mono(size: 9),
+                  ),
+                ),
+                SizedBox(
+                  width: 44,
+                  child: Text(
+                    '占比',
+                    textAlign: TextAlign.right,
+                    style: _mono(size: 9),
+                  ),
+                ),
+                SizedBox(
+                  width: 60,
+                  child: Text(
+                    '净利',
+                    textAlign: TextAlign.right,
+                    style: _mono(size: 9),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          for (var i = 0; i < rows.length; i++)
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: i == rows.length - 1
+                        ? Colors.transparent
+                        : LhColors.line2.withValues(alpha: 0.6),
+                    width: 0.5,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 22,
+                    child: Text(
+                      '${i + 1}',
+                      style: _mono(
+                        size: 10,
+                        color: i < 3 ? LhBiPlum.primary : LhColors.mute2,
+                        weight: i < 3 ? FontWeight.w700 : FontWeight.w500,
+                        spacing: 0,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: LhScrollText(
+                      rows[i].name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _sans(
+                        size: 11,
+                        color: LhColors.ink,
+                        weight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 64,
+                    child: Text(
+                      lhBiValue(rows[i].value, isRate: _metric.isRate),
+                      textAlign: TextAlign.right,
+                      style: _mono(size: 10, color: LhColors.ink, spacing: 0),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 44,
+                    child: Text(
+                      total > 0
+                          ? lhBiPct(rows[i].scale.abs() / total * 100)
+                          : '—',
+                      textAlign: TextAlign.right,
+                      style: _mono(size: 10, color: LhColors.mute, spacing: 0),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 60,
+                    child: Text(
+                      lhBiMoney(rows[i].profit),
+                      textAlign: TextAlign.right,
+                      style: _mono(
+                        size: 10,
+                        color: rows[i].profit < 0
+                            ? LhColors.neg
+                            : LhColors.ink2,
+                        spacing: 0,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ── 杂项 ─────────────────────────────────────────────────────────────────
+
+  Widget _noData(String text) => Padding(
+    padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
+    child: Text(text, style: _mono(size: 10, color: LhColors.mute2)),
+  );
+
+  Widget _emptyCard() => Container(
+    padding: const EdgeInsets.symmetric(vertical: 44, horizontal: 20),
+    decoration: BoxDecoration(
+      color: LhColors.paper,
+      borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
+      border: Border.all(color: LhColors.line2, width: 0.7),
+    ),
+    child: Center(
+      child: Text(
+        '当前区间下没有可分析的数据。\n换个区间或维度再看。',
+        textAlign: TextAlign.center,
+        style: _mono(size: 11, color: LhColors.mute2, spacing: 0.2),
+      ),
+    ),
+  );
+
+  Widget _footnote() => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 4),
+    child: Text(
+      _isNetTa
+          ? '口径与净TA 列表一致：${widget.periodLabel} · ${widget.rangeLabel}。'
+                '流入为正、流出为负，瀑布按五类映射顺序累加，不做估算。'
+          : '口径与列表一致：${widget.periodLabel} · ${widget.rangeLabel}。'
+                '构成图按规模拆分，比率指标不参与加总。',
+      style: _mono(size: 8.5, color: LhColors.mute2, spacing: 0.1),
+    ),
+  );
+}
+
+@immutable
+class _Slice {
+  const _Slice({required this.name, required this.value, required this.color});
+  final String name;
+  final double value;
+  final Color color;
+}
+
+@immutable
+class _BiSeries {
+  const _BiSeries({
+    required this.values,
+    required this.labels,
+    required this.fallback,
+  });
+  final List<double> values;
+  final List<String> labels;
+
+  /// true = 选中的是比率指标，序列退回销售额。
+  final bool fallback;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 画笔
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// 环形图 —— 至多 5 片，片间留 2px 缝（不画描边）。
+class _DonutPainter extends CustomPainter {
+  _DonutPainter({
+    required this.slices,
+    required this.total,
+    required this.progress,
+    required this.centerLabel,
+    required this.centerParts,
+    this.selected,
+  });
+
+  final List<_Slice> slices;
+  final double total;
+  final double progress;
+  final String centerLabel;
+  final ({String text, String unit}) centerParts;
+
+  /// 展开了省份拆分的那一片：它保持满色并加宽，其余压淡。
+  final String? selected;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (total <= 0 || slices.isEmpty) return;
+    final center = Offset(size.width / 2, size.height / 2);
+    final outer = math.min(size.width, size.height) / 2 - 6;
+    if (outer <= 0) return;
+    const stroke = 28.0;
+    final r = outer - stroke / 2;
+    final rect = Rect.fromCircle(center: center, radius: r);
+
+    // 底环：让缝读起来是「缝」，不是破了个洞。用灯塔的紫 hairline 色。
+    canvas.drawCircle(
+      center,
+      r,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..color = LhBiPlum.mist,
+    );
+
+    final gap = r > 0 ? (2.0 / r) : 0.0;
+    final sel = selected;
+    var start = -math.pi / 2;
+    for (final s in slices) {
+      final sweep = (s.value / total) * math.pi * 2 * progress;
+      final drawn = math.max(sweep - gap, 0.0);
+      final isSel = sel != null && s.name == sel;
+      if (drawn > 0) {
+        canvas.drawArc(
+          rect,
+          start + gap / 2,
+          drawn,
+          false,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = isSel ? stroke + 6 : stroke
+            ..strokeCap = StrokeCap.butt
+            ..color = (sel == null || isSel)
+                ? s.color
+                : s.color.withValues(alpha: 0.28),
+        );
+      }
+      start += sweep;
+    }
+
+    // 圆心读数：与 Hero 同款「大数 + 小单位」
+    final label = _tp(centerLabel, _mono(size: 9, spacing: 0.6));
+    final valueTp = _tp(
+      centerParts.text,
+      LhTypography.number(size: 21, color: LhBiPlum.heroNum),
+    );
+    final unitTp = _tp(
+      centerParts.unit,
+      _sans(size: 9, color: LhColors.mute, weight: FontWeight.w500),
+    );
+    final wide =
+        valueTp.width + (centerParts.unit.isEmpty ? 0 : unitTp.width + 2);
+    label.paint(canvas, Offset(center.dx - label.width / 2, center.dy - 19));
+    valueTp.paint(canvas, Offset(center.dx - wide / 2, center.dy - 5));
+    if (centerParts.unit.isNotEmpty) {
+      unitTp.paint(
+        canvas,
+        Offset(center.dx - wide / 2 + valueTp.width + 2, center.dy + 5),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DonutPainter old) =>
+      old.progress != progress ||
+      old.total != total ||
+      old.slices.length != slices.length ||
+      old.selected != selected ||
+      old.centerParts.text != centerParts.text;
+}
+
+/// Top N 横向柱 —— 名义类目，一个色（灯塔紫）；负值走珊瑚。
+/// 数值直标在右侧固定列，不压柱子，永远不会被裁。
+class _RankBarPainter extends CustomPainter {
+  _RankBarPainter({
+    required this.items,
+    required this.maxAbs,
+    required this.isRate,
+    required this.progress,
+    this.rowHeight = 30,
+    this.selected,
+  });
+
+  final List<_BiItem> items;
+  final double maxAbs;
+  final bool isRate;
+  final double progress;
+
+  /// 下钻面板里行更密，主排行榜用 30。
+  final double rowHeight;
+
+  /// 已展开省份拆分的那一行：底色点亮，其余不变。
+  final String? selected;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (items.isEmpty || maxAbs <= 0) return;
+
+    const rankW = 18.0;
+    const nameW = 76.0;
+    const valueW = 62.0;
+    final rowH = rowHeight;
+    final barH = rowHeight >= 30 ? 11.0 : 9.0;
+
+    final plotLeft = rankW + nameW + 8;
+    final plotRight = size.width - valueW - 6;
+    final plotW = plotRight - plotLeft;
+    if (plotW <= 10) return;
+    final bottom = items.length * rowH + 4;
+
+    // 竖向发丝网格：用灯塔的紫 hairline，与全页线色一致
+    final gridPaint = Paint()
+      ..color = LhBiPlum.line
+      ..strokeWidth = 0.5;
+    for (var i = 1; i <= 4; i++) {
+      final x = plotLeft + plotW * i / 4;
+      canvas.drawLine(Offset(x, 2), Offset(x, bottom), gridPaint);
+    }
+
+    for (var i = 0; i < items.length; i++) {
+      final it = items[i];
+      final cy = i * rowH + rowH / 2;
+      final isTop3 = i < 3;
+      if (selected != null && it.name == selected) {
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(0, cy - rowH / 2 + 1, size.width, rowH - 2),
+            const Radius.circular(6),
+          ),
+          Paint()..color = LhBiPlum.lavender,
+        );
+      }
+
+      final rank = _tp(
+        '${i + 1}',
+        _mono(
+          size: 10,
+          color: isTop3 ? LhBiPlum.primary : LhColors.mute2,
+          weight: isTop3 ? FontWeight.w700 : FontWeight.w500,
+          spacing: 0,
+        ),
+      );
+      rank.paint(canvas, Offset(0, cy - rank.height / 2));
+
+      final showGroup = rowH >= 30 && it.group.isNotEmpty;
+      final name = _tp(
+        it.name,
+        _sans(
+          size: 10.5,
+          color: LhColors.ink2,
+          weight: isTop3 ? FontWeight.w600 : FontWeight.w500,
+        ),
+        maxWidth: nameW,
+      );
+      if (showGroup) {
+        // 名称 + 分类两行 —— 排行榜上「谁」不只是名字，还包括它属于哪一档。
+        name.paint(canvas, Offset(rankW, cy - name.height + 1));
+        final grp = _tp(
+          it.group,
+          _mono(size: 8, color: LhColors.mute2, spacing: 0.1),
+          maxWidth: nameW,
+        );
+        grp.paint(canvas, Offset(rankW, cy + 2));
+      } else {
+        name.paint(canvas, Offset(rankW, cy - name.height / 2));
+      }
+
+      final ratio = (it.value.abs() / maxAbs).clamp(0.0, 1.0);
+      final w = plotW * ratio * progress;
+      final neg = it.value < 0;
+      final color = neg ? LhColors.neg : LhBiPlum.primary;
+      if (w > 0.5) {
+        final rr = Rect.fromLTWH(plotLeft, cy - barH / 2, w, barH);
+        canvas.drawRRect(
+          RRect.fromRectAndCorners(
+            rr,
+            topRight: const Radius.circular(5),
+            bottomRight: const Radius.circular(5),
+          ),
+          Paint()..color = color.withValues(alpha: isTop3 ? 1.0 : 0.62),
+        );
+      }
+
+      final val = _tp(
+        lhBiValue(it.value, isRate: isRate),
+        _mono(
+          size: 10,
+          color: neg ? LhColors.neg : LhColors.ink,
+          weight: isTop3 ? FontWeight.w700 : FontWeight.w600,
+          spacing: 0,
+        ),
+        maxWidth: valueW,
+      );
+      val.paint(canvas, Offset(size.width - val.width, cy - val.height / 2));
+    }
+
+    // 基线
+    canvas.drawLine(
+      Offset(plotLeft, 2),
+      Offset(plotLeft, bottom),
+      Paint()
+        ..color = LhBiPlum.heroEdge
+        ..strokeWidth = 0.8,
+    );
+
+    // x 轴刻度（0 / 中 / 最大）
+    for (var i = 0; i <= 2; i++) {
+      final v = maxAbs * i / 2;
+      final x = plotLeft + plotW * i / 2;
+      final t = _tp(lhBiTick(v, isRate: isRate), _mono(size: 8.5, spacing: 0));
+      t.paint(
+        canvas,
+        Offset(
+          (x - t.width / 2).clamp(0.0, size.width - t.width),
+          bottom + 5,
+        ),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RankBarPainter old) =>
+      old.progress != progress ||
+      old.maxAbs != maxAbs ||
+      old.selected != selected ||
+      old.rowHeight != rowHeight ||
+      old.items.length != items.length;
+}
+
+/// 走势：柱 = 当期值，线 = 3 期移动均值。同一个度量，同一把尺，单轴。
+class _TrendPainter extends CustomPainter {
+  _TrendPainter({
+    required this.values,
+    required this.labels,
+    required this.progress,
+  });
+
+  final List<double> values;
+  final List<String> labels;
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.length < 2) return;
+
+    const axisW = 40.0;
+    const xBandH = 18.0;
+    const plotTop = 10.0;
+    final plotLeft = axisW;
+    final plotRight = size.width - 4;
+    final plotBottom = size.height - xBandH;
+    final plotW = plotRight - plotLeft;
+    final plotH = plotBottom - plotTop;
+    if (plotW <= 20 || plotH <= 20) return;
+
+    var maxV = values.reduce(math.max);
+    var minV = values.reduce(math.min);
+    if (minV > 0) minV = 0;
+    if (maxV < 0) maxV = 0;
+    if (maxV == minV) maxV = minV + 1;
+    final span = maxV - minV;
+
+    double y(double v) => plotBottom - (v - minV) / span * plotH;
+
+    // 水平发丝网格 + 左侧刻度（实线，紫 hairline）
+    final gridPaint = Paint()
+      ..color = LhBiPlum.line
+      ..strokeWidth = 0.5;
+    for (var i = 0; i <= 3; i++) {
+      final v = minV + span * i / 3;
+      final yy = y(v);
+      canvas.drawLine(Offset(plotLeft, yy), Offset(plotRight, yy), gridPaint);
+      final t = _tp(lhBiTick(v, isRate: false), _mono(size: 8.5, spacing: 0));
+      t.paint(canvas, Offset(axisW - 6 - t.width, yy - t.height / 2));
+    }
+
+    if (minV < 0) {
+      canvas.drawLine(
+        Offset(plotLeft, y(0)),
+        Offset(plotRight, y(0)),
+        Paint()
+          ..color = LhBiPlum.heroEdge
+          ..strokeWidth = 0.9,
+      );
+    }
+
+    // 柱：2px 缝，淡紫面
+    final n = values.length;
+    final slot = plotW / n;
+    final barW = math.max(slot - 2.0, 2.0);
+    final zeroY = y(0);
+    for (var i = 0; i < n; i++) {
+      final v = values[i];
+      final cx = plotLeft + slot * i + slot / 2;
+      final full = y(v);
+      final top = zeroY + (full - zeroY) * progress;
+      final rr = Rect.fromLTRB(
+        cx - barW / 2,
+        math.min(top, zeroY),
+        cx + barW / 2,
+        math.max(top, zeroY),
+      );
+      if (rr.height < 0.5) continue;
+      const radius = Radius.circular(3);
+      canvas.drawRRect(
+        v >= 0
+            ? RRect.fromRectAndCorners(rr, topLeft: radius, topRight: radius)
+            : RRect.fromRectAndCorners(
+                rr,
+                bottomLeft: radius,
+                bottomRight: radius,
+              ),
+        Paint()
+          ..color = (v < 0 ? LhColors.neg : LhBiPlum.primary).withValues(
+            alpha: 0.30,
+          ),
+      );
+    }
+
+    // 3 期移动均值线（2px，实紫）
+    final ma = <double>[];
+    for (var i = 0; i < n; i++) {
+      final from = math.max(0, i - 2);
+      var s = 0.0;
+      for (var j = from; j <= i; j++) {
+        s += values[j];
+      }
+      ma.add(s / (i - from + 1));
+    }
+    final path = Path();
+    final visible = (n * progress).ceil().clamp(1, n);
+    for (var i = 0; i < visible; i++) {
+      final cx = plotLeft + slot * i + slot / 2;
+      final cy = y(ma[i]);
+      if (i == 0) {
+        path.moveTo(cx, cy);
+      } else {
+        path.lineTo(cx, cy);
+      }
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..color = LhBiPlum.primary,
+    );
+
+    // 末点：2px 白环，避免和柱糊在一起
+    if (visible > 0) {
+      final cx = plotLeft + slot * (visible - 1) + slot / 2;
+      final cy = y(ma[visible - 1]);
+      canvas.drawCircle(
+        Offset(cx, cy),
+        5.5,
+        Paint()..color = LhColors.paper,
+      );
+      canvas.drawCircle(
+        Offset(cx, cy),
+        4.0,
+        Paint()..color = LhBiPlum.primary,
+      );
+    }
+
+    // x 轴：只标首 / 中 / 末
+    final idxs = <int>{0, n ~/ 2, n - 1};
+    for (final i in idxs) {
+      final raw = i < labels.length ? labels[i] : '${i + 1}';
+      final t = _tp(raw, _mono(size: 8.5, spacing: 0), maxWidth: slot * 3);
+      final cx = plotLeft + slot * i + slot / 2;
+      t.paint(
+        canvas,
+        Offset(
+          (cx - t.width / 2).clamp(0.0, size.width - t.width),
+          plotBottom + 5,
+        ),
+      );
+    }
+
+    // 峰值直标一个点（与 Hero 走势图的 MAX 标注同一个做法）
+    var peak = 0;
+    for (var i = 1; i < n; i++) {
+      if (values[i] > values[peak]) peak = i;
+    }
+    if (progress > 0.85) {
+      final t = _tp(
+        'MAX ${lhBiTick(values[peak], isRate: false)}',
+        _mono(
+          size: 8.5,
+          color: LhBiPlum.deep,
+          weight: FontWeight.w700,
+          spacing: 0.2,
+        ),
+      );
+      final cx = plotLeft + slot * peak + slot / 2;
+      t.paint(
+        canvas,
+        Offset(
+          (cx - t.width / 2).clamp(0.0, size.width - t.width),
+          math.max(y(values[peak]) - t.height - 6, 0),
+        ),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TrendPainter old) =>
+      old.progress != progress || old.values.length != values.length;
+}
+
+/// 盈亏诊断：以零为中轴的发散柱。
+/// 双极取「紫 ↔ 珊瑚」而不是绿红 —— 绿在这个 App 里是「跌 / 现金流」的语义色。
+class _DivergingPainter extends CustomPainter {
+  _DivergingPainter({
+    required this.items,
+    required this.maxAbs,
+    required this.progress,
+    this.gain = LhBiPalette.gain,
+    this.loss = LhBiPalette.loss,
+    this.gainLabel = '盈利',
+    this.lossLabel = '亏损',
+  });
+
+  final List<_BiItem> items;
+  final double maxAbs;
+  final double progress;
+
+  /// 双极配色与轴脚注可换：账本读「盈亏」，净TA 读「流入 / 流出」。
+  final Color gain;
+  final Color loss;
+  final String gainLabel;
+  final String lossLabel;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (items.isEmpty || maxAbs <= 0) return;
+
+    const rowH = 28.0;
+    const barH = 12.0;
+    const nameW = 72.0;
+    const valueW = 58.0;
+
+    final plotLeft = nameW + 4;
+    final plotRight = size.width - valueW - 6;
+    final plotW = plotRight - plotLeft;
+    if (plotW <= 20) return;
+    final zeroX = plotLeft + plotW / 2;
+    final half = plotW / 2;
+    final bottom = items.length * rowH + 4;
+
+    // 零轴（中性，不用任何一极的色）
+    canvas.drawLine(
+      Offset(zeroX, 0),
+      Offset(zeroX, bottom),
+      Paint()
+        ..color = LhColors.line
+        ..strokeWidth = 0.9,
+    );
+
+    for (var i = 0; i < items.length; i++) {
+      final it = items[i];
+      final cy = i * rowH + rowH / 2;
+      final pos = it.profit >= 0;
+      final color = pos ? gain : loss;
+      final w = half * (it.profit.abs() / maxAbs).clamp(0.0, 1.0) * progress;
+
+      final name = _tp(
+        it.name,
+        _sans(size: 10.5, color: LhColors.ink2, weight: FontWeight.w500),
+        maxWidth: nameW,
+      );
+      name.paint(canvas, Offset(0, cy - name.height / 2));
+
+      if (w > 0.5) {
+        final rr = pos
+            ? Rect.fromLTWH(zeroX + 1, cy - barH / 2, w, barH)
+            : Rect.fromLTWH(zeroX - 1 - w, cy - barH / 2, w, barH);
+        canvas.drawRRect(
+          RRect.fromRectAndCorners(
+            rr,
+            topRight: Radius.circular(pos ? 5 : 0),
+            bottomRight: Radius.circular(pos ? 5 : 0),
+            topLeft: Radius.circular(pos ? 0 : 5),
+            bottomLeft: Radius.circular(pos ? 0 : 5),
+          ),
+          Paint()..color = color,
+        );
+      }
+
+      final val = _tp(
+        lhBiMoney(it.profit),
+        _mono(size: 10, color: color, weight: FontWeight.w700, spacing: 0),
+        maxWidth: valueW,
+      );
+      val.paint(canvas, Offset(size.width - val.width, cy - val.height / 2));
+    }
+
+    // 轴脚注：负极 ← 0 → 正极
+    final left = _tp(
+      lossLabel,
+      _mono(size: 8.5, color: loss, spacing: 0.3),
+    );
+    final mid = _tp('0', _mono(size: 8.5, spacing: 0));
+    final right = _tp(
+      gainLabel,
+      _mono(size: 8.5, color: gain, spacing: 0.3),
+    );
+    final baseY = bottom + 5;
+    left.paint(canvas, Offset(plotLeft, baseY));
+    mid.paint(canvas, Offset(zeroX - mid.width / 2, baseY));
+    right.paint(canvas, Offset(plotRight - right.width, baseY));
+  }
+
+  @override
+  bool shouldRepaint(covariant _DivergingPainter old) =>
+      old.progress != progress ||
+      old.maxAbs != maxAbs ||
+      old.items.length != items.length;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 净TA 专属：配色 · 模型 · 画笔
+//
+//   账本四维用紫（份额语义），净TA 用 青 ↔ 珊瑚（方向语义）。两套色不共用，
+//   因为它们回答的不是同一类问题：紫色系里「深浅」表示大小，这里「左右」
+//   表示进出，混用会让人把流出读成亏损。
+// ═══════════════════════════════════════════════════════════════════════════
+
+abstract final class LhBiFlow {
+  /// 深墨 hero —— 与账本的雾紫 hero 拉开距离，进这一维就知道换了仪表。
+  static const Color ink = Color(0xFF16202B);
+  static const Color inflow = Color(0xFF0F9E8E);
+  static const Color outflow = Color(0xFFD1553C);
+
+  /// 深底上的同色（提亮，保证 4.5:1 以上）。
+  static const Color inflowOn = Color(0xFF3FD1BC);
+  static const Color outflowOn = Color(0xFFFF8B6D);
+  static const Color mute = Color(0xFF8A98A8);
+  static const Color tint = Color(0xFFF1F8F7);
+  static const Color edge = Color(0xFFD6E7E4);
+}
+
+@immutable
+class _FlowSub {
+  const _FlowSub({
+    required this.name,
+    required this.parent,
+    required this.net,
+  });
+  final String name;
+  final String parent;
+  final double net;
+}
+
+@immutable
+class _FlowBucket {
+  const _FlowBucket({
+    required this.name,
+    required this.net,
+    required this.inflow,
+    required this.outflow,
+    required this.subs,
+  });
+  final String name;
+  final double net;
+
+  /// inflow ≥ 0，outflow ≤ 0（数据层就是这么存的）。
+  final double inflow;
+  final double outflow;
+  final List<_FlowSub> subs;
+}
+
+@immutable
+class _WaterfallStep {
+  const _WaterfallStep({
+    required this.name,
+    required this.value,
+    required this.start,
+    required this.end,
+    required this.isTotal,
+  });
+  final String name;
+  final double value;
+  final double start;
+  final double end;
+  final bool isTotal;
+}
+
+/// 横向瀑布：每行一类，柱子从上一档累计值画到本档累计值，最后一行收口到净额。
+///
+/// 用横向而不是纵向：手机宽度放不下六个竖柱＋四字类名，横过来名字有位置，
+/// 柱长也更容易比。虚线接力棒把「上一档结束＝下一档开始」显式画出来 ——
+/// 瀑布图看不懂，多半就是缺了这根线。
+class _WaterfallPainter extends CustomPainter {
+  _WaterfallPainter({
+    required this.steps,
+    required this.lo,
+    required this.hi,
+    required this.progress,
+  });
+
+  final List<_WaterfallStep> steps;
+  final double lo;
+  final double hi;
+  final double progress;
+
+  static const double rowH = 30;
+  static const double nameW = 60;
+  static const double valueW = 60;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (steps.isEmpty) return;
+    final plotLeft = nameW + 6;
+    final plotRight = size.width - valueW - 2;
+    final plotW = plotRight - plotLeft;
+    if (plotW <= 24) return;
+
+    final span = (hi - lo).abs() < 1e-9 ? 1.0 : hi - lo;
+    double x(double v) => plotLeft + (v - lo) / span * plotW;
+    final zeroX = x(0);
+    final bottom = steps.length * rowH;
+
+    canvas.drawLine(
+      Offset(zeroX, 0),
+      Offset(zeroX, bottom),
+      Paint()
+        ..color = LhColors.line
+        ..strokeWidth = 0.9,
+    );
+
+    for (var i = 0; i < steps.length; i++) {
+      final s = steps[i];
+      final cy = i * rowH + rowH / 2;
+      final positive = s.isTotal ? s.end >= 0 : s.value >= 0;
+      final color = positive ? LhBiFlow.inflow : LhBiFlow.outflow;
+
+      final name = _tp(
+        s.name,
+        _sans(
+          size: 10.5,
+          color: s.isTotal ? LhColors.ink : LhColors.ink2,
+          weight: s.isTotal ? FontWeight.w700 : FontWeight.w500,
+        ),
+        maxWidth: nameW,
+      );
+      name.paint(canvas, Offset(0, cy - name.height / 2));
+
+      final a = x(s.start);
+      final b = a + (x(s.end) - a) * progress;
+      final left = math.min(a, b);
+      final right = math.max(a, b);
+      final barH = s.isTotal ? 16.0 : 13.0;
+      final rect = Rect.fromLTRB(
+        left,
+        cy - barH / 2,
+        math.max(right, left + 1.5),
+        cy + barH / 2,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(3)),
+        Paint()..color = s.isTotal ? color : color.withAlpha(205),
+      );
+      if (s.isTotal) {
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(rect, const Radius.circular(3)),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.2
+            ..color = LhBiFlow.ink.withAlpha(120),
+        );
+      }
+
+      // 接力虚线：这一档的终点＝下一档的起点。
+      if (i < steps.length - 1 && !steps[i + 1].isTotal) {
+        final linkX = x(s.end);
+        final dash = Paint()
+          ..color = LhColors.mute2.withAlpha(120)
+          ..strokeWidth = 0.8;
+        var y = cy + barH / 2 + 1;
+        final endY = cy + rowH - barH / 2 - 1;
+        while (y < endY) {
+          canvas.drawLine(
+            Offset(linkX, y),
+            Offset(linkX, math.min(y + 2.5, endY)),
+            dash,
+          );
+          y += 5;
+        }
+      }
+
+      final val = _tp(
+        '${s.value >= 0 ? '+' : '−'}${lhBiMoney(s.value.abs())}',
+        _mono(
+          size: 10,
+          color: s.isTotal ? LhColors.ink : color,
+          weight: FontWeight.w700,
+          spacing: 0,
+        ),
+        maxWidth: valueW,
+      );
+      val.paint(canvas, Offset(size.width - val.width, cy - val.height / 2));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _WaterfallPainter old) =>
+      old.progress != progress ||
+      old.lo != lo ||
+      old.hi != hi ||
+      old.steps.length != steps.length;
+}
+
+/// 存量 / 流量双栏：上栏累计净额（钱有没有攒下来），下栏每期净额（这期进出）。
+///
+/// 两栏各用各的刻度，因为它们不是一个量纲 —— 硬塞进一个坐标系，
+/// 累计线会把每期柱压成一条贴底的线，等于白画。
+class _FlowTrendPainter extends CustomPainter {
+  _FlowTrendPainter({
+    required this.values,
+    required this.cumulative,
+    required this.labels,
+    required this.progress,
+  });
+
+  final List<double> values;
+  final List<double> cumulative;
+  final List<String> labels;
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.length < 2) return;
+    const leftPad = 4.0;
+    const rightPad = 6.0;
+    final plotW = size.width - leftPad - rightPad;
+    if (plotW <= 20) return;
+
+    final topH = size.height * 0.54;
+    final gap = 16.0;
+    final botTop = topH + gap;
+    final botH = size.height - botTop - 14;
+    if (botH <= 10) return;
+
+    final n = values.length;
+    final step = plotW / (n - 1);
+
+    // ── 上栏：累计净额面积线 ───────────────────────────────────────────
+    var cLo = 0.0;
+    var cHi = 0.0;
+    for (final v in cumulative) {
+      cLo = math.min(cLo, v);
+      cHi = math.max(cHi, v);
+    }
+    if ((cHi - cLo).abs() < 1e-9) cHi = cLo + 1;
+    double cy(double v) => topH - (v - cLo) / (cHi - cLo) * (topH - 6) - 3;
+
+    final zeroY = cy(0);
+    canvas.drawLine(
+      Offset(leftPad, zeroY),
+      Offset(size.width - rightPad, zeroY),
+      Paint()
+        ..color = LhColors.line
+        ..strokeWidth = 0.8,
+    );
+
+    final shown = (n * progress).clamp(2, n).toInt();
+    final path = Path();
+    final area = Path();
+    for (var i = 0; i < shown; i++) {
+      final px = leftPad + i * step;
+      final py = cy(cumulative[i]);
+      if (i == 0) {
+        path.moveTo(px, py);
+        area.moveTo(px, zeroY);
+        area.lineTo(px, py);
+      } else {
+        path.lineTo(px, py);
+        area.lineTo(px, py);
+      }
+    }
+    area.lineTo(leftPad + (shown - 1) * step, zeroY);
+    area.close();
+    final endPositive = cumulative[shown - 1] >= 0;
+    final lineColor = endPositive ? LhBiFlow.inflow : LhBiFlow.outflow;
+    canvas.drawPath(area, Paint()..color = lineColor.withAlpha(28));
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..strokeJoin = StrokeJoin.round
+        ..color = lineColor,
+    );
+    final lastX = leftPad + (shown - 1) * step;
+    final lastY = cy(cumulative[shown - 1]);
+    canvas.drawCircle(Offset(lastX, lastY), 3.2, Paint()..color = lineColor);
+    canvas.drawCircle(
+      Offset(lastX, lastY),
+      3.2,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4
+        ..color = LhColors.paper,
+    );
+
+    final cumTag = _tp(
+      '累计 ${lhBiMoney(cumulative[shown - 1])}',
+      _mono(size: 9, color: lineColor, weight: FontWeight.w700, spacing: 0.2),
+    );
+    cumTag.paint(
+      canvas,
+      Offset(
+        math.max(0.0, math.min(lastX + 6, size.width - cumTag.width)),
+        math.max(0.0, lastY - cumTag.height - 4),
+      ),
+    );
+    final cumKicker = _tp(
+      '累计净额',
+      _mono(size: 8.5, color: LhColors.mute2, spacing: 0.6),
+    );
+    cumKicker.paint(canvas, Offset(leftPad, 0));
+
+    // ── 下栏：每期净额正负柱 ───────────────────────────────────────────
+    var mx = 0.0;
+    for (final v in values) {
+      mx = math.max(mx, v.abs());
+    }
+    if (mx <= 0) mx = 1;
+    final midY = botTop + botH / 2;
+    canvas.drawLine(
+      Offset(leftPad, midY),
+      Offset(size.width - rightPad, midY),
+      Paint()
+        ..color = LhColors.line
+        ..strokeWidth = 0.8,
+    );
+
+    final barW = math.max(2.0, math.min(11.0, step * 0.55));
+    for (var i = 0; i < shown; i++) {
+      final v = values[i];
+      if (v == 0) continue;
+      final px = leftPad + i * step;
+      final h = (v.abs() / mx) * (botH / 2 - 4) * progress;
+      final rect = v >= 0
+          ? Rect.fromLTRB(px - barW / 2, midY - h, px + barW / 2, midY)
+          : Rect.fromLTRB(px - barW / 2, midY, px + barW / 2, midY + h);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(2)),
+        Paint()
+          ..color = (v >= 0 ? LhBiFlow.inflow : LhBiFlow.outflow)
+              .withAlpha(215),
+      );
+    }
+    final barKicker = _tp(
+      '每期净额',
+      _mono(size: 8.5, color: LhColors.mute2, spacing: 0.6),
+    );
+    barKicker.paint(canvas, Offset(leftPad, botTop - 11));
+
+    // ── 横轴：首 / 中 / 末三个刻度，够定位就行 ─────────────────────────
+    String labelAt(int i) {
+      if (i < 0 || i >= labels.length) return '${i + 1}';
+      return labels[i];
+    }
+
+    final axisY = size.height - 11;
+    final ticks = <int>{0, (n - 1) ~/ 2, n - 1};
+    for (final i in ticks) {
+      final t = _tp(labelAt(i), _mono(size: 8.5, spacing: 0.1));
+      var tx = leftPad + i * step - t.width / 2;
+      // 窄屏下标签可能比画布还宽，clamp 的上界必须先兜到 0，否则会断言失败。
+      tx = tx.clamp(0.0, math.max(0.0, size.width - t.width));
+      t.paint(canvas, Offset(tx, axisY));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _FlowTrendPainter old) =>
+      old.progress != progress ||
+      old.values.length != values.length ||
+      old.cumulative.length != cumulative.length;
+}

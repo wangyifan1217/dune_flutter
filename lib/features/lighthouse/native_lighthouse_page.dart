@@ -13983,10 +13983,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // 期间条已收进 Hero 标题行的「日 ▾」——一个一天切不了两次的控件，
-        // 不该长期占着首屏最高的 44px。原来那条自带 2/10 的上下留白，
-        // 撤掉后补一格，别让 Hero 直接顶到 AppBar 底下。
-        const SizedBox(height: 6),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(22, 2, 22, 10),
+          child: _buildPeriodBar(),
+        ),
         // Hero：始终展示；L1 分类只筛列表，不在 Hero 上贴「能源」等标签
         _buildHeroShell(
           child: _buildHero(),
@@ -15272,8 +15272,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               child: Icon(summaryIcon, size: 12, color: summaryAccent),
             ),
             const SizedBox(width: 7),
-            // 左组：标题 + 真实区间 + 分类筛选。整组吃掉除粒度块外的全部宽度，
-            // 标题第一个让位（Flexible），保证右边那块永远贴着右边缘。
+            // 左组：标题 + 真实区间 + 分类筛选。
             Expanded(
               child: Row(
                 children: [
@@ -15315,12 +15314,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ],
               ),
             ),
-            // 右组：粒度。只在一级汇总出现 —— 二级/三级的 Hero 已经是某个实体
-            // 的切片，粒度由外面那层决定。
-            if (totalsOverride == null) ...[
-              const SizedBox(width: 10),
-              _buildHeroPeriodChip(),
-            ],
           ],
         ),
 
@@ -22376,16 +22369,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     unawaited(_ensureBiLedgerDims());
   }
 
-  /// 进 BI 就把账本四维（含人效）的行拉齐 —— 顶部切视角是零延迟的横向比较，
-  /// 不该切一次等一次。净TA 不预拉：它会把 netTa* 并进共享 metrics，
-  /// 用户没切到那个视角之前，不该对页面的 Hero 产生任何副作用。
+  /// 进 BI 只拉「马上要显示的那一维」。
+  ///
+  /// 原来是一次并发拉满四维，理由是「切视角要零延迟」。但代价是每次开 BI
+  /// 都同时压四条重查询下去 —— 人效那条尤其重（要全量事实行 + 逐坐标定主），
+  /// 四条一起挤在同一个连接池里，连带把当前这一维的首屏也拖慢了。
+  ///
+  /// 顶部切视角本来就走 onDimChanged → _loadTab，缺哪维现取哪维，
+  /// 而 _loadTab 有 _loadedTabs 缓存，同一区间内切回来不会重复请求。
+  /// 用一次「切过去时的短暂等待」，换掉每次开 BI 的三条多余请求。
   Future<void> _ensureBiLedgerDims() async {
-    await Future.wait<void>([
-      _loadTab('product'),
-      _loadTab('supply'),
-      _loadTab('channel'),
-      if (_showsPeopleTab) _loadTab('people'),
-    ]);
+    await _loadTab(_biInitialDim());
   }
 
   void _closeBiView() {

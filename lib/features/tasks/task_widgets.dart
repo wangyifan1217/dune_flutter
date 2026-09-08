@@ -229,8 +229,9 @@ class TaskMemberProgressChart extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               child: SizedBox(
                 width: chartWidth < 280 ? 280 : chartWidth,
+                height: 220,
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     for (var i = 0; i < bars.length; i++) ...[
                       if (i > 0) SizedBox(width: gap),
@@ -287,10 +288,12 @@ class _VerticalBar extends StatelessWidget {
           Expanded(
             child: LayoutBuilder(
               builder: (context, c) {
-                final h = (c.maxHeight * (pct <= 0 ? 0.04 : pct)).clamp(
-                  4.0,
-                  c.maxHeight,
-                );
+                final maxH = c.maxHeight;
+                if (!maxH.isFinite || maxH <= 0) {
+                  return const SizedBox.shrink();
+                }
+                final target = maxH * (pct <= 0 ? 0.04 : pct);
+                final h = target.clamp(0.0, maxH);
                 return Align(
                   alignment: Alignment.bottomCenter,
                   child: Container(

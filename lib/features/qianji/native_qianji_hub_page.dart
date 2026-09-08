@@ -30,8 +30,11 @@ class NativeQianjiHubPage extends StatefulWidget {
     this.onOpenMeetingSupervise,
     this.onOpenSessionSupervise,
     this.onOpenKbSupervise,
+    this.onOpenEfficiencyAnalysis,
+    this.onOpenEfficiencyBossPreview,
     this.onOpenFundSecondment,
     this.onOpenCashFlow,
+    this.onOpenMonthlyBill,
     this.onOpenTravel,
     this.onOpenRobotHome,
     this.onOpenRobot,
@@ -43,8 +46,11 @@ class NativeQianjiHubPage extends StatefulWidget {
   final VoidCallback? onOpenMeetingSupervise;
   final VoidCallback? onOpenSessionSupervise;
   final VoidCallback? onOpenKbSupervise;
+  final VoidCallback? onOpenEfficiencyAnalysis;
+  final VoidCallback? onOpenEfficiencyBossPreview;
   final VoidCallback? onOpenFundSecondment;
   final VoidCallback? onOpenCashFlow;
+  final VoidCallback? onOpenMonthlyBill;
   final VoidCallback? onOpenTravel;
   final VoidCallback? onOpenRobotHome;
 
@@ -245,6 +251,23 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                         color: _themePurple,
                         onTap: widget.onOpenKbSupervise,
                       ),
+                      _NovaHubTile(
+                        title: '工作情况',
+                        subtitle: widget.session?.workSituationViewAll == true
+                            ? '全部部门'
+                            : '本人及下级',
+                        icon: Icons.groups_outlined,
+                        color: _themePurple,
+                        onTap: widget.onOpenEfficiencyBossPreview,
+                      ),
+                      if (widget.onOpenEfficiencyAnalysis != null)
+                        _NovaHubTile(
+                          title: 'AI效能分析',
+                          subtitle: '个人与部门效能',
+                          icon: Icons.insights_outlined,
+                          color: _themePurple,
+                          onTap: widget.onOpenEfficiencyAnalysis,
+                        ),
                       if (widget.onOpenFundSecondment != null)
                         _NovaHubTile(
                           title: '资金借调',
@@ -260,6 +283,14 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                           icon: Icons.account_balance_outlined,
                           color: _themePurple,
                           onTap: widget.onOpenCashFlow,
+                        ),
+                      if (widget.onOpenMonthlyBill != null)
+                        _NovaHubTile(
+                          title: '月结',
+                          subtitle: '应收 · 应付',
+                          icon: Icons.receipt_long_outlined,
+                          color: _themePurple,
+                          onTap: widget.onOpenMonthlyBill,
                         ),
                       _NovaHubTile(
                         title: '差旅管理',

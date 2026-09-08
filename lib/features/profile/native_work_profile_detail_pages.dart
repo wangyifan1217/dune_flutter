@@ -436,7 +436,7 @@ class _NativeWorkProfileBusinessPageState
       onBack: widget.onBack,
       onRefresh: _load,
       children: [
-        _InfoCard(text: '${_profileMonthLabel(widget.month)} · 提案与 KPI 任务'),
+        _InfoCard(text: '${_profileMonthLabel(widget.month)} · 提案与灯塔数据规则'),
         const SizedBox(height: 12),
         if (_loading)
           const _LoadingBlock()
@@ -446,7 +446,7 @@ class _NativeWorkProfileBusinessPageState
           _StatsWrap(
             items: [
               if (proposals != null) ('发起提案', proposals.length),
-              if (_score != null) ('KPI任务', tasks.length),
+              if (_score != null) ('灯塔规则', tasks.length),
               if (_score != null) ('覆盖省份', provinces.length),
               if (person != null) ('绩效主分', person.mainScore.round()),
             ],
@@ -475,20 +475,21 @@ class _NativeWorkProfileBusinessPageState
               const SizedBox(height: 10),
             ],
           const SizedBox(height: 10),
-          const _SectionTitle(title: 'KPI 任务'),
+          const _SectionTitle(title: '灯塔数据规则'),
           const SizedBox(height: 10),
           if (_score == null)
             _UnavailableBlock(onRetry: _load)
           else if (tasks.isEmpty)
-            const _EmptyBlock(text: '该月份暂无 KPI 任务')
+            const _EmptyBlock(text: '该月份暂无对应的灯塔数据规则')
           else
             for (final task in tasks) ...[
               _ListCard(
                 icon: Icons.analytics_outlined,
-                title: task.taskName,
+                title: kpiLighthouseSliceTitle(task),
                 subtitle: [
-                  task.bucketLabel,
-                  task.province,
+                  kpiLighthouseSliceSubtitle(task),
+                  if (task.bucketLabel.isNotEmpty)
+                    task.bucketLabel.replaceAll('板块', ''),
                   '权重 ${task.weightPct.toStringAsFixed(1)}%',
                   '得分 ${task.taskTotal.toStringAsFixed(1)}',
                 ].where((item) => item.isNotEmpty).join(' · '),

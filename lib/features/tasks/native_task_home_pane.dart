@@ -265,24 +265,19 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     _publishChrome();
   }
 
-  void _backFromAction() {
-    setState(() {
-      _pageNavBack = true;
-      _page = _TaskPage.detail;
-      _actionTask = null;
-      _actionMode = null;
-    });
-    _publishChrome();
-  }
+  void _backFromAction() => _closeAction(refresh: false);
 
-  void _doneAction() {
+  void _doneAction() => _closeAction(refresh: true);
+
+  void _closeAction({required bool refresh}) {
     setState(() {
       _pageNavBack = true;
-      _page = _TaskPage.detail;
+      _page = _detailId != null ? _TaskPage.detail : _TaskPage.list;
       _actionTask = null;
       _actionMode = null;
     });
     _publishChrome();
+    if (refresh) unawaited(_reload());
   }
 
   Future<void> _openQuickCreate() async {
@@ -425,33 +420,39 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   };
 
   Widget _pageBody() {
-    return switch (_page) {
-      _TaskPage.action => NativeTaskActionView(
-        session: widget.session,
-        task: _actionTask!,
-        mode: _actionMode!,
-        onBack: _backFromAction,
-        onDone: _doneAction,
-      ),
-      _TaskPage.detail => NativeTaskDetailView(
-        session: widget.session,
-        taskId: _detailId!,
-        onBack: _backFromDetail,
-        onAddSubtask: () => _openCreate(
-          parentId: _detailId,
-          parentTask: _detailParentCache?.id == _detailId
-              ? _detailParentCache
-              : null,
-        ),
-        onOpenTask: _openDetail,
-        onOpenProgress: (t) => _openAction(t, TaskActionMode.progress),
-        onOpenEvaluate: (t) => _openAction(t, TaskActionMode.evaluate),
-        onTaskLoaded: (t) {
-          if (t.isMain) _detailParentCache = t;
-        },
-      ),
-      _TaskPage.list => _buildList(),
-    };
+    switch (_page) {
+      case _TaskPage.action:
+        final task = _actionTask;
+        final mode = _actionMode;
+        if (task == null || mode == null) return _buildList();
+        return NativeTaskActionView(
+          session: widget.session,
+          task: task,
+          mode: mode,
+          onBack: _backFromAction,
+          onDone: _doneAction,
+        );
+      case _TaskPage.detail:
+        final id = _detailId;
+        if (id == null) return _buildList();
+        return NativeTaskDetailView(
+          session: widget.session,
+          taskId: id,
+          onBack: _backFromDetail,
+          onAddSubtask: () => _openCreate(
+            parentId: id,
+            parentTask: _detailParentCache?.id == id ? _detailParentCache : null,
+          ),
+          onOpenTask: _openDetail,
+          onOpenProgress: (t) => _openAction(t, TaskActionMode.progress),
+          onOpenEvaluate: (t) => _openAction(t, TaskActionMode.evaluate),
+          onTaskLoaded: (t) {
+            if (t.isMain) _detailParentCache = t;
+          },
+        );
+      case _TaskPage.list:
+        return _buildList();
+    }
   }
 
   @override

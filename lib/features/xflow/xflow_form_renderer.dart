@@ -98,6 +98,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
   }
 
   bool _isVisible(XflowField field) {
+    if (field.raw['hiddenOnCreate'] == true) return false;
     final cond = (field.raw['visibleWhen'] ?? '').toString().trim();
     if (cond.isEmpty) return true;
     return _parseCond(cond, widget.values);
@@ -1893,6 +1894,14 @@ class _XflowSelectPickerState extends State<_XflowSelectPicker> {
     });
   }
 
+  void _scheduleCollapse() {
+    // 点选项时 TapRegion 会先判 outside；延迟收起，避免名单被拆掉导致选不中。
+    Future<void>.delayed(const Duration(milliseconds: 80), () {
+      if (!mounted || !_expanded) return;
+      setState(() => _expanded = false);
+    });
+  }
+
   void _clear() {
     widget.onChanged('');
     setState(() {
@@ -1908,10 +1917,7 @@ class _XflowSelectPickerState extends State<_XflowSelectPicker> {
     final hasText = _controller.text.trim().isNotEmpty;
     final showMenu = !widget.readonly && _expanded && _filtered.isNotEmpty;
     return TapRegion(
-      onTapOutside: (_) {
-        FocusManager.instance.primaryFocus?.unfocus();
-        if (_expanded) setState(() => _expanded = false);
-      },
+      onTapOutside: (_) => _scheduleCollapse(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -2401,7 +2407,11 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
 
   void _onFocusChange() {
     if (!_focus.hasFocus) {
-      _dismissSuggestions();
+      // 等 ListTile.onTap 先跑完，避免点结果时先失焦把名单拆掉。
+      Future<void>.delayed(const Duration(milliseconds: 80), () {
+        if (!mounted || _focus.hasFocus) return;
+        _dismissSuggestions();
+      });
       return;
     }
     if (widget.readonly) return;
@@ -2419,12 +2429,23 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
     });
   }
 
+  void _releaseFocus() {
+    _focus.unfocus(disposition: UnfocusDisposition.previouslyFocusedChild);
+  }
+
+  void _setControllerText(String text) {
+    _controller.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+
   @override
   void didUpdateWidget(covariant _XflowProposalPicker oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.value != widget.value) {
       final next = _displayText(widget.value);
-      if (_controller.text != next) {
+      if (!_focus.hasFocus && _controller.text != next) {
         _controller.text = next;
       }
     }
@@ -2477,15 +2498,19 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
     widget.onChanged(
       linkedProposalIntakePayload(id: id, code: code, title: title),
     );
+    final label = code.isNotEmpty && title.isNotEmpty
+        ? '$code · $title'
+        : (code.isNotEmpty ? code : title);
+    _debounce?.cancel();
+    _setControllerText(label);
     setState(() {
-      _controller.text = code.isNotEmpty && title.isNotEmpty
-          ? '$code · $title'
-          : (code.isNotEmpty ? code : title);
       _results = const [];
       _searched = false;
       _loading = false;
     });
-    _focus.unfocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _releaseFocus();
+    });
   }
 
   Future<void> _selectApprovedMine(
@@ -2529,13 +2554,17 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
     } else {
       widget.onChanged(payload);
     }
+    final label = _displayText(payload);
+    _debounce?.cancel();
+    _setControllerText(label);
     setState(() {
-      _controller.text = _displayText(payload);
       _results = const [];
       _searched = false;
       _loading = false;
     });
-    _focus.unfocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _releaseFocus();
+    });
   }
 
   int _int(dynamic v) {
@@ -2607,9 +2636,12 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
             ),
           ),
           style: xfInputTextStyle(),
-          onTapOutside: (_) => _focus.unfocus(
-            disposition: UnfocusDisposition.previouslyFocusedChild,
-          ),
+          onTap: widget.readonly
+              ? null
+              : () {
+                  if (!_focus.hasFocus) _focus.requestFocus();
+                },
+          onTapOutside: (_) => _releaseFocus(),
           onChanged: widget.readonly ? null : _onQueryChanged,
         ),
         if (_results.isNotEmpty) ...[
@@ -2743,12 +2775,32 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
 
   void _onFocusChange() {
     if (_focus.hasFocus) return;
+    // 等 ListTile.onTap 先跑完，避免点结果时页面 GestureDetector 先失焦把名单拆掉。
+    Future<void>.delayed(const Duration(milliseconds: 80), () {
+      if (!mounted || _focus.hasFocus) return;
+      _dismissSuggestions();
+    });
+  }
+
+  void _dismissSuggestions() {
     if (_results.isEmpty && !_searched && !_loading) return;
     setState(() {
       _results = const [];
       _searched = false;
       _loading = false;
     });
+  }
+
+  void _releaseFocus() {
+    // 默认 unfocus 会让整页 FocusScope 吃掉后续点击，表现为「选完进不了输入框」。
+    _focus.unfocus(disposition: UnfocusDisposition.previouslyFocusedChild);
+  }
+
+  void _setControllerText(String text) {
+    _controller.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
   }
 
   String _resolvedDisplay() {
@@ -2833,23 +2885,27 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
     }
     patch.addAll(_cfg.fillPatches(row));
     _fromFill = _useFillDisplay;
-    if (_fromFill) {
-      final merged = <String, dynamic>{...?widget.scopeValues, ...patch};
-      _controller.text = _cfg.fillDisplayOf(merged);
-    } else {
-      _controller.text = _cfg.storeObject
-          ? _displayText(patch[widget.fieldKey])
-          : (patch.containsKey(widget.fieldKey)
-                ? '${patch[widget.fieldKey]}'
-                : _controller.text);
-    }
+    final display = _fromFill
+        ? _cfg.fillDisplayOf(<String, dynamic>{
+            ...?widget.scopeValues,
+            ...patch,
+          })
+        : (_cfg.storeObject
+              ? _displayText(patch[widget.fieldKey])
+              : (patch.containsKey(widget.fieldKey)
+                    ? '${patch[widget.fieldKey]}'
+                    : _controller.text));
+    _debounce?.cancel();
+    _setControllerText(display);
     _writeMany(patch);
     setState(() {
       _results = const [];
       _searched = false;
       _loading = false;
     });
-    _focus.unfocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _releaseFocus();
+    });
   }
 
   Future<void> _search(String q) async {
@@ -2931,9 +2987,12 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
             ),
           ),
           style: xfInputTextStyle(),
-          onTapOutside: (_) => _focus.unfocus(
-            disposition: UnfocusDisposition.previouslyFocusedChild,
-          ),
+          onTap: widget.readonly
+              ? null
+              : () {
+                  if (!_focus.hasFocus) _focus.requestFocus();
+                },
+          onTapOutside: (_) => _releaseFocus(),
           onChanged: widget.readonly ? null : _onQueryChanged,
         ),
         if (_results.isNotEmpty) ...[

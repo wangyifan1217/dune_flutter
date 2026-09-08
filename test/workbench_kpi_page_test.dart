@@ -122,7 +122,10 @@ class _FakeKpiService extends WorkbenchKpiService {
                   taskId: 1,
                   taskName: '中石油',
                   province: '广东',
-                  bucketLabel: '能源',
+                  productName: '中石油',
+                  productGroup: '能源',
+                  channelName: '平安',
+                  bucketLabel: '能源板块',
                   weightPct: 70,
                   autoWeightPct: 70,
                   taskTotal: 88,
@@ -130,11 +133,13 @@ class _FakeKpiService extends WorkbenchKpiService {
                   prevRevenue: 60,
                   curProfit: 10,
                   prevProfit: 9,
+                  matchSummary: '产品=中石油；渠道L1=平安',
                 ),
                 WorkProfileKpiTask(
                   taskId: 2,
                   taskName: '多渠道',
                   province: '广东',
+                  channelName: '多渠道',
                   bucketLabel: '能源',
                   weightPct: 30,
                   autoWeightPct: 30,
@@ -143,6 +148,7 @@ class _FakeKpiService extends WorkbenchKpiService {
                   prevRevenue: 40,
                   curProfit: 4,
                   prevProfit: 5,
+                  matchSummary: '渠道L1=多渠道',
                 ),
               ],
             ),
@@ -174,7 +180,9 @@ class _FakeKpiService extends WorkbenchKpiService {
 }
 
 void main() {
-  testWidgets('delete requires a second confirmation', (tester) async {
+  testWidgets('lists lighthouse slices with score and grade, without task editing', (
+    tester,
+  ) async {
     final service = _FakeKpiService();
     await tester.pumpWidget(
       MaterialApp(
@@ -189,29 +197,16 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('中石油'), findsOneWidget);
-    expect(find.text('不计项目'), findsNothing);
-    expect(service.lastCountedOnly, isTrue);
-
-    await tester.tap(find.text('仅计入'));
-    await tester.pumpAndSettle();
-    expect(find.text('不计项目'), findsOneWidget);
-    expect(service.lastCountedOnly, isFalse);
-
-    await tester.tap(find.byKey(const Key('kpi-delete-1')));
-    await tester.pumpAndSettle();
-    expect(find.text('确认删除任务？'), findsOneWidget);
-
-    await tester.tap(find.text('取消'));
-    await tester.pumpAndSettle();
-    expect(service.deleteCount, 0);
-    expect(find.text('中石油'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('kpi-delete-1')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('kpi-confirm-ok')));
-    await tester.pump();
-    expect(service.deleteCount, 1);
-    await tester.pump(const Duration(seconds: 3));
+    expect(find.text('广东 · 平安'), findsOneWidget);
+    expect(find.text('多渠道'), findsOneWidget);
+    expect(find.textContaining('李四（2条规则）'), findsOneWidget);
+    expect(find.textContaining('良（达到预期）'), findsAtLeastNWidgets(1));
+    expect(find.text('产品=中石油；渠道L1=平安'), findsNothing);
+    expect(find.text('渠道L1=多渠道'), findsNothing);
+    expect(find.text('仅计入'), findsNothing);
+    expect(find.byKey(const Key('kpi-add')), findsNothing);
+    expect(find.byTooltip('删除'), findsNothing);
+    expect(find.byTooltip('编辑'), findsNothing);
   });
 
   testWidgets('rerun and export require confirmation', (tester) async {
@@ -245,8 +240,7 @@ void main() {
     await tester.tap(find.byKey(const Key('kpi-confirm-ok')));
     await tester.pump();
     expect(service.rerunCount, 1);
-    expect(find.textContaining('绩效结果'), findsOneWidget);
-    expect(find.textContaining('良（达到预期）'), findsOneWidget);
+    expect(find.textContaining('良（达到预期）'), findsAtLeastNWidgets(1));
 
     await tester.tap(find.byKey(const Key('kpi-export')));
     await tester.pumpAndSettle();
@@ -281,6 +275,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('中石油'), findsOneWidget);
     expect(find.byKey(const Key('kpi-rerun')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-summary')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -303,7 +298,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('kpi-detail-9')));
     await tester.pumpAndSettle();
-    expect(service.fetchCount, 1);
+    expect(service.fetchCount, 2);
     expect(find.textContaining('李四 · 2026年8月'), findsOneWidget);
     expect(find.byKey(const Key('kpi-detail-save')), findsOneWidget);
 
@@ -334,4 +329,108 @@ void main() {
     expect(service.lastItems!.single.remark, '下调中石油占比');
     await tester.pump(const Duration(seconds: 3));
   });
+
+  testWidgets('shows markdown summary and forwards it to IM', (tester) async {
+    final service = _FakeKpiService();
+    var picked = 0;
+    var sentId = 0;
+    var sentMd = '';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NativeWorkbenchKpiPage(
+            session: _session,
+            service: service,
+            now: DateTime(2026, 9, 3),
+            pickConversation: () async {
+              picked++;
+              return 42;
+            },
+            sendMarkdown: (id, markdown) async {
+              sentId = id;
+              sentMd = markdown;
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('kpi-summary')), findsOneWidget);
+    expect(find.textContaining('2026年8月 业务绩效汇总'), findsOneWidget);
+    expect(find.text('转发到 IM'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('kpi-summary-forward')));
+    await tester.pump();
+    expect(picked, 1);
+    expect(sentId, 42);
+    expect(sentMd, contains('| 李四 | 88.00 | 良（达到预期） |'));
+    expect(find.text('已转发到会话'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('people list defaults to score high to low', (tester) async {
+    final service = _RankedKpiService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NativeWorkbenchKpiPage(
+            session: _session,
+            service: service,
+            now: DateTime(2026, 9, 3),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final zhang = tester.getTopLeft(find.textContaining('张三（0条规则）'));
+    final li = tester.getTopLeft(find.textContaining('李四（0条规则）'));
+    final he = tester.getTopLeft(find.textContaining('何佳伟（0条规则）'));
+    expect(zhang.dy, lessThan(li.dy));
+    expect(li.dy, lessThan(he.dy));
+  });
+}
+
+class _RankedKpiService extends _FakeKpiService {
+  @override
+  Future<WorkProfileKpiScore> fetchScore({
+    required String month,
+    int userId = 0,
+  }) async {
+    return WorkProfileKpiScore(
+      month: month,
+      prevMonth: '2026-07',
+      people: const [
+        WorkProfileKpiPerson(
+          userId: 2,
+          userName: '何佳伟',
+          mainScore: 47.36,
+          bonus: 0,
+          telecomWeight: 0,
+          energyWeight: 1,
+          telecomScore: 0,
+          energyScore: 47.36,
+        ),
+        WorkProfileKpiPerson(
+          userId: 3,
+          userName: '张三',
+          mainScore: 91,
+          bonus: 0,
+          telecomWeight: 1,
+          energyWeight: 0,
+          telecomScore: 91,
+          energyScore: 0,
+        ),
+        WorkProfileKpiPerson(
+          userId: 1,
+          userName: '李四',
+          mainScore: 88,
+          bonus: 0,
+          telecomWeight: 0,
+          energyWeight: 1,
+          telecomScore: 0,
+          energyScore: 88,
+        ),
+      ],
+    );
+  }
 }

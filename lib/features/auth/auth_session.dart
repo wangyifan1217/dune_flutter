@@ -32,6 +32,7 @@ class AuthSession {
     this.broadcastAccess = false,
     this.fundSecondmentAccess = false,
     this.cashFlowAccess = false,
+    this.monthlyBillAccess = false,
     this.contractViewAccess = false,
     this.contractConfigAccess = false,
     this.contractKbSyncAccess = false,
@@ -39,6 +40,7 @@ class AuthSession {
     this.proposalIntakeViewAll = false,
     this.travelImportAccess = false,
     this.travelViewAll = false,
+    this.workSituationViewAll = false,
     this.kpiPerformanceAccess = false,
     this.payrollReportAccess = false,
   });
@@ -80,6 +82,9 @@ class AuthSession {
   /// 后端下发的 NOVA「资金流向」看板开关。
   final bool cashFlowAccess;
 
+  /// 后端下发的 NOVA「月结」看板开关。
+  final bool monthlyBillAccess;
+
   /// 合同归集查看权限。
   final bool contractViewAccess;
 
@@ -100,6 +105,9 @@ class AuthSession {
 
   /// 差旅地图查看全部员工；未开通仅自己及下属。
   final bool travelViewAll;
+
+  /// 工作情况查看全部部门；未开通仅自己及下属。
+  final bool workSituationViewAll;
 
   /// 工作台行政「业务绩效」。
   final bool kpiPerformanceAccess;
@@ -147,6 +155,9 @@ class AuthSession {
 
   bool get effectiveCashFlowAccess =>
       cashFlowAccess || DunesDefaults.localLighthouseAccessBypass;
+
+  bool get effectiveMonthlyBillAccess =>
+      monthlyBillAccess || DunesDefaults.localLighthouseAccessBypass;
 
   bool get effectiveContractConfigAccess => contractConfigAccess;
 
@@ -197,6 +208,12 @@ class AuthSession {
       if (!next.cashFlowAccess) {
         next = next.copyWith(cashFlowAccess: true);
       }
+      if (!next.monthlyBillAccess) {
+        next = next.copyWith(monthlyBillAccess: true);
+      }
+      if (!next.workSituationViewAll) {
+        next = next.copyWith(workSituationViewAll: true);
+      }
     }
     return next;
   }
@@ -245,6 +262,7 @@ class AuthSession {
     bool? broadcastAccess,
     bool? fundSecondmentAccess,
     bool? cashFlowAccess,
+    bool? monthlyBillAccess,
     bool? contractViewAccess,
     bool? contractConfigAccess,
     bool? contractKbSyncAccess,
@@ -252,6 +270,7 @@ class AuthSession {
     bool? proposalIntakeViewAll,
     bool? travelImportAccess,
     bool? travelViewAll,
+    bool? workSituationViewAll,
     bool? kpiPerformanceAccess,
     bool? payrollReportAccess,
   }) {
@@ -287,6 +306,7 @@ class AuthSession {
       broadcastAccess: broadcastAccess ?? this.broadcastAccess,
       fundSecondmentAccess: fundSecondmentAccess ?? this.fundSecondmentAccess,
       cashFlowAccess: cashFlowAccess ?? this.cashFlowAccess,
+      monthlyBillAccess: monthlyBillAccess ?? this.monthlyBillAccess,
       contractViewAccess: contractViewAccess ?? this.contractViewAccess,
       contractConfigAccess: contractConfigAccess ?? this.contractConfigAccess,
       contractKbSyncAccess: contractKbSyncAccess ?? this.contractKbSyncAccess,
@@ -295,6 +315,7 @@ class AuthSession {
           proposalIntakeViewAll ?? this.proposalIntakeViewAll,
       travelImportAccess: travelImportAccess ?? this.travelImportAccess,
       travelViewAll: travelViewAll ?? this.travelViewAll,
+      workSituationViewAll: workSituationViewAll ?? this.workSituationViewAll,
       kpiPerformanceAccess: kpiPerformanceAccess ?? this.kpiPerformanceAccess,
       payrollReportAccess: payrollReportAccess ?? this.payrollReportAccess,
     );
@@ -364,6 +385,7 @@ class AuthSession {
       broadcastAccess: data['broadcastAccess'] == true,
       fundSecondmentAccess: data['fundSecondmentAccess'] == true,
       cashFlowAccess: data['cashFlowAccess'] == true,
+      monthlyBillAccess: data['monthlyBillAccess'] == true,
       contractViewAccess: data['contractViewAccess'] == true,
       contractConfigAccess: data['contractConfigAccess'] == true,
       contractKbSyncAccess: data['contractKbSyncAccess'] == true,
@@ -371,6 +393,7 @@ class AuthSession {
       proposalIntakeViewAll: data['proposalIntakeViewAll'] == true,
       travelImportAccess: data['travelImportAccess'] == true,
       travelViewAll: data['travelViewAll'] == true,
+      workSituationViewAll: data['workSituationViewAll'] == true,
       kpiPerformanceAccess: data['kpiPerformanceAccess'] == true,
       payrollReportAccess: data['payrollReportAccess'] == true,
     );
@@ -418,6 +441,7 @@ class AuthSession {
       broadcastAccess: claims['broadcastAccess'] == true,
       fundSecondmentAccess: claims['fundSecondmentAccess'] == true,
       cashFlowAccess: claims['cashFlowAccess'] == true,
+      monthlyBillAccess: claims['monthlyBillAccess'] == true,
       contractViewAccess: claims['contractViewAccess'] == true,
       contractConfigAccess: claims['contractConfigAccess'] == true,
       contractKbSyncAccess: claims['contractKbSyncAccess'] == true,
@@ -425,6 +449,7 @@ class AuthSession {
       proposalIntakeViewAll: claims['proposalIntakeViewAll'] == true,
       travelImportAccess: claims['travelImportAccess'] == true,
       travelViewAll: claims['travelViewAll'] == true,
+      workSituationViewAll: claims['workSituationViewAll'] == true,
       kpiPerformanceAccess: claims['kpiPerformanceAccess'] == true,
       payrollReportAccess: claims['payrollReportAccess'] == true,
     );
@@ -477,6 +502,7 @@ class AuthSession {
       'broadcastAccess': broadcastAccess,
       'fundSecondmentAccess': fundSecondmentAccess,
       'cashFlowAccess': cashFlowAccess,
+      'monthlyBillAccess': monthlyBillAccess,
       'contractViewAccess': contractViewAccess,
       'contractConfigAccess': contractConfigAccess,
       'contractKbSyncAccess': contractKbSyncAccess,
@@ -484,6 +510,7 @@ class AuthSession {
       'proposalIntakeViewAll': proposalIntakeViewAll,
       'travelImportAccess': travelImportAccess,
       'travelViewAll': travelViewAll,
+      'workSituationViewAll': workSituationViewAll,
       'kpiPerformanceAccess': kpiPerformanceAccess,
       'payrollReportAccess': payrollReportAccess,
     };
@@ -525,6 +552,7 @@ class AuthSession {
       broadcastAccess: json['broadcastAccess'] == true,
       fundSecondmentAccess: json['fundSecondmentAccess'] == true,
       cashFlowAccess: json['cashFlowAccess'] == true,
+      monthlyBillAccess: json['monthlyBillAccess'] == true,
       contractViewAccess: json['contractViewAccess'] == true,
       contractConfigAccess: json['contractConfigAccess'] == true,
       contractKbSyncAccess: json['contractKbSyncAccess'] == true,
@@ -532,6 +560,7 @@ class AuthSession {
       proposalIntakeViewAll: json['proposalIntakeViewAll'] == true,
       travelImportAccess: json['travelImportAccess'] == true,
       travelViewAll: json['travelViewAll'] == true,
+      workSituationViewAll: json['workSituationViewAll'] == true,
       kpiPerformanceAccess: json['kpiPerformanceAccess'] == true,
       payrollReportAccess: json['payrollReportAccess'] == true,
     );

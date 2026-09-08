@@ -129,6 +129,10 @@ class ChatMessageQuote {
           final text = bodyText.trim();
           return text.isEmpty ? '对账催办' : text;
         }
+        if ((payload?['type'] ?? '').toString() == 'reconciliationAm') {
+          final text = bodyText.trim();
+          return text.isEmpty ? '请前往资管进行对账' : text;
+        }
         final text = bodyText.trim();
         if (text.isEmpty) return '[消息]';
         return text.length > 80 ? '${text.substring(0, 80)}…' : text;

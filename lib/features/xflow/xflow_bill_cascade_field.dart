@@ -666,7 +666,10 @@ class _BillInlineSelectState extends State<_BillInlineSelect> {
     final showMenu = widget.enabled && _expanded && widget.items.isNotEmpty;
     return TapRegion(
       onTapOutside: (_) {
-        if (_expanded) setState(() => _expanded = false);
+        Future<void>.delayed(const Duration(milliseconds: 80), () {
+          if (!mounted || !_expanded) return;
+          setState(() => _expanded = false);
+        });
       },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

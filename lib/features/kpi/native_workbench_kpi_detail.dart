@@ -314,9 +314,19 @@ class _TaskEditor extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  '${task.taskName} · ${task.province.isEmpty ? '全国' : task.province}',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      kpiLighthouseSliceTitle(task),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      kpiLighthouseSliceSubtitle(task),
+                      style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                    ),
+                  ],
                 ),
               ),
               if (task.weightOverridden || task.scoreAdjusted)

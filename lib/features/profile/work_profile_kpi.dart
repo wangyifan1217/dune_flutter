@@ -111,6 +111,12 @@ class WorkProfileKpiTask {
     this.scoreAdj = 0,
     this.scoreAdjusted = false,
     this.remark = '',
+    this.matchSummary = '',
+    this.productName = '',
+    this.productGroup = '',
+    this.channelName = '',
+    this.channelGroup = '',
+    this.supplyGroup = '',
     this.metrics = const [],
   });
 
@@ -132,6 +138,12 @@ class WorkProfileKpiTask {
   final double scoreAdj;
   final bool scoreAdjusted;
   final String remark;
+  final String matchSummary;
+  final String productName;
+  final String productGroup;
+  final String channelName;
+  final String channelGroup;
+  final String supplyGroup;
   final List<WorkProfileKpiMetric> metrics;
 
   factory WorkProfileKpiTask.fromJson(Map<String, dynamic> json) {
@@ -139,6 +151,11 @@ class WorkProfileKpiTask {
       taskId: (json['taskId'] as num?)?.toInt() ?? 0,
       taskName: '${json['taskName'] ?? ''}',
       province: '${json['province'] ?? ''}',
+      productName: '${json['productName'] ?? ''}',
+      productGroup: '${json['productGroup'] ?? ''}',
+      channelName: '${json['channelName'] ?? ''}',
+      channelGroup: '${json['channelGroup'] ?? ''}',
+      supplyGroup: '${json['supplyGroup'] ?? ''}',
       bucketLabel: '${json['bucketLabel'] ?? json['categoryLabel'] ?? ''}',
       weightPct: (json['weightPct'] as num?)?.toDouble() ?? 0,
       taskTotal: (json['taskTotal'] as num?)?.toDouble() ?? 0,
@@ -154,6 +171,7 @@ class WorkProfileKpiTask {
       scoreAdj: (json['scoreAdj'] as num?)?.toDouble() ?? 0,
       scoreAdjusted: json['scoreAdjusted'] == true,
       remark: '${json['remark'] ?? ''}',
+      matchSummary: '${json['matchSummary'] ?? ''}',
       metrics: (json['metrics'] as List? ?? const [])
           .whereType<Map>()
           .map((e) => WorkProfileKpiMetric.fromJson(Map<String, dynamic>.from(e)))
@@ -281,6 +299,130 @@ class WorkProfileKpiScore {
           .toList(growable: false),
     );
   }
+}
+
+bool kpiLighthouseWildcardDim(String value, {bool keepNationwide = false}) {
+  final v = value.trim();
+  if (v.isEmpty || v == '*' || v == '全部' || v.toLowerCase() == 'none') {
+    return true;
+  }
+  if (v == '全国') return !keepNationwide;
+  return false;
+}
+
+bool kpiLighthouseBucketDim(String value) {
+  final v = value.replaceAll('板块', '').trim();
+  return v == '能源' || v == '通信' || v == '运营商';
+}
+
+Map<String, String> parseKpiLighthouseDims(WorkProfileKpiTask task) {
+  final out = <String, String>{};
+  void put(String key, String? value, {bool keepNationwide = false}) {
+    final v = (value ?? '').trim();
+    if (v.isEmpty || out.containsKey(key)) return;
+    if (kpiLighthouseWildcardDim(v, keepNationwide: keepNationwide)) return;
+    out[key] = v;
+  }
+
+  put('product', task.productName);
+  put('group', task.productGroup);
+  put('province', task.province, keepNationwide: true);
+  put('channel', task.channelName);
+  put('channel', task.channelGroup);
+  put('supply', task.supplyGroup);
+
+  var raw = task.matchSummary.trim();
+  if (raw.startsWith('灯塔规则')) {
+    raw = raw.replaceFirst(RegExp(r'^灯塔规则\s*'), '');
+  }
+  for (final part in raw.split(RegExp(r'[；;]'))) {
+    final idx = part.indexOf('=');
+    if (idx <= 0) continue;
+    final key = part.substring(0, idx).trim();
+    final value = part.substring(idx + 1).trim();
+    if (key.startsWith('产品分组') || key == '分组') {
+      put('group', value);
+    } else if (key.startsWith('产品')) {
+      put('product', value);
+    } else if (key.startsWith('省份')) {
+      put('province', value, keepNationwide: true);
+    } else if (key.startsWith('渠道')) {
+      put('channel', value);
+    } else if (key.startsWith('供给')) {
+      put('supply', value);
+    }
+  }
+  return out;
+}
+
+String kpiLighthouseSliceTitle(WorkProfileKpiTask task) {
+  final dims = parseKpiLighthouseDims(task);
+  for (final key in ['product', 'group', 'channel', 'supply']) {
+    final value = dims[key]?.trim() ?? '';
+    if (value.isEmpty) continue;
+    if (key == 'group' && kpiLighthouseBucketDim(value)) continue;
+    return value;
+  }
+  final group = dims['group']?.trim() ?? '';
+  if (group.isNotEmpty) return group;
+  final name = task.taskName.trim();
+  return name.isEmpty ? '灯塔数据' : name;
+}
+
+String kpiLighthouseSliceSubtitle(WorkProfileKpiTask task) {
+  final dims = parseKpiLighthouseDims(task);
+  final title = kpiLighthouseSliceTitle(task);
+  final bits = <String>[];
+  void add(String? value, {bool skipBucket = false}) {
+    final v = (value ?? '').trim();
+    if (v.isEmpty || v == title || bits.contains(v)) return;
+    if (skipBucket && kpiLighthouseBucketDim(v)) return;
+    bits.add(v);
+  }
+
+  final province = (dims['province'] ?? task.province).trim();
+  add(province.isEmpty ? '全国' : province);
+  add(dims['channel']);
+  add(dims['supply']);
+  add(dims['group'], skipBucket: true);
+  return bits.isEmpty ? '全国' : bits.join(' · ');
+}
+
+String kpiScoreMonthTitle(String month) {
+  final match = RegExp(r'^(\d{4})-(\d{2})$').firstMatch(month.trim());
+  if (match == null) return month.trim();
+  return '${match.group(1)}年${int.parse(match.group(2)!)}月';
+}
+
+List<WorkProfileKpiPerson> kpiPeopleByScoreDesc(
+  List<WorkProfileKpiPerson> people,
+) {
+  return [...people]..sort((a, b) {
+      final byScore = b.mainScore.compareTo(a.mainScore);
+      if (byScore != 0) return byScore;
+      return a.userName.compareTo(b.userName);
+    });
+}
+
+/// 全员最终得分与等级的 Markdown，便于页面展示和转发 IM。
+String kpiScoreSummaryMarkdown(WorkProfileKpiScore score) {
+  final people = kpiPeopleByScoreDesc(score.people);
+  final monthTitle = kpiScoreMonthTitle(score.month);
+  final title = monthTitle.isEmpty ? '业务绩效汇总' : '$monthTitle 业务绩效汇总';
+  final buf = StringBuffer()
+    ..writeln('## $title')
+    ..writeln()
+    ..writeln('共 **${people.length}** 人')
+    ..writeln()
+    ..writeln('| 姓名 | 最终得分 | 等级 |')
+    ..writeln('| --- | ---: | --- |');
+  for (final person in people) {
+    final name = person.userName.trim().replaceAll('|', '\\|');
+    buf.writeln(
+      '| $name | ${person.mainScore.toStringAsFixed(2)} | ${person.resolvedGrade.label} |',
+    );
+  }
+  return buf.toString().trimRight();
 }
 
 class WorkProfileModuleHint {

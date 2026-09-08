@@ -55,6 +55,8 @@ class MainActivity : FlutterActivity() {
     private var consecutiveReadErrors = 0
     /** 开录/续录后短时间内的空读不视为抢麦（设备刚就绪时常有短暂静音）。 */
     private var ignoreSilentConflictUntilMs: Long = 0L
+    /** 小米等机型会掐断 VOICE_RECOGNITION，空读后重开麦克风的次数。 */
+    private var audioSourceRecoveries = 0
     private var sessionTracking = false
     private var sessionTitle = ""
     private var crashWav: CrashSafeWavWriter? = null
@@ -208,6 +210,7 @@ class MainActivity : FlutterActivity() {
         startNewSegmentEncoder(newVoiceRecordingPath("voice"))
         persistLiveSession()
         startSegmentRotateTimer()
+        refreshRecordingNotification()
     }
 
     private fun flushLiveSessionForDeath() {
@@ -375,6 +378,7 @@ class MainActivity : FlutterActivity() {
             segmentPaths.clear()
             micConflictDetected = false
             consecutiveReadErrors = 0
+            audioSourceRecoveries = 0
 
             val m4aPath = newVoiceRecordingPath("voice")
             outputPath = m4aPath
@@ -397,6 +401,7 @@ class MainActivity : FlutterActivity() {
             }
             persistLiveSession()
             startSegmentRotateTimer()
+            refreshRecordingNotification()
             result.success(true)
         } catch (e: Exception) {
             stopInternal(deleteFile = true)
@@ -424,34 +429,43 @@ class MainActivity : FlutterActivity() {
         )
         val bufferSize = if (minBuf > 0) minBuf * 2 else sampleRate * 2
         recordBufferSize = bufferSize
-
-        val record = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_RECOGNITION,
-            sampleRate,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-            bufferSize
-        )
-        if (record.state != AudioRecord.STATE_INITIALIZED) {
-            record.release()
-            // 回退默认麦克风源，兼容部分机型。
-            val fallback = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                sampleRate,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize
-            )
-            if (fallback.state != AudioRecord.STATE_INITIALIZED) {
-                fallback.release()
-                throw IllegalStateException("AudioRecord init failed")
-            }
-            fallback.startRecording()
-            audioRecord = fallback
-            return
-        }
+        val record = createAudioRecord(bufferSize)
         record.startRecording()
         audioRecord = record
+    }
+
+    /**
+     * 长会议用 MIC，不要用 VOICE_RECOGNITION。
+     * 小米 14 / HyperOS 会把识别源当成短语音会话，大约 3 分钟后静音并触发我们的「抢麦暂停」。
+     */
+    private fun createAudioRecord(bufferSize: Int): AudioRecord {
+        val sources = mutableListOf(
+            MediaRecorder.AudioSource.MIC,
+            MediaRecorder.AudioSource.DEFAULT,
+            MediaRecorder.AudioSource.CAMCORDER,
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+        )
+        if (Build.VERSION.SDK_INT >= 24) {
+            sources.add(1, MediaRecorder.AudioSource.UNPROCESSED)
+        }
+        for (source in sources) {
+            val record = try {
+                AudioRecord(
+                    source,
+                    sampleRate,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    bufferSize
+                )
+            } catch (_: Exception) {
+                continue
+            }
+            if (record.state == AudioRecord.STATE_INITIALIZED) {
+                return record
+            }
+            record.release()
+        }
+        throw IllegalStateException("AudioRecord init failed")
     }
 
     private fun pauseRecord(result: MethodChannel.Result) {
@@ -564,6 +578,7 @@ class MainActivity : FlutterActivity() {
         }
         micConflictDetected = false
         consecutiveReadErrors = 0
+        audioSourceRecoveries = 0
         isPaused = false
         startedAtMs = System.currentTimeMillis()
         ignoreSilentConflictUntilMs = System.currentTimeMillis() + 3_000L
@@ -623,6 +638,10 @@ class MainActivity : FlutterActivity() {
                         read == AudioRecord.ERROR -> {
                         consecutiveReadErrors++
                         if (consecutiveReadErrors >= 3) {
+                            if (tryRecoverAudioRecord()) {
+                                consecutiveReadErrors = 0
+                                continue
+                            }
                             handleMicConflict("audioRecordError")
                             break
                         }
@@ -634,6 +653,10 @@ class MainActivity : FlutterActivity() {
                         if (consecutiveReadErrors >= 150 &&
                             System.currentTimeMillis() >= ignoreSilentConflictUntilMs
                         ) {
+                            if (tryRecoverAudioRecord()) {
+                                consecutiveReadErrors = 0
+                                continue
+                            }
                             handleMicConflict("audioRecordSilent")
                             break
                         }
@@ -654,6 +677,20 @@ class MainActivity : FlutterActivity() {
             if (isRecording && !isPaused) {
                 handleMicConflict("audioRecordException")
             }
+        }
+    }
+
+    private fun tryRecoverAudioRecord(): Boolean {
+        if (!isRecording || isPaused || !sessionTracking || audioSourceRecoveries >= 2) {
+            return false
+        }
+        return try {
+            openAudioRecordAndStart()
+            audioSourceRecoveries++
+            ignoreSilentConflictUntilMs = System.currentTimeMillis() + 3_000L
+            true
+        } catch (_: Exception) {
+            false
         }
     }
 
@@ -740,6 +777,7 @@ class MainActivity : FlutterActivity() {
         startedAtMs = 0L
         accumulatedDurationMs = 0L
         consecutiveReadErrors = 0
+        audioSourceRecoveries = 0
         releaseWakeLock()
         abandonAudioFocusForRecording()
         MeetingRecordingService.stop(this)
@@ -854,6 +892,18 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun refreshRecordingNotification() {
+        if (!isRecording || isPaused || !sessionTracking) return
+        val totalMs = accumulatedDurationMs + currentSegmentDurationMs()
+        val minutes = (totalMs / 60000L).toInt()
+        val seconds = ((totalMs / 1000L) % 60L).toInt()
+        MeetingRecordingService.update(
+            this,
+            title = "沙丘 · 会议录音进行中",
+            text = String.format("已录 %d:%02d，结束后生成纪要", minutes, seconds)
+        )
+    }
+
     private fun emitRecorderEvent(kind: String, reason: String? = null) {
         val sink = recorderEventSink ?: return
         val payload = mutableMapOf<String, Any>("kind" to kind)
@@ -878,8 +928,7 @@ class MainActivity : FlutterActivity() {
         mainHandler.post {
             when (focusChange) {
                 AudioManager.AUDIOFOCUS_LOSS,
-                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
-                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
                     if (isRecording && !isPaused && pauseRecordInternal(finalizeSegment = true)) {
                         pausedBySystemInterruption = true
                         emitRecorderEvent("paused", "audioFocusLoss")
@@ -890,6 +939,9 @@ class MainActivity : FlutterActivity() {
                         )
                     }
                 }
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                    // 通知/导航压低音量，会议录音继续采。
+                }
                 AudioManager.AUDIOFOCUS_GAIN -> {
                     tryNativeResumeAfterSystemInterruption()
                 }
@@ -898,13 +950,15 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun requestAudioFocusForRecording() {
+        // 长会议只采集、不播声音。抢 VOICE_COMMUNICATION 焦点会被小米当成网络通话，约 3 分钟掐断。
+        if (sessionTracking) return
         val am = getSystemService(AUDIO_SERVICE) as? AudioManager ?: return
         if (Build.VERSION.SDK_INT >= 26) {
             val attrs = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                .setUsage(AudioAttributes.USAGE_MEDIA)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                 .build()
-            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
                 .setAudioAttributes(attrs)
                 .setOnAudioFocusChangeListener(audioFocusChangeListener, mainHandler)
                 .setAcceptsDelayedFocusGain(true)
@@ -915,8 +969,8 @@ class MainActivity : FlutterActivity() {
             @Suppress("DEPRECATION")
             am.requestAudioFocus(
                 audioFocusChangeListener,
-                AudioManager.STREAM_VOICE_CALL,
-                AudioManager.AUDIOFOCUS_GAIN,
+                AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK,
             )
         }
     }

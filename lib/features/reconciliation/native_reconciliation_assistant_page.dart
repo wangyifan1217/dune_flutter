@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/widgets/cached_network_image.dart';
+import '../am_sso/am_sso_service.dart';
 import '../auth/auth_session.dart';
 import '../chat/assistant_transcript_support.dart';
 import '../chat/chat_widgets.dart';
@@ -988,6 +989,7 @@ class _NativeReconciliationAssistantPageState
                     : '今日对账信息已生成，请查阅下面的对账卡片。',
                 mine: false,
                 enableSelection: false,
+                onUrlTap: _openMessageUrl,
               ),
               for (final item in items) ...[
                 const SizedBox(height: 8),
@@ -1073,10 +1075,27 @@ class _NativeReconciliationAssistantPageState
           text: msg.bodyText,
           mine: false,
           enableSelection: false,
+          onUrlTap: _openMessageUrl,
         ),
       ),
       const SizedBox(height: 12),
     ];
+  }
+
+  Future<void> _openMessageUrl(Uri uri) async {
+    try {
+      final opened = await openMaybeAmSsoUrl(widget.session, uri);
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法打开系统浏览器，请检查默认浏览器设置后重试')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyErrorText(e))),
+      );
+    }
   }
 
   String _timeLabel(DateTime? at) {
@@ -1093,7 +1112,7 @@ class _NativeReconciliationAssistantPageState
       builder: (context) => AlertDialog(
         title: const Text('对账助手'),
         content: const Text(
-          '每天由后台推送对账名片。确认顺序为一层 → 财务 → 二层；二层确认整张表即可，无需逐条确认，也可以驳回。最终人只查阅不用确认。超时未确认会通知最终人。',
+          '每天由后台按推送时间发给对账参与人。点击消息里的标签二 / 标签三链接，会按资管 1.0 相同方式免登打开对应页面。',
         ),
         actions: [
           TextButton(

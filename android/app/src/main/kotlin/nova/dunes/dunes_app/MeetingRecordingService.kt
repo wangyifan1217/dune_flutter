@@ -16,13 +16,15 @@ import androidx.core.app.NotificationCompat
  *
  * Android 10/11/14 要求：只有存在「microphone」类型的前台服务时，App 切后台或锁屏后
  * 才被允许继续采集麦克风；否则系统会静音麦克风。录音期间启动本服务并展示常驻通知。
+ *
+ * 小米 HyperOS 对 IMPORTANCE_LOW 通知容易折叠后冻结进程，会议录音用 DEFAULT 且每分钟刷新文案。
  */
 class MeetingRecordingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startAsForeground()
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -35,28 +37,12 @@ class MeetingRecordingService : Service() {
     }
 
     private fun startAsForeground() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val mgr = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            if (mgr.getNotificationChannel(CHANNEL_ID) == null) {
-                val channel = NotificationChannel(
-                    CHANNEL_ID,
-                    "会议录音",
-                    NotificationManager.IMPORTANCE_LOW
-                ).apply {
-                    setShowBadge(false)
-                    description = "会议录音进行时的常驻提示"
-                }
-                mgr.createNotificationChannel(channel)
-            }
-        }
-
-        val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("沙丘 · 会议录音进行中")
-            .setContentText("正在后台录音，结束后生成纪要")
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
+        ensureChannel(this)
+        val notification = buildNotification(
+            this,
+            "沙丘 · 会议录音进行中",
+            "正在后台录音，结束后生成纪要"
+        )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
@@ -70,7 +56,8 @@ class MeetingRecordingService : Service() {
     }
 
     companion object {
-        private const val CHANNEL_ID = "dunes_meeting_recording"
+        // 新 channel：旧版 IMPORTANCE_LOW 在小米上容易被折叠后冻结。
+        private const val CHANNEL_ID = "dunes_meeting_recording_v2"
         private const val NOTIFICATION_ID = 4711
 
         @Volatile
@@ -90,16 +77,42 @@ class MeetingRecordingService : Service() {
         }
 
         fun update(context: Context, title: String, text: String) {
+            ensureChannel(context)
             val mgr = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
                 ?: return
-            val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            mgr.notify(NOTIFICATION_ID, buildNotification(context, title, text))
+        }
+
+        private fun ensureChannel(context: Context) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+            val mgr = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                ?: return
+            if (mgr.getNotificationChannel(CHANNEL_ID) != null) return
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "会议录音",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
+                description = "会议录音进行时的常驻提示，请勿关闭"
+            }
+            mgr.createNotificationChannel(channel)
+        }
+
+        private fun buildNotification(context: Context, title: String, text: String): Notification {
+            return NotificationCompat.Builder(context, CHANNEL_ID)
                 .setContentTitle(title)
                 .setContentText(text)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
                 .build()
-            mgr.notify(NOTIFICATION_ID, notification)
         }
     }
 }

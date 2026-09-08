@@ -55,4 +55,14 @@ void main() {
     expect(linkedProposalOpensIntake('sales-proposal'), isFalse);
     expect(linkedProposalOpensIntake('proposal_intake'), isTrue);
   });
+
+  test('approval linked intake is treated as collaboration proposal', () {
+    final payload = linkedProposalIntakePayload(
+      id: 37,
+      code: 'TA-20260824-000037',
+      title: '抖音渠道中石油产品上线提案',
+    );
+    expect(linkedProposalOpensIntake(parseLinkedProposalSource(payload)), isTrue);
+    expect(parseLinkedProposalId(payload), 37);
+  });
 }

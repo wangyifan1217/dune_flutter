@@ -22,6 +22,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/util/native_permissions.dart';
 import '../../core/widgets/cached_network_image.dart';
+import '../am_sso/am_sso_service.dart';
 import '../auth/auth_session.dart';
 import '../contacts/contact_service.dart';
 import '../meeting/meeting_live_controller.dart';
@@ -6416,6 +6417,17 @@ class _NativeChatViewState extends State<NativeChatView>
     );
   }
 
+  Future<void> _openChatUrl(Uri uri) async {
+    try {
+      final opened = await openMaybeAmSsoUrl(widget.session, uri);
+      if (!opened) {
+        _showToast('无法打开系统浏览器，请检查默认浏览器设置后重试', error: true);
+      }
+    } catch (e) {
+      _showToast(friendlyErrorText(e), error: true);
+    }
+  }
+
   void _showToast(String message, {bool error = false}) {
     if (!mounted) return;
     showDunesToast(
@@ -7913,6 +7925,7 @@ class _NativeChatViewState extends State<NativeChatView>
       mine: mine,
       quote: quote.isEmpty ? null : quote,
       onQuoteTap: onQuoteTap,
+      onUrlTap: _openChatUrl,
       // 与文件消息同一套深色宫格菜单（PC 右键 / APP 长按）。
       onActionsMenu: (anchor, selectedText) {
         unawaited(
@@ -8496,17 +8509,6 @@ class _NativeChatViewState extends State<NativeChatView>
     }
   }
 
-  bool _isGroupOwner() {
-    final me = widget.session.userId;
-    return _groupMembers.any((m) {
-      final uid = (m['userId'] as num?)?.toInt() ?? 0;
-      if (uid != me) return false;
-      final role = (m['role'] ?? '').toString().toUpperCase();
-      final roleLabel = (m['roleLabel'] ?? '').toString();
-      return role == 'OWNER' || roleLabel.contains('主');
-    });
-  }
-
   String? _memberAvatarPreset(Map<String, dynamic> member) {
     final value = (member['avatarPreset'] ?? '').toString().trim();
     return value.isEmpty ? null : value;
@@ -8666,7 +8668,7 @@ class _NativeChatViewState extends State<NativeChatView>
                   onTap: () {},
                   child: _AtMentionSheet(
                     members: members,
-                    showAtAll: _isGroupOwner(),
+                    showAtAll: true,
                     avatarService: _service,
                     initialFilter: filter,
                     filterListenable: _atFilterNotifier!,

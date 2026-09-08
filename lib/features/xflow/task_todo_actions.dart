@@ -16,6 +16,26 @@ import 'xflow_service.dart';
 const kTaskTodoMaxInvoiceFiles = 6;
 const kTaskTodoMaxInvoiceBytes = 20 * 1024 * 1024;
 
+String _taskFieldLabel(String key) {
+  const labels = <String, String>{
+    'bankAccountName': '户名',
+    'bankName': '开户行',
+    'bankAccountNo': '账号',
+    'merchantPlatform': '开户平台',
+    'merchantNo': '商户号',
+    'merchantName': '商户名称',
+    'actualPayAmount': '实付金额',
+    'paymentVoucher': '支付凭证',
+    'repayAmount': '还款金额',
+    'returnedInvoice': '回传发票',
+    'expressTrackingNo': '快递单号',
+    'fileDestination': '文件去向',
+    'writeOffReason': '无法收回原因',
+    'receiptVoucher': '回款凭证',
+  };
+  return labels[key] ?? key;
+}
+
 class TaskTodoConfirmCopy {
   const TaskTodoConfirmCopy({
     required this.title,
@@ -71,6 +91,7 @@ TaskTodoConfirmCopy taskTodoConfirmCopy(
     'ISSUE_INVOICE' => '请上传已开具的发票文件（可多张，电脑可拖拽）。提交后写入原单，不重新走审批。',
     'SEAL' => '确认盖章后，合同用印进入「填写快递单号」。不重审。',
     'REPAY' => '提交还款金额和凭证后关闭本条待办。不重审。',
+    'OPEN_ACCOUNT' => '请回填开户信息到本单。提交后抄送出纳，不重审。',
     _ => '确认完成该待办？提交后写入原单，不重新走审批。',
   };
   return TaskTodoConfirmCopy(
@@ -417,10 +438,31 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
           for (final key in widget.keys)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: TextField(
-                decoration: InputDecoration(labelText: key),
-                onChanged: (v) => _fieldValues[key] = v,
-              ),
+              child: key == 'merchantPlatform'
+                  ? DropdownButtonFormField<String>(
+                      value: (_fieldValues[key] ?? '').isEmpty
+                          ? null
+                          : _fieldValues[key],
+                      decoration: InputDecoration(
+                        labelText: _taskFieldLabel(key),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: '壹钱包', child: Text('壹钱包')),
+                        DropdownMenuItem(value: '银联', child: Text('银联')),
+                        DropdownMenuItem(value: '微信', child: Text('微信')),
+                        DropdownMenuItem(value: '支付宝', child: Text('支付宝')),
+                        DropdownMenuItem(value: '其他', child: Text('其他')),
+                      ],
+                      onChanged: (v) => setState(() {
+                        _fieldValues[key] = v ?? '';
+                      }),
+                    )
+                  : TextField(
+                      decoration: InputDecoration(
+                        labelText: _taskFieldLabel(key),
+                      ),
+                      onChanged: (v) => _fieldValues[key] = v,
+                    ),
             ),
         ],
       ],

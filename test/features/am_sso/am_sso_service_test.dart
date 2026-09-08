@@ -25,4 +25,21 @@ void main() {
     expect(app.title, '资管1.0');
     expect(app.subtitle, '资金 · 账单 · 对账');
   });
+
+  test('amSsoTargetForUrl maps 资管对账页到免登 target', () {
+    final tag2 = Uri.parse(
+      'https://sel-prod.djien-qr.com/infoReport/cnpc-shucai-tag2-supplier',
+    );
+    final tag3 = Uri.parse(
+      'https://sel-prod.djien-qr.com/infoReport/shucai-tag3-v2',
+    );
+    expect(isAmReconPageUrl(tag2), isTrue);
+    expect(isAmReconPageUrl(tag3), isTrue);
+    expect(amSsoTargetForUrl(tag2), kAmReconTag2Path);
+    expect(amSsoTargetForUrl(tag3), kAmReconTag3Path);
+    expect(
+      amSsoTargetForUrl(Uri.parse('https://example.com/other')),
+      isNull,
+    );
+  });
 }

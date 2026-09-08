@@ -1413,6 +1413,7 @@ class ChatTextBubble extends StatelessWidget {
     this.onSelectionMulti,
     this.onSelectionRecall,
     this.onActionsMenu,
+    this.onUrlTap,
     this.enableSelection = true,
     this.selectAllOnLongPress = false,
     this.preferPartialTextCopy = false,
@@ -1431,6 +1432,7 @@ class ChatTextBubble extends StatelessWidget {
   /// 与文件消息一致的操作菜单（深色图标宫格）。
   /// 桌面仍拦截系统选区工具条；APP 在 [preferPartialTextCopy] 时先出复制/全选/更多。
   final void Function(Offset anchor, String selectedText)? onActionsMenu;
+  final Future<void> Function(Uri uri)? onUrlTap;
   final bool enableSelection;
   final bool selectAllOnLongPress;
 
@@ -1506,7 +1508,13 @@ class ChatTextBubble extends StatelessWidget {
               ..onTap = () {
                 final uri = Uri.tryParse(href);
                 if (uri == null) return;
-                unawaited(launchUrl(uri, mode: LaunchMode.externalApplication));
+                unawaited(() async {
+                  if (onUrlTap != null) {
+                    await onUrlTap!(uri);
+                    return;
+                  }
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }());
               },
           ),
         );

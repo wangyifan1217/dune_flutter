@@ -15,11 +15,13 @@ Future<void> showProposalIntakeOverlay({
   required BuildContext context,
   required AuthSession session,
   required int proposalId,
+  bool linkedFromApproval = false,
 }) {
   Widget hostFor(VoidCallback close) {
     return _ProposalIntakeOverlayHost(
       session: session,
       proposalId: proposalId,
+      linkedFromApproval: linkedFromApproval,
       onClose: close,
     );
   }
@@ -83,11 +85,13 @@ class _ProposalIntakeOverlayHost extends StatefulWidget {
     required this.session,
     required this.proposalId,
     required this.onClose,
+    this.linkedFromApproval = false,
   });
 
   final AuthSession session;
   final int proposalId;
   final VoidCallback onClose;
+  final bool linkedFromApproval;
 
   @override
   State<_ProposalIntakeOverlayHost> createState() =>
@@ -119,8 +123,9 @@ class _ProposalIntakeOverlayHostState
   bool get _formReady =>
       !_loading && _error == null && _row != null && _options != null;
 
-  /// PC 弹窗保留一层关闭条。APP 把关闭放进表单顶栏，避免刘海下再叠一条。
-  bool get _showHostChrome => isDesktopCommOnly || !_formReady;
+  /// 从审批点进来始终露出返回条；PC 弹窗也保留一层顶栏。
+  bool get _showHostChrome =>
+      isDesktopCommOnly || !_formReady || widget.linkedFromApproval;
 
   Future<void> _load({int? id, bool quiet = false}) async {
     final target = id ?? _proposalId;
@@ -134,10 +139,28 @@ class _ProposalIntakeOverlayHostState
       setState(() => _proposalId = target);
     }
     try {
+      final detail = _service.fetchDetail(target);
+      final options = _service.fetchOptions();
+      final people = _service.fetchPeople();
+      if (widget.linkedFromApproval) {
+        final result = await Future.wait([detail, options, people]);
+        if (!mounted) return;
+        setState(() {
+          _proposalId = target;
+          _row = result[0] as ProposalIntakeRow;
+          _options = result[1] as ProposalIntakeOptions;
+          _people = result[2] as List<ProposalPerson>;
+          _actionQueue = const [];
+          _formSession++;
+          _loading = false;
+          _error = null;
+        });
+        return;
+      }
       final result = await Future.wait([
-        _service.fetchDetail(target),
-        _service.fetchOptions(),
-        _service.fetchPeople(),
+        detail,
+        options,
+        people,
         _service.fetchList(actionable: true, pageSize: 100),
       ]);
       if (!mounted) return;
@@ -202,17 +225,23 @@ class _ProposalIntakeOverlayHostState
   }
 
   Widget _hostChrome() {
+    final fromApproval = widget.linkedFromApproval;
     return SizedBox(
       height: 48,
       child: Row(
         children: [
           IconButton(
-            tooltip: '关闭',
+            tooltip: fromApproval ? '返回' : '关闭',
             onPressed: widget.onClose,
-            icon: const Icon(Icons.close_rounded),
+            icon: Icon(
+              fromApproval ? Icons.arrow_back_rounded : Icons.close_rounded,
+            ),
           ),
-          const Expanded(
-            child: Text('协作提案', style: TextStyle(fontWeight: FontWeight.w700)),
+          Expanded(
+            child: Text(
+              fromApproval ? '返回审批' : '协作提案',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
           ProposalIntakeProcessHelpButton(
             purchase: _row != null && proposalIntakeIsPurchase(_row!.kind),
@@ -235,6 +264,7 @@ class _ProposalIntakeOverlayHostState
       );
     }
     final row = _row!;
+    final fromApproval = widget.linkedFromApproval;
     return ProposalIntakeForm(
       key: ValueKey('overlay-form-$_formSession'),
       row: row,
@@ -245,7 +275,7 @@ class _ProposalIntakeOverlayHostState
       saving: false,
       service: _service,
       enableComments: true,
-      onClose: isDesktopCommOnly ? null : widget.onClose,
+      onClose: (isDesktopCommOnly || fromApproval) ? null : widget.onClose,
       onChanged: (next) => _row = next,
       onSaved: (next) {
         setState(() => _row = next);
@@ -256,14 +286,20 @@ class _ProposalIntakeOverlayHostState
       onError: (message) =>
           showProposalCenterToast(context, message, error: true),
       onDeleted: widget.onClose,
-      onNext: () => unawaited(_goNext(afterDecision: false)),
-      onAfterFinalDecision: (id) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          unawaited(_goNext(afterDecision: true));
-        });
-      },
-      nextCount: _actionQueue.where((item) => item.id != row.id).length,
+      onNext: fromApproval
+          ? null
+          : () => unawaited(_goNext(afterDecision: false)),
+      onAfterFinalDecision: fromApproval
+          ? null
+          : (id) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                unawaited(_goNext(afterDecision: true));
+              });
+            },
+      nextCount: fromApproval
+          ? 0
+          : _actionQueue.where((item) => item.id != row.id).length,
       nextBusy: _nextBusy,
     );
   }

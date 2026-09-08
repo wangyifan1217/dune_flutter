@@ -864,6 +864,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
     final out = <String>[];
     for (final field in template.fields) {
       if (field.key.isEmpty || field.type == 'section') continue;
+      if (field.raw['hiddenOnCreate'] == true) continue;
       if (field.isCardDynamicList) {
         out.addAll(field.missingRequiredGroupLabels(_values[field.key]));
         continue;

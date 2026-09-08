@@ -592,6 +592,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                 ),
               ),
             Expanded(
+              key: const ValueKey('workbench-pager-slot'),
               child: PageView(
                 controller: _pageController,
                 physics: _lockPageSwipe
@@ -638,6 +639,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     switch (_contentView) {
       case _WorkbenchView.tasks:
         return NativeTaskHomePane(
+          key: const ValueKey('workbench-tasks'),
           session: _session,
           embedded: true,
           onChromeChanged: _onTaskChrome,
@@ -847,7 +849,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
       if (!_session.isExternalUser && _canSeeKpiPerformance == true)
         _WorkbenchTile(
           title: '业务绩效',
-          subtitle: '人员任务 · 重跑与导出',
+          subtitle: '灯塔规则计分 · 重跑与导出',
           icon: Icons.insights_outlined,
           color: const Color(0xFF0F766E),
           enabled: true,

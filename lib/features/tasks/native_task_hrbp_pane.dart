@@ -325,7 +325,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
   void _backFromAction() {
     setState(() {
       _pageNavBack = true;
-      _page = _HrbpPage.detail;
+      _page = _detailId != null ? _HrbpPage.detail : _HrbpPage.board;
       _actionTask = null;
       _actionMode = null;
     });
@@ -340,24 +340,32 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
       };
 
   Widget _pageBody() {
-    return switch (_page) {
-      _HrbpPage.action => NativeTaskActionView(
+    switch (_page) {
+      case _HrbpPage.action:
+        final task = _actionTask;
+        final mode = _actionMode;
+        if (task == null || mode == null) return _buildBoard();
+        return NativeTaskActionView(
           session: widget.session,
-          task: _actionTask!,
-          mode: _actionMode!,
+          task: task,
+          mode: mode,
           onBack: _backFromAction,
           onDone: _backFromAction,
-        ),
-      _HrbpPage.detail => NativeTaskDetailView(
+        );
+      case _HrbpPage.detail:
+        final id = _detailId;
+        if (id == null) return _buildBoard();
+        return NativeTaskDetailView(
           session: widget.session,
-          taskId: _detailId!,
+          taskId: id,
           onBack: _backFromDetail,
           onOpenTask: _openDetail,
           onOpenProgress: (t) => _openAction(t, TaskActionMode.progress),
           onOpenEvaluate: (t) => _openAction(t, TaskActionMode.evaluate),
-        ),
-      _HrbpPage.board => _buildBoard(),
-    };
+        );
+      case _HrbpPage.board:
+        return _buildBoard();
+    }
   }
 
   @override

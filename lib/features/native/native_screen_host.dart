@@ -87,6 +87,8 @@ import '../qianji/native_qianji_fund_secondment_detail_page.dart';
 import '../qianji/native_qianji_fund_secondment_page.dart';
 import '../qianji/native_qianji_detail_page.dart';
 import '../qianji/native_qianji_hub_page.dart';
+import '../qianji/efficiency/native_qianji_efficiency_boss_preview.dart';
+import '../qianji/efficiency/native_qianji_efficiency_page.dart';
 import '../qianji/native_qianji_iteration_page.dart';
 import '../qianji/native_qianji_kb_supervise_page.dart';
 import '../qianji/digital_auto/digital_auto_config.dart';
@@ -100,6 +102,7 @@ import '../qianji/native_qianji_session_supervise_page.dart';
 import '../qianji/native_qianji_task_detail_page.dart';
 import '../qianji/native_qianji_team_perf_page.dart';
 import '../qianji/native_qianji_cash_flow_board_page.dart';
+import '../qianji/native_qianji_monthly_bill_page.dart';
 import '../qianji/travel/native_qianji_travel_page.dart';
 import '../qianji/qianji_models.dart';
 import '../qianji/qianji_project_models.dart';
@@ -3311,11 +3314,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenMeetingSupervise: () => widget.navigation.go('QJMM'),
           onOpenSessionSupervise: () => widget.navigation.go('QJSS'),
           onOpenKbSupervise: () => widget.navigation.go('QJKB'),
+          onOpenEfficiencyAnalysis: () => widget.navigation.go('QJEA'),
+          onOpenEfficiencyBossPreview: () => widget.navigation.go('QJEAB'),
           onOpenFundSecondment: widget.session.effectiveFundSecondmentAccess
               ? () => widget.navigation.go('QJFS')
               : null,
           onOpenCashFlow: widget.session.effectiveCashFlowAccess
               ? () => widget.navigation.go('QJCF')
+              : null,
+          onOpenMonthlyBill: widget.session.effectiveMonthlyBillAccess
+              ? () => widget.navigation.go('QJMB')
               : null,
           onOpenTravel: () => widget.navigation.go('QJTR'),
           onOpenRobotHome: () {
@@ -3498,6 +3506,18 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           session: widget.session,
           onBack: widget.navigation.back,
         );
+      case 'QJEA':
+        return NativeQianjiEfficiencyPage(
+          session: widget.session,
+          onBack: widget.navigation.back,
+        );
+      case 'QJEAB':
+        return NativeQianjiEfficiencyBossPreview(
+          session: widget.session,
+          onBack: widget.navigation.back,
+          viewAll: widget.session.workSituationViewAll,
+          viewerName: widget.session.displayName ?? '',
+        );
       case 'QJTR':
         return NativeQianjiTravelPage(
           session: widget.session,
@@ -3514,6 +3534,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           );
         }
         return NativeQianjiCashFlowBoardPage(
+          session: widget.session,
+          onBack: widget.navigation.back,
+        );
+      case 'QJMB':
+        if (!widget.session.effectiveMonthlyBillAccess) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.go('QJ');
+          });
+          return const Scaffold(
+            backgroundColor: DunesColors.bgApp,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return NativeQianjiMonthlyBillPage(
           session: widget.session,
           onBack: widget.navigation.back,
         );
@@ -3879,7 +3913,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return NativeWorkProfilePerfPage(
           session: widget.session,
           onBack: widget.navigation.back,
-          initialMonth: _workProfileMonth,
         );
       case 'C1':
         return _buildConversationListPage();
@@ -4838,10 +4871,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJAM',
       'QJSS',
       'QJKB',
+      'QJEA',
+      'QJEAB',
       'QJFS',
       'QJFSD',
       'QJTR',
       'QJCF',
+      'QJMB',
       'QJR',
       'QJRA',
       'QJRC',
@@ -4927,10 +4963,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'QJAM' ||
         screen == 'QJSS' ||
         screen == 'QJKB' ||
+        screen == 'QJEA' ||
+        screen == 'QJEAB' ||
         screen == 'QJFS' ||
         screen == 'QJFSD' ||
         screen == 'QJTR' ||
         screen == 'QJCF' ||
+        screen == 'QJMB' ||
         screen == 'QJR' ||
         screen == 'QJRA' ||
         screen == 'QJRC' ||
@@ -5023,10 +5062,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJAM',
       'QJSS',
       'QJKB',
+      'QJEA',
+      'QJEAB',
       'QJFS',
       'QJFSD',
       'QJTR',
       'QJCF',
+      'QJMB',
       'QJR',
       'QJRA',
       'QJRC',
@@ -5069,8 +5111,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJAM' => const ['QJ', 'QJAM'],
       'QJSS' => const ['QJ', 'QJSS'],
       'QJKB' => const ['QJ', 'QJKB'],
+      'QJEA' => const ['QJ', 'QJEA'],
+      'QJEAB' => const ['QJ', 'QJEAB'],
       'QJTR' => const ['QJ', 'QJTR'],
       'QJCF' => const ['QJ', 'QJCF'],
+      'QJMB' => const ['QJ', 'QJMB'],
       'QJFS' => const ['QJ', 'QJFS'],
       'QJFSD' => const ['QJ', 'QJFS', 'QJFSD'],
       'QJD' => const ['QJ', 'QJD'],

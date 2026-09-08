@@ -6,7 +6,7 @@ import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
-import '../proposal_intake/native_proposal_intake_page.dart';
+import '../proposal_intake/proposal_intake_overlay.dart';
 import '../shell/dunes_toast.dart';
 import 'approval_chat_forward.dart';
 import 'approval_chat_share.dart';
@@ -28,19 +28,11 @@ Future<void> openLinkedProposalDetail({
   if (proposalId <= 0 || !context.mounted) return;
 
   if (linkedProposalOpensIntake(source)) {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (ctx) {
-          return Material(
-            color: DunesColors.bgApp,
-            child: NativeProposalIntakePage(
-              session: session,
-              initialIntakeId: proposalId,
-              showCreate: false,
-            ),
-          );
-        },
-      ),
+    await showProposalIntakeOverlay(
+      context: context,
+      session: session,
+      proposalId: proposalId,
+      linkedFromApproval: true,
     );
     return;
   }

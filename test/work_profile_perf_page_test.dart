@@ -1,11 +1,113 @@
 import 'package:dunes_app/features/auth/auth_session.dart';
-import 'package:dunes_app/features/kpi/workbench_kpi_service.dart';
 import 'package:dunes_app/features/profile/native_work_profile_perf_page.dart';
 import 'package:dunes_app/features/profile/work_profile_kpi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+WorkProfileKpiTask _slice({
+  String taskName = '',
+  String province = '',
+  String bucketLabel = '',
+  String matchSummary = '',
+  String productName = '',
+  String productGroup = '',
+  String channelName = '',
+  String supplyGroup = '',
+}) {
+  return WorkProfileKpiTask(
+    taskId: 1,
+    taskName: taskName,
+    province: province,
+    bucketLabel: bucketLabel,
+    weightPct: 0,
+    taskTotal: 0,
+    curRevenue: 0,
+    prevRevenue: 0,
+    curProfit: 0,
+    prevProfit: 0,
+    matchSummary: matchSummary,
+    productName: productName,
+    productGroup: productGroup,
+    channelName: channelName,
+    supplyGroup: supplyGroup,
+  );
+}
+
 void main() {
+  test('lighthouse slice title prefers product over old task name', () {
+    final fromFields = _slice(
+      taskName: '旧任务名',
+      province: '广东',
+      productName: '中石油',
+      productGroup: '能源',
+      channelName: '平安',
+      bucketLabel: '能源板块',
+    );
+    expect(kpiLighthouseSliceTitle(fromFields), '中石油');
+    expect(kpiLighthouseSliceSubtitle(fromFields), '广东 · 平安');
+
+    final fromSummary = _slice(
+      taskName: '小套-加油会员',
+      province: '广东',
+      bucketLabel: '通信板块',
+      matchSummary: '产品=小套-加油会员',
+    );
+    expect(kpiLighthouseSliceTitle(fromSummary), '小套-加油会员');
+    expect(kpiLighthouseSliceSubtitle(fromSummary), '广东');
+
+    final supply = _slice(
+      taskName: '中石油',
+      province: '中油BP',
+      matchSummary: '供给方=中石油',
+    );
+    expect(kpiLighthouseSliceTitle(supply), '中石油');
+    expect(kpiLighthouseSliceSubtitle(supply), '中油BP');
+
+    final channel = _slice(
+      taskName: '多渠道',
+      province: '全国',
+      matchSummary: '渠道L1=多渠道',
+    );
+    expect(kpiLighthouseSliceTitle(channel), '多渠道');
+    expect(kpiLighthouseSliceSubtitle(channel), '全国');
+  });
+
+  test('builds markdown summary of final scores and grades', () {
+    const score = WorkProfileKpiScore(
+      month: '2026-08',
+      prevMonth: '2026-07',
+      people: [
+        WorkProfileKpiPerson(
+          userId: 2,
+          userName: '何佳伟',
+          mainScore: 47.36,
+          bonus: 0,
+          telecomWeight: 0.5,
+          energyWeight: 0.5,
+          telecomScore: 40,
+          energyScore: 50,
+        ),
+        WorkProfileKpiPerson(
+          userId: 1,
+          userName: '李四',
+          mainScore: 88,
+          bonus: 0,
+          telecomWeight: 0,
+          energyWeight: 1,
+          telecomScore: 0,
+          energyScore: 88,
+        ),
+      ],
+    );
+    final md = kpiScoreSummaryMarkdown(score);
+    expect(md, contains('## 2026年8月 业务绩效汇总'));
+    expect(md, contains('共 **2** 人'));
+    expect(md, contains('| 姓名 | 最终得分 | 等级 |'));
+    expect(md.indexOf('李四'), lessThan(md.indexOf('何佳伟')));
+    expect(md, contains('| 李四 | 88.00 | 良（达到预期） |'));
+    expect(md, contains('| 何佳伟 | 47.36 | 辅（专项改进） |'));
+  });
+
   const session = AuthSession(
     phone: '13800000000',
     userId: 1,
@@ -194,8 +296,8 @@ void main() {
     expect(find.textContaining('主营 80.50'), findsOneWidget);
     expect(find.textContaining('中（低于预期）'), findsOneWidget);
     expect(find.byKey(const Key('work-profile-perf-add')), findsNothing);
-    expect(find.textContaining('通信（2）'), findsOneWidget);
-    expect(find.textContaining('能源（1）'), findsOneWidget);
+    expect(find.textContaining('通信（2条规则）'), findsOneWidget);
+    expect(find.textContaining('能源（1条规则）'), findsOneWidget);
     expect(find.text('权重 70.00%'), findsOneWidget);
     expect(find.text('权重 30.00%'), findsOneWidget);
     expect(find.text('权重 100.00%'), findsOneWidget);
@@ -266,35 +368,35 @@ void main() {
     expect(find.textContaining('得分 75.0（自动 70.0）'), findsOneWidget);
   });
 
-  testWidgets('defaults to current month and can step to previous month', (
+  testWidgets('defaults to previous month and can step to current month', (
     tester,
   ) async {
+    final seen = <String>[];
     await tester.pumpWidget(
       MaterialApp(
         home: NativeWorkProfilePerfPage(
           session: session,
           onBack: () {},
           now: DateTime(2026, 9, 3),
-          score: const WorkProfileKpiScore(
-            month: '2026-09',
-            prevMonth: '2026-08',
-          ),
+          loadScore: (month) async {
+            seen.add(month);
+            return WorkProfileKpiScore(month: month, prevMonth: '2026-07');
+          },
         ),
       ),
     );
-    expect(find.text('2026年9月'), findsOneWidget);
-    expect(
-      tester.widget<IconButton>(find.byKey(const Key('work-profile-perf-month-next'))).onPressed,
-      isNull,
-    );
-
-    await tester.tap(find.byKey(const Key('work-profile-perf-month-prev')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.text('2026年8月'), findsOneWidget);
+    expect(seen, ['2026-08']);
     expect(
       tester.widget<IconButton>(find.byKey(const Key('work-profile-perf-month-next'))).onPressed,
       isNotNull,
     );
+
+    await tester.tap(find.byKey(const Key('work-profile-perf-month-next')));
+    await tester.pumpAndSettle();
+    expect(find.text('2026年9月'), findsOneWidget);
+    expect(seen, ['2026-08', '2026-09']);
   });
 
   testWidgets('failed live load shows error instead of sample data', (
@@ -307,7 +409,7 @@ void main() {
           onBack: () {},
           now: DateTime(2026, 9, 3),
           loadScore: (month) async {
-            expect(month, '2026-09');
+            expect(month, '2026-08');
             throw Exception('kpi down');
           },
         ),
@@ -335,7 +437,7 @@ void main() {
       ),
     );
     expect(find.byKey(const Key('work-profile-perf-empty')), findsOneWidget);
-    expect(find.text('本月暂无计入任务'), findsOneWidget);
+    expect(find.text('本月暂无对应的灯塔数据规则'), findsOneWidget);
     expect(find.byKey(const Key('work-profile-perf-add')), findsNothing);
   });
 
@@ -349,20 +451,7 @@ void main() {
     expect(kpiGradeOf(60).label, '辅（专项改进）');
   });
 
-  testWidgets('own counted tasks can be created and deleted with confirmation', (
-    tester,
-  ) async {
-    var createCount = 0;
-    var deleteCount = 0;
-    var tasks = [
-      const WorkbenchKpiTask(
-        id: 1,
-        userId: 1,
-        name: '中石油',
-        province: '广东',
-        tagName: '标签II',
-      ),
-    ];
+  testWidgets('does not offer add or edit for counted tasks', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: NativeWorkProfilePerfPage(
@@ -373,47 +462,12 @@ void main() {
             month: '2026-08',
             prevMonth: '2026-07',
           ),
-          listTasks: (_) async => tasks,
-          createTask: (draft) async {
-            createCount++;
-            return draft.copyWith(id: 2);
-          },
-          deleteTask: (id) async {
-            deleteCount++;
-            tasks = tasks.where((e) => e.id != id).toList();
-          },
         ),
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('中石油'), findsOneWidget);
-    expect(find.byKey(const Key('work-profile-perf-add')), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('work-profile-perf-delete-1')));
-    await tester.pumpAndSettle();
-    expect(find.text('确认删除任务？'), findsOneWidget);
-    await tester.tap(find.text('取消'));
-    await tester.pumpAndSettle();
-    expect(deleteCount, 0);
-
-    await tester.tap(find.byKey(const Key('work-profile-perf-delete-1')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('work-profile-perf-confirm-ok')));
-    await tester.pump();
-    expect(deleteCount, 1);
-    await tester.pumpAndSettle();
-    await tester.pump(const Duration(seconds: 3));
-
-    await tester.tap(find.byKey(const Key('work-profile-perf-add')));
-    await tester.pumpAndSettle();
-    expect(find.text('新增任务'), findsOneWidget);
-    await tester.enterText(find.byType(TextField).first, '小套-加油会员');
-    await tester.tap(find.byKey(const Key('work-profile-perf-editor-save')));
-    await tester.pumpAndSettle();
-    expect(find.text('确认新增任务？'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('work-profile-perf-confirm-ok')));
-    await tester.pump();
-    expect(createCount, 1);
-    await tester.pump(const Duration(seconds: 3));
+    expect(find.byKey(const Key('work-profile-perf-add')), findsNothing);
+    expect(find.byTooltip('删除'), findsNothing);
+    expect(find.text('新增任务'), findsNothing);
   });
 }

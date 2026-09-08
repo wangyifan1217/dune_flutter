@@ -148,12 +148,6 @@ class MeetingUploadCoordinator extends ChangeNotifier {
       _schedulePendingWatchdog(meetingId);
       unawaited(_startJob(meetingId, alreadyClaimed: true));
       notifyListeners();
-
-      // 任务已入队后可清理源文件（上传使用 destPath）。
-      if (src != destPath) {
-        await _deleteLocalFile(src);
-      }
-
       return meetingId;
     } catch (e) {
       if (!jobQueued) {
@@ -382,7 +376,7 @@ class MeetingUploadCoordinator extends ChangeNotifier {
         );
       }
 
-      await _deleteLocalFile(job.localFilePath);
+      // 上传成功后保留 App 本地录音，仅清掉后台上传任务。
       final doneIdx = _indexOfJob(job.meetingId);
       if (doneIdx < 0) return;
       _jobs = List<MeetingUploadJob>.from(_jobs)..removeAt(doneIdx);
@@ -455,7 +449,6 @@ class MeetingUploadCoordinator extends ChangeNotifier {
     );
     if (prepared == src) return src;
 
-    await _deleteLocalFile(src);
     if (prepared != destPath) {
       await _moveFile(prepared, destPath);
     }

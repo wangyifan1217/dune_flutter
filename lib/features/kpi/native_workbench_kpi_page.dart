@@ -7,8 +7,11 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import '../conversation/conversation_picker_sheet.dart';
+import '../conversation/conversation_service.dart';
 import '../profile/native_work_profile_perf_page.dart';
 import '../profile/work_profile_kpi.dart';
+import '../robots/robot_markdown.dart';
 import '../shell/dunes_toast.dart';
 import '../tasks/native_task_home_pane.dart';
 import 'native_workbench_kpi_detail.dart';
@@ -24,6 +27,8 @@ class NativeWorkbenchKpiPage extends StatefulWidget {
     this.service,
     this.saveExport,
     this.now,
+    this.pickConversation,
+    this.sendMarkdown,
   });
 
   final AuthSession session;
@@ -31,6 +36,8 @@ class NativeWorkbenchKpiPage extends StatefulWidget {
   final WorkbenchKpiService? service;
   final Future<void> Function(Uint8List bytes, String name)? saveExport;
   final DateTime? now;
+  final Future<int?> Function()? pickConversation;
+  final Future<void> Function(int conversationId, String markdown)? sendMarkdown;
 
   @override
   State<NativeWorkbenchKpiPage> createState() => _NativeWorkbenchKpiPageState();
@@ -38,15 +45,14 @@ class NativeWorkbenchKpiPage extends StatefulWidget {
 
 class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
   late final WorkbenchKpiService _service;
+  ConversationService? _conversations;
   final TextEditingController _keywordCtrl = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   Timer? _keywordDebounce;
 
-  bool _countedOnly = true;
   bool _loading = true;
   bool _busy = false;
   String? _error;
-  List<WorkbenchKpiTask> _tasks = const [];
   WorkProfileKpiScore? _score;
   late DateTime _month;
   int _detailUserId = 0;
@@ -76,6 +82,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     _keywordDebounce?.cancel();
     _keywordCtrl.dispose();
     _scrollController.dispose();
+    _conversations?.close();
     widget.onChromeChanged?.call(const TaskShellChrome());
     super.dispose();
   }
@@ -83,14 +90,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
   void _publishChrome() {
     widget.onChromeChanged?.call(
       TaskShellChrome(
-        trailing: _detailUserId > 0
-            ? null
-            : IconButton(
-                key: const Key('kpi-add'),
-                tooltip: '新增任务',
-                onPressed: _busy ? null : () => unawaited(_editTask(null)),
-                icon: const Icon(Icons.add_rounded),
-              ),
+        trailing: null,
         onBack: _detailUserId > 0 ? _closeDetail : null,
       ),
     );
@@ -108,10 +108,9 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
   }
 
   void _onKeywordChanged() {
-    setState(() {});
     _keywordDebounce?.cancel();
-    _keywordDebounce = Timer(const Duration(milliseconds: 320), () {
-      unawaited(_load());
+    _keywordDebounce = Timer(const Duration(milliseconds: 180), () {
+      if (mounted) setState(() {});
     });
   }
 
@@ -121,15 +120,10 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
       _error = null;
     });
     try {
-      final rows = await _service.listTasks(
-        q: _keywordCtrl.text,
-        countedOnly: _countedOnly,
-      );
+      final score = await _service.fetchScore(month: formatKpiMonth(_month));
       if (!mounted) return;
       setState(() {
-        _tasks = _countedOnly
-            ? rows.where((task) => task.isCounted).toList(growable: false)
-            : rows;
+        _score = score;
         _loading = false;
       });
     } catch (e) {
@@ -171,79 +165,6 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     return ok == true;
   }
 
-  Future<void> _editTask(WorkbenchKpiTask? existing) async {
-    final draft = await showDialog<WorkbenchKpiTask>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _KpiTaskEditorDialog(
-        initial: existing ?? const WorkbenchKpiTask(id: 0, userId: 0, name: ''),
-        searchPeople: _service.searchPeople,
-      ),
-    );
-    if (draft == null || !mounted) return;
-    final creating = existing == null || existing.id <= 0;
-    final ok = await _confirm(
-      title: creating ? '确认新增任务？' : '确认保存修改？',
-      content: creating
-          ? '将为「${draft.userName.isEmpty ? draft.userId : draft.userName}」新增「${draft.name}」。'
-          : '将更新「${draft.userName.isEmpty ? draft.userId : draft.userName} / ${draft.name}」。',
-      confirmLabel: creating ? '确认新增' : '确认保存',
-    );
-    if (!ok || !mounted) return;
-    setState(() => _busy = true);
-    _publishChrome();
-    try {
-      if (creating) {
-        await _service.createTask(draft);
-        if (mounted) showDunesToast(context, '任务已新增');
-      } else {
-        await _service.updateTask(draft);
-        if (mounted) showDunesToast(context, '任务已更新');
-      }
-      await _load();
-    } catch (e) {
-      if (mounted) {
-        showDunesToast(
-          context,
-          friendlyErrorText(e, fallback: creating ? '新增失败' : '保存失败'),
-          kind: DunesToastKind.error,
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _busy = false);
-        _publishChrome();
-      }
-    }
-  }
-
-  Future<void> _deleteTask(WorkbenchKpiTask row) async {
-    final ok = await _confirm(
-      title: '确认删除任务？',
-      content:
-          '将删除「${row.userName.isEmpty ? row.userId : row.userName} / ${row.name}」，删除后不可恢复。',
-      confirmLabel: '确认删除',
-      danger: true,
-    );
-    if (!ok || !mounted) return;
-    setState(() => _busy = true);
-    try {
-      await _service.deleteTask(row.id);
-      if (mounted) showDunesToast(context, '已删除');
-      await _load();
-    } catch (e) {
-      if (mounted) {
-        showDunesToast(
-          context,
-          friendlyErrorText(e, fallback: '删除失败'),
-          kind: DunesToastKind.error,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   Future<void> _pickMonth() async {
     final picked = await showDatePicker(
       context: context,
@@ -257,6 +178,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     );
     if (picked == null || !mounted) return;
     setState(() => _month = kpiMonthStart(picked));
+    unawaited(_load());
     unawaited(_reloadDetail());
   }
 
@@ -264,6 +186,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     final next = kpiShiftMonth(_month, delta);
     if (next.isBefore(_earliestMonth) || next.isAfter(_currentMonth)) return;
     setState(() => _month = next);
+    unawaited(_load());
     unawaited(_reloadDetail());
   }
 
@@ -341,7 +264,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     final label = formatKpiMonthLabel(_month);
     final ok = await _confirm(
       title: '确认重跑绩效？',
-      content: '将按当前计入任务即时计算 $label 的绩效，不会改写历史任务。',
+      content: '将按当前灯塔数据规则即时计算 $label 的绩效，不会改写历史任务。',
       confirmLabel: '确认重跑',
     );
     if (!ok || !mounted) return;
@@ -352,7 +275,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
       setState(() => _score = score);
       showDunesToast(
         context,
-        '$label 已计算：${score.people.length} 人，未映射 ${score.unmapped.length}',
+        '$label 已计算：${score.people.length} 人',
       );
       unawaited(_reloadDetail());
     } catch (e) {
@@ -413,20 +336,80 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     }
   }
 
-  List<_PersonGroup> get _groups {
-    final map = <int, _PersonGroup>{};
-    for (final task in _tasks) {
-      final g = map.putIfAbsent(
-        task.userId,
-        () => _PersonGroup(
-          userId: task.userId,
-          userName: task.userName.isEmpty ? '${task.userId}' : task.userName,
-          tasks: [],
-        ),
-      );
-      g.tasks.add(task);
+  Future<void> _forwardSummary() async {
+    final score = _score;
+    if (score == null || score.people.isEmpty) {
+      showDunesToast(context, '暂无可转发内容');
+      return;
     }
-    return map.values.toList();
+    final markdown = kpiScoreSummaryMarkdown(score);
+    final conversationId = widget.pickConversation != null
+        ? await widget.pickConversation!()
+        : await showConversationPickerSheet(
+            context: context,
+            service: _conversations ??= ConversationService(
+              session: widget.session,
+            ),
+            title: '转发到 IM',
+          );
+    if (conversationId == null || conversationId <= 0 || !mounted) return;
+    try {
+      if (widget.sendMarkdown != null) {
+        await widget.sendMarkdown!(conversationId, markdown);
+      } else {
+        final conv = _conversations ??= ConversationService(
+          session: widget.session,
+        );
+        await conv.sendText(
+          conversationId,
+          markdown,
+          payload: <String, dynamic>{
+            'robotMarkdown': true,
+            'kpiScoreSummary': true,
+            'month': score.month,
+          },
+        );
+      }
+      if (mounted) showDunesToast(context, '已转发到会话');
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          friendlyErrorText(e, fallback: '转发失败'),
+          kind: DunesToastKind.error,
+        );
+      }
+    }
+  }
+
+  List<_PersonGroup> get _groups {
+    final needle = _keywordCtrl.text.trim().toLowerCase();
+    final people = kpiPeopleByScoreDesc(_score?.people ?? const <WorkProfileKpiPerson>[]);
+    return [
+      for (final person in people)
+        if (needle.isEmpty || _personMatches(person, needle))
+          _PersonGroup(person: person),
+    ];
+  }
+
+  bool _personMatches(WorkProfileKpiPerson person, String needle) {
+    if (person.userName.toLowerCase().contains(needle)) return true;
+    for (final cat in person.categories) {
+      for (final task in cat.tasks) {
+        if (task.taskName.toLowerCase().contains(needle) ||
+            task.province.toLowerCase().contains(needle) ||
+            task.productName.toLowerCase().contains(needle) ||
+            task.productGroup.toLowerCase().contains(needle) ||
+            task.channelName.toLowerCase().contains(needle) ||
+            task.supplyGroup.toLowerCase().contains(needle) ||
+            kpiLighthouseSliceTitle(task).toLowerCase().contains(needle) ||
+            kpiLighthouseSliceSubtitle(task).toLowerCase().contains(needle) ||
+            task.matchSummary.toLowerCase().contains(needle)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   Widget _buildDetailBody() {
@@ -441,7 +424,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     }
     if (_detailScore == null) {
       return const Center(
-        child: Text('该月暂无计入绩效明细', style: TextStyle(color: DunesColors.text3)),
+        child: Text('该月暂无绩效明细', style: TextStyle(color: DunesColors.text3)),
       );
     }
     return WorkbenchKpiDetailPane(
@@ -465,15 +448,11 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
       controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
       children: [
-        if (_score != null) ...[
-          _ScoreSummary(score: _score!),
-          const SizedBox(height: 12),
-        ],
         if (_groups.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 48),
             child: Center(
-              child: Text('暂无人员任务', style: TextStyle(color: DunesColors.text3)),
+              child: Text('该月暂无灯塔数据规则切片', style: TextStyle(color: DunesColors.text3)),
             ),
           )
         else
@@ -483,36 +462,58 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      '${group.userName}（${group.tasks.length}）',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: DunesColors.text2,
-                      ),
+                    child: Wrap(
+                      spacing: 10,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          '${group.person.userName}（${group.slices.length}条规则）',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: DunesColors.text2,
+                          ),
+                        ),
+                        Text(
+                          group.person.mainScore.toStringAsFixed(2),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: DunesColors.text,
+                          ),
+                        ),
+                        Text(
+                          group.person.resolvedGrade.label,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _accent,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   TextButton(
-                    key: Key('kpi-detail-${group.userId}'),
+                    key: Key('kpi-detail-${group.person.userId}'),
                     onPressed: _busy
                         ? null
                         : () => unawaited(
-                            _openDetail(group.userId, group.userName),
+                            _openDetail(group.person.userId, group.person.userName),
                           ),
                     child: const Text('查看明细'),
                   ),
                 ],
               ),
             ),
-            for (final task in group.tasks)
-              _TaskCard(
+            for (final task in group.slices)
+              _SliceCard(
                 task: task,
                 onOpen: _busy
                     ? null
-                    : () =>
-                          unawaited(_openDetail(group.userId, group.userName)),
-                onEdit: _busy ? null : () => unawaited(_editTask(task)),
-                onDelete: _busy ? null : () => unawaited(_deleteTask(task)),
+                    : () => unawaited(
+                          _openDetail(group.person.userId, group.person.userName),
+                        ),
               ),
           ],
       ],
@@ -535,7 +536,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
                   TextField(
                     controller: _keywordCtrl,
                     decoration: InputDecoration(
-                      hintText: '搜索姓名 / 任务 / 省份',
+                      hintText: '搜索姓名 / 产品 / 省份 / 渠道 / 供给',
                       prefixIcon: const Icon(Icons.search, size: 20),
                       isDense: true,
                       filled: true,
@@ -557,20 +558,6 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    if (_detailUserId <= 0)
-                      FilterChip(
-                        label: const Text('仅计入'),
-                        selected: _countedOnly,
-                        visualDensity: VisualDensity.compact,
-                        onSelected: _busy
-                            ? null
-                            : (v) {
-                                setState(() => _countedOnly = v);
-                                unawaited(_load());
-                              },
-                        selectedColor: _accent.withValues(alpha: 0.16),
-                        checkmarkColor: _accent,
-                      ),
                     TextButton.icon(
                       onPressed: _busy ? null : _pickMonth,
                       icon: const Icon(Icons.calendar_month_outlined, size: 18),
@@ -622,6 +609,13 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
                         ),
                     ],
                   ),
+                  if (_score != null && _score!.people.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    _KpiSummaryPane(
+                      markdown: kpiScoreSummaryMarkdown(_score!),
+                      onForward: _busy ? null : () => unawaited(_forwardSummary()),
+                    ),
+                  ],
                 ],
               ],
             ),
@@ -636,44 +630,42 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
 }
 
 class _PersonGroup {
-  _PersonGroup({
-    required this.userId,
-    required this.userName,
-    required this.tasks,
-  });
-  final int userId;
-  final String userName;
-  final List<WorkbenchKpiTask> tasks;
+  _PersonGroup({required this.person});
+  final WorkProfileKpiPerson person;
+  List<WorkProfileKpiTask> get slices {
+    final list = [
+      for (final cat in person.categories) ...cat.tasks,
+    ];
+    list.sort((a, b) {
+      final byScore = b.taskTotal.compareTo(a.taskTotal);
+      if (byScore != 0) return byScore;
+      return kpiLighthouseSliceTitle(a).compareTo(kpiLighthouseSliceTitle(b));
+    });
+    return list;
+  }
 }
 
-class _TaskCard extends StatelessWidget {
-  const _TaskCard({
-    required this.task,
-    this.onOpen,
-    this.onEdit,
-    this.onDelete,
-  });
+class _SliceCard extends StatelessWidget {
+  const _SliceCard({required this.task, this.onOpen});
 
-  final WorkbenchKpiTask task;
+  final WorkProfileKpiTask task;
   final VoidCallback? onOpen;
-  final VoidCallback? onEdit;
-  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
-    final range =
-        '${task.startDate.isEmpty ? '不限' : task.startDate} ~ ${task.endDate.isEmpty ? '不限' : task.endDate}';
+    final title = kpiLighthouseSliceTitle(task);
+    final subtitle = kpiLighthouseSliceSubtitle(task);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
-          key: Key('kpi-task-${task.id}'),
+          key: Key('kpi-task-${task.taskId}'),
           borderRadius: BorderRadius.circular(10),
           onTap: onOpen,
           child: Container(
-            padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: const Color(0xFFE8EAED)),
@@ -685,7 +677,7 @@ class _TaskCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        task.name,
+                        title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -696,11 +688,7 @@ class _TaskCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        [
-                          task.province.isEmpty ? '全国' : task.province,
-                          if (task.tagName.isNotEmpty) task.tagName,
-                          range,
-                        ].join(' · '),
+                        subtitle,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -711,40 +699,32 @@ class _TaskCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: task.isCounted
-                        ? const Color(0xFFEAEFDF)
-                        : const Color(0xFFF2F3F5),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    task.isCounted ? '计入' : '不计',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: task.isCounted
-                          ? const Color(0xFF5D8A4E)
-                          : DunesColors.text3,
+                if (task.bucketLabel.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF2F4F7),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        task.bucketLabel.replaceAll('板块', ''),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: DunesColors.text3,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-                IconButton(
-                  tooltip: '编辑',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                ),
-                IconButton(
-                  key: Key('kpi-delete-${task.id}'),
-                  tooltip: '删除',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline, size: 18),
+                Text(
+                  task.taskTotal.toStringAsFixed(1),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: DunesColors.text2,
+                  ),
                 ),
               ],
             ),
@@ -755,13 +735,17 @@ class _TaskCard extends StatelessWidget {
   }
 }
 
-class _ScoreSummary extends StatelessWidget {
-  const _ScoreSummary({required this.score});
-  final WorkProfileKpiScore score;
+class _KpiSummaryPane extends StatelessWidget {
+  const _KpiSummaryPane({required this.markdown, this.onForward});
+
+  final String markdown;
+  final VoidCallback? onForward;
 
   @override
   Widget build(BuildContext context) {
     return Container(
+      key: const Key('kpi-summary'),
+      width: double.infinity,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -771,34 +755,33 @@ class _ScoreSummary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '${score.month} 绩效结果 · ${score.people.length} 人',
-            style: const TextStyle(fontWeight: FontWeight.w700),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  '汇总',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+              ),
+              TextButton.icon(
+                key: const Key('kpi-summary-forward'),
+                onPressed: onForward,
+                icon: const Icon(Icons.ios_share_outlined, size: 16),
+                label: const Text('转发到 IM'),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
-          for (final person in score.people.take(12))
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                '${person.userName}  主营 ${person.mainScore.toStringAsFixed(2)}  · ${person.resolvedGrade.label}  · 通信 ${person.telecomScore.toStringAsFixed(1)}  · 能源 ${person.energyScore.toStringAsFixed(1)}',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+          const SizedBox(height: 4),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 220),
+            child: SingleChildScrollView(
+              child: RobotMarkdown(
+                markdown: markdown,
+                compact: true,
+                selectable: true,
               ),
             ),
-          if (score.people.length > 12)
-            Text(
-              '… 还有 ${score.people.length - 12} 人，请导出查看全部',
-              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
-            ),
-          if (score.unmapped.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                '未映射 ${score.unmapped.length} 条，请到任务配置补产品映射',
-                style: const TextStyle(fontSize: 12, color: Color(0xFFB07A2B)),
-              ),
-            ),
+          ),
         ],
       ),
     );

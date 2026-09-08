@@ -7,6 +7,31 @@ import '../../core/http/session_http.dart';
 import '../../core/platform/desktop_features.dart';
 import '../auth/auth_session.dart';
 
+const kAmSsoDefaultAppKey = 'oa';
+
+const kAmReconTag2Path = '/infoReport/cnpc-shucai-tag2-supplier';
+const kAmReconTag3Path = '/infoReport/shucai-tag3-v2';
+
+bool isAmReconPageUrl(Uri uri) {
+  final path = uri.path;
+  return path == kAmReconTag2Path || path == kAmReconTag3Path;
+}
+
+String? amSsoTargetForUrl(Uri uri) {
+  if (!isAmReconPageUrl(uri)) return null;
+  return uri.path;
+}
+
+Future<bool> openMaybeAmSsoUrl(AuthSession session, Uri uri) async {
+  final target = amSsoTargetForUrl(uri);
+  if (target == null) {
+    return launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+  final service = AmSsoService(session);
+  final login = await service.fetchLoginUrl(kAmSsoDefaultAppKey, target: target);
+  return service.openInSystemBrowser(login);
+}
+
 class WorkbenchSsoApp {
   const WorkbenchSsoApp({
     required this.appKey,
@@ -68,11 +93,15 @@ class AmSsoService {
         .toList();
   }
 
-  Future<AmSsoLoginUrl> fetchLoginUrl(String appKey) {
+  Future<AmSsoLoginUrl> fetchLoginUrl(String appKey, {String? target}) {
     final key = Uri.encodeComponent(appKey.trim());
-    final path = isDesktopCommOnly
+    var path = isDesktopCommOnly
         ? '/sso/$key/pc/login-url'
         : '/sso/$key/h5/login-url';
+    final landing = (target ?? '').trim();
+    if (landing.isNotEmpty) {
+      path = '$path?target=${Uri.encodeQueryComponent(landing)}';
+    }
     return _fetch(path);
   }
 

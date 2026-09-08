@@ -346,9 +346,6 @@ class LighthouseService {
   }
 
   /// 人效维度 —— 账本按「负责人 × 任务」分组。
-  ///
-  /// 与其余账本接口同形：粒度、同期窗口、分组、口径都是参数，环比与得分在
-  /// lighthouse-go 里算完下发；本地只在服务端没给 score 时用考评表公式兜底。
   Future<LhPeopleBundle> fetchPeople({
     String? period,
     int? offset,

@@ -3,6 +3,7 @@
 // 期望值不是我们定的，是人事《M4 月度绩效考评表》里已经算出来的那一格 ——
 // 引擎跑出来必须和表里的数字对上，对不上就是口径漂了。
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dunes_app/features/lighthouse/lighthouse_hero_metric.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_people.dart';
 
 void main() {
@@ -281,5 +282,17 @@ void main() {
       expect(snap.passCount, 0);
       expect(snap.riskCount, 0);
     });
+  });
+
+  test('人效入口跟业务绩效权限走，没有权限不露 tab', () {
+    expect(lighthouseLedgerShowsPeopleTab, isTrue);
+    expect(
+      lighthousePeopleTabVisible(kpiPerformanceAccess: true),
+      isTrue,
+    );
+    expect(
+      lighthousePeopleTabVisible(kpiPerformanceAccess: false),
+      isFalse,
+    );
   });
 }

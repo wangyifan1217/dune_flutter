@@ -1801,7 +1801,8 @@ List<ProposalIntakeNotifyRecipient> _dedupeNotifyRecipients(
   return out;
 }
 
-/// 「通知TA」：本单已指定的相关人，以当前用户身份转发私聊名片。不含自己。
+/// 「通知TA」：本单已指定的相关人，以当前用户身份转发私聊名片。
+/// 不含自己、不含最终确认人（许总 / 许正阳），避免日常知会打到总裁。
 List<ProposalIntakeNotifyRecipient> proposalIntakeForwardEveryoneRecipients({
   required ProposalIntakeRow row,
   List<ProposalPerson> people = const [],
@@ -1812,6 +1813,9 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeForwardEveryoneRecipients({
   final out = <ProposalIntakeNotifyRecipient>[];
   void add(int id, String role, String name) {
     if (id <= 0 || id == excludeUserId) return;
+    if (_skipNotifyTaRecipient(userId: id, name: name, options: options)) {
+      return;
+    }
     out.add(
       ProposalIntakeNotifyRecipient(
         userId: id,
@@ -1830,7 +1834,6 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeForwardEveryoneRecipients({
     ('financeOwner1', '财务部负责人一'),
     ('financeOwner2', '财务部负责人二'),
     ('contractAdmin', '合同管理员'),
-    ('president', '最终确认人'),
   ];
   for (final owner in owners) {
     final id =
@@ -1841,10 +1844,20 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeForwardEveryoneRecipients({
       proposalIntakeOwnerDisplayName(form, owner.$1, people: people),
     );
   }
-  for (final id in options?.presidentUserIds ?? const <int>[]) {
-    add(id, '最终确认人', _presidentName(id, options, people));
-  }
   return _dedupeNotifyRecipients(out);
+}
+
+bool _skipNotifyTaRecipient({
+  required int userId,
+  required String name,
+  ProposalIntakeOptions? options,
+}) {
+  if (options != null && options.isConfiguredPresident(userId)) return true;
+  final n = name.trim();
+  return n == '许总' ||
+      n == '许正阳' ||
+      n.contains('许正阳') ||
+      n.contains('许总');
 }
 
 bool proposalIntakeReviewsComplete(ProposalIntakeRow row) {

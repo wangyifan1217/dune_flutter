@@ -6301,7 +6301,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                         if (stats.postApprovalTodoEnabled)
                           _buildMenuItem(
                             icon: Icons.task_alt_outlined,
-                            title: '审批代办',
+                            title: '审批待办',
                             desc:
                                 '${stats.pendingTodoForMe} 待办理 · ${stats.handledTodoThisMonth} 本月已办',
                             badge: stats.pendingTodoForMe,

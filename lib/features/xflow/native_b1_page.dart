@@ -529,7 +529,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                             kicker: isB1
                                 ? '我的审批 · ${_all.length} 项'
                                 : isB13
-                                ? '审批代办 · ${_all.length} 项'
+                                ? '审批待办 · ${_all.length} 项'
                                 : widget.type == _ListType.b14
                                 ? '我发起 · ${_all.length} 份'
                                 : '抄送提案 · ${_all.length} 份',

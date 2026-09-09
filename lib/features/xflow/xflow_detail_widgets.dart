@@ -383,7 +383,7 @@ class XfDetTaskTodoBanner extends StatelessWidget {
         ? (status.isEmpty
             ? '办理意见会写到下方评论区。核验失败等原因也会显示在评论里。'
             : '当前：$status。办理意见会写到下方评论区。')
-        : '当前：$status。办理人可在「审批代办」或本页底部操作。';
+        : '当前：$status。办理人可在「审批待办」或本页底部操作。';
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),

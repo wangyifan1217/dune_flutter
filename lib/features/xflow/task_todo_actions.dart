@@ -16,7 +16,7 @@ import 'xflow_service.dart';
 const kTaskTodoMaxInvoiceFiles = 6;
 const kTaskTodoMaxInvoiceBytes = 20 * 1024 * 1024;
 
-String _taskFieldLabel(String key) {
+String _taskFieldLabel(String key, {bool loanWan = false}) {
   const labels = <String, String>{
     'bankAccountName': '户名',
     'bankName': '开户行',
@@ -33,7 +33,17 @@ String _taskFieldLabel(String key) {
     'writeOffReason': '无法收回原因',
     'receiptVoucher': '回款凭证',
   };
-  return labels[key] ?? key;
+  final label = labels[key] ?? key;
+  if (loanWan && (key == 'actualPayAmount' || key == 'repayAmount')) {
+    return '$label（万）';
+  }
+  return label;
+}
+
+bool _isLoanRequestItem(XflowProposalItem item) {
+  final bt = item.businessType.trim().toUpperCase();
+  final key = (item.templateKey ?? '').trim().toLowerCase();
+  return bt == 'LOAN_REQUEST' || key == 'loan-request';
 }
 
 class TaskTodoConfirmCopy {
@@ -84,13 +94,20 @@ TaskTodoConfirmCopy taskTodoConfirmCopy(
     );
   }
   final action = (item.primaryAction ?? '').toUpperCase();
+  final loan = _isLoanRequestItem(item);
   final body = switch (action) {
-    'PAY' => '确认后进入「已付款」待办（填实付金额和凭证）。不重审。',
-    'MARK_PAID' => '提交实付金额和支付凭证后，按先票/先款进入核验或补票。不重审。',
+    'PAY' => loan
+        ? '确认后进入「已付款」待办。完成已付款并填写实付金额后，才会进入资金借调。不重审。'
+        : '确认后进入「已付款」待办（填实付金额和凭证）。不重审。',
+    'MARK_PAID' => loan
+        ? '提交实付金额和支付凭证后进入资金借调，借出金额以实付为准。不重审。'
+        : '提交实付金额和支付凭证后，按先票/先款进入核验或补票。不重审。',
     'UPLOAD_INVOICE' => '请上传发票文件（可多张，电脑可拖拽）。提交后核验人会收到「核验发票」。不重审。',
     'ISSUE_INVOICE' => '请上传已开具的发票文件（可多张，电脑可拖拽）。提交后写入原单，不重新走审批。',
     'SEAL' => '确认盖章后，合同用印进入「填写快递单号」。不重审。',
-    'REPAY' => '提交还款金额和凭证后关闭本条待办。不重审。',
+    'REPAY' => loan
+        ? '提交还款金额后冲减资金借调剩余未还。不重审。'
+        : '提交还款金额和凭证后关闭本条待办。不重审。',
     'OPEN_ACCOUNT' => '请回填开户信息到本单。提交后抄送出纳，不重审。',
     _ => '确认完成该待办？提交后写入原单，不重新走审批。',
   };
@@ -124,6 +141,7 @@ Future<bool> confirmAndCompleteTaskTodo({
       copy: copy,
       keys: keys,
       needsInvoiceFiles: taskTodoNeedsInvoiceFiles(action),
+      loanWan: _isLoanRequestItem(item),
       service: service,
     ),
   );
@@ -186,12 +204,14 @@ class _TaskTodoCompleteDialog extends StatefulWidget {
     required this.keys,
     required this.needsInvoiceFiles,
     required this.service,
+    this.loanWan = false,
   });
 
   final TaskTodoConfirmCopy copy;
   final List<String> keys;
   final bool needsInvoiceFiles;
   final XflowService service;
+  final bool loanWan;
 
   @override
   State<_TaskTodoCompleteDialog> createState() =>
@@ -459,8 +479,17 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
                     )
                   : TextField(
                       decoration: InputDecoration(
-                        labelText: _taskFieldLabel(key),
+                        labelText: _taskFieldLabel(
+                          key,
+                          loanWan: widget.loanWan,
+                        ),
                       ),
+                      keyboardType:
+                          key == 'actualPayAmount' || key == 'repayAmount'
+                          ? const TextInputType.numberWithOptions(
+                              decimal: true,
+                            )
+                          : TextInputType.text,
                       onChanged: (v) => _fieldValues[key] = v,
                     ),
             ),

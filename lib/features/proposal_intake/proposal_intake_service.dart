@@ -219,6 +219,7 @@ class ProposalIntakeService {
     bool approved,
     int version, {
     String comment = '',
+    List<String> sections = const <String>[],
   }) async {
     final data = _unwrap(
       await http.post(
@@ -226,6 +227,7 @@ class ProposalIntakeService {
         headers: _headers,
         body: jsonEncode({
           'section': section,
+          'sections': sections,
           'approved': approved,
           'comment': comment,
           'version': version,

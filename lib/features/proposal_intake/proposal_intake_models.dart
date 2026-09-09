@@ -3677,11 +3677,57 @@ bool proposalIntakeChannelCategoryChildOf(CatalogRef child, CatalogRef parent) {
 String proposalIntakeNewCouponPackId() =>
     'pack-${DateTime.now().microsecondsSinceEpoch}';
 
+int proposalIntakePackSkuQuantity(int? raw) {
+  if (raw == null || raw < 1) return 1;
+  return raw;
+}
+
+Map<String, int> proposalIntakeNormalizeSkuQuantities(
+  List<String> skuIds,
+  Map<String, int>? quantities,
+) {
+  return {
+    for (final id in skuIds) id: proposalIntakePackSkuQuantity(quantities?[id]),
+  };
+}
+
+int proposalIntakeParseSkuQty(Object? raw) {
+  if (raw is int) return raw;
+  if (raw is num) return raw.toInt();
+  return int.tryParse('$raw'.trim()) ?? 0;
+}
+
+Map<String, int> proposalIntakeParseSkuQuantities(
+  Map raw,
+  List<String> skuIds,
+) {
+  final parsed = <String, int>{};
+  final qtyRaw = raw['skuQuantities'];
+  if (qtyRaw is Map) {
+    for (final entry in qtyRaw.entries) {
+      final id = '${entry.key}'.trim();
+      final qty = proposalIntakeParseSkuQty(entry.value);
+      if (id.isNotEmpty && qty >= 1) parsed[id] = qty;
+    }
+  }
+  final skusRaw = raw['skus'];
+  if (skusRaw is List) {
+    for (final item in skusRaw) {
+      if (item is! Map) continue;
+      final id = '${item['id'] ?? item['skuId'] ?? ''}'.trim();
+      final qty = proposalIntakeParseSkuQty(item['quantity'] ?? item['qty']);
+      if (id.isNotEmpty && qty >= 1) parsed[id] = qty;
+    }
+  }
+  return proposalIntakeNormalizeSkuQuantities(skuIds, parsed);
+}
+
 class ProposalCouponPackRow {
   const ProposalCouponPackRow({
     required this.id,
     this.name = '',
     this.skuIds = const [],
+    this.skuQuantities = const {},
     this.syncSourceRef,
     this.institutionRef,
     this.channelRef,
@@ -3693,6 +3739,7 @@ class ProposalCouponPackRow {
   final String id;
   final String name;
   final List<String> skuIds;
+  final Map<String, int> skuQuantities;
   final CatalogRef? syncSourceRef;
   final CatalogRef? institutionRef;
   final CatalogRef? channelRef;
@@ -3707,34 +3754,45 @@ class ProposalCouponPackRow {
   String get channelName => (channelRef?.name ?? '').trim();
   bool get isExistingBuilt => existingBuilt.trim() == '是';
 
+  int quantityOf(String skuId) =>
+      proposalIntakePackSkuQuantity(skuQuantities[skuId]);
+
   ProposalCouponPackRow copyWith({
     String? name,
     List<String>? skuIds,
+    Map<String, int>? skuQuantities,
     Object? syncSourceRef = _catalogUnset,
     Object? institutionRef = _catalogUnset,
     Object? channelRef = _catalogUnset,
     String? existingBuilt,
     Object? assetProduct = _catalogUnset,
     List<ProposalSkuSettleRow>? settlements,
-  }) => ProposalCouponPackRow(
-    id: id,
-    name: name ?? this.name,
-    skuIds: skuIds ?? this.skuIds,
-    syncSourceRef: identical(syncSourceRef, _catalogUnset)
-        ? this.syncSourceRef
-        : syncSourceRef as CatalogRef?,
-    institutionRef: identical(institutionRef, _catalogUnset)
-        ? this.institutionRef
-        : institutionRef as CatalogRef?,
-    channelRef: identical(channelRef, _catalogUnset)
-        ? this.channelRef
-        : channelRef as CatalogRef?,
-    existingBuilt: existingBuilt ?? this.existingBuilt,
-    assetProduct: identical(assetProduct, _catalogUnset)
-        ? this.assetProduct
-        : assetProduct as ChannelProductHit?,
-    settlements: settlements ?? this.settlements,
-  );
+  }) {
+    final nextIds = skuIds ?? this.skuIds;
+    return ProposalCouponPackRow(
+      id: id,
+      name: name ?? this.name,
+      skuIds: nextIds,
+      skuQuantities: proposalIntakeNormalizeSkuQuantities(
+        nextIds,
+        skuQuantities ?? this.skuQuantities,
+      ),
+      syncSourceRef: identical(syncSourceRef, _catalogUnset)
+          ? this.syncSourceRef
+          : syncSourceRef as CatalogRef?,
+      institutionRef: identical(institutionRef, _catalogUnset)
+          ? this.institutionRef
+          : institutionRef as CatalogRef?,
+      channelRef: identical(channelRef, _catalogUnset)
+          ? this.channelRef
+          : channelRef as CatalogRef?,
+      existingBuilt: existingBuilt ?? this.existingBuilt,
+      assetProduct: identical(assetProduct, _catalogUnset)
+          ? this.assetProduct
+          : assetProduct as ChannelProductHit?,
+      settlements: settlements ?? this.settlements,
+    );
+  }
 
   ProposalCouponPackRow applyAssetProduct(
     ChannelProductHit? hit, {
@@ -3760,6 +3818,9 @@ class ProposalCouponPackRow {
     'id': id,
     'name': name,
     'skuIds': skuIds,
+    'skuQuantities': {
+      for (final id in skuIds) id: quantityOf(id),
+    },
     'syncSource': syncSourceCode,
     'syncSourceRef': catalogRefToJson(syncSourceRef),
     'institution': institutionName,
@@ -3803,13 +3864,24 @@ class ProposalCouponPackRow {
     if (name.isEmpty) name = asset?.productName ?? '';
     var channelRef = proposalIntakeChannelRefFromJson(raw);
     channelRef ??= asset?.channelRef;
+    var skuIds = [
+      for (final item in skuRaw is List ? skuRaw : const [])
+        '${item ?? ''}'.trim(),
+    ].where((id) => id.isNotEmpty).toList();
+    if (skuIds.isEmpty) {
+      final skusRaw = raw['skus'];
+      if (skusRaw is List) {
+        skuIds = [
+          for (final item in skusRaw)
+            if (item is Map) '${item['id'] ?? item['skuId'] ?? ''}'.trim(),
+        ].where((id) => id.isNotEmpty).toList();
+      }
+    }
     return ProposalCouponPackRow(
       id: '${raw['id'] ?? ''}'.trim(),
       name: name,
-      skuIds: [
-        for (final item in skuRaw is List ? skuRaw : const [])
-          '${item ?? ''}'.trim(),
-      ].where((id) => id.isNotEmpty).toList(),
+      skuIds: skuIds,
+      skuQuantities: proposalIntakeParseSkuQuantities(raw, skuIds),
       syncSourceRef: syncRef,
       institutionRef: institution,
       channelRef: channelRef,

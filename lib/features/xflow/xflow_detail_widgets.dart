@@ -445,6 +445,7 @@ class XfDetTaskTodoBanner extends StatelessWidget {
 
 const kTaskTodoCompletionLabels = <String, String>{
   'actualPayAmount': '实付金额',
+  'repayAmount': '还款金额',
   'paymentVoucher': '支付凭证号',
   'verifyResult': '核验结果',
   'fileDestination': '文件去向',

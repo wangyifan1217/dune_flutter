@@ -96,6 +96,17 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   }
 
   @override
+  void didUpdateWidget(covariant NativeProposalIntakePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.kind != widget.kind ||
+        oldWidget.assistantMode != widget.assistantMode) {
+      _page = _ProposalPage.list;
+      _editing = null;
+      unawaited(_load(resetScroll: true));
+    }
+  }
+
+  @override
   void dispose() {
     _search.dispose();
     _listScroll.dispose();
@@ -140,7 +151,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         _service.fetchList(
           keyword: widget.assistantMode ? '' : _search.text,
           status: widget.assistantMode ? '' : _statusFilter,
-          kind: widget.assistantMode ? '' : widget.kind,
+          kind: widget.kind,
           sector: widget.assistantMode ? '' : _sectorFilter,
           actionable: widget.assistantMode,
           pageSize: widget.assistantMode ? 100 : 20,
@@ -428,7 +439,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
 
   Future<void> _refreshActionQueue() async {
     try {
-      final result = await _service.fetchList(actionable: true, pageSize: 100);
+      final result = await _service.fetchList(
+        actionable: true,
+        kind: widget.kind,
+        pageSize: 100,
+      );
       if (!mounted) return;
       setState(() => _actionQueue = result.items);
     } catch (_) {}
@@ -441,7 +456,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     if (_nextBusy) return;
     setState(() => _nextBusy = true);
     try {
-      final result = await _service.fetchList(actionable: true, pageSize: 100);
+      final result = await _service.fetchList(
+        actionable: true,
+        kind: widget.kind,
+        pageSize: 100,
+      );
       if (!mounted) return;
       setState(() => _actionQueue = result.items);
       final next = nextProposalIntake(
@@ -919,6 +938,10 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         title: '暂无提案',
         message: (_statusFilter.isNotEmpty || _sectorFilter.isNotEmpty)
             ? '没有符合当前筛选的提案'
+            : widget.assistantMode
+            ? (proposalIntakeIsPurchase(widget.kind)
+                  ? '当前没有需要你处理的采购提案'
+                  : '当前没有需要你处理的销售提案')
             : widget.showCreate
             ? (proposalIntakeIsPurchase(widget.kind)
                   ? '点击右上角「新建采购提案」开始录入'
@@ -1344,6 +1367,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   String? _draggingUnsignedPrefix;
   String? _openingProductFile;
   String? _downloadingProductFile;
+  final Set<String> _rejectSelected = <String>{};
   late final SettlementCatalogService _catalog;
   bool _ownsCatalog = false;
   List<CatalogRef> _sectorCatalog = const [];
@@ -1504,7 +1528,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _stage == 'awaiting_submit' ||
       _stage == 'tech_reviewing';
 
-  /// 复核开始后整单只读；要改内容必须先驳回。科技变更填写轮除外。
+  /// 待最终确认或已完成后整单只读；复核中提交人仍可改未复核内容。
   bool get _isContentFrozen =>
       _row.status == 'pending_president' ||
       (_row.status == 'done' && !_row.isTechRevising) ||
@@ -1515,6 +1539,35 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   bool get _isSubmitter => _me > 0 && _row.createdBy == _me;
 
   bool _isOwner(String key) => _me > 0 && _ownerId(key) == _me;
+
+  bool _moduleReviewed(String flag) => _review[flag] == true;
+
+  String _itemParentFlag(String section) {
+    if (section.startsWith('financeItem:')) return 'financeCompleted';
+    if (section.startsWith('technologyItem:')) return 'technologyCompleted';
+    if (section.startsWith('contractItem:purchase.')) {
+      return 'purchaseContractCompleted';
+    }
+    if (section.startsWith('contractItem:sales.')) {
+      return 'salesContractCompleted';
+    }
+    return '';
+  }
+
+  bool _reviewLocksField({String? resetReview, String? reviewSection}) {
+    if (_row.isTechRevising) return false;
+    final section = reviewSection?.trim() ?? '';
+    if (section.isNotEmpty) {
+      if (_itemReviewed(section)) return true;
+      final parent = _itemParentFlag(section);
+      if (parent.isNotEmpty && _moduleReviewed(parent)) return true;
+    }
+    final flag = resetReview?.trim() ?? '';
+    return flag.isNotEmpty && _moduleReviewed(flag);
+  }
+
+  bool get _canEditAsSubmitter =>
+      !_isLocked && _isSubmitter && !_row.techRevisionOpen;
 
   /// 科技逐条复核人：已指定则只认负责二；旧单未指定时回退提交人。
   bool get _isMarketOwner2 {
@@ -1537,7 +1590,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   String get _stage => _row.resolvedStage;
 
   bool get _canEditMarket =>
-      !_isContentFrozen && _isSubmitter && !_row.techRevisionOpen;
+      _canEditAsSubmitter && !_moduleReviewed('marketCompleted');
 
   bool get _canEditTech =>
       _isTechFiller && (!_isContentFrozen || _row.isTechRevising);
@@ -1553,7 +1606,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       !_isLocked &&
       _isOwner('financeOwner2') &&
       _row.status == 'reviewing' &&
-      !_row.techRevisionOpen;
+      !_row.techRevisionOpen &&
+      !_moduleReviewed('financeCompleted');
 
   bool get _canEditSkuSettlements =>
       !_showSelectedAsText && (_canEditMarket || _canEditFinanceModules);
@@ -1569,7 +1623,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   bool get _canSeeHun => _isMarketOwner1;
 
   bool get _canEditHun =>
-      _canSeeHun && !_isLocked && !_showSelectedAsText && !_row.techRevisionOpen;
+      _canSeeHun &&
+      !_isLocked &&
+      !_showSelectedAsText &&
+      !_row.techRevisionOpen &&
+      !_moduleReviewed('marketCompleted');
 
   String get _submitterName {
     final named = _personNameById(_row.createdBy);
@@ -1588,7 +1646,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       (_isAnyOwner2 && !_isMarketOwner1);
 
   bool get _canEditBusinessCost =>
-      !_isLocked && _isMarketOwner1 && _stage == 'reviewing';
+      !_isLocked &&
+      _isMarketOwner1 &&
+      _stage == 'reviewing' &&
+      !_moduleReviewed('financeCompleted');
 
   bool get _canSave =>
       (_row.isTechRevising && _isTechFiller) ||
@@ -1596,9 +1657,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _canEditHun ||
       _canEditFinanceModules ||
       _canEditFinanceInterface ||
-      (!_isContentFrozen &&
-          !_row.techRevisionOpen &&
-          (_isSubmitter || _isTechFiller));
+      _canEditAsSubmitter ||
+      (!_isContentFrozen && !_row.techRevisionOpen && _isTechFiller);
 
   bool get _canStartTechRevision =>
       _row.id > 0 &&
@@ -1646,10 +1706,22 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   bool get _canDelete => _row.id > 0 && _row.canDeleteBy(_me);
 
-  bool _fillEnabled(bool? writable) {
-    if (writable != null) return writable;
-    return !_isContentFrozen && _canEditMarket;
+  bool _fillEnabled(
+    bool? writable, {
+    String? resetReview,
+    String? reviewSection,
+  }) {
+    final locked = _reviewLocksField(
+      resetReview: resetReview,
+      reviewSection: reviewSection,
+    );
+    if (writable != null) return writable && !locked;
+    return _canEditAsSubmitter && !locked;
   }
+
+  bool _canEditContractExtras(String prefix) =>
+      _canEditAsSubmitter &&
+      !_reviewLocksField(resetReview: '${prefix}ContractCompleted');
 
   bool get _supportsDesktopDrop {
     if (kIsWeb) return true;
@@ -1760,7 +1832,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (_row.status == 'done' || _row.status == 'pending_president') {
       return _row.status;
     }
-    if (_isContentFrozen) return _row.status;
+    if (_row.status == 'reviewing' || _isReviewing) return _row.status;
     final moduleRevise =
         _review['reviewRejected'] == true &&
         _review['presidentRejected'] != true;
@@ -1774,6 +1846,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String? resetReview,
     bool rebuild = true,
   }) {
+    if (resetReview != null && _moduleReviewed(resetReview)) return;
     var form = Map<String, dynamic>.from(_form)..[key] = value;
     var estimated = false;
     if (proposalIsFinanceEstimateInputKey(key)) {
@@ -1880,7 +1953,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   void _setHasExistingPurchaseProposal(bool enabled) {
-    if (!_canEditMarket) return;
+    if (!_canEditContractExtras('purchase')) return;
     final form = Map<String, dynamic>.from(_form)
       ..addAll(proposalIntakeResetContractFields('purchase'))
       ..['purchaseMode'] = ''
@@ -1920,7 +1993,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   Future<void> _applyApprovedPurchase(ProposalApprovedPurchaseHit hit) async {
-    if (!_canEditMarket) return;
+    if (!_canEditContractExtras('purchase')) return;
     final form = Map<String, dynamic>.from(_form)
       ..addAll(proposalIntakePatchFromApprovedPurchase(hit));
     final hasFile =
@@ -2169,13 +2242,123 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   Widget? _rowReviewToggle(String? section, String pendingLabel) {
     if (section == null) return null;
     final reviewed = _itemReviewed(section);
-    return ProposalReviewToggle(
+    final comment = _itemRejectComment(section);
+    final canAct = _reviewEnabled(section);
+    final toggle = ProposalReviewToggle(
       reviewed: reviewed,
+      rejected: comment.isNotEmpty && !reviewed,
       pendingLabel: pendingLabel,
-      onPressed: _reviewEnabled(section)
+      selectable: canAct,
+      selected: _rejectSelected.contains(section),
+      selectKey: section,
+      onSelected: canAct
+          ? (value) {
+              setState(() {
+                if (value) {
+                  _rejectSelected.add(section);
+                } else {
+                  _rejectSelected.remove(section);
+                }
+              });
+            }
+          : null,
+      onPressed: canAct
           ? () => unawaited(_setItemReview(section, !reviewed))
           : null,
+      onReject: canAct ? () => unawaited(_rejectItemReview(section)) : null,
     );
+    if (comment.isEmpty) return toggle;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        toggle,
+        const SizedBox(height: 4),
+        Text(
+          comment,
+          style: const TextStyle(
+            color: Color(0xFFB42318),
+            fontSize: 11,
+            height: 1.35,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _itemRejectComment(String section) {
+    final raw = _review['itemRejectComments'];
+    if (raw is! Map) return '';
+    return '${raw[section] ?? ''}'.trim();
+  }
+
+  Future<void> _rejectItemReview(String section) async {
+    final comment = await showProposalRejectDialog(
+      context: context,
+      title: '驳回本条',
+      hint: '请填写这条字段的驳回意见。只退回本条，其他已复核字段仍保留。也可勾选多条后点底部「驳回所选」。整板块仍可在底部直接驳回。',
+    );
+    if (!mounted) return;
+    if (comment == null) return;
+    if (comment.isEmpty) {
+      widget.onError('驳回时请填写意见');
+      return;
+    }
+    try {
+      final saved = await widget.service.saveReview(
+        _row.id,
+        section,
+        false,
+        _row.version,
+        comment: comment,
+      );
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _row = saved.row);
+        widget.onChanged(saved.row);
+        _toastNotified(saved.notified, fallback: '已驳回本条');
+      });
+    } catch (error) {
+      widget.onError(friendlyErrorText(error));
+    }
+  }
+
+  Future<void> _rejectSelectedItems() async {
+    final selected = _rejectSelected.toList()..sort();
+    if (selected.isEmpty) return;
+    final comment = await showProposalRejectDialog(
+      context: context,
+      title: '驳回所选 ${selected.length} 条',
+      hint: '请填写驳回意见。这份意见会写到所选每一条上，其他未选字段仍保留。',
+    );
+    if (!mounted) return;
+    if (comment == null) return;
+    if (comment.isEmpty) {
+      widget.onError('驳回时请填写意见');
+      return;
+    }
+    try {
+      final saved = await widget.service.saveReview(
+        _row.id,
+        selected.first,
+        false,
+        _row.version,
+        comment: comment,
+        sections: selected,
+      );
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _row = saved.row;
+          _rejectSelected.clear();
+        });
+        widget.onChanged(saved.row);
+        _toastNotified(saved.notified, fallback: '已驳回所选 ${selected.length} 条');
+      });
+    } catch (error) {
+      widget.onError(friendlyErrorText(error));
+    }
   }
 
   Set<String> _setOf(String key) {
@@ -2359,6 +2542,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String? resetReview,
     bool rebuild = true,
   }) {
+    if (resetReview != null && _moduleReviewed(resetReview)) return;
     final form = Map<String, dynamic>.from(_form)..addAll(values);
     final review = Map<String, dynamic>.from(_review);
     if (resetReview != null) review[resetReview] = false;
@@ -3023,7 +3207,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ),
       'notify_market2' => (
         '确认提交复核',
-        '确认后将通知全部复核人，提案内容锁定。这是科技填写完成的最终确认。',
+        '确认后将通知全部复核人。未复核内容提交人仍可修改，已复核部分锁定。这是科技填写完成的最终确认。',
         '确认提交',
       ),
       'start_review' => (
@@ -3325,7 +3509,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                             wide ? 28 : 14,
                             wide ? 22 : 14,
                             wide ? 28 : 14,
-                            _canDecidePresident ? 24 : 80,
+                            _canDecidePresident || _rejectSelected.isNotEmpty
+                                ? 24
+                                : 80,
                           ),
                           sliver: SliverToBoxAdapter(
                             child: Column(
@@ -3352,6 +3538,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ),
                   ),
                 ),
+                if (_rejectSelected.isNotEmpty)
+                  ProposalBatchRejectBar(
+                    count: _rejectSelected.length,
+                    onClear: () => setState(() => _rejectSelected.clear()),
+                    onReject: () => unawaited(_rejectSelectedItems()),
+                  ),
                 if (_canDecidePresident)
                   ProposalPresidentDecisionBar(
                     onApprove: () =>
@@ -3945,8 +4137,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ),
       child: Text(
         _canSubmit
-            ? '单条复核和板块复核都已完成。请点击右上角「通知最终人」。提交前内容仍不可改，如需改请驳回。'
-            : '各环节已复核完成。提交人请点击右上角「通知最终人」。提交前内容仍不可改，如需改请驳回。',
+            ? '单条复核和板块复核都已完成。请点击右上角「通知最终人」。已复核内容不可再改；如需改已复核部分请驳回。'
+            : '各环节已复核完成。提交人请点击右上角「通知最终人」。已复核内容不可再改；如需改已复核部分请驳回。',
         style: const TextStyle(
           color: ProposalPalette.green,
           fontWeight: FontWeight.w600,
@@ -4658,7 +4850,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           tag: 'Finance',
           description: _canEditBusinessCost
               ? '业务成本由你在财务复核时填写；其余财务项由提交人填写，财务部负责人二逐条复核。'
-              : _canEditMarket
+              : _canEditAsSubmitter
               ? '提交人填写 · 业务成本由市场部负责人一在财务复核时填写 · 财务部负责人二逐条复核 · 财务部负责人一整板块复核。'
               : '本板块由提交人填写；业务成本由市场部负责人一在财务复核时填写。',
         ),
@@ -5253,7 +5445,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   Widget _existingPurchaseProposalToggle() {
     final enabled = proposalIntakeHasExistingPurchaseProposal(_form);
-    final locked = _showSelectedAsText || !_canEditMarket;
+    final locked = _showSelectedAsText || !_canEditContractExtras('purchase');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -5301,7 +5493,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final currentId = proposalIntakeLinkedPurchaseProposalId(_form);
     final selectedTitle = _text('linkedPurchaseProposalTitle');
     final selectedCode = _text('linkedPurchaseProposalCode');
-    final locked = _showSelectedAsText || !_canEditMarket;
+    final locked = _showSelectedAsText || !_canEditContractExtras('purchase');
     return ProposalField(
       label: '已通过的采购提案',
       required: true,
@@ -5369,7 +5561,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       label: '选择合同',
       required: true,
       source: '从合同归集带出编号',
-      tone: proposalFieldTone(enabled: _canEditMarket, source: '从合同归集带出编号'),
+      tone: proposalFieldTone(enabled: _canEditContractExtras(prefix), source: '从合同归集带出编号'),
       child: ProposalSelectField<int>(
         key: ValueKey(
           'contract-$prefix-${_text('${prefix}ContractId')}-$_fieldEpoch',
@@ -5406,7 +5598,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 ].where((item) => item.isNotEmpty).join(' · '),
               ),
         ],
-        onSelected: !_canEditMarket
+        onSelected: !_canEditContractExtras(prefix)
             ? null
             : (id) {
                 if (id != null) {
@@ -5436,7 +5628,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   Future<void> _applyContract(String prefix, int id) async {
-    if (!_canEditMarket) return;
+    if (!_canEditContractExtras(prefix)) return;
     try {
       final detail = await widget.service.fetchContractDetail(id);
       final form = Map<String, dynamic>.from(_form)
@@ -5758,6 +5950,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             for (final id in pack.skuIds)
               if (skuIds.contains(id)) id,
           ],
+          skuQuantities: {
+            for (final id in pack.skuIds)
+              if (skuIds.contains(id)) id: pack.quantityOf(id),
+          },
         ),
     ];
     final form = Map<String, dynamic>.from(_form)
@@ -5875,13 +6071,29 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (!_canEditMarket) return;
     _patchCouponPack(packId, (pack) {
       final selected = [...pack.skuIds];
+      final quantities = Map<String, int>.from(pack.skuQuantities);
       if (selected.contains(skuId)) {
         selected.remove(skuId);
+        quantities.remove(skuId);
       } else {
         selected.add(skuId);
+        quantities[skuId] = 1;
       }
-      return pack.copyWith(skuIds: selected);
+      return pack.copyWith(skuIds: selected, skuQuantities: quantities);
     });
+  }
+
+  void _setCouponPackSkuQuantity(String packId, String skuId, String raw) {
+    if (!_canEditMarket) return;
+    final qty = proposalIntakePackSkuQuantity(int.tryParse(raw.trim()));
+    _patchCouponPack(packId, (pack) {
+      final selected = [...pack.skuIds];
+      if (!selected.contains(skuId)) selected.add(skuId);
+      return pack.copyWith(
+        skuIds: selected,
+        skuQuantities: {...pack.skuQuantities, skuId: qty},
+      );
+    }, rebuild: false);
   }
 
   void _writePackSettlements(
@@ -6350,7 +6562,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               fontSize: 11,
             ),
           ),
-          const SizedBox(height: 6),
+          const Padding(
+            padding: EdgeInsets.only(top: 2, bottom: 6),
+            child: Text(
+              '勾选产品后填写数量，默认 1。',
+              style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+            ),
+          ),
           if (products.isEmpty)
             const Text(
               '请先添加渠道产品后再勾选。',
@@ -6361,34 +6579,70 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               [
                 for (final sku in products)
                   if (pack.skuIds.contains(sku.id))
-                    sku.productName.trim().isEmpty
-                        ? '未填写产品名称'
-                        : sku.productName.trim(),
+                    [
+                      sku.productName.trim().isEmpty
+                          ? '未填写产品名称'
+                          : sku.productName.trim(),
+                      '×${pack.quantityOf(sku.id)}',
+                    ].join(' '),
               ].join('、'),
             )
           else
             Wrap(
               spacing: 8,
               runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 for (final sku in products)
-                  ProposalChoiceChip(
-                    label: sku.productName.trim().isEmpty
-                        ? '未填写产品名称'
-                        : [
-                            sku.productName.trim(),
-                            if (sku.faceValue.trim().isNotEmpty)
-                              sku.faceValue.trim(),
-                          ].join(' · '),
-                    selected: pack.skuIds.contains(sku.id),
-                    enabled: _canEditMarket,
-                    onSelected: (_) => _toggleCouponPackSku(pack.id, sku.id),
-                  ),
+                  _couponPackSkuPick(pack: pack, sku: sku),
               ],
             ),
           ],
         ],
       ),
+    );
+  }
+
+  Widget _couponPackSkuPick({
+    required ProposalCouponPackRow pack,
+    required ProposalSkuDetailRow sku,
+  }) {
+    final selected = pack.skuIds.contains(sku.id);
+    final label = sku.productName.trim().isEmpty
+        ? '未填写产品名称'
+        : [
+            sku.productName.trim(),
+            if (sku.faceValue.trim().isNotEmpty) sku.faceValue.trim(),
+          ].join(' · ');
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ProposalChoiceChip(
+          label: label,
+          selected: selected,
+          enabled: _canEditMarket,
+          onSelected: (_) => _toggleCouponPackSku(pack.id, sku.id),
+        ),
+        if (selected) ...[
+          const SizedBox(width: 6),
+          SizedBox(
+            width: 72,
+            child: ProposalField(
+              label: '数量',
+              child: TextFormField(
+                key: ValueKey('proposal-pack-sku-qty-${pack.id}-${sku.id}'),
+                initialValue: '${pack.quantityOf(sku.id)}',
+                keyboardType: TextInputType.number,
+                onTapOutside: (_) =>
+                    FocusManager.instance.primaryFocus?.unfocus(),
+                onChanged: (value) =>
+                    _setCouponPackSkuQuantity(pack.id, sku.id, value),
+                decoration: proposalInputDecoration(hint: '1'),
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -7121,7 +7375,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 for (final sku in channelRows)
                   if (pack.skuIds.contains(sku.id) &&
                       sku.productName.trim().isNotEmpty)
-                    sku.productName.trim(),
+                    '${sku.productName.trim()} ×${pack.quantityOf(sku.id)}',
               ].join(' · '),
               emptyTitle: '未填写券包名称',
               reviewPrefix: 'packSettle',
@@ -7388,7 +7642,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   Widget _financeModuleCard(ProposalFinanceModule module, bool wide) {
-    final enabled = _canEditFinanceModules && !_showSelectedAsText;
+    final itemLocked = _reviewLocksField(
+      resetReview: 'financeCompleted',
+      reviewSection: 'financeItem:launchModule:${module.id}',
+    );
+    final enabled =
+        _canEditFinanceModules && !_showSelectedAsText && !itemLocked;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -8240,7 +8499,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   Future<void> _pickUnsignedFile(String prefix) async {
-    if (!_canEditMarket || _uploadingContractPrefix != null) return;
+    if (!_canEditContractExtras(prefix) || _uploadingContractPrefix != null) return;
     setState(() => _uploadingContractPrefix = prefix);
     try {
       final group = XTypeGroup(label: '合同文件', extensions: _unsignedFileExts);
@@ -8263,7 +8522,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String prefix,
     DropDoneDetails detail,
   ) async {
-    if (!_canEditMarket || _uploadingContractPrefix != null) return;
+    if (!_canEditContractExtras(prefix) || _uploadingContractPrefix != null) return;
     setState(() {
       _uploadingContractPrefix = prefix;
       _draggingUnsignedPrefix = null;
@@ -8323,7 +8582,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   void _clearUnsignedFile(String prefix) {
-    if (!_canEditMarket) return;
+    if (!_canEditContractExtras(prefix)) return;
     final form = Map<String, dynamic>.from(_form)
       ..['${prefix}FileName'] = ''
       ..['${prefix}ObjectKey'] = ''
@@ -8388,7 +8647,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   Widget _contractSourceFileField(String prefix, {required bool allowUpload}) {
-    final enabled = _canEditMarket && allowUpload;
+    final enabled = _canEditContractExtras(prefix) && allowUpload;
     final uploading = _uploadingContractPrefix == prefix;
     final opening = _openingContractPrefix == prefix;
     final dragging = _draggingUnsignedPrefix == prefix;
@@ -8623,7 +8882,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 const Padding(
                   padding: EdgeInsets.only(top: 4),
                   child: Text(
-                    '发现问题可直接点「驳回」，不必先逐条点完复核。通过本板块仍需先完成逐条复核。',
+                    '发现问题可直接点「驳回」，或勾选多条后点底部「驳回所选」。通过本板块仍需先完成逐条复核。',
                     style: TextStyle(
                       color: ProposalPalette.coral,
                       fontSize: 10,
@@ -9117,7 +9376,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     bool? writable,
     bool required = false,
   }) {
-    final enabled = _fillEnabled(writable);
+    final enabled = _fillEnabled(
+      writable,
+      resetReview: resetReview,
+      reviewSection: reviewSection,
+    );
     final raw = _text(key).trim();
     final parsed = _parseDate(raw);
     return _datePickerField(
@@ -9155,7 +9418,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String reviewLabel = '复核',
     bool? writable,
   }) {
-    final enabled = _fillEnabled(writable);
+    final enabled = _fillEnabled(
+      writable,
+      resetReview: resetReview,
+      reviewSection: reviewSection,
+    );
     final tone = proposalFieldTone(enabled: enabled, source: source);
     final footer = _contractEditFooter(key);
     final multiline = maxLines > 1;
@@ -9212,7 +9479,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     bool required = false,
     Widget? extraTrailing,
   }) {
-    final enabled = _fillEnabled(writable);
+    final enabled = _fillEnabled(
+      writable,
+      resetReview: resetReview,
+      reviewSection: reviewSection,
+    );
     final tone = proposalFieldTone(enabled: enabled, source: source);
     final footer = _contractEditFooter(key);
     final trailing = _mergeTrailing([
@@ -9278,7 +9549,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String reviewLabel = '复核',
     ValueChanged<String>? onQueryChanged,
   }) {
-    final canEdit = _fillEnabled(null) && enabled;
+    final canEdit =
+        _fillEnabled(null, resetReview: resetReview, reviewSection: reviewSection) &&
+        enabled;
     final tone = proposalFieldTone(enabled: canEdit);
     final selected = _selectedCatalog(current, options);
     final values = _withCurrent(options, selected);
@@ -9331,7 +9604,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     bool? writable,
     ValueChanged<String?>? onSelected,
   }) {
-    final enabled = _fillEnabled(writable);
+    final enabled = _fillEnabled(
+      writable,
+      resetReview: resetReview,
+      reviewSection: reviewSection,
+    );
     final tone = proposalFieldTone(enabled: enabled);
     final current = _text(key);
     if (_readValuesOnly(enabled)) {
@@ -9395,13 +9672,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String label,
     String key, {
     required String positionIncludes,
+    String? resetReview,
     String? reviewSection,
     String reviewLabel = '复核',
     String? badge,
     bool? writable,
     bool required = false,
   }) {
-    final enabled = _fillEnabled(writable);
+    final enabled = _fillEnabled(
+      writable,
+      resetReview: resetReview ?? (writable == null ? 'marketCompleted' : null),
+      reviewSection: reviewSection,
+    );
     final tone = proposalFieldTone(enabled: enabled, source: badge);
     final preferredIds = {
       for (final person in widget.people)
@@ -9533,8 +9815,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     bool wide = true,
   }) {
     final enabled = allowDuringReview
-        ? (!_isLocked && (writable ?? false))
-        : _fillEnabled(writable);
+        ? (!_isLocked &&
+              (writable ?? false) &&
+              !_reviewLocksField(resetReview: 'financeCompleted'))
+        : _fillEnabled(
+            writable,
+            resetReview: 'financeCompleted',
+            reviewSection: reviewSection,
+          );
     final tone = proposalFieldTone(enabled: enabled);
     final selectedRaw = _setOf(namesKey);
     final selected = namesKey == 'costItems'
@@ -9821,7 +10109,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     bool single = false,
     bool required = false,
   }) {
-    final enabled = _fillEnabled(writable);
+    final enabled = _fillEnabled(
+      writable,
+      resetReview: resetReview,
+      reviewSection: reviewSection,
+    );
     final tone = proposalFieldTone(enabled: enabled, source: source);
     final selected = _setOf(key);
     if (_readValuesOnly(enabled)) {

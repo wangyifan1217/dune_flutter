@@ -321,6 +321,25 @@ void main() {
     expect(pack.institutionCode, 'TK');
   });
 
+  test('coupon pack product quantity defaults to 1', () {
+    final pack = ProposalCouponPackRow.fromJson({
+      'id': 'pack-1',
+      'name': '券包',
+      'skuIds': ['sku-1', 'sku-2'],
+    });
+    expect(pack.quantityOf('sku-1'), 1);
+    expect(pack.quantityOf('sku-2'), 1);
+    expect(pack.toJson()['skuQuantities'], {'sku-1': 1, 'sku-2': 1});
+
+    final counted = ProposalCouponPackRow.fromJson({
+      'id': 'pack-1',
+      'skuIds': ['sku-1'],
+      'skuQuantities': {'sku-1': 3},
+    });
+    expect(counted.quantityOf('sku-1'), 3);
+    expect(counted.copyWith(skuIds: ['sku-1', 'sku-2']).quantityOf('sku-2'), 1);
+  });
+
   test('sku and pack keep channel snapshot and lift from old settlements', () {
     final sku = ProposalSkuDetailRow.fromJson({
       'id': 'sku-1',

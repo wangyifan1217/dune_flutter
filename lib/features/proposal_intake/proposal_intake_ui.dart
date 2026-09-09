@@ -333,56 +333,150 @@ class ProposalField extends StatelessWidget {
   }
 }
 
-/// 逐条复核开关：复核通过后转为绿色可撤销状态。
+/// 逐条复核：可点通过，也可单条驳回；非责任人只显示待复核，避免误以为已有人审过。
 class ProposalReviewToggle extends StatelessWidget {
   const ProposalReviewToggle({
     super.key,
     required this.reviewed,
     required this.onPressed,
+    this.onReject,
+    this.rejected = false,
     this.pendingLabel = '复核',
     this.tooltip,
+    this.selectable = false,
+    this.selected = false,
+    this.onSelected,
+    this.selectKey,
   });
 
   final bool reviewed;
+  final bool rejected;
   final VoidCallback? onPressed;
+  final VoidCallback? onReject;
   final String pendingLabel;
   final String? tooltip;
+  final bool selectable;
+  final bool selected;
+  final ValueChanged<bool>? onSelected;
+  final String? selectKey;
 
   @override
   Widget build(BuildContext context) {
-    final button = OutlinedButton(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 30),
-        padding: const EdgeInsets.symmetric(horizontal: 9),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        backgroundColor: reviewed
-            ? ProposalPalette.greenSoft
-            : ProposalPalette.purpleSoft,
-        foregroundColor: reviewed
-            ? ProposalPalette.green
-            : ProposalPalette.purpleDeep,
-        side: BorderSide(
-          color: reviewed ? ProposalPalette.green : ProposalPalette.purple,
+    final canAct = onPressed != null;
+    if (!canAct) {
+      final label = reviewed
+          ? '已复核'
+          : rejected
+          ? '已驳回'
+          : pendingLabel;
+      final chip = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: reviewed
+              ? ProposalPalette.greenSoft
+              : rejected
+              ? const Color(0xFFF8E8E8)
+              : const Color(0xFFF3EEF7),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: reviewed
+                ? ProposalPalette.green
+                : rejected
+                ? const Color(0xFFD9A3A3)
+                : const Color(0xFFDDD1E8),
+          ),
         ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            reviewed ? Icons.check_rounded : Icons.task_alt_rounded,
-            size: 13,
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: reviewed
+                ? ProposalPalette.green
+                : rejected
+                ? const Color(0xFFB42318)
+                : ProposalPalette.text3,
           ),
-          const SizedBox(width: 4),
-          Text(
-            reviewed ? '已复核' : pendingLabel,
-            style: const TextStyle(fontSize: 11),
+        ),
+      );
+      return Tooltip(
+        message: tooltip ??
+            (reviewed
+                ? '已复核'
+                : rejected
+                ? '该字段已被驳回'
+                : '等待$pendingLabel，当前账号不能点'),
+        child: chip,
+      );
+    }
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (selectable && onSelected != null)
+          Tooltip(
+            message: selected ? '已选，将一并驳回' : '勾选后可一次驳回多条',
+            child: SizedBox(
+              width: 22,
+              height: 22,
+              child: Checkbox(
+                key: selectKey == null
+                    ? null
+                    : ValueKey<String>('proposal-item-select-$selectKey'),
+                value: selected,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+                onChanged: (value) => onSelected!(value ?? false),
+              ),
+            ),
           ),
-        ],
-      ),
+        OutlinedButton(
+          onPressed: onPressed,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 30),
+            padding: const EdgeInsets.symmetric(horizontal: 9),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            backgroundColor: reviewed
+                ? ProposalPalette.greenSoft
+                : ProposalPalette.purpleSoft,
+            foregroundColor: reviewed
+                ? ProposalPalette.green
+                : ProposalPalette.purpleDeep,
+            side: BorderSide(
+              color: reviewed ? ProposalPalette.green : ProposalPalette.purple,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                reviewed ? Icons.check_rounded : Icons.task_alt_rounded,
+                size: 13,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                reviewed ? '已复核' : '点此复核',
+                style: const TextStyle(fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+        if (onReject != null)
+          OutlinedButton(
+            onPressed: onReject,
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 30),
+              padding: const EdgeInsets.symmetric(horizontal: 9),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              foregroundColor: const Color(0xFFB42318),
+              side: const BorderSide(color: Color(0xFFD9A3A3)),
+            ),
+            child: const Text('驳回', style: TextStyle(fontSize: 11)),
+          ),
+      ],
     );
-    final message = tooltip ?? (reviewed ? '已复核' : pendingLabel);
-    return Tooltip(message: message, child: button);
   }
 }
 
@@ -728,6 +822,65 @@ class ProposalPills extends StatelessWidget {
   );
 }
 
+class ProposalBatchRejectBar extends StatelessWidget {
+  const ProposalBatchRejectBar({
+    super.key,
+    required this.count,
+    required this.onClear,
+    required this.onReject,
+  });
+
+  final int count;
+  final VoidCallback onClear;
+  final VoidCallback onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: Color(0xFFFBFAFD),
+          border: Border(top: BorderSide(color: Color(0xFFEAE3F0))),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '已选 $count 条，填一份意见即可一次驳回',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: ProposalPalette.text2,
+                  ),
+                ),
+              ),
+              TextButton(
+                key: const ValueKey('proposal-batch-reject-clear'),
+                onPressed: onClear,
+                child: const Text('取消选择'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                key: const ValueKey('proposal-batch-reject-submit'),
+                onPressed: onReject,
+                style: FilledButton.styleFrom(
+                  backgroundColor: ProposalPalette.coral,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(0, 40),
+                ),
+                child: Text('驳回所选 ($count)'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class ProposalPresidentDecisionBar extends StatelessWidget {
   const ProposalPresidentDecisionBar({
     super.key,
@@ -870,7 +1023,7 @@ const proposalIntakeProcessSteps = <(String, String)>[
   ('4', '提交人提交各板块进入复核。'),
   (
     '5',
-    '市场部负责人一复核市场板块；市场部负责人二逐条复核科技；科技部负责人复核财务技术接口；财务部负责人二复核采购/销售合同并逐条复核财务，财务部负责人一整板块复核财务。发现问题可直接整板块驳回，不必先逐条点完复核。',
+    '市场部负责人一复核市场板块；市场部负责人二逐条复核科技；科技部负责人复核财务技术接口；财务部负责人二复核采购/销售合同并逐条复核财务，财务部负责人一整板块复核财务。发现问题可对单条点「驳回」，也可直接整板块驳回，不必先逐条点完复核。',
   ),
   ('6', '各板块复核完成后，提交人通知最终确认人。'),
   ('7', '最终确认人通过即完成；整单驳回则退回提交人重填。板块驳回后，填写人修改再点「重新提交并通知审核人」，系统会通知该板块审核人。'),
@@ -886,7 +1039,7 @@ const proposalIntakePurchaseProcessSteps = <(String, String)>[
   ('4', '提交人提交各板块进入复核。'),
   (
     '5',
-    '市场部负责人一复核市场板块，并可填写 HUN ID；市场部负责人二逐条复核科技；科技部负责人复核财务技术接口；财务部负责人二复核采购合同。财务板块暂不复核。发现问题可直接整板块驳回，不必先逐条点完复核。',
+    '市场部负责人一复核市场板块，并可填写 HUN ID；市场部负责人二逐条复核科技；科技部负责人复核财务技术接口；财务部负责人二复核采购合同。财务板块暂不复核。发现问题可对单条点「驳回」，也可直接整板块驳回，不必先逐条点完复核。',
   ),
   ('6', '各板块复核完成后，提交人通知最终确认人。'),
   ('7', '最终确认人通过即完成；整单驳回则退回提交人重填。板块驳回后，填写人修改再点「重新提交并通知审核人」，系统会通知该板块审核人。'),

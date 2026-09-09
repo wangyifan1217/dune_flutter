@@ -173,9 +173,9 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     );
 
     // 窗口就绪后再拦截关闭，避免插件尚未挂上 HWND 时点 X 直接退出。
+    // 标题只设一次：macOS 26 把 title 再写一遍会叠出副标题，标题栏出现两个「沙丘」。
     windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.setPreventClose(true);
-      await windowManager.setTitle('沙丘');
       try {
         // WindowOptions 的 minimumSize 在部分系统上不可靠，显式再设一次。
         await windowManager.setMinimumSize(kDesktopWindowMinSize);

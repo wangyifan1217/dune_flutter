@@ -1231,7 +1231,7 @@ void main() {
           .widget<OutlinedButton>(
             find.descendant(
               of: _fieldOf('合同编号').first,
-              matching: find.widgetWithText(OutlinedButton, '财务部负责人二复核'),
+              matching: find.widgetWithText(OutlinedButton, '点此复核'),
             ),
           )
           .onPressed,
@@ -1718,6 +1718,24 @@ void main() {
     expect(find.text('包含渠道产品'), findsOneWidget);
     expect(find.textContaining('中石油100元'), findsWidgets);
     expect(find.textContaining('中石油50元'), findsWidgets);
+    expect(find.text('数量'), findsNothing);
+
+    await tester.tap(find.widgetWithText(ProposalChoiceChip, '中石油100元 · 100'));
+    await tester.pump();
+    expect(find.text('数量'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.byWidgetPredicate((widget) {
+              final key = widget.key;
+              return widget is TextFormField &&
+                  key is ValueKey<String> &&
+                  key.value.startsWith('proposal-pack-sku-qty-');
+            }),
+          )
+          .initialValue,
+      '1',
+    );
 
     await _scrollUntil(tester, '券包结算');
     expect(find.text('券包结算'), findsOneWidget);
@@ -2144,6 +2162,125 @@ void main() {
       isNotNull,
     );
     expect(find.textContaining('发现问题可直接点「驳回」'), findsWidgets);
+  });
+
+  testWidgets('submitter can edit unreviewed fields during reviewing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'reviewing',
+          'version': 3,
+          'createdBy': 11,
+          'form': {
+            'proposalName': '已复核市场名称',
+            'financeOwner2': '李思',
+            'financeOwner2UserId': 12,
+            'rollback': '不回滚',
+          },
+          'review': {
+            'stage': 'reviewing',
+            'marketCompleted': true,
+            'financeCompleted': false,
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+
+    await _scrollUntil(tester, '产品提案名称');
+    expect(
+      find.descendant(
+        of: _fieldOf('产品提案名称').first,
+        matching: find.byType(TextFormField),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: _fieldOf('产品提案名称').first,
+        matching: find.byType(SelectableText),
+      ),
+      findsWidgets,
+    );
+
+    await _scrollUntil(tester, '是否回滚');
+    expect(
+      tester
+          .widget<ProposalSelectField<String>>(
+            find
+                .descendant(
+                  of: _fieldOf('是否回滚').first,
+                  matching: find.byWidgetPredicate(
+                    (widget) => widget is ProposalSelectField<String>,
+                  ),
+                )
+                .first,
+          )
+          .onSelected,
+      isNotNull,
+    );
+  });
+
+  testWidgets('reviewer can check multiple rows for batch reject', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'reviewing',
+          'version': 3,
+          'createdBy': 11,
+          'form': {
+            'financeOwner2': '王奕凡',
+            'financeOwner2UserId': 11,
+            'salesMode': '未签署合同',
+            'salesName': '测试销售合同',
+          },
+          'review': {'stage': 'reviewing'},
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '销售合同复核');
+
+    final nameBox = find.byKey(
+      const ValueKey('proposal-item-select-contractItem:sales.Name'),
+    );
+    final noBox = find.byKey(
+      const ValueKey('proposal-item-select-contractItem:sales.No'),
+    );
+    expect(nameBox, findsOneWidget);
+    expect(noBox, findsOneWidget);
+    expect(find.byKey(const ValueKey('proposal-batch-reject-submit')), findsNothing);
+
+    tester.widget<Checkbox>(nameBox).onChanged!(true);
+    await tester.pump();
+    tester.widget<Checkbox>(noBox).onChanged!(true);
+    await tester.pump();
+
+    expect(find.textContaining('驳回所选 (2)'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('proposal-batch-reject-submit')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('rejected module banner tells submitter to notify reviewer', (

@@ -3,6 +3,8 @@ import FlutterMacOS
 import desktop_multi_window
 
 class MainFlutterWindow: NSWindow {
+  private var titleObservers: [NSKeyValueObservation] = []
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -13,7 +15,8 @@ class MainFlutterWindow: NSWindow {
     self.setContentSize(NSSize(width: 1080, height: 720))
     self.minSize = NSSize(width: 1024, height: 680)
     self.center()
-    self.title = "沙丘"
+    applySingleTitle("沙丘")
+    observeTitleDuplication()
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     FlutterMultiWindowPlugin.setOnWindowCreatedCallback { controller in
@@ -28,5 +31,30 @@ class MainFlutterWindow: NSWindow {
     }
 
     super.awakeFromNib()
+  }
+
+  /// macOS 11+ 会把 title / subtitle 叠成两行；Tahoe 上 dual-set 后常见两个「沙丘」。
+  private func applySingleTitle(_ text: String) {
+    title = text
+    stripDuplicateSubtitle()
+  }
+
+  private func stripDuplicateSubtitle() {
+    guard #available(macOS 11.0, *) else { return }
+    if !subtitle.isEmpty {
+      subtitle = ""
+    }
+  }
+
+  private func observeTitleDuplication() {
+    titleObservers.append(observe(\.title, options: [.new]) { [weak self] _, _ in
+      self?.stripDuplicateSubtitle()
+    })
+    if #available(macOS 11.0, *) {
+      titleObservers.append(observe(\.subtitle, options: [.new]) { [weak self] _, change in
+        guard let self, let value = change.newValue, !value.isEmpty else { return }
+        self.subtitle = ""
+      })
+    }
   }
 }

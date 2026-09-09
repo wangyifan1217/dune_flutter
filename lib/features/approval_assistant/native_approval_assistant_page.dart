@@ -22,7 +22,7 @@ import 'approval_urge_send_sheet.dart';
 
 enum ApprovalAssistantPickMode { browse, explain, urge }
 
-/// 审批助手只读会话：消息流 + 底部三按钮（无输入框）。
+/// 审批助手只读会话：消息流 + 底部待办入口（无输入框）。
 class NativeApprovalAssistantPage extends StatefulWidget {
   const NativeApprovalAssistantPage({
     super.key,
@@ -44,7 +44,7 @@ class NativeApprovalAssistantPage extends StatefulWidget {
   final VoidCallback? onBack;
   final ValueChanged<int>? onConversationRead;
   final void Function(ApprovalAssistantPickMode mode)? onOpenPendingList;
-  final VoidCallback? onOpenProposals;
+  final ValueChanged<String>? onOpenProposals;
   final ValueChanged<ApprovalChatShare>? onOpenApproval;
 
   @override
@@ -400,7 +400,9 @@ class _NativeApprovalAssistantPageState
             _BottomActions(
               onPending: () => widget.onOpenPendingList
                   ?.call(ApprovalAssistantPickMode.browse),
-              onProposals: () => widget.onOpenProposals?.call(),
+              onSalesProposals: () => widget.onOpenProposals?.call('sales'),
+              onPurchaseProposals: () =>
+                  widget.onOpenProposals?.call('purchase'),
               onExplain: () => widget.onOpenPendingList
                   ?.call(ApprovalAssistantPickMode.explain),
               onUrge: () => widget.onOpenPendingList
@@ -936,13 +938,15 @@ class ApprovalAssistantAvatar extends StatelessWidget {
 class _BottomActions extends StatelessWidget {
   const _BottomActions({
     required this.onPending,
-    required this.onProposals,
+    required this.onSalesProposals,
+    required this.onPurchaseProposals,
     required this.onExplain,
     required this.onUrge,
   });
 
   final VoidCallback onPending;
-  final VoidCallback onProposals;
+  final VoidCallback onSalesProposals;
+  final VoidCallback onPurchaseProposals;
   final VoidCallback onExplain;
   final VoidCallback onUrge;
 
@@ -956,40 +960,57 @@ class _BottomActions extends StatelessWidget {
         color: DunesColors.bgApp,
         border: Border(top: BorderSide(color: DunesColors.borderSoft)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: _ActionBtn(
-              label: '今日待审',
-              icon: Icons.inbox_outlined,
-              primary: true,
-              onTap: onPending,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: _ActionBtn(
+                  label: '今日待审',
+                  icon: Icons.inbox_outlined,
+                  primary: true,
+                  onTap: onPending,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _ActionBtn(
+                  label: '销售提案',
+                  icon: Icons.assignment_outlined,
+                  primary: true,
+                  onTap: onSalesProposals,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _ActionBtn(
+                  label: '采购提案',
+                  icon: Icons.shopping_bag_outlined,
+                  primary: true,
+                  onTap: onPurchaseProposals,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: _ActionBtn(
-              label: '提案审核',
-              icon: Icons.assignment_outlined,
-              primary: true,
-              onTap: onProposals,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: _ActionBtn(
-              label: '解释内容',
-              icon: Icons.menu_book_outlined,
-              onTap: onExplain,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: _ActionBtn(
-              label: '催办进度',
-              icon: Icons.campaign_outlined,
-              onTap: onUrge,
-            ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: _ActionBtn(
+                  label: '解释内容',
+                  icon: Icons.menu_book_outlined,
+                  onTap: onExplain,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _ActionBtn(
+                  label: '催办进度',
+                  icon: Icons.campaign_outlined,
+                  onTap: onUrge,
+                ),
+              ),
+            ],
           ),
         ],
       ),

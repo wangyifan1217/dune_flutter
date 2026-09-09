@@ -195,6 +195,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   String _ssoAppTitle = '';
   ApprovalAssistantPickMode _approvalAssistantPickMode =
       ApprovalAssistantPickMode.browse;
+  String _approvalAssistantProposalKind = 'sales';
 
   /// 作废过期的「打开审批助手」异步结果，避免从灯塔等会话被事后抢跳到 AA1。
   int _approvalAssistantOpenGen = 0;
@@ -2632,7 +2633,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     widget.navigation.go('AA2');
   }
 
-  void _openApprovalAssistantProposals() {
+  void _openApprovalAssistantProposals(String kind) {
+    setState(() => _approvalAssistantProposalKind = kind);
     widget.navigation.go('AA3');
   }
 
@@ -2664,6 +2666,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   Widget _buildApprovalAssistantProposalPage() {
     return NativeApprovalAssistantProposalPage(
       session: widget.session,
+      kind: _approvalAssistantProposalKind,
       onBack: () {
         if (widget.navigation.history.contains('AA1')) {
           widget.navigation.popTo('AA1');

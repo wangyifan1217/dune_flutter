@@ -98,6 +98,152 @@ void main() {
     expect(rows.single.id, 11);
   });
 
+  test('product L2 catalog keeps snowflake ids as text', () {
+    final ref = CatalogRef.fromJson({
+      'id': '2070042866993868805',
+      'code': 'GGCX_CXXTHY',
+      'name': '小套-出行会员',
+      'level': 2,
+      'parentId': '2070042866993868804',
+      'parentCode': 'GGCX',
+      'parentName': '公共出行',
+    });
+    expect(ref.idText, '2070042866993868805');
+    expect(ref.parentIdText, '2070042866993868804');
+    expect(ref.parentCode, 'GGCX');
+    expect(ref.parentName, '公共出行');
+    expect(ref.toJson()['id'], '2070042866993868805');
+    expect(ref.toJson()['parentId'], '2070042866993868804');
+  });
+
+  test('fetchProductCategoryL2 maps 资管二级分类 rows', () async {
+    Uri? seen;
+    final client = MockClient((request) async {
+      seen = request.url;
+      return http.Response(
+        jsonEncode({
+          'code': 200,
+          'msg': '操作成功',
+          'data': [
+            {
+              'id': '2070042866993868805',
+              'code': 'GGCX_CXXTHY',
+              'name': '小套-出行会员',
+              'level': 2,
+              'parentId': '2070042866993868804',
+              'parentCode': 'GGCX',
+              'parentName': '公共出行',
+            },
+            {
+              'id': '2070042866993868810',
+              'code': 'YYS_Hcz',
+              'name': '小套-好车主会员',
+              'level': 2,
+              'parentId': '2070042866947731400',
+              'parentCode': 'YYS',
+              'parentName': '运营商',
+            },
+          ],
+        }),
+        200,
+        headers: const {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final catalog = SettlementCatalogService(client: client);
+    addTearDown(catalog.dispose);
+    final rows = await catalog.fetchProductCategoryL2();
+    expect(seen?.path, contains('/out/shaqiu/catalog/product-category/l2'));
+    expect(seen?.queryParameters.containsKey('parentId'), isFalse);
+    expect(rows.map((e) => e.name).toList(), ['小套-出行会员', '小套-好车主会员']);
+    expect(rows.first.idText, '2070042866993868805');
+    expect(rows.last.parentCode, 'YYS');
+  });
+
+  test('标签一 options come from 资管 product L2 filtered by sector', () {
+    const travel = CatalogRef(
+      idText: '1',
+      code: 'GGCX_CXXTHY',
+      name: '小套-出行会员',
+      parentCode: 'GGCX',
+      parentName: '公共出行',
+    );
+    const owner = CatalogRef(
+      idText: '2',
+      code: 'YYS_Hcz',
+      name: '小套-好车主会员',
+      parentCode: 'YYS',
+      parentIdText: '99',
+      parentName: '运营商',
+    );
+    const energy = CatalogRef(
+      idText: '3',
+      code: 'NY_XJQ',
+      name: '中石油现金券',
+      parentCode: 'NY',
+      parentName: '能源',
+    );
+    const catalog = [travel, owner, energy];
+    expect(
+      proposalIntakeProductL2ForSector(
+        catalog,
+        sector: const CatalogRef(code: 'YYS', name: '运营商'),
+      ).map((e) => e.name).toList(),
+      ['小套-好车主会员'],
+    );
+    expect(
+      proposalIntakeProductL2ForSector(
+        catalog,
+        sector: const CatalogRef(name: '能源'),
+      ).map((e) => e.name).toList(),
+      ['中石油现金券'],
+    );
+    expect(
+      proposalIntakeProductL2ForSector(
+        const [
+          CatalogRef(
+            idText: '4',
+            code: 'FT_FF',
+            name: '中石油返费',
+            parentCode: 'fintech',
+            parentName: 'fintech',
+          ),
+        ],
+        sector: const CatalogRef(name: 'Fintech'),
+      ).map((e) => e.name).toList(),
+      ['中石油返费'],
+    );
+    expect(
+      proposalIntakeProductL2ForSector(catalog, sector: CatalogRef.empty),
+      isEmpty,
+    );
+  });
+
+  test('fetchProductCategoryL1 maps 资管一级分类 rows', () async {
+    Uri? seen;
+    final client = MockClient((request) async {
+      seen = request.url;
+      return http.Response(
+        jsonEncode({
+          'code': 200,
+          'msg': '操作成功',
+          'data': [
+            {'id': '2066420509628776449', 'code': 'MY', 'name': '民营', 'level': 1},
+            {'id': '2070042866947731458', 'code': 'NY', 'name': '能源', 'level': 1},
+            {'id': '1', 'code': 'fintech', 'name': 'fintech', 'level': 1},
+          ],
+        }),
+        200,
+        headers: const {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final catalog = SettlementCatalogService(client: client);
+    addTearDown(catalog.dispose);
+    final rows = await catalog.fetchProductCategoryL1();
+    expect(seen?.path, contains('/out/shaqiu/catalog/product-category/l1'));
+    expect(rows.map((e) => e.name).toList(), ['民营', '能源', 'fintech']);
+    expect(rows[1].code, 'NY');
+  });
+
   test('fetchChannelCategoryL2 filters by parentCode and keeps parent fields', () async {
     Uri? seen;
     final client = MockClient((request) async {

@@ -1033,6 +1033,29 @@ String lighthouseSyncedAtStamp(DateTime t) {
   return '$y.$mo.$dd $hh:$mm';
 }
 
+/// v20 · 主 Hero 拍平。
+///
+/// 旧版是「每要分一组就加一个面」堆出来的：雾紫大卡 → 白卡（大数 / 走势）
+/// → 分区卡（规模 / 成本 / 利润，各带一色底）→ 指标格。四层嵌套的面，
+/// 去表达一个其实只有三层的信息结构 —— 那些淡紫淡黄淡粉不是设计决定，
+/// 是「我得把这块和那块分开」的补丁。
+///
+/// 拍平之后只有一个白面，分组交给三样东西：发丝线、留白、字重。
+/// 代价是两处，都在下面补掉了：
+///   · 指标格失去边框底色之后「能点」变弱 → 标签右侧常驻 → 箭头，
+///     并把整格热区留满（见 lighthouseHeroFlatCellArrowAlways）
+///   · Hero 与账本的边界原本靠雾紫底 → 改用一条双线灰带（见 _buildPanel）
+///
+/// 想退回卡片版，把这一个常量改成 false 即可，两套版式都还在。
+const bool lighthouseHeroUsesFlatLayout = false;
+
+/// 拍平版里指标标签后面常驻的小箭头 —— 它是唯一还在说「这格能点」的东西。
+const bool lighthouseHeroFlatCellArrowAlways = true;
+
+/// 分区表头带的高度与底色浓度（压在白底上约 #F7F6F9）。
+const double lighthouseHeroFlatBandHeight = 26;
+const int lighthouseHeroFlatBandAlpha = 10;
+
 const double lighthouseHeroSummaryTitleFontSize = 13.5;
 const double lighthouseHeroSummaryIconSize = 20;
 const double lighthouseHeroSummaryIconRadius = 6;

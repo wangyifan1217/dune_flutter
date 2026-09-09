@@ -8,6 +8,7 @@ import '../xflow/proposal_import_template.dart';
 class CatalogRef {
   const CatalogRef({
     this.id,
+    this.idText = '',
     this.code = '',
     this.name = '',
     this.formulaExpression = '',
@@ -15,11 +16,14 @@ class CatalogRef {
     this.settleMethod = '',
     this.parentCode = '',
     this.parentId,
+    this.parentIdText = '',
     this.parentName = '',
     this.displayPath = '',
   });
 
   final int? id;
+  /// 资管雪花 id 原文字符串，避免 Flutter web 把 19 位 id 截断。
+  final String idText;
   final String code;
   final String name;
   final String formulaExpression;
@@ -27,13 +31,17 @@ class CatalogRef {
   final String settleMethod;
   final String parentCode;
   final int? parentId;
+  final String parentIdText;
   final String parentName;
   final String displayPath;
 
   static const empty = CatalogRef();
 
   bool get isEmpty =>
-      (id == null || id == 0) && code.trim().isEmpty && name.trim().isEmpty;
+      (id == null || id == 0) &&
+      idText.trim().isEmpty &&
+      code.trim().isEmpty &&
+      name.trim().isEmpty;
 
   bool get isNotEmpty => !isEmpty;
 
@@ -43,11 +51,27 @@ class CatalogRef {
     return name.trim().isNotEmpty ? name.trim() : code.trim();
   }
 
+  String get resolvedIdText {
+    final text = idText.trim();
+    if (text.isNotEmpty) return text;
+    if (id != null && id != 0) return '$id';
+    return '';
+  }
+
+  String get resolvedParentIdText {
+    final text = parentIdText.trim();
+    if (text.isNotEmpty) return text;
+    if (parentId != null && parentId != 0) return '$parentId';
+    return '';
+  }
+
   /// 业务平台积分/返费 code 相同，必须连 name 才能区分。
-  String get identity => '${id ?? ''}|${code.trim()}|${name.trim()}';
+  String get identity =>
+      '${resolvedIdText}|${code.trim()}|${name.trim()}';
 
   CatalogRef copyWith({
     int? id,
+    String? idText,
     String? code,
     String? name,
     String? formulaExpression,
@@ -55,10 +79,12 @@ class CatalogRef {
     String? settleMethod,
     String? parentCode,
     int? parentId,
+    String? parentIdText,
     String? parentName,
     String? displayPath,
   }) => CatalogRef(
     id: id ?? this.id,
+    idText: idText ?? this.idText,
     code: code ?? this.code,
     name: name ?? this.name,
     formulaExpression: formulaExpression ?? this.formulaExpression,
@@ -66,13 +92,14 @@ class CatalogRef {
     settleMethod: settleMethod ?? this.settleMethod,
     parentCode: parentCode ?? this.parentCode,
     parentId: parentId ?? this.parentId,
+    parentIdText: parentIdText ?? this.parentIdText,
     parentName: parentName ?? this.parentName,
     displayPath: displayPath ?? this.displayPath,
   );
 
   Map<String, dynamic> toJson() {
     final out = <String, dynamic>{
-      if (id != null && id != 0) 'id': id,
+      if (_jsonId(resolvedIdText, id) != null) 'id': _jsonId(resolvedIdText, id),
       if (code.trim().isNotEmpty) 'code': code.trim(),
       if (name.trim().isNotEmpty) 'name': name.trim(),
       if (formulaExpression.trim().isNotEmpty)
@@ -80,7 +107,8 @@ class CatalogRef {
       if (productSource.trim().isNotEmpty) 'productSource': productSource.trim(),
       if (settleMethod.trim().isNotEmpty) 'settleMethod': settleMethod.trim(),
       if (parentCode.trim().isNotEmpty) 'parentCode': parentCode.trim(),
-      if (parentId != null && parentId != 0) 'parentId': parentId,
+      if (_jsonId(resolvedParentIdText, parentId) != null)
+        'parentId': _jsonId(resolvedParentIdText, parentId),
       if (parentName.trim().isNotEmpty) 'parentName': parentName.trim(),
       if (displayPath.trim().isNotEmpty) 'displayPath': displayPath.trim(),
     };
@@ -96,8 +124,11 @@ class CatalogRef {
     final name =
         '${map['name'] ?? map['channelName'] ?? map['supplierName'] ?? map['shortName'] ?? map['supplierShortName'] ?? map['formulaName'] ?? ''}'
             .trim();
+    final idText = '${map['id'] ?? ''}'.trim();
+    final parentIdText = '${map['parentId'] ?? ''}'.trim();
     return CatalogRef(
       id: catalogInt(map['id']),
+      idText: idText,
       code: code,
       name: name,
       formulaExpression: '${map['formulaExpression'] ?? ''}'.trim(),
@@ -105,6 +136,7 @@ class CatalogRef {
       settleMethod: '${map['settleMethod'] ?? ''}'.trim(),
       parentCode: '${map['parentCode'] ?? ''}'.trim(),
       parentId: catalogInt(map['parentId']),
+      parentIdText: parentIdText,
       parentName: '${map['parentName'] ?? ''}'.trim(),
       displayPath: '${map['displayPath'] ?? ''}'.trim(),
     );
@@ -172,6 +204,63 @@ List<CatalogRef> flattenBillTypeTree(Object? raw, {String prefix = ''}) {
 int? catalogInt(Object? value) {
   if (value is num) return value.toInt();
   return int.tryParse('${value ?? ''}'.trim());
+}
+
+Object? _jsonId(String text, int? id) {
+  final raw = text.trim();
+  if (raw.isEmpty) {
+    if (id == null || id == 0) return null;
+    return id;
+  }
+  if (raw.length <= 15) {
+    final parsed = int.tryParse(raw);
+    if (parsed != null) return parsed;
+  }
+  return raw;
+}
+
+/// 销售提案「产品（标签一）」= 资管产品二级分类，按已选业务板块（资管产品一级）过滤。
+List<CatalogRef> proposalIntakeProductL2ForSector(
+  List<CatalogRef> catalog, {
+  CatalogRef? sector,
+}) {
+  if (catalog.isEmpty) return const [];
+  if (sector == null || sector.isEmpty) return const [];
+  final parentCode = sector.code.trim();
+  final parentIdText = sector.resolvedIdText;
+  final parentName = sector.name.trim().toLowerCase();
+  final codeKey = parentCode.toLowerCase();
+  return [
+    for (final row in catalog)
+      if (_productL2MatchesSector(
+        row,
+        parentCode: parentCode,
+        codeKey: codeKey,
+        parentIdText: parentIdText,
+        parentName: parentName,
+      ))
+        row,
+  ];
+}
+
+bool _productL2MatchesSector(
+  CatalogRef row, {
+  required String parentCode,
+  required String codeKey,
+  required String parentIdText,
+  required String parentName,
+}) {
+  final rowCode = row.parentCode.trim();
+  if (parentCode.isNotEmpty &&
+      (rowCode == parentCode || rowCode.toLowerCase() == codeKey)) {
+    return true;
+  }
+  if (parentIdText.isNotEmpty && row.resolvedParentIdText == parentIdText) {
+    return true;
+  }
+  if (parentName.isEmpty) return false;
+  if (row.parentName.trim().toLowerCase() == parentName) return true;
+  return rowCode.toLowerCase() == parentName;
 }
 
 /// 已建渠道产品 / 券包查询命中。来自 [GET /out/shaqiu/catalog/channel-product]。
@@ -532,13 +621,17 @@ class SettlementCatalogService {
   Future<List<CatalogRef>> fetchProductCategoryL2({
     String parentCode = '',
     int? parentId,
+    String parentIdText = '',
   }) async {
+    final idText = parentIdText.trim().isNotEmpty
+        ? parentIdText.trim()
+        : (parentId != null && parentId > 0 ? '$parentId' : '');
     return _mapList(
       '/out/shaqiu/catalog/product-category/l2',
       CatalogRef.fromJson,
       query: {
         if (parentCode.trim().isNotEmpty) 'parentCode': parentCode.trim(),
-        if (parentId != null && parentId > 0) 'parentId': '$parentId',
+        if (idText.isNotEmpty) 'parentId': idText,
       },
     );
   }

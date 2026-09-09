@@ -1372,7 +1372,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   late final SettlementCatalogService _catalog;
   bool _ownsCatalog = false;
   List<CatalogRef> _sectorCatalog = const [];
-  List<CatalogRef> _productCatalog = const [];
+  List<CatalogRef> _productCatalogAll = const [];
   List<CatalogRef> _projectCatalog = const [];
   List<CatalogRef> _syncSourceCatalog = const [];
   List<CatalogRef> _channelCategoryL1 = const [];
@@ -1386,7 +1386,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   final Map<String, int> _assetProductSyncSeq = {};
   final Set<String> _assetProductSyncing = {};
   final Map<String, String> _assetProductSyncHint = {};
-  int _productCatalogSeq = 0;
 
   static const _financeMetricFields = <(String, String)>[
     ('salesScale', '销售规模目标（万元）'),
@@ -2577,19 +2576,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   Future<void> _loadMarketCatalog() async {
     final results = await Future.wait([
       _catalog.fetchProductCategoryL1(),
+      _catalog.fetchProductCategoryL2(),
       _catalog.fetchProjects(),
       _catalog.fetchSyncSources(),
     ]);
     if (!mounted) return;
     setState(() {
       _sectorCatalog = results[0];
-      _projectCatalog = results[1];
-      _syncSourceCatalog = results[2];
+      _productCatalogAll = results[1];
+      _projectCatalog = results[2];
+      _syncSourceCatalog = results[3];
     });
-    final sector = _formRef('sectorRef');
-    if (sector != null && sector.isNotEmpty) {
-      await _loadProductCatalog(sector);
-    }
   }
 
   Future<void> _loadChannelCategories() async {
@@ -2602,20 +2599,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _channelCategoryL1 = results[0];
       _channelCategoryL2 = results[1];
     });
-  }
-
-  Future<void> _loadProductCatalog(CatalogRef? sector) async {
-    final seq = ++_productCatalogSeq;
-    if (sector == null || sector.isEmpty) {
-      if (mounted) setState(() => _productCatalog = const []);
-      return;
-    }
-    final rows = await _catalog.fetchProductCategoryL2(
-      parentCode: sector.code,
-      parentId: sector.id,
-    );
-    if (!mounted || seq != _productCatalogSeq) return;
-    setState(() => _productCatalog = rows);
   }
 
   int _projectSearchSeq = 0;
@@ -2888,7 +2871,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   List<CatalogRef> _productOptions() {
-    if (_productCatalog.isNotEmpty) return _productCatalog;
+    final filtered = proposalIntakeProductL2ForSector(
+      _productCatalogAll,
+      sector: _formRef('sectorRef') ?? CatalogRef.fromName(_text('sector')),
+    );
+    if (filtered.isNotEmpty || _productCatalogAll.isNotEmpty) return filtered;
     return [
       for (final item in widget.options.products) CatalogRef.fromName(item.value),
     ];
@@ -4278,7 +4265,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 options: _sectorOptions(),
                 required: true,
                 resetReview: 'marketCompleted',
-                hint: _sectorCatalog.isEmpty ? '请选择业务板块' : '请选择资管一级分类',
+                hint: _sectorCatalog.isEmpty ? '请选择业务板块' : '请选择资管产品一级分类',
                 onSelected: (value) {
                   _setMany({
                     'sector': value?.name ?? '',
@@ -4286,7 +4273,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     'product': '',
                     'productRef': null,
                   }, resetReview: 'marketCompleted');
-                  unawaited(_loadProductCatalog(value));
                 },
               ),
           ProposalField(

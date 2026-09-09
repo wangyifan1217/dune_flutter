@@ -9,12 +9,15 @@ LhBiViewPage _page({
   List<Map<String, dynamic>> rows = const [],
   Widget? topChrome,
   Widget? periodBar,
+  bool loading = false,
   ({String label, List<Map<String, dynamic>> rows}) Function(
     String dim,
     String name,
     String breakKey,
   )?
   breakdownFor,
+  List<Map<String, dynamic>>? Function(String dim, String window)?
+      windowRowsFor,
 }) {
   return LhBiViewPage(
     initialDim: initialDim,
@@ -22,6 +25,7 @@ LhBiViewPage _page({
     rangeLabel: '09.01–09.08',
     periodLabel: '本月',
     rowsFor: rowsFor ?? (_) => rows,
+    windowRowsFor: windowRowsFor,
     metricsFor: (_) => const [
       LhBiMetric(key: 'profit', label: '净利润'),
       LhBiMetric(key: 'sales', label: '销售额'),
@@ -47,10 +51,36 @@ LhBiViewPage _page({
         onClose: onClose,
     topChrome: topChrome,
     periodBar: periodBar,
+    loading: loading,
   );
 }
 
 void main() {
+  test('BI 边距跟一级灯塔同一条参考线', () {
+    expect(lhBiChromePad, 16);
+    expect(lhBiPeriodPad, 22);
+    expect(lhBiCardPad, 12);
+  });
+
+  test('BI 切粒度要拉当前视角，不是主列表停着的那一维', () {
+    expect(
+      lighthouseBiDimToLoad(biDim: 'people', fallback: 'product'),
+      'people',
+    );
+    expect(
+      lighthouseBiDimToLoad(biDim: 'netTa', fallback: 'product'),
+      'netTa',
+    );
+    expect(
+      lighthouseBiDimToLoad(biDim: null, fallback: 'channel'),
+      'channel',
+    );
+    expect(
+      lighthouseBiDimToLoad(biDim: '  ', fallback: 'supply'),
+      'supply',
+    );
+  });
+
   test('构成图把同名未分类合成一片，图例 key 带序号', () {
     final slices = lhBiBuildCompositionSlices(const [
       (name: '未分类', scale: 100),
@@ -61,6 +91,19 @@ void main() {
     expect(slices.firstWhere((s) => s.name == '未分类').value, 150);
     expect(lhBiLegendKey('未分类', 0), 'bi-legend-0-未分类');
     expect(lhBiLegendKey('未分类', 1), isNot(lhBiLegendKey('未分类', 0)));
+  });
+
+  test('构成扇区丢掉亏损，圆心合计仍含亏损', () {
+    const values = <({String name, double scale})>[
+      (name: '中石化现金券', scale: 8100),
+      (name: '出行金', scale: 5600),
+      (name: '亏损产品', scale: -1000),
+    ];
+    final slices = lhBiBuildCompositionSlices(values);
+    expect(slices.map((s) => s.name).toList(), ['中石化现金券', '出行金']);
+    expect(slices.fold<double>(0, (s, e) => s + e.value), 13700);
+    expect(lhBiSignedTotal(values.map((e) => e.scale)), 12700);
+    expect(lhBiParts(12700, isRate: false).text, '1.3');
   });
 
   test('构成图默认列出全部产品，不折进其他项', () {
@@ -203,7 +246,28 @@ void main() {
     expect(find.textContaining('领先次名'), findsNothing);
     expect(find.textContaining('盈利合计'), findsNothing);
     expect(find.textContaining('亏损合计'), findsNothing);
+    expect(find.textContaining('期内走势'), findsNothing);
+    expect(find.textContaining('盈亏诊断'), findsNothing);
+    expect(find.textContaining('排行'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('加载中空列表显示同步中，不是没有数据', (tester) async {
+    tester.view.physicalSize = const Size(390, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: _page(loading: true),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('数据同步中…'), findsOneWidget);
+    expect(find.textContaining('没有可分析的数据'), findsNothing);
   });
 
   testWidgets('从供给可切到产品、渠道并看到对应行', (tester) async {
@@ -363,5 +427,63 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byKey(const ValueKey('bi-legend-0-未分类')), findsOneWidget);
     expect(find.byKey(const ValueKey('bi-legend-1-未分类')), findsNothing);
+  });
+
+  test('按名字加总本日本月，同名合并，找不到返回 null', () {
+    const rows = [
+      {'name': '中石化现金券', 'profit': 1000.0},
+      {'name': '中石化现金券', 'profit': 200.0},
+      {'name': '出行金', 'profit': 500.0},
+    ];
+    double profitOf(Map<String, dynamic> row) =>
+        (row['profit'] as num).toDouble();
+    expect(lhBiLookupNamedMetric(rows, '中石化现金券', profitOf), 1200);
+    expect(lhBiLookupNamedMetric(rows, '出行金', profitOf), 500);
+    expect(lhBiLookupNamedMetric(rows, '不存在', profitOf), isNull);
+    expect(lhBiLookupNamedMetric(const [], '出行金', profitOf), isNull);
+  });
+
+  testWidgets('构成图例是利润占比本日新增本月新增四列', (tester) async {
+    tester.view.physicalSize = const Size(390, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: _page(
+            rows: const [
+              {'name': '中石化现金券', 'profit': 8500, 'sales': 20000},
+              {'name': '出行金', 'profit': 5600, 'sales': 12000},
+            ],
+            windowRowsFor: (dim, window) => switch (window) {
+              'day' => const [
+                {'name': '中石化现金券', 'profit': 1000, 'sales': 3000},
+                {'name': '出行金', 'profit': 400, 'sales': 800},
+              ],
+              'month' => const [
+                {'name': '中石化现金券', 'profit': 5000, 'sales': 12000},
+                {'name': '出行金', 'profit': 2000, 'sales': 4000},
+              ],
+              _ => const [],
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 800));
+
+    expect(find.text('利润'), findsOneWidget);
+    expect(find.text('占比'), findsOneWidget);
+    expect(find.text('本日新增'), findsOneWidget);
+    expect(find.text('本月新增'), findsOneWidget);
+    expect(find.text('0.10万'), findsWidgets);
+    expect(find.text('0.50万'), findsWidgets);
+    expect(find.text('0.04万'), findsWidgets);
+    expect(find.text('0.20万'), findsWidgets);
+    expect(find.text('0.14万'), findsOneWidget);
+    expect(find.text('0.70万'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

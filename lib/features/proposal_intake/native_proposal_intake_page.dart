@@ -24,6 +24,7 @@ import 'flow_panorama/flow_ctx_mapper.dart';
 import 'flow_panorama/flow_panorama_section.dart';
 import 'proposal_cost_estimate.dart';
 import 'proposal_intake_models.dart';
+import 'proposal_intake_unreviewed.dart';
 import 'proposal_intake_select.dart';
 import 'proposal_intake_service.dart';
 import 'proposal_intake_ui.dart';
@@ -1489,10 +1490,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     'rollback',
   ];
 
+  late Map<String, dynamic> _serverForm;
+
   @override
   void initState() {
     super.initState();
     _row = widget.row;
+    _serverForm = proposalIntakeCloneForm(widget.row.form);
     _ownsCatalog = widget.catalog == null;
     _catalog = widget.catalog ?? SettlementCatalogService();
     unawaited(_loadMarketCatalog());
@@ -1567,7 +1571,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   bool get _canEditAsSubmitter =>
-      !_isLocked && _isSubmitter && !_row.techRevisionOpen;
+      !_isLocked &&
+      !_row.techRevisionOpen &&
+      (_isSubmitter || widget.session.proposalIntakeViewAll);
 
   /// 科技逐条复核人：已指定则只认负责二；旧单未指定时回退提交人。
   bool get _isMarketOwner2 {
@@ -1858,6 +1864,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _bumpCostAmountStamps(before, form);
       estimated = true;
     }
+    form = _keepUnreviewed(form);
     final review = Map<String, dynamic>.from(_review);
     if (resetReview != null) review[resetReview] = false;
     _dirty = true;
@@ -1899,7 +1906,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       businessCatalog: widget.options.businessCostItemOptions,
     );
     _bumpCostAmountStamps(before, next);
-    return next;
+    return _keepUnreviewed(next);
+  }
+
+  Map<String, dynamic> _keepUnreviewed(Map<String, dynamic> form) {
+    return proposalIntakeKeepUnreviewedForm(
+      baseline: _serverForm,
+      current: form,
+      review: _review,
+    );
   }
 
   Widget? _mergeTrailing(List<Widget?> items) {
@@ -3324,7 +3339,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     }
     try {
       final confirmed = _row.copyWith(
-        form: proposalIntakeConfirmContractEdits(_form),
+        form: _keepUnreviewed(proposalIntakeConfirmContractEdits(_form)),
       );
       final saved = confirmed.id <= 0
           ? await widget.service.create(
@@ -3337,6 +3352,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       if (!mounted) return;
       setState(() {
         _row = saved;
+        _serverForm = proposalIntakeCloneForm(saved.form);
         _dirty = false;
       });
       widget.onSaved(saved);

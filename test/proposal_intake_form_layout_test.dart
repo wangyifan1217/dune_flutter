@@ -2231,6 +2231,124 @@ void main() {
     );
   });
 
+  testWidgets('view-all can edit others unreviewed fields during reviewing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        session: AuthSession.fromJson(const {
+          'userId': 11,
+          'displayName': '王奕凡',
+          'proposalIntakeViewAll': true,
+        }),
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'reviewing',
+          'version': 3,
+          'createdBy': 99,
+          'form': {
+            'proposalName': '已复核市场名称',
+            'financeOwner2': '李思',
+            'financeOwner2UserId': 12,
+            'rollback': '不回滚',
+          },
+          'review': {
+            'stage': 'reviewing',
+            'marketCompleted': true,
+            'financeCompleted': false,
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+
+    await _scrollUntil(tester, '产品提案名称');
+    expect(
+      find.descendant(
+        of: _fieldOf('产品提案名称').first,
+        matching: find.byType(TextFormField),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: _fieldOf('产品提案名称').first,
+        matching: find.byType(SelectableText),
+      ),
+      findsWidgets,
+    );
+
+    await _scrollUntil(tester, '是否回滚');
+    expect(
+      tester
+          .widget<ProposalSelectField<String>>(
+            find
+                .descendant(
+                  of: _fieldOf('是否回滚').first,
+                  matching: find.byWidgetPredicate(
+                    (widget) => widget is ProposalSelectField<String>,
+                  ),
+                )
+                .first,
+          )
+          .onSelected,
+      isNotNull,
+    );
+  });
+
+  testWidgets('view-all cannot edit after pending president', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        session: AuthSession.fromJson(const {
+          'userId': 11,
+          'displayName': '王奕凡',
+          'proposalIntakeViewAll': true,
+        }),
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'pending_president',
+          'version': 3,
+          'createdBy': 99,
+          'form': {
+            'proposalName': '待确认名称',
+            'rollback': '不回滚',
+          },
+          'review': {
+            'stage': 'pending_president',
+            'marketCompleted': true,
+            'financeCompleted': true,
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+
+    await _scrollUntil(tester, '产品提案名称');
+    expect(
+      find.descendant(
+        of: _fieldOf('产品提案名称').first,
+        matching: find.byType(TextFormField),
+      ),
+      findsNothing,
+    );
+  });
+
   testWidgets('reviewer can check multiple rows for batch reject', (
     tester,
   ) async {

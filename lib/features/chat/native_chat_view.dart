@@ -420,6 +420,9 @@ class _NativeChatViewState extends State<NativeChatView>
   bool _emojiOpen = false;
   bool _toolsOpen = false;
 
+  /// 移动端发送后保持键盘；用户点消息区空白后置 false，避免发送回调再抢回焦点。
+  bool _composerKeepFocus = false;
+
   /// PC：输入框可拖拽高度（托起消息列表）。
   /// 下限需容纳一行字高 + 上下 padding + 发送按钮行，否则会裁切首行。
   double _pcInputHeight = 108;
@@ -3352,8 +3355,9 @@ class _NativeChatViewState extends State<NativeChatView>
     final payloadOrNull = payload.isEmpty ? null : payload;
     setState(() => _sending = true);
     // 键盘「发送」会先 unfocus；连发场景下立刻抢回焦点，避免先折叠再展开。
-    final keepKeyboard = !isWideChatLayout(context);
-    if (keepKeyboard) _inputFocusNode.requestFocus();
+    // 用户点消息区空白后 _composerKeepFocus 会被清掉，后续不再抢回。
+    _composerKeepFocus = !isWideChatLayout(context);
+    _requestComposerFocusIfKept();
     try {
       var conv = _conversation;
       if (conv == null || conv.id <= 0) {
@@ -3363,7 +3367,7 @@ class _NativeChatViewState extends State<NativeChatView>
         }
         conv = ready;
         // 首次建会话的 await 后补一次焦点，防止键盘被系统收起。
-        if (keepKeyboard && mounted) _inputFocusNode.requestFocus();
+        _requestComposerFocusIfKept();
       }
       final locating = _locatedMode || (_effectiveFocusMessageId > 0);
       final sent = await _service.sendText(
@@ -3388,16 +3392,16 @@ class _NativeChatViewState extends State<NativeChatView>
       if (mounted) {
         setState(_clearPendingNewMessages);
         _scrollToPreferredAnchor(force: true);
-        if (keepKeyboard) _inputFocusNode.requestFocus();
+        _requestComposerFocusIfKept();
       }
     } catch (e) {
       _showToast('发送失败：${friendlyErrorText(e)}');
     } finally {
       if (mounted) {
         setState(() => _sending = false);
-        if (keepKeyboard) {
+        if (_composerKeepFocus) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _inputFocusNode.requestFocus();
+            _requestComposerFocusIfKept();
           });
         }
       }
@@ -5302,6 +5306,21 @@ class _NativeChatViewState extends State<NativeChatView>
     setState(() => _emojiOpen = false);
   }
 
+  void _dismissChatKeyboard() {
+    _composerKeepFocus = false;
+    if (_inputFocusNode.hasFocus) {
+      _inputFocusNode.unfocus();
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    _closeEmojiPicker();
+    if (_toolsOpen) setState(() => _toolsOpen = false);
+  }
+
+  void _requestComposerFocusIfKept() {
+    if (!mounted || !_composerKeepFocus) return;
+    _inputFocusNode.requestFocus();
+  }
+
   Widget _buildMultiSelectHeader() {
     final selectedCount = _multiSelectedMessageIds.length;
     return Container(
@@ -5448,144 +5467,155 @@ class _NativeChatViewState extends State<NativeChatView>
 
   Widget _buildComposerDock({required bool locked, required String inputHint}) {
     final wide = isWideChatLayout(context);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (_uploadLabel != null) _buildPendingUploadBubble(),
-        // PC：工具栏常显在输入区上方；APP：点「+」后在下方展开宫格。
-        if (wide)
-          ChatQuickActions(
-            onCamera: locked || _mediaBusy
-                ? () {}
-                : () => _sendImageFrom(ImageSource.camera, '拍照'),
-            onCameraLongPress: locked || _mediaBusy
-                ? null
-                : _recordAndSendVideo,
-            onAlbum: locked || _mediaBusy ? () {} : _sendMultiImagesFromGallery,
-            onScreenshot: !isDesktopCommOnly || locked || _mediaBusy
-                ? null
-                : _desktopScreenshotAndSend,
-            onFile: locked || _mediaBusy ? () {} : _sendFile,
-            onApproval: locked || _mediaBusy
-                ? () {}
-                : () => unawaited(_forwardApprovalToChat()),
-            onAt: locked ? null : _pickAtMember,
-            onEmoji: locked ? null : _toggleEmojiPicker,
-            onVideo: locked || _mediaBusy ? () {} : _pickAndSendVideo,
-            showAt: !_isPrivate,
-            showVideo: true,
-          ),
-        if (_quoteDraft != null && !_quoteDraft!.isEmpty && !locked)
-          ChatQuotePreviewBar(quote: _quoteDraft!, onCancel: _clearQuoteDraft),
-        if (_desktopComposerAttachments.isNotEmpty)
-          _buildDesktopAttachmentTray(),
-        ValueListenableBuilder<bool>(
-          valueListenable: MeetingLiveController.instance.active,
-          builder: (context, meetingLive, _) {
-            // 录音能力仅移动端可用；Chrome/桌面仍显示语音按钮，点击时提示。
-            final voiceSupported =
-                !kIsWeb &&
-                defaultTargetPlatform != TargetPlatform.windows &&
-                defaultTargetPlatform != TargetPlatform.macOS;
-            final voiceBlocked = !voiceSupported || locked || meetingLive;
-            final effectiveVoiceMode = voiceBlocked ? false : _voiceMode;
-            // PC 不展示语音入口；APP 始终展示（不支持时点按提示）。
-            final showVoice = wide ? voiceSupported : true;
-            return ChatInputBar(
-              controller: _inputController,
-              focusNode: _inputFocusNode,
-              onInputFocused: () {
-                if (!wide && _toolsOpen) setState(() => _toolsOpen = false);
-                _scrollToLatestAfterKeyboard();
-              },
-              inputHeight: wide ? _pcInputHeight : null,
-              onInputHeightDrag: wide
-                  ? (deltaDy) {
-                      setState(() {
-                        _pcInputHeight = (_pcInputHeight - deltaDy).clamp(
-                          _pcInputHeightMin,
-                          _pcInputHeightMax,
-                        );
-                      });
-                    }
-                  : null,
-              voiceMode: effectiveVoiceMode,
-              voiceEnabled: showVoice,
-              sending: _sending,
-              enabled: !locked,
-              hintText: inputHint,
-              onAttemptPasteImage: locked ? null : _attemptPasteImage,
-              onToggleVoice: () {
-                if (!wide && _toolsOpen) setState(() => _toolsOpen = false);
-                if (meetingLive) {
-                  _showToast('会议录音进行中，暂无法发送语音');
-                  return;
-                }
-                if (!voiceSupported) {
-                  _showToast('当前环境不支持录音');
-                  return;
-                }
-                if (locked) return;
-                setState(() {
-                  _voiceMode = !_voiceMode;
-                  _emojiOpen = false;
-                });
-              },
-              onSend: () {
-                _send();
-              },
-              onPlus: wide || locked || _mediaBusy
+    return TextFieldTapRegion(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_uploadLabel != null) _buildPendingUploadBubble(),
+          // PC：工具栏常显在输入区上方；APP：点「+」后在下方展开宫格。
+          if (wide)
+            ChatQuickActions(
+              onCamera: locked || _mediaBusy
+                  ? () {}
+                  : () => _sendImageFrom(ImageSource.camera, '拍照'),
+              onCameraLongPress: locked || _mediaBusy
                   ? null
-                  : () => setState(() {
-                      _toolsOpen = !_toolsOpen;
-                      if (_toolsOpen) {
-                        _emojiOpen = false;
-                        FocusScope.of(context).unfocus();
+                  : _recordAndSendVideo,
+              onAlbum: locked || _mediaBusy
+                  ? () {}
+                  : _sendMultiImagesFromGallery,
+              onScreenshot: !isDesktopCommOnly || locked || _mediaBusy
+                  ? null
+                  : _desktopScreenshotAndSend,
+              onFile: locked || _mediaBusy ? () {} : _sendFile,
+              onApproval: locked || _mediaBusy
+                  ? () {}
+                  : () => unawaited(_forwardApprovalToChat()),
+              onAt: locked ? null : _pickAtMember,
+              onEmoji: locked ? null : _toggleEmojiPicker,
+              onVideo: locked || _mediaBusy ? () {} : _pickAndSendVideo,
+              showAt: !_isPrivate,
+              showVideo: true,
+            ),
+          if (_quoteDraft != null && !_quoteDraft!.isEmpty && !locked)
+            ChatQuotePreviewBar(
+              quote: _quoteDraft!,
+              onCancel: _clearQuoteDraft,
+            ),
+          if (_desktopComposerAttachments.isNotEmpty)
+            _buildDesktopAttachmentTray(),
+          ValueListenableBuilder<bool>(
+            valueListenable: MeetingLiveController.instance.active,
+            builder: (context, meetingLive, _) {
+              // 录音能力仅移动端可用；Chrome/桌面仍显示语音按钮，点击时提示。
+              final voiceSupported =
+                  !kIsWeb &&
+                  defaultTargetPlatform != TargetPlatform.windows &&
+                  defaultTargetPlatform != TargetPlatform.macOS;
+              final voiceBlocked = !voiceSupported || locked || meetingLive;
+              final effectiveVoiceMode = voiceBlocked ? false : _voiceMode;
+              // PC 不展示语音入口；APP 始终展示（不支持时点按提示）。
+              final showVoice = wide ? voiceSupported : true;
+              return ChatInputBar(
+                controller: _inputController,
+                focusNode: _inputFocusNode,
+                onInputFocused: () {
+                  if (!wide && _toolsOpen) setState(() => _toolsOpen = false);
+                  _scrollToLatestAfterKeyboard();
+                },
+                onTapOutside: _dismissChatKeyboard,
+                shouldKeepFocusAfterSend: () => _composerKeepFocus,
+                inputHeight: wide ? _pcInputHeight : null,
+                onInputHeightDrag: wide
+                    ? (deltaDy) {
+                        setState(() {
+                          _pcInputHeight = (_pcInputHeight - deltaDy).clamp(
+                            _pcInputHeightMin,
+                            _pcInputHeightMax,
+                          );
+                        });
                       }
-                    }),
-              plusOpen: _toolsOpen,
-              onEmoji: locked
-                  ? null
-                  : () {
-                      if (!wide) setState(() => _toolsOpen = false);
-                      _toggleEmojiPicker();
-                    },
-              recording: _recording,
-              recordWillCancel: _recordWillCancel,
-              recordWillTranscribe: _recordWillTranscribe,
-              recordDurationMs: _recordDurationMs,
-              onVoiceHoldStart: voiceBlocked
-                  ? null
-                  : (details) => _startHoldRecord(details.globalPosition),
-              onVoiceHoldMove: _onRecordMove,
-              onVoiceHoldEnd: (_) => _finishHoldRecord(),
-              onVoiceHoldCancel: () =>
-                  _cancelHoldRecordInternal(showHint: false),
-            );
-          },
-        ),
-        // APP：微信式工具宫格在输入栏下方展开。
-        if (!wide && _toolsOpen && !locked)
-          ChatQuickActions(
-            onCamera: locked || _mediaBusy
-                ? () {}
-                : () => _sendImageFrom(ImageSource.camera, '拍照'),
-            onCameraLongPress: locked || _mediaBusy
-                ? null
-                : _recordAndSendVideo,
-            onAlbum: locked || _mediaBusy ? () {} : _sendMultiImagesFromGallery,
-            onFile: locked || _mediaBusy ? () {} : _sendFile,
-            onApproval: locked || _mediaBusy
-                ? () {}
-                : () => unawaited(_forwardApprovalToChat()),
-            onAt: locked ? null : _pickAtMember,
-            onVideo: null,
-            showAt: !_isPrivate,
-            showVideo: false,
+                    : null,
+                voiceMode: effectiveVoiceMode,
+                voiceEnabled: showVoice,
+                sending: _sending,
+                enabled: !locked,
+                hintText: inputHint,
+                onAttemptPasteImage: locked ? null : _attemptPasteImage,
+                onToggleVoice: () {
+                  if (!wide && _toolsOpen) setState(() => _toolsOpen = false);
+                  if (meetingLive) {
+                    _showToast('会议录音进行中，暂无法发送语音');
+                    return;
+                  }
+                  if (!voiceSupported) {
+                    _showToast('当前环境不支持录音');
+                    return;
+                  }
+                  if (locked) return;
+                  setState(() {
+                    _voiceMode = !_voiceMode;
+                    _emojiOpen = false;
+                  });
+                },
+                onSend: () {
+                  _send();
+                },
+                onPlus: wide || locked || _mediaBusy
+                    ? null
+                    : () => setState(() {
+                        _toolsOpen = !_toolsOpen;
+                        if (_toolsOpen) {
+                          _emojiOpen = false;
+                          FocusScope.of(context).unfocus();
+                        }
+                      }),
+                plusOpen: _toolsOpen,
+                onEmoji: locked
+                    ? null
+                    : () {
+                        if (!wide) setState(() => _toolsOpen = false);
+                        _toggleEmojiPicker();
+                      },
+                recording: _recording,
+                recordWillCancel: _recordWillCancel,
+                recordWillTranscribe: _recordWillTranscribe,
+                recordDurationMs: _recordDurationMs,
+                onVoiceHoldStart: voiceBlocked
+                    ? null
+                    : (details) => _startHoldRecord(details.globalPosition),
+                onVoiceHoldMove: _onRecordMove,
+                onVoiceHoldEnd: (_) => _finishHoldRecord(),
+                onVoiceHoldCancel: () =>
+                    _cancelHoldRecordInternal(showHint: false),
+              );
+            },
           ),
-        if (_emojiOpen && !locked)
-          ChatEmojiGifPanel(controller: _inputController),
-      ],
+          // APP：微信式工具宫格在输入栏下方展开。
+          if (!wide && _toolsOpen && !locked)
+            ChatQuickActions(
+              onCamera: locked || _mediaBusy
+                  ? () {}
+                  : () => _sendImageFrom(ImageSource.camera, '拍照'),
+              onCameraLongPress: locked || _mediaBusy
+                  ? null
+                  : _recordAndSendVideo,
+              onAlbum: locked || _mediaBusy
+                  ? () {}
+                  : _sendMultiImagesFromGallery,
+              onFile: locked || _mediaBusy ? () {} : _sendFile,
+              onApproval: locked || _mediaBusy
+                  ? () {}
+                  : () => unawaited(_forwardApprovalToChat()),
+              onAt: locked ? null : _pickAtMember,
+              onVideo: null,
+              showAt: !_isPrivate,
+              showVideo: false,
+            ),
+          if (_emojiOpen && !locked)
+            ChatEmojiGifPanel(controller: _inputController),
+        ],
+      ),
     );
   }
 
@@ -7767,11 +7797,7 @@ class _NativeChatViewState extends State<NativeChatView>
             onLongPressStart: _messageMultiSelectMode
                 ? null
                 : (details) => unawaited(
-                    _onMessageActions(
-                      m,
-                      mine,
-                      anchor: details.globalPosition,
-                    ),
+                    _onMessageActions(m, mine, anchor: details.globalPosition),
                   ),
           ),
         ),
@@ -8776,713 +8802,780 @@ class _NativeChatViewState extends State<NativeChatView>
           child: Stack(
             fit: StackFit.expand,
             children: [
-              GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTap: () {
-                  FocusScope.of(context).unfocus();
-                  _closeEmojiPicker();
-                  // 点会话区域：收起工具栏。
-                  if (_toolsOpen) setState(() => _toolsOpen = false);
-                },
-                child: Column(
-                  children: [
-                    if (selecting)
-                      _buildMultiSelectHeader()
-                    else
-                      ChatConvHeader(
-                        title: title,
-                        subtitle: subtitle,
-                        onBack: widget.onBack,
-                        showBackButton: widget.showBackButton,
-                        onTapTitle: _isPrivate
-                            ? widget.onOpenProfile
-                            : widget.onOpenGroupInfo,
-                        showOnlineDot:
-                            _isPrivate &&
-                            !(_conversation?.isSelfMemo ??
-                                widget.conversationHint?.isSelfMemo ??
-                                false) &&
-                            _peerOnline,
-                        leadingAvatar: conv.isSelfMemo
-                            ? Container(
-                                width: 45,
-                                height: 45,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF7B5CD8),
-                                  borderRadius: BorderRadius.circular(
-                                    45 * 0.18,
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.folder_copy_outlined,
-                                  color: Colors.white,
-                                  size: 24,
-                                ),
-                              )
-                            : _isPrivate
-                            ? ImUserAvatar(
-                                initial: title.isNotEmpty
-                                    ? title.substring(0, 1)
-                                    : '?',
-                                seed: conv.peerUserId ?? conv.id,
-                                showOnline: false,
-                                avatarPreset: conv.peerAvatarPreset,
-                                avatarObjectKey: conv.peerAvatarObjectKey,
-                                avatarService: _service,
-                                size: 45,
-                                borderRadius: 45 * 0.18,
-                              )
-                            : null,
-                        actions: [
-                          // 智能总结：私聊 / 群聊头部均保留
-                          if (widget.onOpenAiSummary != null)
-                            IconButton(
-                              tooltip: '智能分析',
-                              onPressed: () => widget.onOpenAiSummary!(conv.id),
-                              icon: const Icon(
-                                Icons.auto_awesome_rounded,
-                                size: 20,
-                                color: Color(0xFF7B5CD8),
-                              ),
-                            ),
-                          // 私聊：三点进资料（历史/免打扰/置顶在资料页）
-                          if (_isPrivate && widget.onOpenProfile != null)
-                            IconButton(
-                              tooltip: '更多',
-                              onPressed: widget.onOpenProfile,
-                              icon: const Icon(Icons.more_vert, size: 20),
-                            ),
-                          // 群聊：三点进群信息（历史/媒体在群资料页内，不占头部）
-                          if (!_isPrivate && widget.onOpenGroupInfo != null)
-                            IconButton(
-                              tooltip: '群信息',
-                              onPressed: widget.onOpenGroupInfo,
-                              icon: const Icon(Icons.more_vert, size: 20),
-                            ),
-                        ],
-                      ),
-                    if (!selecting && _pinnedMessages.isNotEmpty)
-                      TapRegion(
-                        groupId: 'chat-pinned-bar',
-                        onTapOutside: (_) {
-                          if (!_pinnedExpanded) return;
-                          setState(() => _pinnedExpanded = false);
-                        },
-                        child: ChatPinnedMessagesBar(
-                          items: _pinnedMessages,
-                          expanded: _pinnedExpanded,
-                          onToggleExpand: () {
-                            setState(() => _pinnedExpanded = !_pinnedExpanded);
-                          },
-                          onTapItem: (pin) {
-                            if (_pinnedExpanded) {
-                              setState(() => _pinnedExpanded = false);
-                            }
-                            unawaited(_jumpToPinnedMessage(pin));
-                          },
-                          onUnpinItem: (pin) {
-                            unawaited(_unpinMessage(pin.messageId));
-                          },
-                        ),
-                      ),
-                    Expanded(
-                      child: Stack(
+              Column(
+                children: [
+                  Expanded(
+                    child: Listener(
+                      behavior: HitTestBehavior.translucent,
+                      onPointerDown: (_) => _dismissChatKeyboard(),
+                      child: Column(
                         children: [
-                          if (!_bootstrapped && _loading)
-                            const Center(
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          else if (_error != null && !_bootstrapped)
-                            Center(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                ),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      _error!,
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        color: DunesColors.text3,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    OutlinedButton(
-                                      onPressed: _load,
-                                      child: const Text('重试'),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
+                          if (selecting)
+                            _buildMultiSelectHeader()
                           else
-                            NotificationListener<ScrollNotification>(
-                              onNotification: _onMessageListScroll,
-                              child: LayoutBuilder(
-                                builder: (context, constraints) {
-                                  final wide = isWideChatLayout(context);
-                                  // PC 桌面禁用 shrinkWrap：否则短会话 maxScrollExtent≈0，
-                                  // 鼠标滚轮无法驱动 ScrollPosition，「上滑加载」失效。
-                                  final useShrinkWrap =
-                                      wide && !isDesktopCommOnly;
-                                  final list = Listener(
-                                    onPointerSignal:
-                                        _onMessageListPointerSignal,
-                                    child: ListView.builder(
-                                      controller: _scrollController,
-                                      reverse: true,
-                                      // 宽屏 Web 短会话贴顶；桌面端铺满视口以保证滚轮加载历史。
-                                      shrinkWrap: useShrinkWrap,
-                                      physics: _chatListScrollPhysics(
-                                        scrollMetrics,
+                            ChatConvHeader(
+                              title: title,
+                              subtitle: subtitle,
+                              onBack: widget.onBack,
+                              showBackButton: widget.showBackButton,
+                              onTapTitle: _isPrivate
+                                  ? widget.onOpenProfile
+                                  : widget.onOpenGroupInfo,
+                              showOnlineDot:
+                                  _isPrivate &&
+                                  !(_conversation?.isSelfMemo ??
+                                      widget.conversationHint?.isSelfMemo ??
+                                      false) &&
+                                  _peerOnline,
+                              leadingAvatar: conv.isSelfMemo
+                                  ? Container(
+                                      width: 45,
+                                      height: 45,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF7B5CD8),
+                                        borderRadius: BorderRadius.circular(
+                                          45 * 0.18,
+                                        ),
                                       ),
-                                      cacheExtent: listCacheExtent,
-                                      addAutomaticKeepAlives: false,
-                                      addRepaintBoundaries: true,
-                                      findChildIndexCallback:
-                                          _findMessageListChildIndex,
-                                      keyboardDismissBehavior:
-                                          ScrollViewKeyboardDismissBehavior
-                                              .onDrag,
-                                      padding: const EdgeInsets.fromLTRB(
-                                        12,
-                                        12,
-                                        12,
-                                        10,
+                                      child: const Icon(
+                                        Icons.folder_copy_outlined,
+                                        color: Colors.white,
+                                        size: 24,
                                       ),
-                                      itemCount:
-                                          listEntries.length +
-                                          _listFooterCount +
-                                          _listHeaderCount,
-                                      itemBuilder: (_, index) {
-                                        final hasNewerFooter =
-                                            _locatedMode && _hasNewer;
-                                        if (hasNewerFooter && index == 0) {
-                                          return Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 10,
-                                            ),
-                                            child: Center(
-                                              child: _loadingNewer
-                                                  ? const SizedBox(
-                                                      width: 18,
-                                                      height: 18,
-                                                      child:
-                                                          CircularProgressIndicator(
-                                                            strokeWidth: 2,
-                                                          ),
-                                                    )
-                                                  : TextButton(
-                                                      onPressed: _loadNewer,
-                                                      child: const Text(
-                                                        '加载更新消息',
-                                                      ),
-                                                    ),
-                                            ),
-                                          );
-                                        }
-                                        final headerIndex =
-                                            listEntries.length +
-                                            _listFooterCount;
-                                        if (_listHeaderCount > 0 &&
-                                            index >= headerIndex) {
-                                          // 历史顶入口进入可视区时再兜底拉一次。
-                                          WidgetsBinding.instance
-                                              .addPostFrameCallback((_) {
-                                                if (!mounted ||
-                                                    !_scrollController
-                                                        .hasClients) {
-                                                  return;
-                                                }
-                                                if (_shouldAutoloadOlder(
-                                                  _scrollController.position,
-                                                )) {
-                                                  unawaited(_loadOlder());
-                                                }
-                                              });
-                                          return Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 10,
-                                            ),
-                                            child: Center(
-                                              child: _loadingOlder
-                                                  ? const SizedBox(
-                                                      width: 18,
-                                                      height: 18,
-                                                      child:
-                                                          CircularProgressIndicator(
-                                                            strokeWidth: 2,
-                                                          ),
-                                                    )
-                                                  : TextButton(
-                                                      onPressed: _loadOlder,
-                                                      child: const Text(
-                                                        '加载更早消息',
-                                                      ),
-                                                    ),
-                                            ),
-                                          );
-                                        }
-                                        final entry = _entryForListIndex(
-                                          index,
-                                          listEntries,
-                                        );
-                                        if (entry == null) {
-                                          return const SizedBox.shrink();
-                                        }
-                                        if (entry.dividerLabel != null) {
-                                          return ChatDateDivider(
-                                            key: ValueKey<String>(
-                                              'day-${entry.dividerLabel}',
-                                            ),
-                                            label: entry.dividerLabel!,
-                                          );
-                                        }
-                                        final m = entry.message!;
-                                        final mine =
-                                            m.senderUserId ==
-                                            widget.session.userId;
-                                        final highlighted =
-                                            _highlightMessageId == m.id;
-                                        final timeLabel =
-                                            InboxFormat.msgTimeLabel(
-                                              m.createdAt,
-                                            );
-                                        final rowAvatar =
-                                            _tappableAvatarForMessage(
-                                              m,
-                                              mine: mine,
-                                            );
-                                        Widget row;
-                                        if (_isSystemKind(m.kind)) {
-                                          row = _buildMessageWidget(m, mine);
-                                        } else {
-                                          final peerRead = mine && _isPrivate
-                                              ? _messagePeerRead(m)
-                                              : false;
-                                          final desktop = isDesktopCommOnly;
-                                          final textMessage =
-                                              m.kind.toUpperCase() == 'TEXT';
-                                          final imageMessage =
-                                              m.kind.toUpperCase() == 'IMAGE';
-                                          final isForwardMessage =
-                                              _forwardBundleFromPayload(
-                                                m.payload,
-                                              ) !=
-                                              null;
-                                          final isRobotMarkdown =
-                                              _isRobotMarkdownPayload(
-                                                m.payload,
-                                              );
-                                          // 纯文字气泡由 ChatTextBubble.onActionsMenu
-                                          // 走与文件相同的深色宫格，并保留选区信息；
-                                          // 行级手势不再接管，避免 PC 右键抢先导致选区丢失。
-                                          // 图片单击/长按放在气泡上，避免行级长按吞掉安卓单击。
-                                          final useTextBubbleMenu =
-                                              textMessage &&
-                                              !isForwardMessage &&
-                                              !isRobotMarkdown;
-                                          final canShowActions =
-                                              !_messageMultiSelectMode &&
-                                              !_isSystemKind(m.kind);
-                                          final enableLongPress =
-                                              canShowActions &&
-                                              !useTextBubbleMenu &&
-                                              !imageMessage;
-                                          final enableSecondaryTap =
-                                              canShowActions &&
-                                              desktop &&
-                                              !useTextBubbleMenu;
-                                          void openActions(Offset anchor) {
-                                            unawaited(
-                                              _onMessageActions(
-                                                m,
-                                                mine,
-                                                anchor: anchor,
-                                              ),
-                                            );
-                                          }
-
-                                          row = ChatMessageRow(
-                                            message: m,
-                                            mine: mine,
-                                            showSenderMeta:
-                                                entry.showSenderMeta,
-                                            showTimeForMine: mine,
-                                            timeLabel: timeLabel,
-                                            readLabel:
-                                                mine &&
-                                                    _isPrivate &&
-                                                    _conversation?.isSelfMemo !=
-                                                        true
-                                                ? (peerRead ? '已读' : '未读')
-                                                : null,
-                                            onLongPress: null,
-                                            onLongPressStart: enableLongPress
-                                                ? (details) => openActions(
-                                                    details.globalPosition,
-                                                  )
-                                                : null,
-                                            onSecondaryTapDown:
-                                                enableSecondaryTap
-                                                ? (details) => openActions(
-                                                    details.globalPosition,
-                                                  )
-                                                : null,
-                                            onReadTap: mine && !_isPrivate
-                                                ? () => _showReadReceipts(m)
-                                                : null,
-                                            readTapLabel:
-                                                _groupReadLabelForMessage(
-                                                  m,
-                                                  mine: mine,
-                                                ),
-                                            avatar: !mine ? rowAvatar : null,
-                                            trailingAvatar: mine
-                                                ? rowAvatar
-                                                : null,
-                                            content: _buildMessageWidget(
-                                              m,
-                                              mine,
-                                            ),
-                                          );
-                                        }
-                                        var rowWidget = highlighted
-                                            ? AnimatedContainer(
-                                                key: _messageRowKey(m.id),
-                                                duration: const Duration(
-                                                  milliseconds: 200,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: DunesColors.accentSoft
-                                                      .withValues(alpha: 0.45),
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                ),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      vertical: 2,
-                                                    ),
-                                                child: row,
-                                              )
-                                            : KeyedSubtree(
-                                                key: _messageRowKey(m.id),
-                                                child: row,
-                                              );
-                                        if (_messageMultiSelectMode &&
-                                            _canSelectMessageForMulti(m)) {
-                                          final selected =
-                                              _multiSelectedMessageIds.contains(
-                                                m.id,
-                                              );
-                                          rowWidget = Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                  left: 2,
-                                                  right: 6,
-                                                  top: 8,
-                                                ),
-                                                child: GestureDetector(
-                                                  behavior:
-                                                      HitTestBehavior.opaque,
-                                                  onTap: () =>
-                                                      _toggleMessageMultiSelected(
-                                                        m.id,
-                                                      ),
-                                                  child: Icon(
-                                                    selected
-                                                        ? Icons.check_circle
-                                                        : Icons
-                                                              .radio_button_unchecked,
-                                                    size: 22,
-                                                    color: selected
-                                                        ? DunesColors.accent
-                                                        : DunesColors.text3,
-                                                  ),
-                                                ),
-                                              ),
-                                              Expanded(
-                                                child: GestureDetector(
-                                                  behavior:
-                                                      HitTestBehavior.opaque,
-                                                  onTap: () =>
-                                                      _toggleMessageMultiSelected(
-                                                        m.id,
-                                                      ),
-                                                  child: rowWidget,
-                                                ),
-                                              ),
-                                            ],
-                                          );
-                                        }
-                                        return rowWidget;
-                                      },
+                                    )
+                                  : _isPrivate
+                                  ? ImUserAvatar(
+                                      initial: title.isNotEmpty
+                                          ? title.substring(0, 1)
+                                          : '?',
+                                      seed: conv.peerUserId ?? conv.id,
+                                      showOnline: false,
+                                      avatarPreset: conv.peerAvatarPreset,
+                                      avatarObjectKey: conv.peerAvatarObjectKey,
+                                      avatarService: _service,
+                                      size: 45,
+                                      borderRadius: 45 * 0.18,
+                                    )
+                                  : null,
+                              actions: [
+                                // 智能总结：私聊 / 群聊头部均保留
+                                if (widget.onOpenAiSummary != null)
+                                  IconButton(
+                                    tooltip: '智能分析',
+                                    onPressed: () =>
+                                        widget.onOpenAiSummary!(conv.id),
+                                    icon: const Icon(
+                                      Icons.auto_awesome_rounded,
+                                      size: 20,
+                                      color: Color(0xFF7B5CD8),
                                     ),
+                                  ),
+                                // 私聊：三点进资料（历史/免打扰/置顶在资料页）
+                                if (_isPrivate && widget.onOpenProfile != null)
+                                  IconButton(
+                                    tooltip: '更多',
+                                    onPressed: widget.onOpenProfile,
+                                    icon: const Icon(Icons.more_vert, size: 20),
+                                  ),
+                                // 群聊：三点进群信息（历史/媒体在群资料页内，不占头部）
+                                if (!_isPrivate &&
+                                    widget.onOpenGroupInfo != null)
+                                  IconButton(
+                                    tooltip: '群信息',
+                                    onPressed: widget.onOpenGroupInfo,
+                                    icon: const Icon(Icons.more_vert, size: 20),
+                                  ),
+                              ],
+                            ),
+                          if (!selecting && _pinnedMessages.isNotEmpty)
+                            TapRegion(
+                              groupId: 'chat-pinned-bar',
+                              onTapOutside: (_) {
+                                if (!_pinnedExpanded) return;
+                                setState(() => _pinnedExpanded = false);
+                              },
+                              child: ChatPinnedMessagesBar(
+                                items: _pinnedMessages,
+                                expanded: _pinnedExpanded,
+                                onToggleExpand: () {
+                                  setState(
+                                    () => _pinnedExpanded = !_pinnedExpanded,
                                   );
-                                  // 桌面端列表已铺满视口，无需 shrinkWrap+Align。
-                                  if (!wide || isDesktopCommOnly) return list;
-                                  return Align(
-                                    alignment: Alignment.topCenter,
-                                    child: ConstrainedBox(
-                                      constraints: BoxConstraints(
-                                        maxHeight: constraints.maxHeight,
-                                      ),
-                                      child: list,
-                                    ),
-                                  );
+                                },
+                                onTapItem: (pin) {
+                                  if (_pinnedExpanded) {
+                                    setState(() => _pinnedExpanded = false);
+                                  }
+                                  unawaited(_jumpToPinnedMessage(pin));
+                                },
+                                onUnpinItem: (pin) {
+                                  unawaited(_unpinMessage(pin.messageId));
                                 },
                               ),
                             ),
-                          if (_loadingOlder)
-                            const Positioned(
-                              top: 8,
-                              left: 0,
-                              right: 0,
-                              child: Center(
-                                child: Material(
-                                  color: Colors.transparent,
-                                  child: SizedBox(
-                                    width: 18,
-                                    height: 18,
+                          Expanded(
+                            child: Stack(
+                              children: [
+                                if (!_bootstrapped && _loading)
+                                  const Center(
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
                                     ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          if (_locating)
-                            Positioned(
-                              top: 8,
-                              left: 0,
-                              right: 0,
-                              child: Center(
-                                child: Material(
-                                  elevation: 1,
-                                  borderRadius: BorderRadius.circular(16),
-                                  color: DunesColors.bgApp,
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
+                                  )
+                                else if (_error != null && !_bootstrapped)
+                                  Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 24,
+                                      ),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            _error!,
+                                            textAlign: TextAlign.center,
+                                            style: const TextStyle(
+                                              color: DunesColors.text3,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          OutlinedButton(
+                                            onPressed: _load,
+                                            child: const Text('重试'),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const SizedBox(
-                                          width: 12,
-                                          height: 12,
+                                  )
+                                else
+                                  NotificationListener<ScrollNotification>(
+                                    onNotification: _onMessageListScroll,
+                                    child: LayoutBuilder(
+                                      builder: (context, constraints) {
+                                        final wide = isWideChatLayout(context);
+                                        // PC 桌面禁用 shrinkWrap：否则短会话 maxScrollExtent≈0，
+                                        // 鼠标滚轮无法驱动 ScrollPosition，「上滑加载」失效。
+                                        final useShrinkWrap =
+                                            wide && !isDesktopCommOnly;
+                                        final list = Listener(
+                                          onPointerSignal:
+                                              _onMessageListPointerSignal,
+                                          child: ListView.builder(
+                                            controller: _scrollController,
+                                            reverse: true,
+                                            // 宽屏 Web 短会话贴顶；桌面端铺满视口以保证滚轮加载历史。
+                                            shrinkWrap: useShrinkWrap,
+                                            physics: _chatListScrollPhysics(
+                                              scrollMetrics,
+                                            ),
+                                            cacheExtent: listCacheExtent,
+                                            addAutomaticKeepAlives: false,
+                                            addRepaintBoundaries: true,
+                                            findChildIndexCallback:
+                                                _findMessageListChildIndex,
+                                            keyboardDismissBehavior:
+                                                ScrollViewKeyboardDismissBehavior
+                                                    .onDrag,
+                                            padding: const EdgeInsets.fromLTRB(
+                                              12,
+                                              12,
+                                              12,
+                                              10,
+                                            ),
+                                            itemCount:
+                                                listEntries.length +
+                                                _listFooterCount +
+                                                _listHeaderCount,
+                                            itemBuilder: (_, index) {
+                                              final hasNewerFooter =
+                                                  _locatedMode && _hasNewer;
+                                              if (hasNewerFooter &&
+                                                  index == 0) {
+                                                return Padding(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        vertical: 10,
+                                                      ),
+                                                  child: Center(
+                                                    child: _loadingNewer
+                                                        ? const SizedBox(
+                                                            width: 18,
+                                                            height: 18,
+                                                            child:
+                                                                CircularProgressIndicator(
+                                                                  strokeWidth:
+                                                                      2,
+                                                                ),
+                                                          )
+                                                        : TextButton(
+                                                            onPressed:
+                                                                _loadNewer,
+                                                            child: const Text(
+                                                              '加载更新消息',
+                                                            ),
+                                                          ),
+                                                  ),
+                                                );
+                                              }
+                                              final headerIndex =
+                                                  listEntries.length +
+                                                  _listFooterCount;
+                                              if (_listHeaderCount > 0 &&
+                                                  index >= headerIndex) {
+                                                // 历史顶入口进入可视区时再兜底拉一次。
+                                                WidgetsBinding.instance
+                                                    .addPostFrameCallback((_) {
+                                                      if (!mounted ||
+                                                          !_scrollController
+                                                              .hasClients) {
+                                                        return;
+                                                      }
+                                                      if (_shouldAutoloadOlder(
+                                                        _scrollController
+                                                            .position,
+                                                      )) {
+                                                        unawaited(_loadOlder());
+                                                      }
+                                                    });
+                                                return Padding(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        vertical: 10,
+                                                      ),
+                                                  child: Center(
+                                                    child: _loadingOlder
+                                                        ? const SizedBox(
+                                                            width: 18,
+                                                            height: 18,
+                                                            child:
+                                                                CircularProgressIndicator(
+                                                                  strokeWidth:
+                                                                      2,
+                                                                ),
+                                                          )
+                                                        : TextButton(
+                                                            onPressed:
+                                                                _loadOlder,
+                                                            child: const Text(
+                                                              '加载更早消息',
+                                                            ),
+                                                          ),
+                                                  ),
+                                                );
+                                              }
+                                              final entry = _entryForListIndex(
+                                                index,
+                                                listEntries,
+                                              );
+                                              if (entry == null) {
+                                                return const SizedBox.shrink();
+                                              }
+                                              if (entry.dividerLabel != null) {
+                                                return ChatDateDivider(
+                                                  key: ValueKey<String>(
+                                                    'day-${entry.dividerLabel}',
+                                                  ),
+                                                  label: entry.dividerLabel!,
+                                                );
+                                              }
+                                              final m = entry.message!;
+                                              final mine =
+                                                  m.senderUserId ==
+                                                  widget.session.userId;
+                                              final highlighted =
+                                                  _highlightMessageId == m.id;
+                                              final timeLabel =
+                                                  InboxFormat.msgTimeLabel(
+                                                    m.createdAt,
+                                                  );
+                                              final rowAvatar =
+                                                  _tappableAvatarForMessage(
+                                                    m,
+                                                    mine: mine,
+                                                  );
+                                              Widget row;
+                                              if (_isSystemKind(m.kind)) {
+                                                row = _buildMessageWidget(
+                                                  m,
+                                                  mine,
+                                                );
+                                              } else {
+                                                final peerRead =
+                                                    mine && _isPrivate
+                                                    ? _messagePeerRead(m)
+                                                    : false;
+                                                final desktop =
+                                                    isDesktopCommOnly;
+                                                final textMessage =
+                                                    m.kind.toUpperCase() ==
+                                                    'TEXT';
+                                                final imageMessage =
+                                                    m.kind.toUpperCase() ==
+                                                    'IMAGE';
+                                                final isForwardMessage =
+                                                    _forwardBundleFromPayload(
+                                                      m.payload,
+                                                    ) !=
+                                                    null;
+                                                final isRobotMarkdown =
+                                                    _isRobotMarkdownPayload(
+                                                      m.payload,
+                                                    );
+                                                // 纯文字气泡由 ChatTextBubble.onActionsMenu
+                                                // 走与文件相同的深色宫格，并保留选区信息；
+                                                // 行级手势不再接管，避免 PC 右键抢先导致选区丢失。
+                                                // 图片单击/长按放在气泡上，避免行级长按吞掉安卓单击。
+                                                final useTextBubbleMenu =
+                                                    textMessage &&
+                                                    !isForwardMessage &&
+                                                    !isRobotMarkdown;
+                                                final canShowActions =
+                                                    !_messageMultiSelectMode &&
+                                                    !_isSystemKind(m.kind);
+                                                final enableLongPress =
+                                                    canShowActions &&
+                                                    !useTextBubbleMenu &&
+                                                    !imageMessage;
+                                                final enableSecondaryTap =
+                                                    canShowActions &&
+                                                    desktop &&
+                                                    !useTextBubbleMenu;
+                                                void openActions(
+                                                  Offset anchor,
+                                                ) {
+                                                  unawaited(
+                                                    _onMessageActions(
+                                                      m,
+                                                      mine,
+                                                      anchor: anchor,
+                                                    ),
+                                                  );
+                                                }
+
+                                                row = ChatMessageRow(
+                                                  message: m,
+                                                  mine: mine,
+                                                  showSenderMeta:
+                                                      entry.showSenderMeta,
+                                                  showTimeForMine: mine,
+                                                  timeLabel: timeLabel,
+                                                  readLabel:
+                                                      mine &&
+                                                          _isPrivate &&
+                                                          _conversation
+                                                                  ?.isSelfMemo !=
+                                                              true
+                                                      ? (peerRead ? '已读' : '未读')
+                                                      : null,
+                                                  onLongPress: null,
+                                                  onLongPressStart:
+                                                      enableLongPress
+                                                      ? (
+                                                          details,
+                                                        ) => openActions(
+                                                          details
+                                                              .globalPosition,
+                                                        )
+                                                      : null,
+                                                  onSecondaryTapDown:
+                                                      enableSecondaryTap
+                                                      ? (
+                                                          details,
+                                                        ) => openActions(
+                                                          details
+                                                              .globalPosition,
+                                                        )
+                                                      : null,
+                                                  onReadTap: mine && !_isPrivate
+                                                      ? () =>
+                                                            _showReadReceipts(m)
+                                                      : null,
+                                                  readTapLabel:
+                                                      _groupReadLabelForMessage(
+                                                        m,
+                                                        mine: mine,
+                                                      ),
+                                                  avatar: !mine
+                                                      ? rowAvatar
+                                                      : null,
+                                                  trailingAvatar: mine
+                                                      ? rowAvatar
+                                                      : null,
+                                                  content: _buildMessageWidget(
+                                                    m,
+                                                    mine,
+                                                  ),
+                                                );
+                                              }
+                                              var rowWidget = highlighted
+                                                  ? AnimatedContainer(
+                                                      key: _messageRowKey(m.id),
+                                                      duration: const Duration(
+                                                        milliseconds: 200,
+                                                      ),
+                                                      decoration: BoxDecoration(
+                                                        color: DunesColors
+                                                            .accentSoft
+                                                            .withValues(
+                                                              alpha: 0.45,
+                                                            ),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              8,
+                                                            ),
+                                                      ),
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            vertical: 2,
+                                                          ),
+                                                      child: row,
+                                                    )
+                                                  : KeyedSubtree(
+                                                      key: _messageRowKey(m.id),
+                                                      child: row,
+                                                    );
+                                              if (_messageMultiSelectMode &&
+                                                  _canSelectMessageForMulti(
+                                                    m,
+                                                  )) {
+                                                final selected =
+                                                    _multiSelectedMessageIds
+                                                        .contains(m.id);
+                                                rowWidget = Row(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                            left: 2,
+                                                            right: 6,
+                                                            top: 8,
+                                                          ),
+                                                      child: GestureDetector(
+                                                        behavior:
+                                                            HitTestBehavior
+                                                                .opaque,
+                                                        onTap: () =>
+                                                            _toggleMessageMultiSelected(
+                                                              m.id,
+                                                            ),
+                                                        child: Icon(
+                                                          selected
+                                                              ? Icons
+                                                                    .check_circle
+                                                              : Icons
+                                                                    .radio_button_unchecked,
+                                                          size: 22,
+                                                          color: selected
+                                                              ? DunesColors
+                                                                    .accent
+                                                              : DunesColors
+                                                                    .text3,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Expanded(
+                                                      child: GestureDetector(
+                                                        behavior:
+                                                            HitTestBehavior
+                                                                .opaque,
+                                                        onTap: () =>
+                                                            _toggleMessageMultiSelected(
+                                                              m.id,
+                                                            ),
+                                                        child: rowWidget,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                );
+                                              }
+                                              return rowWidget;
+                                            },
+                                          ),
+                                        );
+                                        // 桌面端列表已铺满视口，无需 shrinkWrap+Align。
+                                        if (!wide || isDesktopCommOnly)
+                                          return list;
+                                        return Align(
+                                          alignment: Alignment.topCenter,
+                                          child: ConstrainedBox(
+                                            constraints: BoxConstraints(
+                                              maxHeight: constraints.maxHeight,
+                                            ),
+                                            child: list,
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                if (_loadingOlder)
+                                  const Positioned(
+                                    top: 8,
+                                    left: 0,
+                                    right: 0,
+                                    child: Center(
+                                      child: Material(
+                                        color: Colors.transparent,
+                                        child: SizedBox(
+                                          width: 18,
+                                          height: 18,
                                           child: CircularProgressIndicator(
-                                            strokeWidth: 1.5,
+                                            strokeWidth: 2,
                                           ),
                                         ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          '定位中…',
-                                          style: DunesTypography.sans(
-                                            fontSize: 11,
-                                            color: DunesColors.text3,
-                                          ),
-                                        ),
-                                      ],
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ),
-                            ),
-                          if (_showUnreadJumpBadge)
-                            Positioned(
-                              right: 12,
-                              top: 12,
-                              child: Material(
-                                color: Colors.transparent,
-                                elevation: 0,
-                                borderRadius: BorderRadius.circular(
-                                  isDesktopCommOnly ? 999 : 14,
-                                ),
-                                child: InkWell(
-                                  onTap: () => unawaited(_jumpToFirstUnread()),
-                                  borderRadius: BorderRadius.circular(
-                                    isDesktopCommOnly ? 999 : 14,
+                                if (_locating)
+                                  Positioned(
+                                    top: 8,
+                                    left: 0,
+                                    right: 0,
+                                    child: Center(
+                                      child: Material(
+                                        elevation: 1,
+                                        borderRadius: BorderRadius.circular(16),
+                                        color: DunesColors.bgApp,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 6,
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const SizedBox(
+                                                width: 12,
+                                                height: 12,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 1.5,
+                                                    ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                '定位中…',
+                                                style: DunesTypography.sans(
+                                                  fontSize: 11,
+                                                  color: DunesColors.text3,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                  child: Ink(
-                                    decoration: BoxDecoration(
+                                if (_showUnreadJumpBadge)
+                                  Positioned(
+                                    right: 12,
+                                    top: 12,
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      elevation: 0,
                                       borderRadius: BorderRadius.circular(
                                         isDesktopCommOnly ? 999 : 14,
                                       ),
-                                      color: isDesktopCommOnly
-                                          ? const Color(0xFF07C160)
-                                          : Colors.white,
-                                      border: isDesktopCommOnly
-                                          ? null
-                                          : Border.all(
-                                              color: DunesColors.accent
-                                                  .withValues(alpha: 0.32),
+                                      child: InkWell(
+                                        onTap: () =>
+                                            unawaited(_jumpToFirstUnread()),
+                                        borderRadius: BorderRadius.circular(
+                                          isDesktopCommOnly ? 999 : 14,
+                                        ),
+                                        child: Ink(
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(
+                                              isDesktopCommOnly ? 999 : 14,
                                             ),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 11,
-                                      vertical: 7,
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        if (!isDesktopCommOnly) ...[
-                                          const Icon(
-                                            Icons.mark_chat_unread_outlined,
-                                            size: 15,
-                                            color: DunesColors.accentDeep,
-                                          ),
-                                          const SizedBox(width: 5),
-                                        ],
-                                        Text(
-                                          '${_sessionUnreadCount > 99 ? '99+' : _sessionUnreadCount} 条未读',
-                                          style: DunesTypography.sans(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
                                             color: isDesktopCommOnly
-                                                ? Colors.white
-                                                : DunesColors.accentDeep,
+                                                ? const Color(0xFF07C160)
+                                                : Colors.white,
+                                            border: isDesktopCommOnly
+                                                ? null
+                                                : Border.all(
+                                                    color: DunesColors.accent
+                                                        .withValues(
+                                                          alpha: 0.32,
+                                                        ),
+                                                  ),
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 11,
+                                            vertical: 7,
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              if (!isDesktopCommOnly) ...[
+                                                const Icon(
+                                                  Icons
+                                                      .mark_chat_unread_outlined,
+                                                  size: 15,
+                                                  color: DunesColors.accentDeep,
+                                                ),
+                                                const SizedBox(width: 5),
+                                              ],
+                                              Text(
+                                                '${_sessionUnreadCount > 99 ? '99+' : _sessionUnreadCount} 条未读',
+                                                style: DunesTypography.sans(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: isDesktopCommOnly
+                                                      ? Colors.white
+                                                      : DunesColors.accentDeep,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 2),
+                                              Icon(
+                                                Icons.keyboard_arrow_up_rounded,
+                                                size: 16,
+                                                color: isDesktopCommOnly
+                                                    ? Colors.white
+                                                    : DunesColors.accentDeep,
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                        const SizedBox(width: 2),
-                                        Icon(
-                                          Icons.keyboard_arrow_up_rounded,
-                                          size: 16,
-                                          color: isDesktopCommOnly
-                                              ? Colors.white
-                                              : DunesColors.accentDeep,
-                                        ),
-                                      ],
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ),
-                            ),
-                          if ((_awayFromLatest ||
-                                  _pendingNewMessageCount > 0) &&
-                              !_locatedMode)
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              bottom: 12,
-                              child: Center(
-                                child: Material(
-                                  color: Colors.transparent,
-                                  elevation: 0,
-                                  borderRadius: BorderRadius.circular(999),
-                                  child: InkWell(
-                                    onTap: _jumpToPendingMessages,
-                                    borderRadius: BorderRadius.circular(999),
-                                    child: Ink(
-                                      decoration: BoxDecoration(
+                                if ((_awayFromLatest ||
+                                        _pendingNewMessageCount > 0) &&
+                                    !_locatedMode)
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 12,
+                                    child: Center(
+                                      child: Material(
+                                        color: Colors.transparent,
+                                        elevation: 0,
                                         borderRadius: BorderRadius.circular(
                                           999,
                                         ),
-                                        color: _pendingNewMessageCount > 0
-                                            ? const Color(0xFF7E64BD)
-                                            : Colors.white,
-                                        border: _pendingNewMessageCount > 0
-                                            ? null
-                                            : Border.all(
-                                                color: DunesColors.borderSoft,
-                                              ),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 8,
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.keyboard_arrow_down_rounded,
-                                            size: 16,
-                                            color: _pendingNewMessageCount > 0
-                                                ? Colors.white
-                                                : DunesColors.accentDeep,
+                                        child: InkWell(
+                                          onTap: _jumpToPendingMessages,
+                                          borderRadius: BorderRadius.circular(
+                                            999,
                                           ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            _pendingNewMessageCount > 0
-                                                ? '${_pendingNewMessageCount > 99 ? '99+' : _pendingNewMessageCount} 条新消息'
-                                                : '回到最新',
-                                            style: DunesTypography.sans(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
+                                          child: Ink(
+                                            decoration: BoxDecoration(
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
                                               color: _pendingNewMessageCount > 0
-                                                  ? Colors.white
-                                                  : DunesColors.accentDeep,
+                                                  ? const Color(0xFF7E64BD)
+                                                  : Colors.white,
+                                              border:
+                                                  _pendingNewMessageCount > 0
+                                                  ? null
+                                                  : Border.all(
+                                                      color: DunesColors
+                                                          .borderSoft,
+                                                    ),
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 14,
+                                              vertical: 8,
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons
+                                                      .keyboard_arrow_down_rounded,
+                                                  size: 16,
+                                                  color:
+                                                      _pendingNewMessageCount >
+                                                          0
+                                                      ? Colors.white
+                                                      : DunesColors.accentDeep,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  _pendingNewMessageCount > 0
+                                                      ? '${_pendingNewMessageCount > 99 ? '99+' : _pendingNewMessageCount} 条新消息'
+                                                      : '回到最新',
+                                                  style: DunesTypography.sans(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w600,
+                                                    color:
+                                                        _pendingNewMessageCount >
+                                                            0
+                                                        ? Colors.white
+                                                        : DunesColors
+                                                              .accentDeep,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
-                                        ],
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ),
-                            ),
-                          if (_locatedMode)
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              bottom: 8,
-                              child: Center(
-                                child: Material(
-                                  elevation: 0,
-                                  borderRadius: BorderRadius.circular(20),
-                                  color: Colors.white,
-                                  child: InkWell(
-                                    onTap: _jumpToLatest,
-                                    borderRadius: BorderRadius.circular(20),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 8,
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(
-                                            Icons.arrow_downward,
-                                            size: 14,
-                                            color: DunesColors.accentDeep,
+                                if (_locatedMode)
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 8,
+                                    child: Center(
+                                      child: Material(
+                                        elevation: 0,
+                                        borderRadius: BorderRadius.circular(20),
+                                        color: Colors.white,
+                                        child: InkWell(
+                                          onTap: _jumpToLatest,
+                                          borderRadius: BorderRadius.circular(
+                                            20,
                                           ),
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            '回到最新消息',
-                                            style: DunesTypography.sans(
-                                              fontSize: 12,
-                                              color: DunesColors.accentDeep,
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 14,
+                                              vertical: 8,
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.arrow_downward,
+                                                  size: 14,
+                                                  color: DunesColors.accentDeep,
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  '回到最新消息',
+                                                  style: DunesTypography.sans(
+                                                    fontSize: 12,
+                                                    color:
+                                                        DunesColors.accentDeep,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
-                                        ],
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              ),
+                              ],
                             ),
+                          ),
                         ],
                       ),
                     ),
-                    if (selecting)
-                      _buildMultiSelectBottomBar()
-                    else
-                      SafeArea(
-                        top: false,
-                        child: _buildComposerDock(
-                          locked: locked,
-                          inputHint: inputHint,
-                        ),
+                  ),
+                  if (selecting)
+                    _buildMultiSelectBottomBar()
+                  else
+                    SafeArea(
+                      top: false,
+                      child: _buildComposerDock(
+                        locked: locked,
+                        inputHint: inputHint,
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
               if (_recording)
                 VoiceRecordingOverlay(

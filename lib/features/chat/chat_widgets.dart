@@ -359,6 +359,8 @@ class ChatInputBar extends StatelessWidget {
     this.hintText,
     this.focusNode,
     this.onInputFocused,
+    this.onTapOutside,
+    this.shouldKeepFocusAfterSend,
     this.showMobilePlusButton = true,
     this.backgroundColor,
     this.onAttemptPasteImage,
@@ -393,6 +395,12 @@ class ChatInputBar extends StatelessWidget {
   final String? hintText;
   final FocusNode? focusNode;
   final VoidCallback? onInputFocused;
+
+  /// 点输入框以外区域时回调（消息列表等）。移动端系统默认不会收起键盘。
+  final VoidCallback? onTapOutside;
+
+  /// 键盘「发送」会在 onSubmitted 后 unfocus；返回 false 时不要再抢回焦点。
+  final bool Function()? shouldKeepFocusAfterSend;
 
   /// 个别纯文本会话（如机器人追问）不需要移动端「+」工具入口。
   final bool showMobilePlusButton;
@@ -429,174 +437,188 @@ class ChatInputBar extends StatelessWidget {
             !effectiveVoiceMode &&
             !wide &&
             (showStop || hasText || showMobilePlusButton);
-        return Container(
-          padding: EdgeInsets.fromLTRB(
-            wide ? 12 : 10,
-            canResize ? 0 : (wide ? 10 : 8),
-            wide ? 12 : 10,
-            bottomInset > 0
-                ? bottomInset + (wide ? 6 : 4)
-                : (wide ? 12.0 : 8.0),
-          ),
-          decoration: BoxDecoration(
-            color:
-                backgroundColor ??
-                (wide ? DunesColors.bgApp : const Color(0xFFF7F7F7)),
-            border: Border(
-              top: BorderSide(
-                color: wide ? DunesColors.borderSoft : const Color(0xFFE8E8E8),
+        return TextFieldTapRegion(
+          child: Container(
+            padding: EdgeInsets.fromLTRB(
+              wide ? 12 : 10,
+              canResize ? 0 : (wide ? 10 : 8),
+              wide ? 12 : 10,
+              bottomInset > 0
+                  ? bottomInset + (wide ? 6 : 4)
+                  : (wide ? 12.0 : 8.0),
+            ),
+            decoration: BoxDecoration(
+              color:
+                  backgroundColor ??
+                  (wide ? DunesColors.bgApp : const Color(0xFFF7F7F7)),
+              border: Border(
+                top: BorderSide(
+                  color: wide
+                      ? DunesColors.borderSoft
+                      : const Color(0xFFE8E8E8),
+                ),
               ),
             ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (canResize) _ComposerResizeHandle(onDrag: onInputHeightDrag!),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  if (voiceEnabled) ...[
-                    if (wide)
-                      _RoundIconBtn(
-                        icon: effectiveVoiceMode
-                            ? Icons.keyboard_outlined
-                            : Icons.mic_none_rounded,
-                        onTap: interactionLocked ? null : onToggleVoice,
-                      )
-                    else
-                      _WeChatCircleIconBtn(
-                        icon: effectiveVoiceMode
-                            ? Icons.keyboard_alt_outlined
-                            : Icons.mic_none_rounded,
-                        onTap: interactionLocked ? null : onToggleVoice,
-                      ),
-                    const SizedBox(width: 8),
-                  ],
-                  Expanded(
-                    child: effectiveVoiceMode
-                        ? GestureDetector(
-                            onLongPressStart: interactionLocked
-                                ? null
-                                : onVoiceHoldStart,
-                            onLongPressMoveUpdate: interactionLocked
-                                ? null
-                                : onVoiceHoldMove,
-                            onLongPressEnd: interactionLocked
-                                ? null
-                                : onVoiceHoldEnd,
-                            onLongPressCancel: interactionLocked
-                                ? null
-                                : onVoiceHoldCancel,
-                            child: Container(
-                              height: 40,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: recording
-                                    ? (recordWillCancel
-                                          ? DunesColors.coral
-                                          : (recordWillTranscribe
-                                                ? const Color(0xFF3C8B86)
-                                                : const Color(0xFF8B72B7)))
-                                    : Colors.white,
-                                borderRadius: BorderRadius.circular(
-                                  wide ? 7 : 8,
-                                ),
-                                border: recording || !wide
-                                    ? null
-                                    : Border.all(color: DunesColors.borderSoft),
-                              ),
-                              child: Text(
-                                recording
-                                    ? (recordWillCancel
-                                          ? '松开取消'
-                                          : recordWillTranscribe
-                                          ? '松开转文字 ${(recordDurationMs / 1000).toStringAsFixed(1)}s'
-                                          : '松开发送 ${(recordDurationMs / 1000).toStringAsFixed(1)}s')
-                                    : '按住 说话',
-                                style: DunesTypography.sans(
-                                  fontSize: wide ? 13.5 : 15,
-                                  fontWeight: FontWeight.w500,
-                                  color: recording
-                                      ? Colors.white
-                                      : DunesColors.text2,
-                                ),
-                              ),
-                            ),
-                          )
-                        : wide
-                        ? _PcComposerBox(
-                            height: inputHeight ?? 108,
-                            controller: controller,
-                            focusNode: focusNode,
-                            enabled: enabled && !showStop,
-                            // 框内另有发送行占高，垂直 padding 略收，避免拖矮后首行被裁切。
-                            fieldPadV: 10,
-                            hintText: hintText,
-                            onInputFocused: onInputFocused,
-                            onSend: interactionLocked ? null : onSend,
-                            onAttemptPasteImage: interactionLocked
-                                ? null
-                                : onAttemptPasteImage,
-                            showStop: showStop,
-                            sending: sending,
-                            interactionLocked: interactionLocked,
-                            onStop: onStop,
-                          )
-                        : _ChatTextField(
-                            controller: controller,
-                            focusNode: focusNode,
-                            enabled: enabled && !showStop,
-                            minLines: minLines,
-                            maxLines: maxLines,
-                            fixedHeight: inputHeight,
-                            wide: wide,
-                            fieldPadV: fieldPadV,
-                            hintText: hintText,
-                            onInputFocused: onInputFocused,
-                            onSend: interactionLocked ? null : onSend,
-                            onAttemptPasteImage: interactionLocked
-                                ? null
-                                : onAttemptPasteImage,
-                          ),
-                  ),
-                  if (showMobileTrailing) ...[
-                    if (showEmojiControl) ...[
-                      const SizedBox(width: 6),
-                      if (emojiPicker != null)
-                        emojiPicker!
-                      else if (onEmoji != null)
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (canResize)
+                  _ComposerResizeHandle(onDrag: onInputHeightDrag!),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (voiceEnabled) ...[
+                      if (wide)
+                        _RoundIconBtn(
+                          icon: effectiveVoiceMode
+                              ? Icons.keyboard_outlined
+                              : Icons.mic_none_rounded,
+                          onTap: interactionLocked ? null : onToggleVoice,
+                        )
+                      else
                         _WeChatCircleIconBtn(
-                          icon: secondaryIcon ?? Icons.emoji_emotions_outlined,
-                          onTap: interactionLocked ? null : onEmoji,
+                          icon: effectiveVoiceMode
+                              ? Icons.keyboard_alt_outlined
+                              : Icons.mic_none_rounded,
+                          onTap: interactionLocked ? null : onToggleVoice,
+                        ),
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: effectiveVoiceMode
+                          ? GestureDetector(
+                              onLongPressStart: interactionLocked
+                                  ? null
+                                  : onVoiceHoldStart,
+                              onLongPressMoveUpdate: interactionLocked
+                                  ? null
+                                  : onVoiceHoldMove,
+                              onLongPressEnd: interactionLocked
+                                  ? null
+                                  : onVoiceHoldEnd,
+                              onLongPressCancel: interactionLocked
+                                  ? null
+                                  : onVoiceHoldCancel,
+                              child: Container(
+                                height: 40,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: recording
+                                      ? (recordWillCancel
+                                            ? DunesColors.coral
+                                            : (recordWillTranscribe
+                                                  ? const Color(0xFF3C8B86)
+                                                  : const Color(0xFF8B72B7)))
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.circular(
+                                    wide ? 7 : 8,
+                                  ),
+                                  border: recording || !wide
+                                      ? null
+                                      : Border.all(
+                                          color: DunesColors.borderSoft,
+                                        ),
+                                ),
+                                child: Text(
+                                  recording
+                                      ? (recordWillCancel
+                                            ? '松开取消'
+                                            : recordWillTranscribe
+                                            ? '松开转文字 ${(recordDurationMs / 1000).toStringAsFixed(1)}s'
+                                            : '松开发送 ${(recordDurationMs / 1000).toStringAsFixed(1)}s')
+                                      : '按住 说话',
+                                  style: DunesTypography.sans(
+                                    fontSize: wide ? 13.5 : 15,
+                                    fontWeight: FontWeight.w500,
+                                    color: recording
+                                        ? Colors.white
+                                        : DunesColors.text2,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : wide
+                          ? _PcComposerBox(
+                              height: inputHeight ?? 108,
+                              controller: controller,
+                              focusNode: focusNode,
+                              enabled: enabled && !showStop,
+                              // 框内另有发送行占高，垂直 padding 略收，避免拖矮后首行被裁切。
+                              fieldPadV: 10,
+                              hintText: hintText,
+                              onInputFocused: onInputFocused,
+                              onTapOutside: onTapOutside,
+                              shouldKeepFocusAfterSend:
+                                  shouldKeepFocusAfterSend,
+                              onSend: interactionLocked ? null : onSend,
+                              onAttemptPasteImage: interactionLocked
+                                  ? null
+                                  : onAttemptPasteImage,
+                              showStop: showStop,
+                              sending: sending,
+                              interactionLocked: interactionLocked,
+                              onStop: onStop,
+                            )
+                          : _ChatTextField(
+                              controller: controller,
+                              focusNode: focusNode,
+                              enabled: enabled && !showStop,
+                              minLines: minLines,
+                              maxLines: maxLines,
+                              fixedHeight: inputHeight,
+                              wide: wide,
+                              fieldPadV: fieldPadV,
+                              hintText: hintText,
+                              onInputFocused: onInputFocused,
+                              onTapOutside: onTapOutside,
+                              shouldKeepFocusAfterSend:
+                                  shouldKeepFocusAfterSend,
+                              onSend: interactionLocked ? null : onSend,
+                              onAttemptPasteImage: interactionLocked
+                                  ? null
+                                  : onAttemptPasteImage,
+                            ),
+                    ),
+                    if (showMobileTrailing) ...[
+                      if (showEmojiControl) ...[
+                        const SizedBox(width: 6),
+                        if (emojiPicker != null)
+                          emojiPicker!
+                        else if (onEmoji != null)
+                          _WeChatCircleIconBtn(
+                            icon:
+                                secondaryIcon ?? Icons.emoji_emotions_outlined,
+                            onTap: interactionLocked ? null : onEmoji,
+                          ),
+                      ],
+                      const SizedBox(width: 6),
+                      if (showStop)
+                        _WeChatPlusBtn(
+                          showStop: true,
+                          sending: sending,
+                          locked: false,
+                          plusOpen: false,
+                          onTap: onStop,
+                        )
+                      else if (hasText)
+                        _WeChatSendBtn(
+                          sending: sending,
+                          locked: interactionLocked,
+                          onTap: interactionLocked ? null : onSend,
+                        )
+                      else
+                        _WeChatPlusBtn(
+                          showStop: false,
+                          sending: sending,
+                          locked: interactionLocked,
+                          plusOpen: plusOpen,
+                          onTap: interactionLocked ? null : (onPlus ?? onSend),
                         ),
                     ],
-                    const SizedBox(width: 6),
-                    if (showStop)
-                      _WeChatPlusBtn(
-                        showStop: true,
-                        sending: sending,
-                        locked: false,
-                        plusOpen: false,
-                        onTap: onStop,
-                      )
-                    else if (hasText)
-                      _WeChatSendBtn(
-                        sending: sending,
-                        locked: interactionLocked,
-                        onTap: interactionLocked ? null : onSend,
-                      )
-                    else
-                      _WeChatPlusBtn(
-                        showStop: false,
-                        sending: sending,
-                        locked: interactionLocked,
-                        plusOpen: plusOpen,
-                        onTap: interactionLocked ? null : (onPlus ?? onSend),
-                      ),
                   ],
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -614,6 +636,8 @@ class _PcComposerBox extends StatelessWidget {
     required this.fieldPadV,
     required this.hintText,
     required this.onInputFocused,
+    this.onTapOutside,
+    this.shouldKeepFocusAfterSend,
     required this.onSend,
     required this.onAttemptPasteImage,
     required this.showStop,
@@ -629,6 +653,8 @@ class _PcComposerBox extends StatelessWidget {
   final double fieldPadV;
   final String? hintText;
   final VoidCallback? onInputFocused;
+  final VoidCallback? onTapOutside;
+  final bool Function()? shouldKeepFocusAfterSend;
   final VoidCallback? onSend;
   final Future<bool> Function()? onAttemptPasteImage;
   final bool showStop;
@@ -662,6 +688,8 @@ class _PcComposerBox extends StatelessWidget {
                 fieldPadV: fieldPadV,
                 hintText: hintText,
                 onInputFocused: onInputFocused,
+                onTapOutside: onTapOutside,
+                shouldKeepFocusAfterSend: shouldKeepFocusAfterSend,
                 onSend: onSend,
                 onAttemptPasteImage: onAttemptPasteImage,
               ),
@@ -924,6 +952,8 @@ class _ChatTextField extends StatefulWidget {
     required this.fieldPadV,
     required this.hintText,
     required this.onInputFocused,
+    this.onTapOutside,
+    this.shouldKeepFocusAfterSend,
     required this.onSend,
     required this.onAttemptPasteImage,
     this.fixedHeight,
@@ -943,6 +973,8 @@ class _ChatTextField extends StatefulWidget {
   final double fieldPadV;
   final String? hintText;
   final VoidCallback? onInputFocused;
+  final VoidCallback? onTapOutside;
+  final bool Function()? shouldKeepFocusAfterSend;
   final VoidCallback? onSend;
   final Future<bool> Function()? onAttemptPasteImage;
 
@@ -1132,10 +1164,16 @@ class _ChatTextFieldState extends State<_ChatTextField> {
               // 发送后立刻抢回焦点，保持键盘不收起（对齐微信连发）。
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (!context.mounted) return;
+                if (widget.shouldKeepFocusAfterSend?.call() == false) return;
                 widget.focusNode?.requestFocus();
               });
             },
       onTap: widget.onInputFocused,
+      onTapOutside: (_) {
+        widget.onTapOutside?.call();
+        // 移动端 TextField 默认点空白不收键盘；IM 需点消息区即可折叠。
+        widget.focusNode?.unfocus();
+      },
       contextMenuBuilder: (context, editableTextState) {
         final buttonItems = _pasteAwareButtonItems(editableTextState);
         if (widget.wide) {

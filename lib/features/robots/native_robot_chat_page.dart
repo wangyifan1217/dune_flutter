@@ -67,6 +67,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
   bool _waitingReply = false;
   bool _clearing = false;
   bool _awayFromLatest = false;
+
   /// 进会话贴底中：忽略短暂滚动偏移，避免 Markdown 撑高前误显「回到最新」。
   bool _enterStickBottomPending = false;
   int _scrollBottomGen = 0;
@@ -77,8 +78,10 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
   String? _selfAvatarPreset;
   String? _selfAvatarObjectKey;
   String? _selfAvatarUrl;
+
   /// 进页后短暂忽略 realtime 触发的 silent reload，避免 mark-read 推送造成二次拉消息。
   DateTime? _suppressRtReloadUntil;
+
   /// 下一轮静默刷新强制落库（忽略指纹短路），用于 ROBOT_REPLY 实时事件。
   bool _forceNextSilentReload = false;
 
@@ -164,8 +167,9 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     if (snap == null || !mounted) return;
     setState(() {
       _selfAvatarPreset = snap.avatarPreset.isEmpty ? null : snap.avatarPreset;
-      _selfAvatarObjectKey =
-          snap.avatarObjectKey.isEmpty ? null : snap.avatarObjectKey;
+      _selfAvatarObjectKey = snap.avatarObjectKey.isEmpty
+          ? null
+          : snap.avatarObjectKey;
       _selfAvatarUrl = snap.avatarUrl.isEmpty ? null : snap.avatarUrl;
     });
   }
@@ -257,8 +261,9 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
       _enterStickBottomPending = true;
     });
     // mark-read 不阻塞首屏：先拉消息；进页 800ms 内忽略 realtime 二次 reload。
-    _suppressRtReloadUntil =
-        DateTime.now().add(const Duration(milliseconds: 800));
+    _suppressRtReloadUntil = DateTime.now().add(
+      const Duration(milliseconds: 800),
+    );
     if (widget.autoMarkRead && _convId > 0) {
       unawaited(_markReadIfViewing());
     }
@@ -613,7 +618,8 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
         payload: <String, dynamic>{
           'robotMarkdown': true,
           'robotKey': _robotKey,
-          'robotName': (_role ?? RobotCatalogCache.instance.resolve(_robotKey)).name,
+          'robotName':
+              (_role ?? RobotCatalogCache.instance.resolve(_robotKey)).name,
           'forwardedFromRobot': true,
         },
       );
@@ -822,96 +828,110 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
         ? widget.conversationHint.title.trim()
         : role.name;
     final canChat = _canChat;
-    final subtitle = !canChat
-        ? '仅推送通知'
-        : (_waitingReply ? '正在分析…' : '文本追问');
+    final subtitle = !canChat ? '仅推送通知' : (_waitingReply ? '正在分析…' : '文本追问');
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
       backgroundColor: DunesColors.bgApp,
       body: SafeArea(
         bottom: false,
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: _dismissKeyboard,
-          child: Column(
-            children: [
-              ChatConvHeader(
-                title: title,
-                subtitle: subtitle,
-                onBack: widget.onBack ?? () => Navigator.maybePop(context),
-                showBackButton: widget.showBackButton,
-                leadingAvatar: RobotFaceAvatar(
-                  role: role,
-                  size: 45,
-                  animate: _waitingReply,
-                  busy: _waitingReply,
-                ),
-                actions: [
-                  IconButton(
-                    tooltip: '清空会话',
-                    onPressed: (_clearing || _loading)
-                        ? null
-                        : _confirmClearHistory,
-                    icon: _clearing
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.delete_outline_rounded, size: 20),
-                    color: DunesColors.text2,
-                  ),
-                  if (canChat && widget.onOpenConsultList != null)
-                    IconButton(
-                      tooltip: '咨询明细',
-                      onPressed: widget.onOpenConsultList,
-                      icon: const Icon(Icons.receipt_long_rounded, size: 20),
-                      color: DunesColors.text2,
+        child: Column(
+          children: [
+            Expanded(
+              child: Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: (_) => _dismissKeyboard(),
+                child: Column(
+                  children: [
+                    ChatConvHeader(
+                      title: title,
+                      subtitle: subtitle,
+                      onBack:
+                          widget.onBack ?? () => Navigator.maybePop(context),
+                      showBackButton: widget.showBackButton,
+                      leadingAvatar: RobotFaceAvatar(
+                        role: role,
+                        size: 45,
+                        animate: _waitingReply,
+                        busy: _waitingReply,
+                      ),
+                      actions: [
+                        IconButton(
+                          tooltip: '清空会话',
+                          onPressed: (_clearing || _loading)
+                              ? null
+                              : _confirmClearHistory,
+                          icon: _clearing
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 20,
+                                ),
+                          color: DunesColors.text2,
+                        ),
+                        if (canChat && widget.onOpenConsultList != null)
+                          IconButton(
+                            tooltip: '咨询明细',
+                            onPressed: widget.onOpenConsultList,
+                            icon: const Icon(
+                              Icons.receipt_long_rounded,
+                              size: 20,
+                            ),
+                            color: DunesColors.text2,
+                          ),
+                      ],
                     ),
-                ],
+                    Expanded(child: _buildBody(role, canChat: canChat)),
+                  ],
+                ),
               ),
-              Expanded(child: _buildBody(role, canChat: canChat)),
-              if (canChat)
-                ChatInputBar(
-                  controller: _input,
-                  focusNode: _focus,
-                  voiceMode: false,
-                  voiceEnabled: false,
-                  sending: _sending,
-                  enabled: !_loading,
-                  hintText: '继续追问…',
-                  onToggleVoice: () {},
-                  onSend: _send,
-                  onPlus: null,
-                  onEmoji: null,
-                  showMobilePlusButton: false,
-                  onInputFocused: () => unawaited(_scrollToLatestForInput()),
-                )
-              else
-                SafeArea(
-                  top: false,
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-                    decoration: const BoxDecoration(
-                      color: DunesColors.bgApp,
-                      border: Border(
-                        top: BorderSide(color: DunesColors.borderSoft),
-                      ),
+            ),
+            if (canChat)
+              ChatInputBar(
+                controller: _input,
+                focusNode: _focus,
+                voiceMode: false,
+                voiceEnabled: false,
+                sending: _sending,
+                enabled: !_loading,
+                hintText: '继续追问…',
+                onToggleVoice: () {},
+                onSend: _send,
+                onPlus: null,
+                onEmoji: null,
+                showMobilePlusButton: false,
+                onInputFocused: () => unawaited(_scrollToLatestForInput()),
+                onTapOutside: _dismissKeyboard,
+              )
+            else
+              SafeArea(
+                top: false,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+                  decoration: const BoxDecoration(
+                    color: DunesColors.bgApp,
+                    border: Border(
+                      top: BorderSide(color: DunesColors.borderSoft),
                     ),
-                    child: Text(
-                      '该机器人仅推送通知，不支持回复',
-                      textAlign: TextAlign.center,
-                      style: DunesTypography.sans(
-                        fontSize: 12,
-                        color: DunesColors.text3,
-                      ),
+                  ),
+                  child: Text(
+                    '该机器人仅推送通知，不支持回复',
+                    textAlign: TextAlign.center,
+                    style: DunesTypography.sans(
+                      fontSize: 12,
+                      color: DunesColors.text3,
                     ),
                   ),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );
@@ -946,9 +966,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     if (_messages.isEmpty && !_waitingReply) {
       return Center(
         child: Text(
-          canChat
-              ? '向「${role.name}」提问，回复会出现在这里'
-              : '暂无推送消息',
+          canChat ? '向「${role.name}」提问，回复会出现在这里' : '暂无推送消息',
           style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
         ),
       );

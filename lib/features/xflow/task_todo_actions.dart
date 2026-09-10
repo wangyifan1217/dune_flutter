@@ -46,6 +46,23 @@ bool _isLoanRequestItem(XflowProposalItem item) {
   return bt == 'LOAN_REQUEST' || key == 'loan-request';
 }
 
+bool taskTodoIsAdminProcurement(XflowProposalItem item) {
+  final key = (item.templateKey ?? '').trim().toLowerCase();
+  if (key == 'finance-admin-procurement') return true;
+  final text =
+      '${item.proposalType ?? ''} ${item.documentKind ?? ''} ${item.title}';
+  return text.contains('行政采购');
+}
+
+List<String> taskTodoCompleteKeys(XflowProposalItem item) {
+  return [
+    for (final key in item.requiredFields)
+      if (key != 'verifyResult' &&
+          !(key == 'paymentVoucher' && taskTodoIsAdminProcurement(item)))
+        key,
+  ];
+}
+
 class TaskTodoConfirmCopy {
   const TaskTodoConfirmCopy({
     required this.title,
@@ -95,13 +112,18 @@ TaskTodoConfirmCopy taskTodoConfirmCopy(
   }
   final action = (item.primaryAction ?? '').toUpperCase();
   final loan = _isLoanRequestItem(item);
+  final adminProc = taskTodoIsAdminProcurement(item);
   final body = switch (action) {
     'PAY' => loan
         ? '确认后进入「已付款」待办。完成已付款并填写实付金额后，才会进入资金借调。不重审。'
-        : '确认后进入「已付款」待办（填实付金额和凭证）。不重审。',
+        : adminProc
+            ? '确认后进入「已付款」待办（填实付金额）。不重审。'
+            : '确认后进入「已付款」待办（填实付金额和凭证）。不重审。',
     'MARK_PAID' => loan
         ? '提交实付金额和支付凭证后进入资金借调，借出金额以实付为准。不重审。'
-        : '提交实付金额和支付凭证后，按先票/先款进入核验或补票。不重审。',
+        : adminProc
+            ? '提交实付金额后，按先票/先款进入核验或补票。不重审。'
+            : '提交实付金额和支付凭证后，按先票/先款进入核验或补票。不重审。',
     'UPLOAD_INVOICE' => '请上传发票文件（可多张，电脑可拖拽）。提交后核验人会收到「核验发票」。不重审。',
     'ISSUE_INVOICE' => '请上传已开具的发票文件（可多张，电脑可拖拽）。提交后写入原单，不重新走审批。',
     'SEAL' => '确认盖章后，合同用印进入「填写快递单号」。不重审。',
@@ -133,7 +155,7 @@ Future<bool> confirmAndCompleteTaskTodo({
   if (action == 'VERIFY_INVOICE') {
     extra['verifyResult'] = (verifyPassed ?? false) ? '通过' : '失败';
   }
-  final keys = item.requiredFields.where((k) => k != 'verifyResult').toList();
+  final keys = taskTodoCompleteKeys(item);
   final copy = taskTodoConfirmCopy(item, verifyPassed: verifyPassed);
   final result = await showDialog<_TaskTodoCompleteResult>(
     context: context,

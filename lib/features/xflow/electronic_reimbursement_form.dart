@@ -9,11 +9,19 @@ const _overlayKeys = {
   'applicant',
   'applicantPosition',
   'applicantRank',
+  'applicantDepartment',
   'entertainmentApprovalNo',
   'advanceApplicationNo',
   'advanceNo',
   'advanceReason',
   'remainingAdvanceAmount',
+};
+
+const _attachmentTemplateMeta = <String, String>{
+  'templateUrl':
+      '/api/v1/xflow/templates/electronic-reimbursement/expense-template',
+  'templateName': '差旅报销费用模板202609.xlsx',
+  'templateLabel': '下载报销费用模板',
 };
 
 const _fieldOverlays = <String, Map<String, dynamic>>{
@@ -24,6 +32,13 @@ const _fieldOverlays = <String, Map<String, dynamic>>{
   },
   'applicantPosition': {'readonly': true, 'placeholder': '根据提交人自动带出'},
   'applicantRank': {'readonly': true, 'placeholder': '根据提交人自动带出'},
+  'applicantDepartment': {
+    'key': 'applicantDepartment',
+    'label': '部门',
+    'type': 'text',
+    'readonly': true,
+    'placeholder': '根据提交人自动带出',
+  },
   'entertainmentApprovalNo': {
     'type': 'proposal',
     'dataSource': kApprovedMineDataSource,
@@ -92,12 +107,33 @@ List<XflowField> applyElectronicReimbursementFieldRules(
   List<XflowField> fields,
 ) {
   if (templateKey != kElectronicReimbursementTemplateKey) return fields;
+  final hasDepartment = fields.any((field) => field.key == 'applicantDepartment');
   return [
     for (final field in fields)
-      _overlayKeys.contains(field.key)
-          ? XflowField.fromJson({...field.raw, ...?_fieldOverlays[field.key]})
-          : field,
+      if (field.key == 'applicantRank' && !hasDepartment)
+        XflowField.fromJson({
+          ...field.raw,
+          ...?_fieldOverlays['applicantDepartment'],
+        })
+      else if (field.key == 'supportingAttachments')
+        _withAttachmentTemplateMeta(field)
+      else if (_overlayKeys.contains(field.key))
+        XflowField.fromJson({...field.raw, ...?_fieldOverlays[field.key]})
+      else
+        field,
   ];
+}
+
+XflowField _withAttachmentTemplateMeta(XflowField field) {
+  final meta = <String, dynamic>{..._attachmentTemplateMeta};
+  final existing = field.raw['meta'];
+  if (existing is Map) {
+    existing.forEach((key, value) {
+      final text = '$value'.trim();
+      if (text.isNotEmpty) meta['$key'] = text;
+    });
+  }
+  return XflowField.fromJson({...field.raw, 'meta': meta});
 }
 
 bool isApprovedMineStatus(String status) =>
@@ -214,6 +250,12 @@ String orgRankText(Map<String, dynamic>? user) {
       .trim();
 }
 
+String orgDepartmentText(Map<String, dynamic>? user) {
+  if (user == null) return '';
+  return '${user['departmentName'] ?? user['department'] ?? user['deptName'] ?? user['dept'] ?? ''}'
+      .trim();
+}
+
 void applySubmitterDefaults({
   required List<XflowField> fields,
   required Map<String, dynamic> values,
@@ -233,6 +275,7 @@ void applySubmitterDefaults({
   }
   final position = orgPositionText(profile);
   final rank = orgRankText(profile);
+  final department = orgDepartmentText(profile);
   if (_hasKey(fields, 'applicantPosition') &&
       (_locked(fields, 'applicantPosition') ||
           !_isFilled(values['applicantPosition'])) &&
@@ -244,6 +287,12 @@ void applySubmitterDefaults({
           !_isFilled(values['applicantRank'])) &&
       rank.isNotEmpty) {
     values['applicantRank'] = rank;
+  }
+  if (_hasKey(fields, 'applicantDepartment') &&
+      (_locked(fields, 'applicantDepartment') ||
+          !_isFilled(values['applicantDepartment'])) &&
+      department.isNotEmpty) {
+    values['applicantDepartment'] = department;
   }
 }
 

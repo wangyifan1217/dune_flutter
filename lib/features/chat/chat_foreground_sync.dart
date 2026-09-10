@@ -1,3 +1,12 @@
+/// 最小化/进托盘/视口被夹扁时，恢复前台才需要补拉消息和修滚动。
+/// 仅切软件失焦不算：窗口还在，重载 reverse 列表会把会话往上拽。
+bool chatForegroundNeedsListRepair({
+  required bool windowObscured,
+  required bool viewportCollapsed,
+}) {
+  return windowObscured || viewportCollapsed;
+}
+
 /// 桌面端最小化/失焦/托盘与恢复前台时，通知当前聊天页。
 class ChatForegroundSync {
   ChatForegroundSync._();

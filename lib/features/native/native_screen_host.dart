@@ -233,6 +233,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   String _kbChatKind = 'KB_ALL';
   String? _kbChatDocId;
   DateTime? _workProfileMonth;
+  DateTime? _workSituationMonth;
+  String _workSituationFilter = 'all';
   int _selectedProposalId = 0;
   XflowTodoHint? _selectedTodoHint;
   String _b10BackScreen = 'P1';
@@ -3318,7 +3320,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenSessionSupervise: () => widget.navigation.go('QJSS'),
           onOpenKbSupervise: () => widget.navigation.go('QJKB'),
           onOpenEfficiencyAnalysis: () => widget.navigation.go('QJEA'),
-          onOpenEfficiencyBossPreview: () => widget.navigation.go('QJEAB'),
+          onOpenEfficiencyBossPreview: () {
+            setState(() {
+              _workSituationMonth = null;
+              _workSituationFilter = 'all';
+            });
+            widget.navigation.go('QJEAB');
+          },
           onOpenFundSecondment: widget.session.effectiveFundSecondmentAccess
               ? () => widget.navigation.go('QJFS')
               : null,
@@ -3513,6 +3521,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return NativeQianjiEfficiencyPage(
           session: widget.session,
           onBack: widget.navigation.back,
+          onOpenWorkSituation: ({required DateTime month, String? filter}) {
+            setState(() {
+              _workSituationMonth = month;
+              _workSituationFilter = filter ?? 'all';
+            });
+            widget.navigation.go('QJEAB');
+          },
         );
       case 'QJEAB':
         return NativeQianjiEfficiencyBossPreview(
@@ -3520,6 +3535,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onBack: widget.navigation.back,
           viewAll: widget.session.workSituationViewAll,
           viewerName: widget.session.displayName ?? '',
+          initialMonth: _workSituationMonth,
+          initialFilter: _workSituationFilter,
         );
       case 'QJTR':
         return NativeQianjiTravelPage(

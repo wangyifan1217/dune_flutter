@@ -27,4 +27,25 @@ void main() {
     expect(copy.body, contains('发票文件'));
     expect(copy.body, contains('拖拽'));
   });
+
+  test('admin procurement paid todo drops payment voucher', () {
+    final item = XflowProposalItem(
+      id: 385,
+      businessType: 'FINANCE_ADMIN_PROCUREMENT',
+      code: 'S-385',
+      title: '朱虹旭 - 行政采购申请单',
+      status: 'OPEN',
+      createdByName: '朱虹旭',
+      createdAt: DateTime(2026, 9, 10),
+      primaryAction: 'MARK_PAID',
+      actionTitle: '已付款',
+      templateKey: 'finance-admin-procurement',
+      proposalType: '行政采购申请单',
+      requiredFields: const ['actualPayAmount', 'paymentVoucher'],
+    );
+    expect(taskTodoIsAdminProcurement(item), isTrue);
+    expect(taskTodoCompleteKeys(item), ['actualPayAmount']);
+    expect(taskTodoConfirmCopy(item).body, contains('实付金额'));
+    expect(taskTodoConfirmCopy(item).body, isNot(contains('支付凭证')));
+  });
 }

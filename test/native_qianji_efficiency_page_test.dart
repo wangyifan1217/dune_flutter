@@ -54,7 +54,7 @@ class _FakeEfficiencyService extends EfficiencyService {
       quality: const [
         EfficiencyEvidence(
           kind: 'kb',
-          label: '上传后从未被打开或引用',
+          label: '上传后没人用（不含自己打开）',
           count: 2,
           severity: 'high',
           ref: 'kb:unused',
@@ -90,6 +90,7 @@ void main() {
     expect(find.text('部门汇总'), findsOneWidget);
     expect(find.text('任务完成率'), findsOneWidget);
     expect(find.text('80%'), findsOneWidget);
+    expect(find.textContaining('上传后没人用'), findsOneWidget);
     expect(find.text('质量抽样'), findsNothing);
 
     await tester.tap(find.byKey(const Key('efficiency-help')));
@@ -103,6 +104,56 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('部门效能分析'), findsOneWidget);
     expect(find.textContaining('看闭环和质量'), findsOneWidget);
+  });
+
+  test('maps evidence kinds to work situation filters', () {
+    expect(
+      workSituationFilterForEvidence(
+        const EfficiencyEvidence(
+          kind: 'kb',
+          label: '没人用',
+          count: 2,
+          severity: 'high',
+          ref: 'kb:unused',
+        ),
+      ),
+      'kb',
+    );
+    expect(
+      workSituationFilterForEvidence(
+        const EfficiencyEvidence(
+          kind: 'task',
+          label: '超期',
+          count: 1,
+          severity: 'high',
+          ref: 'tasks:overdue',
+        ),
+      ),
+      'task',
+    );
+  });
+
+  testWidgets('tapping a hard-fact chip opens work situation', (tester) async {
+    DateTime? openedMonth;
+    String? openedFilter;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeQianjiEfficiencyPage(
+          session: _session,
+          onBack: () {},
+          service: _FakeEfficiencyService(),
+          now: DateTime(2026, 9, 8),
+          onOpenWorkSituation: ({required DateTime month, String? filter}) {
+            openedMonth = month;
+            openedFilter = filter;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('上传后没人用'));
+    expect(openedFilter, 'kb');
+    expect(openedMonth, DateTime(2026, 8));
   });
 
   test('metric grid fills width without wrapping early', () {

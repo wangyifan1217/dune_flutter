@@ -491,14 +491,28 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       displayName: (widget.session.displayName ?? '').trim().isNotEmpty
           ? widget.session.displayName!.trim()
           : widget.session.phone,
-      profile:
-          profile ??
-          {
-            'positionName': widget.session.jobTitle,
-            'jobTitle': widget.session.jobTitle,
-          },
+      profile: _submitterProfile(profile),
     );
     XflowLinkage.recompute(template.fields, template.layout, _values);
+  }
+
+  Map<String, dynamic> _submitterProfile(Map<String, dynamic>? profile) {
+    final merged = <String, dynamic>{
+      'departmentName': widget.session.departmentName,
+      'department': widget.session.departmentName,
+      'positionName': widget.session.jobTitle,
+      'jobTitle': widget.session.jobTitle,
+      ...?profile,
+    };
+    if ('${merged['departmentName'] ?? merged['department'] ?? ''}'.trim().isEmpty &&
+        widget.session.departmentName.trim().isNotEmpty) {
+      merged['departmentName'] = widget.session.departmentName.trim();
+    }
+    if ('${merged['positionName'] ?? merged['jobTitle'] ?? ''}'.trim().isEmpty &&
+        widget.session.jobTitle.trim().isNotEmpty) {
+      merged['positionName'] = widget.session.jobTitle.trim();
+    }
+    return merged;
   }
 
   void _mergeProposalToForm(XflowProposalDetail detail) {

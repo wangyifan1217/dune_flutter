@@ -33,6 +33,12 @@ WorkSituationPerson _person({
   int meetingsLinkedTask = 0,
   int noActionMeetings = 0,
   int kbUnused = 0,
+  int kbUsed = 0,
+  int kbFailed = 0,
+  int kbUsable = 0,
+  int kbSelfViewOnly = 0,
+  int kbUnusedMeetingDocs = 0,
+  int kbUncitedConversations = 0,
   int kbReferences = 0,
   int imSessions = 0,
   int imCards = 0,
@@ -56,6 +62,12 @@ WorkSituationPerson _person({
     meetingsLinkedTask: meetingsLinkedTask,
     noActionMeetings: noActionMeetings,
     kbUnused: kbUnused,
+    kbUsed: kbUsed,
+    kbFailed: kbFailed,
+    kbUsable: kbUsable,
+    kbSelfViewOnly: kbSelfViewOnly,
+    kbUnusedMeetingDocs: kbUnusedMeetingDocs,
+    kbUncitedConversations: kbUncitedConversations,
     kbReferences: kbReferences,
     imSessions: imSessions,
     imCards: imCards,
@@ -116,6 +128,7 @@ class _FakeEfficiencyService extends EfficiencyService {
           meetingsLinkedTask: closed ? 1 : 0,
           noActionMeetings: closed ? 0 : 1,
           kbUnused: closed ? 0 : 1,
+          kbUsed: closed ? 1 : 0,
           kbReferences: closed ? 1 : 0,
           imSessions: 8,
           imCards: closed ? 2 : 1,
@@ -125,7 +138,11 @@ class _FakeEfficiencyService extends EfficiencyService {
                   WorkSituationItem(kind: 'done', title: '8月版本评审', hint: '已完成'),
                 ]
               : const [
-                  WorkSituationItem(kind: 'overdue', title: '需求评审纪要落地', hint: '已超期'),
+                  WorkSituationItem(
+                    kind: 'overdue',
+                    title: '需求评审纪要落地',
+                    hint: '已超期',
+                  ),
                   WorkSituationItem(
                     kind: 'meeting',
                     title: '8/29 产品周会',
@@ -158,6 +175,7 @@ class _FakeEfficiencyService extends EfficiencyService {
           departmentId: 3,
           departmentName: '运营部',
           taskCompleted: 1,
+          kbUsed: 1,
           kbReferences: 1,
         ),
       ],
@@ -183,6 +201,8 @@ void main() {
     WidgetTester tester, {
     bool viewAll = true,
     bool tourSeen = true,
+    String initialFilter = 'all',
+    DateTime? initialMonth,
   }) async {
     SharedPreferences.setMockInitialValues({
       if (tourSeen) workSituationTourSeenKey(1): true,
@@ -200,6 +220,8 @@ void main() {
           now: DateTime(2026, 9, 8),
           viewAll: viewAll,
           viewerName: '林舟',
+          initialFilter: initialFilter,
+          initialMonth: initialMonth,
         ),
       ),
     );
@@ -289,137 +311,347 @@ void main() {
 
   test('task judgment prefers overdue and rejected over AI', () {
     expect(
-      workSituationTaskChipLabel(_person(
-        userId: 1,
-        name: '陈可',
-        title: '产品经理',
-        departmentId: 1,
-        departmentName: '产品部',
-        taskOverdue: 1,
-        taskCompleted: 4,
-      )),
+      workSituationTaskChipLabel(
+        _person(
+          userId: 1,
+          name: '陈可',
+          title: '产品经理',
+          departmentId: 1,
+          departmentName: '产品部',
+          taskOverdue: 1,
+          taskCompleted: 4,
+        ),
+      ),
       '超期未结',
     );
     expect(
-      workSituationTaskIsAdvancing(_person(
-        userId: 1,
-        name: '陈可',
-        title: '产品经理',
-        departmentId: 1,
-        departmentName: '产品部',
-        taskOverdue: 1,
-      )),
+      workSituationTaskIsAdvancing(
+        _person(
+          userId: 1,
+          name: '陈可',
+          title: '产品经理',
+          departmentId: 1,
+          departmentName: '产品部',
+          taskOverdue: 1,
+        ),
+      ),
       isFalse,
     );
     expect(
-      workSituationTaskChipLabel(WorkSituationPerson(
-        userId: 1,
-        name: '陈可',
-        title: '产品经理',
-        departmentId: 1,
-        departmentName: '产品部',
-        proposalRejected: 1,
-        taskReviewLevel: 'delivering',
-      )),
+      workSituationTaskChipLabel(
+        WorkSituationPerson(
+          userId: 1,
+          name: '陈可',
+          title: '产品经理',
+          departmentId: 1,
+          departmentName: '产品部',
+          proposalRejected: 1,
+          taskReviewLevel: 'delivering',
+        ),
+      ),
       '被退回',
     );
     expect(
-      workSituationTaskChipLabel(WorkSituationPerson(
-        userId: 1,
-        name: '陈可',
-        title: '产品经理',
-        departmentId: 1,
-        departmentName: '产品部',
-        taskTotal: 3,
-        taskDoing: 3,
-        taskReviewLevel: 'stalled',
-        taskReviewWhy: '抽看后多数空壳',
-      )),
+      workSituationTaskChipLabel(
+        WorkSituationPerson(
+          userId: 1,
+          name: '陈可',
+          title: '产品经理',
+          departmentId: 1,
+          departmentName: '产品部',
+          taskTotal: 3,
+          taskDoing: 3,
+          taskReviewLevel: 'stalled',
+          taskReviewWhy: '抽看后多数空壳',
+        ),
+      ),
       '空转',
     );
     expect(
-      workSituationTaskChipLabel(_person(
-        userId: 1,
-        name: '陈可',
-        title: '产品经理',
-        departmentId: 1,
-        departmentName: '产品部',
-        taskCompleted: 2,
-      )),
+      workSituationTaskChipLabel(
+        _person(
+          userId: 1,
+          name: '陈可',
+          title: '产品经理',
+          departmentId: 1,
+          departmentName: '产品部',
+          taskCompleted: 2,
+        ),
+      ),
       '按期',
     );
     expect(
-      workSituationTaskIsAdvancing(WorkSituationPerson(
-        userId: 1,
-        name: '陈可',
-        title: '产品经理',
-        departmentId: 1,
-        departmentName: '产品部',
-        taskDoing: 2,
-        taskWaitingOnOthers: 2,
-      )),
+      workSituationTaskIsAdvancing(
+        WorkSituationPerson(
+          userId: 1,
+          name: '陈可',
+          title: '产品经理',
+          departmentId: 1,
+          departmentName: '产品部',
+          taskDoing: 2,
+          taskWaitingOnOthers: 2,
+        ),
+      ),
       isTrue,
     );
     expect(
-      workSituationTaskChipLabel(WorkSituationPerson(
-        userId: 1,
-        name: '陈可',
-        title: '产品经理',
-        departmentId: 1,
-        departmentName: '产品部',
-        taskDoing: 2,
-        taskWaitingOnOthers: 2,
-      )),
+      workSituationTaskChipLabel(
+        WorkSituationPerson(
+          userId: 1,
+          name: '陈可',
+          title: '产品经理',
+          departmentId: 1,
+          departmentName: '产品部',
+          taskDoing: 2,
+          taskWaitingOnOthers: 2,
+        ),
+      ),
       '待下级',
     );
     expect(
-      workSituationTaskChipLabel(WorkSituationPerson(
-        userId: 1,
-        name: '陈可',
-        title: '产品经理',
-        departmentId: 1,
-        departmentName: '产品部',
-        taskDoing: 1,
-        taskWithoutDue: 1,
-      )),
+      workSituationTaskChipLabel(
+        WorkSituationPerson(
+          userId: 1,
+          name: '陈可',
+          title: '产品经理',
+          departmentId: 1,
+          departmentName: '产品部',
+          taskDoing: 1,
+          taskWithoutDue: 1,
+        ),
+      ),
       '没约期',
     );
     expect(
-      workSituationTaskChipLabel(WorkSituationPerson(
-        userId: 1,
-        name: '陈可',
-        title: '产品经理',
-        departmentId: 1,
-        departmentName: '产品部',
-        taskDoing: 1,
-      )),
+      workSituationTaskChipLabel(
+        WorkSituationPerson(
+          userId: 1,
+          name: '陈可',
+          title: '产品经理',
+          departmentId: 1,
+          departmentName: '产品部',
+          taskDoing: 1,
+        ),
+      ),
       '在办',
     );
     expect(
-      workSituationTaskChipLabel(WorkSituationPerson(
-        userId: 1,
-        name: '陈可',
-        title: '产品经理',
-        departmentId: 1,
-        departmentName: '产品部',
-        imTalkLevel: 'substantial',
-        taskReviewWhy: '这个月任务不多',
-      )),
+      workSituationTaskChipLabel(
+        WorkSituationPerson(
+          userId: 1,
+          name: '陈可',
+          title: '产品经理',
+          departmentId: 1,
+          departmentName: '产品部',
+          imTalkLevel: 'substantial',
+          taskReviewWhy: '这个月任务不多',
+        ),
+      ),
       '本月少事',
     );
     expect(
-      workSituationTaskWhy(WorkSituationPerson(
-        userId: 1,
-        name: '陈可',
-        title: '产品经理',
-        departmentId: 1,
-        departmentName: '产品部',
-        imTalkLevel: 'substantial',
-        taskReviewWhy: '这个月任务不多',
-      )),
+      workSituationTaskWhy(
+        WorkSituationPerson(
+          userId: 1,
+          name: '陈可',
+          title: '产品经理',
+          departmentId: 1,
+          departmentName: '产品部',
+          imTalkLevel: 'substantial',
+          taskReviewWhy: '这个月任务不多',
+        ),
+      ),
       contains('会话在跟'),
     );
   });
+
+  test('meeting judgment does not veto the month for one hollow meeting', () {
+    expect(
+      workSituationMeetChipLabel(
+        WorkSituationPerson(
+          userId: 1,
+          name: '陈可',
+          title: '产品经理',
+          departmentId: 1,
+          departmentName: '产品部',
+          meetings: 3,
+          minutesGenerated: 3,
+          meetingsLinkedTask: 2,
+          noActionMeetings: 1,
+        ),
+      ),
+      '部分没落',
+    );
+    expect(
+      workSituationMeetChipLabel(
+        WorkSituationPerson(
+          userId: 1,
+          name: '陈可',
+          title: '产品经理',
+          departmentId: 1,
+          departmentName: '产品部',
+          meetings: 2,
+          minutesGenerated: 2,
+          meetingsLinkedTask: 0,
+          noActionMeetings: 2,
+        ),
+      ),
+      '没落地',
+    );
+    expect(
+      workSituationMeetChipLabel(
+        WorkSituationPerson(
+          userId: 1,
+          name: '陈可',
+          title: '产品经理',
+          departmentId: 1,
+          departmentName: '产品部',
+          meetings: 1,
+          minutesGenerated: 1,
+          meetingsLinkedTask: 1,
+          assignedOverdue: 2,
+        ),
+      ),
+      '行动超期',
+    );
+    expect(
+      workSituationMeetChipLabel(
+        WorkSituationPerson(
+          userId: 1,
+          name: '陈可',
+          title: '产品经理',
+          departmentId: 1,
+          departmentName: '产品部',
+          meetings: 1,
+          minutesGenerated: 0,
+          transcribeFailed: 1,
+        ),
+      ),
+      '没纪要',
+    );
+    expect(
+      workSituationMeetChipLabel(
+        WorkSituationPerson(
+          userId: 1,
+          name: '陈可',
+          title: '产品经理',
+          departmentId: 1,
+          departmentName: '产品部',
+          meetings: 1,
+          minutesGenerated: 1,
+          waitingOnOthersMeet: 1,
+        ),
+      ),
+      '待下级',
+    );
+    expect(
+      workSituationMeetChipLabel(
+        WorkSituationPerson(
+          userId: 1,
+          name: '陈可',
+          title: '产品经理',
+          departmentId: 1,
+          departmentName: '产品部',
+          assignedOpen: 2,
+          assignedWithoutDue: 2,
+        ),
+      ),
+      '没约期',
+    );
+  });
+
+  test(
+    'knowledge judgment does not veto the month for one unused document',
+    () {
+      expect(
+        workSituationKbChipLabel(
+          WorkSituationPerson(
+            userId: 1,
+            name: '陈可',
+            title: '产品经理',
+            departmentId: 1,
+            departmentName: '产品部',
+            kbUsed: 2,
+            kbUnused: 1,
+          ),
+        ),
+        '部分没用',
+      );
+      expect(
+        workSituationKbChipLabel(
+          WorkSituationPerson(
+            userId: 1,
+            name: '陈可',
+            title: '产品经理',
+            departmentId: 1,
+            departmentName: '产品部',
+            kbUnused: 3,
+            kbUsed: 0,
+            kbUsable: 3,
+          ),
+        ),
+        '没人用',
+      );
+      expect(
+        workSituationKbChipLabel(
+          WorkSituationPerson(
+            userId: 1,
+            name: '陈可',
+            title: '产品经理',
+            departmentId: 1,
+            departmentName: '产品部',
+            kbUsed: 2,
+            kbUnused: 0,
+          ),
+        ),
+        '用上了',
+      );
+      expect(
+        workSituationKbChipLabel(
+          WorkSituationPerson(
+            userId: 1,
+            name: '陈可',
+            title: '产品经理',
+            departmentId: 1,
+            departmentName: '产品部',
+            kbFailed: 2,
+            kbUsable: 0,
+            kbUsed: 0,
+          ),
+        ),
+        '入库失败',
+      );
+      expect(
+        workSituationKbChipLabel(
+          WorkSituationPerson(
+            userId: 1,
+            name: '陈可',
+            title: '产品经理',
+            departmentId: 1,
+            departmentName: '产品部',
+            kbUncitedConversations: 2,
+          ),
+        ),
+        '问了没引用',
+      );
+      expect(
+        workSituationKbWhy(
+          WorkSituationPerson(
+            userId: 1,
+            name: '陈可',
+            title: '产品经理',
+            departmentId: 1,
+            departmentName: '产品部',
+            kbUnused: 2,
+            kbUsed: 0,
+            taskDoing: 1,
+            taskOnTime: 1,
+          ),
+        ),
+        contains('事在办，知识没人用'),
+      );
+    },
+  );
 
   test('tour seen flag is per user', () async {
     SharedPreferences.setMockInitialValues({});

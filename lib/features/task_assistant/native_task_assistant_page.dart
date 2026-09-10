@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
@@ -61,6 +63,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
   bool _loadingOlder = false;
   bool _hasMore = false;
   bool _awayFromLatest = false;
+  bool _userScrollActive = false;
   bool _showTasks = false;
   bool _clearing = false;
   TaskItem? _actionTask;
@@ -108,9 +111,9 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     if (_resolvedConvId <= 0 || event.conversationId != _resolvedConvId) {
       return;
     }
-    if (event.type != 'message' && event.type != 'conversation_updated') {
-      return;
-    }
+    // 已读上报会回推 conversation_updated。若据此整页刷新+跳底，
+    // 会和 mark-read 形成循环，上滑会被反复拽回底部。
+    if (event.type != 'message') return;
     _rtDebounce?.cancel();
     _rtDebounce = Timer(const Duration(milliseconds: 300), () {
       if (mounted && !_showTasks) unawaited(_loadMessages(silent: true));
@@ -205,13 +208,16 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
       final messages = await _service.fetchMessagePage(id);
       await _markReadIfViewing();
       if (!mounted) return;
+      final next = silent
+          ? mergeLatestAssistantMessages(
+              current: List<NativeChatMessage>.from(_messages),
+              latest: messages.items,
+            )
+          : messages.items;
+      if (silent && assistantTranscriptUnchanged(_messages, next)) {
+        return;
+      }
       setState(() {
-        final next = silent
-            ? mergeLatestAssistantMessages(
-                current: List<NativeChatMessage>.from(_messages),
-                latest: messages.items,
-              )
-            : messages.items;
         _messages
           ..clear()
           ..addAll(next);
@@ -222,8 +228,8 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
       });
       if (!silent) {
         _scrollToLatestOnEnter();
-      } else if (!_awayFromLatest) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _jumpBottom());
+      } else {
+        _jumpBottomIfFollowingLatest();
       }
     } catch (e) {
       if (!silent && mounted) setState(() => _error = '$e');
@@ -243,10 +249,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
   void _onScroll() {
     if (!_scroll.hasClients) return;
     final pos = _scroll.position;
-    final away = assistantIsAwayFromLatest(pos);
-    if (away != _awayFromLatest && mounted) {
-      setState(() => _awayFromLatest = away);
-    }
+    _syncAwayFromLatest(rebuild: !_userScrollActive);
     if (assistantShouldLoadOlder(
       hasMore: _hasMore,
       loadingOlder: _loadingOlder,
@@ -256,16 +259,56 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     }
   }
 
+  bool _onScrollNotification(ScrollNotification n) {
+    if (n.depth != 0) return false;
+    final dragging =
+        (n is ScrollStartNotification && n.dragDetails != null) ||
+        (n is ScrollUpdateNotification && n.dragDetails != null);
+    final userWheel =
+        n is UserScrollNotification && n.direction != ScrollDirection.idle;
+    if (dragging || userWheel) {
+      _userScrollActive = true;
+    } else if (n is ScrollEndNotification) {
+      _userScrollActive = false;
+      _syncAwayFromLatest(rebuild: true);
+    }
+    return false;
+  }
+
+  void _syncAwayFromLatest({required bool rebuild}) {
+    if (!_scroll.hasClients) return;
+    final away = assistantIsAwayFromLatest(_scroll.position);
+    if (away == _awayFromLatest) return;
+    _awayFromLatest = away;
+    if (rebuild && mounted) setState(() {});
+  }
+
   void _scrollToLatestOnEnter() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _userScrollActive) return;
       _jumpBottom();
-      Future<void>.delayed(const Duration(milliseconds: 80), _jumpBottom);
-      Future<void>.delayed(const Duration(milliseconds: 240), _jumpBottom);
+      Future<void>.delayed(const Duration(milliseconds: 80), () {
+        if (!mounted || _userScrollActive || _awayFromLatest) return;
+        _jumpBottom();
+      });
+      Future<void>.delayed(const Duration(milliseconds: 240), () {
+        if (!mounted || _userScrollActive || _awayFromLatest) return;
+        _jumpBottom();
+      });
+    });
+  }
+
+  void _jumpBottomIfFollowingLatest() {
+    if (_awayFromLatest || _userScrollActive) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _awayFromLatest || _userScrollActive) return;
+      _jumpBottom();
     });
   }
 
   void _jumpBottom({bool animate = false}) {
     if (!_scroll.hasClients) return;
+    if (!animate && _userScrollActive) return;
     final max = _scroll.position.maxScrollExtent;
     if (animate) {
       _scroll.animateTo(
@@ -278,7 +321,19 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     }
     if (_awayFromLatest && mounted) {
       setState(() => _awayFromLatest = false);
+    } else {
+      _awayFromLatest = false;
     }
+  }
+
+  int? _findMessageChildIndex(Key key) {
+    if (key is ValueKey<String> && key.value == 'ta-load-older') {
+      return _loadingOlder ? 0 : null;
+    }
+    if (key is! ValueKey<int>) return null;
+    final i = _messages.indexWhere((m) => m.id == key.value);
+    if (i < 0) return null;
+    return _loadingOlder ? i + 1 : i;
   }
 
   Future<void> _loadOlder() async {
@@ -594,75 +649,45 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     }
     return Stack(
       children: [
-        ListView.builder(
-          controller: _scroll,
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(12),
-          itemCount: _messages.length + (_loadingOlder ? 1 : 0),
-          itemBuilder: (context, index) {
-            if (_loadingOlder && index == 0) {
-              return const Padding(
-                padding: EdgeInsets.only(bottom: 8),
-                child: Center(
-                  child: SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-              );
-            }
-            final m = _messages[_loadingOlder ? index - 1 : index];
-            final payload = m.payload ?? const <String, dynamic>{};
-            final noticeType = (payload['type'] ?? '').toString();
-            final title = (payload['taskTitle'] ?? '').toString();
-            final parent = (payload['parentTitle'] ?? '').toString();
-            final taskId = (payload['taskId'] as num?)?.toInt() ?? 0;
-            final meetingId = (payload['meetingId'] as num?)?.toInt() ?? 0;
-            final meetingTitle = (payload['meetingTitle'] ?? title).toString();
-            final snapshot = (payload['suggestions'] as List? ?? const [])
-                .whereType<Map>()
-                .map(
-                  (e) => MeetingTaskSuggestion.fromJson(
-                    Map<String, dynamic>.from(e),
-                  ),
-                )
-                .toList(growable: false);
-            final isSug = noticeType == 'meetingTaskSuggestions' && meetingId > 0;
-            return ChatMessageRow(
-              message: m,
-              mine: false,
-              showSenderMeta: true,
-              readLabel: null,
-              timeLabel: InboxFormat.formatTime(m.createdAt, withClock: true),
-              avatar: const TaskAssistantAvatar(size: 45),
-              content: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ChatTextBubble(text: m.bodyText, mine: false),
-                  if (isSug)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: MeetingSuggestionImCard(
-                        session: widget.session,
-                        meetingId: meetingId,
-                        meetingTitle: meetingTitle,
-                        snapshot: snapshot,
-                      ),
-                    )
-                  else if (title.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: _TaskAssignmentCard(
-                        title: title,
-                        parentTitle: parent,
-                        onTap: taskId > 0 ? () => _openTaskDetail(taskId) : null,
+        NotificationListener<ScrollNotification>(
+          onNotification: _onScrollNotification,
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              dragDevices: const {
+                PointerDeviceKind.touch,
+                PointerDeviceKind.mouse,
+                PointerDeviceKind.trackpad,
+                PointerDeviceKind.stylus,
+              },
+            ),
+            child: ListView.builder(
+              controller: _scroll,
+              physics: const AlwaysScrollableScrollPhysics(),
+              scrollCacheExtent: const ScrollCacheExtent.viewport(1),
+              addAutomaticKeepAlives: false,
+              addRepaintBoundaries: true,
+              findChildIndexCallback: _findMessageChildIndex,
+              padding: const EdgeInsets.all(12),
+              itemCount: _messages.length + (_loadingOlder ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (_loadingOlder && index == 0) {
+                  return const Padding(
+                    key: ValueKey<String>('ta-load-older'),
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                     ),
-                ],
-              ),
-            );
-          },
+                  );
+                }
+                final m = _messages[_loadingOlder ? index - 1 : index];
+                return _buildNoticeRow(m);
+              },
+            ),
+          ),
         ),
         if (_awayFromLatest)
           Positioned(
@@ -674,6 +699,70 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildNoticeRow(NativeChatMessage m) {
+    final payload = m.payload ?? const <String, dynamic>{};
+    final noticeType = (payload['type'] ?? '').toString();
+    final title = (payload['taskTitle'] ?? '').toString();
+    final parent = (payload['parentTitle'] ?? '').toString();
+    final taskId = (payload['taskId'] as num?)?.toInt() ?? 0;
+    final isSug = noticeType == 'meetingTaskSuggestions';
+    final meetingId = isSug
+        ? ((payload['meetingId'] as num?)?.toInt() ?? 0)
+        : 0;
+    List<MeetingTaskSuggestion> snapshot = const [];
+    var meetingTitle = title;
+    if (isSug && meetingId > 0) {
+      meetingTitle = (payload['meetingTitle'] ?? title).toString();
+      snapshot = (payload['suggestions'] as List? ?? const [])
+          .whereType<Map>()
+          .map(
+            (e) => MeetingTaskSuggestion.fromJson(
+              Map<String, dynamic>.from(e),
+            ),
+          )
+          .toList(growable: false);
+    }
+    return ChatMessageRow(
+      key: ValueKey<int>(m.id),
+      message: m,
+      mine: false,
+      showSenderMeta: true,
+      readLabel: null,
+      timeLabel: InboxFormat.formatTime(m.createdAt, withClock: true),
+      avatar: const TaskAssistantAvatar(size: 45),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ChatTextBubble(
+            text: m.bodyText,
+            mine: false,
+            enableSelection: false,
+          ),
+          if (isSug && meetingId > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: MeetingSuggestionImCard(
+                key: ValueKey<int>(meetingId),
+                session: widget.session,
+                meetingId: meetingId,
+                meetingTitle: meetingTitle,
+                snapshot: snapshot,
+              ),
+            )
+          else if (title.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: _TaskAssignmentCard(
+                title: title,
+                parentTitle: parent,
+                onTap: taskId > 0 ? () => _openTaskDetail(taskId) : null,
+              ),
+            ),
+        ],
+      ),
     );
   }
 

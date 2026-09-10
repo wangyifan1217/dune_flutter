@@ -681,6 +681,8 @@ class XflowProposalListCard extends StatelessWidget {
     this.showTrackButton = false,
     this.onTrackTap,
     this.onDeleteDraft,
+    this.onCopy,
+    this.copying = false,
     this.onPrimaryAction,
     this.primaryActionLabel,
     this.onDangerAction,
@@ -693,6 +695,8 @@ class XflowProposalListCard extends StatelessWidget {
   final bool showTrackButton;
   final VoidCallback? onTrackTap;
   final VoidCallback? onDeleteDraft;
+  final VoidCallback? onCopy;
+  final bool copying;
   final VoidCallback? onPrimaryAction;
   final String? primaryActionLabel;
   final VoidCallback? onDangerAction;
@@ -961,25 +965,12 @@ class XflowProposalListCard extends StatelessWidget {
               _compactMetaRow('提案类型', typeLabel),
               const SizedBox(height: 4),
               _compactMetaRow('时间', timeText),
-              if (onDeleteDraft != null) ...[
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: onDeleteDraft,
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: Text(
-                      item.status.toUpperCase() == 'DRAFT' ? '删除草稿' : '删除',
-                      style: DunesTypography.sans(
-                        fontSize: 11,
-                        color: DunesColors.coral,
-                      ),
-                    ),
-                  ),
+              if (onCopy != null || onDeleteDraft != null) ...[
+                const SizedBox(height: 10),
+                GestureDetector(
+                  onTap: () {},
+                  behavior: HitTestBehavior.opaque,
+                  child: _compactActionRow(),
                 ),
               ],
             ],
@@ -1080,6 +1071,30 @@ class XflowProposalListCard extends StatelessWidget {
     );
   }
 
+  Widget _compactActionRow() {
+    final isDraft = item.status.toUpperCase() == 'DRAFT';
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        if (onCopy != null)
+          _CompactListActionButton(
+            label: '复制',
+            icon: Icons.copy_outlined,
+            loading: copying,
+            onPressed: copying ? null : onCopy,
+          ),
+        if (onCopy != null && onDeleteDraft != null) const SizedBox(width: 8),
+        if (onDeleteDraft != null)
+          _CompactListActionButton(
+            label: isDraft ? '删除草稿' : '删除',
+            icon: Icons.delete_outline,
+            danger: true,
+            onPressed: copying ? null : onDeleteDraft,
+          ),
+      ],
+    );
+  }
+
   Widget _compactMetaRow(
     String label,
     String value, {
@@ -1123,6 +1138,54 @@ class XflowProposalListCard extends StatelessWidget {
 }
 
 enum XflowListCardMode { b1, b14, p1 }
+
+class _CompactListActionButton extends StatelessWidget {
+  const _CompactListActionButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.danger = false,
+    this.loading = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final bool danger;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = danger ? DunesColors.coral : DunesColors.accent;
+    final bg = danger ? DunesColors.coralSoft : DunesColors.accentSoft;
+    return FilledButton.icon(
+      onPressed: loading ? null : onPressed,
+      icon: loading
+          ? SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(strokeWidth: 1.6, color: fg),
+            )
+          : Icon(icon, size: 14),
+      label: Text(label),
+      style: FilledButton.styleFrom(
+        backgroundColor: bg,
+        foregroundColor: fg,
+        disabledBackgroundColor: bg.withValues(alpha: 0.7),
+        disabledForegroundColor: fg.withValues(alpha: 0.7),
+        elevation: 0,
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        minimumSize: const Size(0, 32),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        textStyle: DunesTypography.sans(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
 
 class _StatusBadge extends StatelessWidget {
   const _StatusBadge({required this.status});

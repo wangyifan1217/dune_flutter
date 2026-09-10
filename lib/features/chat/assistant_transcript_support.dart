@@ -54,6 +54,20 @@ bool assistantShouldLoadOlder({
 bool assistantIsAwayFromLatest(ScrollPosition pos) =>
     pos.maxScrollExtent - pos.pixels > 140;
 
+/// 静默刷新若内容没变，不要 setState / 跳底，避免打断正在滑的列表。
+bool assistantTranscriptUnchanged(
+  List<NativeChatMessage> current,
+  List<NativeChatMessage> next,
+) {
+  if (identical(current, next)) return true;
+  if (current.length != next.length) return false;
+  for (var i = 0; i < current.length; i++) {
+    if (current[i].id != next[i].id) return false;
+    if (current[i].bodyText != next[i].bodyText) return false;
+  }
+  return true;
+}
+
 class AssistantBackToLatestChip extends StatelessWidget {
   const AssistantBackToLatestChip({super.key, required this.onTap});
 

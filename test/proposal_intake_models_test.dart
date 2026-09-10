@@ -1119,7 +1119,9 @@ void main() {
           },
         ],
       }),
-      contains('sharedSettle:ss-1:ss-1'),
+      kProposalSharedSettleEnabled
+          ? contains('sharedSettle:ss-1:ss-1')
+          : isNot(contains('sharedSettle:ss-1:ss-1')),
     );
   });
 
@@ -1455,29 +1457,34 @@ void main() {
   });
 
   test('shared settlement covers sku completeness', () {
-    expect(
-      proposalIntakeSkuSettleIssues({
-        'skuDetails': [
-          {
-            'id': 'sku-1',
-            'productName': '现金券100',
-            'settlements': [
-              {'id': 'st-1'},
-            ],
-          },
-        ],
-        'sharedSettlements': [
-          {
-            'id': 'ss-1',
-            'skuIds': ['sku-1'],
-            'settleRatio': '0.926',
-            'formula': '规模×比例',
-            'taxRate': '13%',
-          },
-        ],
-      }),
-      isEmpty,
-    );
+    final issues = proposalIntakeSkuSettleIssues({
+      'skuDetails': [
+        {
+          'id': 'sku-1',
+          'productName': '现金券100',
+          'settlements': [
+            {'id': 'st-1'},
+          ],
+        },
+      ],
+      'sharedSettlements': [
+        {
+          'id': 'ss-1',
+          'skuIds': ['sku-1'],
+          'settleRatio': '0.926',
+          'formula': '规模×比例',
+          'taxRate': '13%',
+        },
+      ],
+    });
+    if (kProposalSharedSettleEnabled) {
+      expect(issues, isEmpty);
+    } else {
+      expect(
+        issues,
+        contains('渠道产品「现金券100」结算一未填完结算方式对应金额、计算公式、税率'),
+      );
+    }
   });
 
   test('historical values remain available in proposal row form', () {
@@ -2451,6 +2458,25 @@ void main() {
         'skuDetails': [saved.toJson()],
       }),
       ['skuSettle:sku-1:st-a', 'skuSettle:sku-1:st-b'],
+    );
+  });
+
+  test('existing built sku name is not treated as extra manual details', () {
+    const named = ProposalSkuDetailRow(
+      id: 'sku-1',
+      productName: '江苏中石油300元电子券（北京中抚）',
+      existingBuilt: '是',
+      assetProduct: ChannelProductHit(
+        id: 88,
+        productName: '江苏中石油300元电子券（北京中抚）',
+      ),
+    );
+    expect(proposalIntakeSkuHasManualDetails(named), isFalse);
+    expect(
+      proposalIntakeSkuHasManualDetails(
+        named.copyWith(faceValue: '300'),
+      ),
+      isTrue,
     );
   });
 

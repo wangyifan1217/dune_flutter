@@ -167,6 +167,74 @@ class XflowRemoteSearchConfig {
   }
 }
 
+class XflowUploadTemplate {
+  const XflowUploadTemplate({
+    required this.url,
+    required this.name,
+    required this.label,
+  });
+
+  final String url;
+  final String name;
+  final String label;
+
+  static XflowUploadTemplate? tryParse(Map<String, dynamic> raw) {
+    final metaRaw = raw['meta'];
+    if (metaRaw is! Map) return null;
+    final meta = Map<String, dynamic>.from(metaRaw);
+    String pick(List<String> keys, [String fallback = '']) {
+      for (final key in keys) {
+        final text = '${meta[key] ?? ''}'.trim();
+        if (text.isNotEmpty) return text;
+      }
+      return fallback;
+    }
+
+    final url = pick(['templateUrl', 'template_url']);
+    if (url.isEmpty) return null;
+    return XflowUploadTemplate(
+      url: url,
+      name: pick(['templateName', 'template_name'], '费用模板.xlsx'),
+      label: pick(['templateLabel', 'template_label'], '下载模板'),
+    );
+  }
+}
+
+String parseContentDispositionFileName(String raw, String fallback) {
+  final star = RegExp(
+    r"filename\*\s*=\s*UTF-8''([^;]+)",
+    caseSensitive: false,
+  ).firstMatch(raw);
+  if (star != null) {
+    try {
+      final decoded = Uri.decodeComponent(star.group(1)!.trim());
+      if (decoded.isNotEmpty) return decoded;
+    } catch (_) {}
+  }
+  final quoted = RegExp(
+    r'filename\s*=\s*"([^"]+)"',
+    caseSensitive: false,
+  ).firstMatch(raw);
+  if (quoted != null) {
+    final name = quoted.group(1)!.trim();
+    if (name.isNotEmpty) return name;
+  }
+  final plain = RegExp(
+    r'filename\s*=\s*([^;]+)',
+    caseSensitive: false,
+  ).firstMatch(raw);
+  if (plain != null) {
+    var name = plain.group(1)!.trim();
+    if (name.length >= 2 &&
+        ((name.startsWith('"') && name.endsWith('"')) ||
+            (name.startsWith("'") && name.endsWith("'")))) {
+      name = name.substring(1, name.length - 1).trim();
+    }
+    if (name.isNotEmpty) return name;
+  }
+  return fallback;
+}
+
 class XflowField {
   const XflowField({
     required this.key,
@@ -230,6 +298,9 @@ class XflowField {
   /// 通用远程搜索配置；path 缺失时返回 null（不当作 remoteSearch 渲染）。
   XflowRemoteSearchConfig? get remoteSearch =>
       XflowRemoteSearchConfig.tryParse(raw['remoteSearch']);
+
+  /// 上传字段若配置了 `meta.templateUrl`，表单展示模板下载。
+  XflowUploadTemplate? get uploadTemplate => XflowUploadTemplate.tryParse(raw);
 
   /// 仅 `dynamicList` + `itemLayout=card` 走可新增分组；其它保持旧行编辑。
   bool get isCardDynamicList =>
@@ -818,4 +889,36 @@ class ApprovalStakeholderPerson {
   final int id;
   final String displayName;
   final String role;
+}
+
+/// 复制审批时去掉身份/流程字段，避免覆盖原单。
+Map<String, dynamic> copyableApprovalFormValues(Map<String, dynamic> source) {
+  const strip = {
+    'id',
+    'proposalId',
+    'businessId',
+    'businessType',
+    'code',
+    'proposalCode',
+    'status',
+    'createdAt',
+    'updatedAt',
+    'submittedAt',
+    'createdBy',
+    'createdById',
+    'createdByName',
+    'wfInstanceId',
+    'instanceId',
+    'approvalId',
+    'todoId',
+    'serialNo',
+    'flowNo',
+    'docNo',
+  };
+  final out = <String, dynamic>{};
+  source.forEach((key, value) {
+    if (strip.contains(key)) return;
+    out[key] = value;
+  });
+  return out;
 }

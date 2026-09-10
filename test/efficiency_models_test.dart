@@ -104,7 +104,7 @@ void main() {
       'quality': [
         {
           'kind': 'kb',
-          'label': '上传后从未被打开或引用',
+          'label': '上传后没人用（不含自己打开）',
           'count': 2,
           'severity': 'high',
           'ref': 'kb:unused',
@@ -133,6 +133,9 @@ void main() {
       'taskOverdueHighWeight': 1,
       'taskReviewLevel': 'stalled',
       'taskReviewWhy': '重点单两周没进度',
+      'meetingReviewLevel': 'mixed',
+      'noMinutesMeetings': 1,
+      'assignedOverdue': 2,
       'items': [
         {
           'kind': 'overdue',
@@ -140,6 +143,7 @@ void main() {
           'hint': '子任务 · 已过期',
           'taskId': 91,
           'isSubtask': true,
+          'meetingId': 12,
         },
       ],
     });
@@ -148,8 +152,11 @@ void main() {
     expect(person.taskStaleOpen, 1);
     expect(person.taskOverdueHighWeight, 1);
     expect(person.taskReviewLevel, 'stalled');
+    expect(person.meetingReviewLevel, 'mixed');
+    expect(person.assignedOverdue, 2);
     expect(person.items.single.taskId, 91);
     expect(person.items.single.isSubtask, isTrue);
+    expect(person.items.single.meetingId, 12);
   });
 
   test('parses work situation board', () {

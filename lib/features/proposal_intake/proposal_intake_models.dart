@@ -3774,6 +3774,11 @@ Set<String> proposalIntakeSharedSettleSkuIds(Map<String, dynamic> form) {
   };
 }
 
+Set<String> proposalIntakeActiveSharedSettleSkuIds(Map<String, dynamic> form) {
+  if (!kProposalSharedSettleEnabled) return const {};
+  return proposalIntakeSharedSettleSkuIds(form);
+}
+
 bool proposalIntakeHasSupplySettleRatio(Map<String, dynamic> form) {
   for (final product in proposalIntakeSupplyProducts(form)) {
     for (final settle in proposalIntakeSupplySettlements(product)) {
@@ -3782,6 +3787,12 @@ bool proposalIntakeHasSupplySettleRatio(Map<String, dynamic> form) {
   }
   return false;
 }
+
+/// 暂时关闭「共用结算」入口，产品各自填结算。旧数据仍可参与测算。
+const kProposalSharedSettleEnabled = false;
+
+/// 规模口径暂时只按年填，不开放按月。
+const kProposalScalePeriodLockedToYear = true;
 
 /// 规模口径取值：空或「年」按年度值，「月」按 ×12 年化。
 const kProposalScalePeriodYear = '年';
@@ -3953,8 +3964,9 @@ List<String> proposalIntakeSkuSettleReviewKeys(Map<String, dynamic> form) {
     for (final sku in proposalIntakeSkuDetails(form))
       for (final settle in proposalIntakeSkuSettlements(sku))
         'skuSettle:${sku.id}:${settle.id}',
-    for (final group in proposalIntakeSharedSettlements(form))
-      'sharedSettle:${group.id}:${group.id}',
+    if (kProposalSharedSettleEnabled)
+      for (final group in proposalIntakeSharedSettlements(form))
+        'sharedSettle:${group.id}:${group.id}',
   ];
 }
 
@@ -3985,14 +3997,16 @@ List<String> proposalIntakeSkuSettleIssues(
     }
   }
   if (!includeSettlements) return issues;
-  final covered = proposalIntakeSharedSettleSkuIds(form);
-  for (final group in proposalIntakeSharedSettlements(form)) {
-    if (group.isBlank) continue;
-    if (group.skuIds.isEmpty) {
-      issues.add('共用结算请勾选适用的渠道产品');
-    }
-    if (!group.terms.isSkuComplete) {
-      issues.add('共用结算未填完结算方式对应金额、计算公式、税率');
+  final covered = proposalIntakeActiveSharedSettleSkuIds(form);
+  if (kProposalSharedSettleEnabled) {
+    for (final group in proposalIntakeSharedSettlements(form)) {
+      if (group.isBlank) continue;
+      if (group.skuIds.isEmpty) {
+        issues.add('共用结算请勾选适用的渠道产品');
+      }
+      if (!group.terms.isSkuComplete) {
+        issues.add('共用结算未填完结算方式对应金额、计算公式、税率');
+      }
     }
   }
   for (var i = 0; i < channel.length; i++) {
@@ -4321,9 +4335,7 @@ List<T> _preferFilledCatalogRows<T>({
 }
 
 bool proposalIntakeSkuHasManualDetails(ProposalSkuDetailRow sku) {
-  return sku.productName.trim().isNotEmpty ||
-      sku.faceValue.trim().isNotEmpty ||
-      sku.channelName.isNotEmpty ||
+  if (sku.faceValue.trim().isNotEmpty ||
       sku.institutionName.isNotEmpty ||
       sku.channelCategoryL1.trim().isNotEmpty ||
       sku.channelCategoryL2.trim().isNotEmpty ||
@@ -4331,7 +4343,18 @@ bool proposalIntakeSkuHasManualDetails(ProposalSkuDetailRow sku) {
       sku.effectiveDate.trim().isNotEmpty ||
       sku.expireDate.trim().isNotEmpty ||
       sku.supplierCodes.trim().isNotEmpty ||
-      sku.inventoryQty.trim().isNotEmpty;
+      sku.inventoryQty.trim().isNotEmpty) {
+    return true;
+  }
+  final channelName = sku.channelName.trim();
+  if (channelName.isEmpty) return false;
+  final hit = sku.assetProduct;
+  if (hit != null &&
+      hit.isNotEmpty &&
+      channelName == hit.channelName.trim()) {
+    return false;
+  }
+  return true;
 }
 
 List<ProposalSkuDetailRow> proposalIntakeSkuDetails(Map<String, dynamic> form) {

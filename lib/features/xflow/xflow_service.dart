@@ -1377,6 +1377,66 @@ class XflowService {
     await deleteSubmission(businessType: businessType, businessId: businessId);
   }
 
+  /// 按原单内容新建一条草稿（新单据、新编号），表单字段与来源一致。
+  Future<XflowProposalItem> copyApprovalAsDraft(XflowProposalItem source) async {
+    final bt = source.businessType.trim().toUpperCase();
+    var templateKey = (source.templateKey ?? '').trim();
+    var values = <String, dynamic>{};
+    if (bt.isEmpty || bt == 'PROPOSAL') {
+      final detail = await fetchProposalDetail(source.id);
+      values = copyableApprovalFormValues(detail.formValues);
+      if (values.isEmpty) {
+        final rawForm = detail.raw['formData'] ?? detail.raw['formValues'];
+        if (rawForm is Map) {
+          values = copyableApprovalFormValues(Map<String, dynamic>.from(rawForm));
+        }
+      }
+      if (templateKey.isEmpty) {
+        templateKey = (detail.raw['templateKey'] ?? '').toString().trim();
+      }
+      if (templateKey.isEmpty) {
+        templateKey = boundTemplateKeyForMenu(salesProposalMenuKey);
+      }
+    } else {
+      final detail = await fetchSubmissionDetail(
+        businessType: source.businessType,
+        businessId: source.id,
+      );
+      values = copyableApprovalFormValues(detail.formData);
+      if (templateKey.isEmpty) templateKey = detail.templateKey.trim();
+    }
+    if (templateKey.isEmpty) {
+      throw Exception('无法识别审批模板，复制失败');
+    }
+    if ((values['title'] ?? '').toString().trim().isEmpty &&
+        source.title.trim().isNotEmpty) {
+      values['title'] = source.title.trim();
+    }
+    final raw = await submitDraft(
+      formValues: values,
+      templateKey: templateKey,
+    );
+    final newId = _int(raw['proposalId'] ?? raw['businessId'] ?? raw['id']);
+    if (newId <= 0) {
+      throw Exception('复制失败，未返回新单据');
+    }
+    final newBt = (raw['businessType'] ?? source.businessType).toString().trim();
+    return XflowProposalItem(
+      id: newId,
+      businessType: newBt.isEmpty ? source.businessType : newBt,
+      code: _preferCode(raw['code'], '$newId', newId),
+      title: source.title,
+      status: 'DRAFT',
+      createdByName: source.createdByName,
+      createdAt: DateTime.now(),
+      templateKey: templateKey,
+      proposalType: source.proposalType,
+      documentKind: source.documentKind,
+      tag1: source.tag1,
+      txType: source.txType,
+    );
+  }
+
   Future<Map<String, dynamic>> pushProposal({
     required int proposalId,
     required int initiatorUserId,
@@ -1617,6 +1677,34 @@ class XflowService {
     }
     if (!p.startsWith('/')) p = '/$p';
     return p;
+  }
+
+  /// 按模板 `meta.templateUrl` 下载配置附件（相对 `apiBase` 或完整 `/api/v1/...`）。
+  Future<({Uint8List bytes, String fileName})> downloadConfiguredFile({
+    required String path,
+    String fileName = '',
+  }) async {
+    final normalized = _normalizeApiPath(path);
+    if (normalized.isEmpty) {
+      throw Exception('模板地址无效');
+    }
+    final resp = await _client.get(
+      _uri(normalized),
+      headers: {'Authorization': 'Bearer ${session.token}'},
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception(
+        _apiMessage(_decode(resp.body), '下载失败（HTTP ${resp.statusCode}）'),
+      );
+    }
+    if (resp.bodyBytes.isEmpty) {
+      throw Exception('模板文件为空');
+    }
+    final name = parseContentDispositionFileName(
+      resp.headers['content-disposition'] ?? '',
+      fileName.trim().isEmpty ? '费用模板.xlsx' : fileName.trim(),
+    );
+    return (bytes: resp.bodyBytes, fileName: name);
   }
 
   Future<Map<String, dynamic>> uploadProposalFile({

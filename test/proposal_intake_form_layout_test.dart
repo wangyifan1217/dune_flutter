@@ -1959,6 +1959,15 @@ void main() {
     expect(find.text('能源积分'), findsWidgets);
     expect(find.text('中石化加油券'), findsWidgets);
     expect(find.text('渠道产品 1 · 中石油 100 元现金券'), findsOneWidget);
+    expect(find.text('已建产品'), findsWidgets);
+    expect(find.text('产品名称'), findsNothing);
+    expect(find.text('面值'), findsNothing);
+    expect(find.text('渠道一级分类'), findsNothing);
+    expect(find.text('渠道二级分类'), findsNothing);
+    expect(find.text('是否同步中油好客'), findsNothing);
+    expect(find.text('库存数量'), findsNothing);
+    expect(find.text('产品生效日期'), findsNothing);
+    expect(find.text('产品失效日期'), findsNothing);
   });
 
   testWidgets('checking existing built product reveals required pickers', (
@@ -2137,10 +2146,22 @@ void main() {
     expect(find.textContaining('中石油100元'), findsWidgets);
     expect(find.byTooltip('中石油100元'), findsNothing);
     expect(find.text('结算一'), findsOneWidget);
-    expect(find.text('新增共用结算'), findsOneWidget);
+    expect(find.text('新增共用结算'), findsNothing);
+    expect(find.textContaining('按渠道产品填写结算'), findsOneWidget);
+    expect(find.text('规模口径'), findsWidgets);
     expect(
-      find.textContaining('比例不一样：不勾共用，直接在各产品卡上填结算'),
+      find.descendant(
+        of: _fieldOf('规模口径').first,
+        matching: find.text('年'),
+      ),
       findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: _fieldOf('规模口径').first,
+        matching: find.byType(ProposalSelectField<String>),
+      ),
+      findsNothing,
     );
     expect(find.text('是否已经建产品'), findsOneWidget);
     expect(find.text('渠道'), findsOneWidget);
@@ -2226,9 +2247,12 @@ void main() {
       ),
     );
     await tester.pump();
-    await _scrollUntil(tester, '销售收入已走共用结算，这里只填规模。应付成本请新增明细。');
-    expect(find.text('销售收入已走共用结算，这里只填规模。应付成本请新增明细。'), findsOneWidget);
-    expect(find.text('销售收入 · 共用结算'), findsOneWidget);
+    await _scrollUntil(tester, '产品结算（销售收入）');
+    expect(find.text('新增共用结算'), findsNothing);
+    expect(find.text('销售收入 · 共用结算'), findsNothing);
+    expect(find.text('销售收入已走共用结算，这里只填规模。应付成本请新增明细。'), findsNothing);
+    expect(find.text('结算比例'), findsWidgets);
+    expect(find.textContaining('中石油100元'), findsWidgets);
   });
 
   testWidgets('finance module asks for project period when not natural month', (

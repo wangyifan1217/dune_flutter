@@ -12,6 +12,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/util/native_permissions.dart';
 import '../chat/chat_file_type_icon.dart';
+import '../chat/file_download.dart' as file_dl;
 import '../shell/dunes_toast.dart';
 import 'xflow_file_open.dart';
 import 'xflow_models.dart';
@@ -38,6 +39,7 @@ class XflowUploadField extends StatefulWidget {
 class _XflowUploadFieldState extends State<XflowUploadField> {
   bool _picking = false;
   bool _dragging = false;
+  bool _downloadingTemplate = false;
 
   static const _meta = <String, Map<String, dynamic>>{
     'planFiles': {
@@ -125,10 +127,43 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
     return widget.field.key;
   }
 
+  XflowUploadTemplate? get _template => widget.field.uploadTemplate;
+
   bool get _supportsDesktopDrop {
     if (kIsWeb) return true;
     return !kIsWeb &&
         (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+  }
+
+  Future<void> _downloadTemplate() async {
+    final template = _template;
+    if (template == null || _downloadingTemplate) return;
+    setState(() => _downloadingTemplate = true);
+    try {
+      final file = await widget.service.downloadConfiguredFile(
+        path: template.url,
+        fileName: template.name,
+      );
+      if (!mounted) return;
+      final path = await file_dl.saveBytesAsFile(file.bytes, file.fileName);
+      if (!mounted) return;
+      if (kIsWeb) {
+        _toast('已开始下载 ${file.fileName}');
+        return;
+      }
+      if (path == null || path.isEmpty) {
+        _toast('保存失败');
+        return;
+      }
+      await file_dl.openLocalFile(path);
+      if (!mounted) return;
+      _toast('已打开 ${file.fileName}');
+    } catch (e) {
+      if (!mounted) return;
+      _toast('下载失败：${friendlyErrorText(e, fallback: '无法下载模板')}');
+    } finally {
+      if (mounted) setState(() => _downloadingTemplate = false);
+    }
   }
 
   Future<void> _pickFiles() async {
@@ -423,25 +458,57 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 7),
-          child: Text.rich(
-            TextSpan(
-              text: _label,
-              style: DunesTypography.sans(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-                color: DunesColors.text,
-              ),
-              children: [
-                TextSpan(
-                  text: ' ${meta['hint']}',
-                  style: DunesTypography.sans(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: DunesColors.text3,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    text: _label,
+                    style: DunesTypography.sans(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.text,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: ' ${meta['hint']}',
+                        style: DunesTypography.sans(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+              if (_template != null)
+                TextButton(
+                  onPressed: _downloadingTemplate ? null : () {
+                    unawaited(_downloadTemplate());
+                  },
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 28),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: _downloadingTemplate
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(
+                          _template!.label,
+                          style: DunesTypography.sans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF2563EB),
+                          ),
+                        ),
+                ),
+            ],
           ),
         ),
         if (_supportsDesktopDrop)

@@ -409,6 +409,8 @@ class WorkSituationItem {
     this.hint = '',
     this.taskId = 0,
     this.isSubtask = false,
+    this.meetingId = 0,
+    this.documentId = 0,
   });
 
   final String kind;
@@ -416,6 +418,8 @@ class WorkSituationItem {
   final String hint;
   final int taskId;
   final bool isSubtask;
+  final int meetingId;
+  final int documentId;
 
   factory WorkSituationItem.fromJson(Map<String, dynamic> json) {
     return WorkSituationItem(
@@ -424,6 +428,8 @@ class WorkSituationItem {
       hint: '${json['hint'] ?? ''}',
       taskId: (json['taskId'] as num?)?.toInt() ?? 0,
       isSubtask: json['isSubtask'] == true,
+      meetingId: (json['meetingId'] as num?)?.toInt() ?? 0,
+      documentId: (json['documentId'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -464,9 +470,27 @@ class WorkSituationPerson {
     this.meetingsLinkedTask = 0,
     this.noActionMeetings = 0,
     this.thinMinutes = 0,
+    this.noMinutesMeetings = 0,
+    this.transcribeFailed = 0,
+    this.assignedOpen = 0,
+    this.assignedOverdue = 0,
+    this.assignedWithoutDue = 0,
+    this.assignedLinked = 0,
+    this.waitingOnOthersMeet = 0,
+    this.actionWithoutAssignee = 0,
+    this.meetingReviewLevel = '',
+    this.meetingReviewWhy = '',
     this.kbDocuments = 0,
     this.kbUnused = 0,
+    this.kbUsed = 0,
+    this.kbFailed = 0,
+    this.kbUsable = 0,
+    this.kbSelfViewOnly = 0,
+    this.kbUnusedMeetingDocs = 0,
+    this.kbUncitedConversations = 0,
     this.kbReferences = 0,
+    this.kbReviewLevel = '',
+    this.kbReviewWhy = '',
     this.imSessions = 0,
     this.imCards = 0,
     this.imUniqueObjects = 0,
@@ -508,9 +532,27 @@ class WorkSituationPerson {
   final int meetingsLinkedTask;
   final int noActionMeetings;
   final int thinMinutes;
+  final int noMinutesMeetings;
+  final int transcribeFailed;
+  final int assignedOpen;
+  final int assignedOverdue;
+  final int assignedWithoutDue;
+  final int assignedLinked;
+  final int waitingOnOthersMeet;
+  final int actionWithoutAssignee;
+  final String meetingReviewLevel;
+  final String meetingReviewWhy;
   final int kbDocuments;
   final int kbUnused;
+  final int kbUsed;
+  final int kbFailed;
+  final int kbUsable;
+  final int kbSelfViewOnly;
+  final int kbUnusedMeetingDocs;
+  final int kbUncitedConversations;
   final int kbReferences;
+  final String kbReviewLevel;
+  final String kbReviewWhy;
   final int imSessions;
   final int imCards;
   final int imUniqueObjects;
@@ -553,9 +595,27 @@ class WorkSituationPerson {
       meetingsLinkedTask: (json['meetingsLinkedTask'] as num?)?.toInt() ?? 0,
       noActionMeetings: (json['noActionMeetings'] as num?)?.toInt() ?? 0,
       thinMinutes: (json['thinMinutes'] as num?)?.toInt() ?? 0,
+      noMinutesMeetings: (json['noMinutesMeetings'] as num?)?.toInt() ?? 0,
+      transcribeFailed: (json['transcribeFailed'] as num?)?.toInt() ?? 0,
+      assignedOpen: (json['assignedOpen'] as num?)?.toInt() ?? 0,
+      assignedOverdue: (json['assignedOverdue'] as num?)?.toInt() ?? 0,
+      assignedWithoutDue: (json['assignedWithoutDue'] as num?)?.toInt() ?? 0,
+      assignedLinked: (json['assignedLinked'] as num?)?.toInt() ?? 0,
+      waitingOnOthersMeet: (json['waitingOnOthersMeet'] as num?)?.toInt() ?? 0,
+      actionWithoutAssignee: (json['actionWithoutAssignee'] as num?)?.toInt() ?? 0,
+      meetingReviewLevel: '${json['meetingReviewLevel'] ?? ''}'.trim(),
+      meetingReviewWhy: '${json['meetingReviewWhy'] ?? ''}'.trim(),
       kbDocuments: (json['kbDocuments'] as num?)?.toInt() ?? 0,
       kbUnused: (json['kbUnused'] as num?)?.toInt() ?? 0,
+      kbUsed: (json['kbUsed'] as num?)?.toInt() ?? 0,
+      kbFailed: (json['kbFailed'] as num?)?.toInt() ?? 0,
+      kbUsable: (json['kbUsable'] as num?)?.toInt() ?? 0,
+      kbSelfViewOnly: (json['kbSelfViewOnly'] as num?)?.toInt() ?? 0,
+      kbUnusedMeetingDocs: (json['kbUnusedMeetingDocs'] as num?)?.toInt() ?? 0,
+      kbUncitedConversations: (json['kbUncitedConversations'] as num?)?.toInt() ?? 0,
       kbReferences: (json['kbReferences'] as num?)?.toInt() ?? 0,
+      kbReviewLevel: '${json['kbReviewLevel'] ?? ''}'.trim(),
+      kbReviewWhy: '${json['kbReviewWhy'] ?? ''}'.trim(),
       imSessions: (json['imSessions'] as num?)?.toInt() ?? 0,
       imCards: (json['imCards'] as num?)?.toInt() ?? 0,
       imUniqueObjects: (json['imUniqueObjects'] as num?)?.toInt() ?? 0,
@@ -603,9 +663,27 @@ class WorkSituationPerson {
       meetingsLinkedTask: meetingsLinkedTask,
       noActionMeetings: noActionMeetings,
       thinMinutes: thinMinutes,
+      noMinutesMeetings: noMinutesMeetings,
+      transcribeFailed: transcribeFailed,
+      assignedOpen: assignedOpen,
+      assignedOverdue: assignedOverdue,
+      assignedWithoutDue: assignedWithoutDue,
+      assignedLinked: assignedLinked,
+      waitingOnOthersMeet: waitingOnOthersMeet,
+      actionWithoutAssignee: actionWithoutAssignee,
+      meetingReviewLevel: meetingReviewLevel,
+      meetingReviewWhy: meetingReviewWhy,
       kbDocuments: kbDocuments,
       kbUnused: kbUnused,
+      kbUsed: kbUsed,
+      kbFailed: kbFailed,
+      kbUsable: kbUsable,
+      kbSelfViewOnly: kbSelfViewOnly,
+      kbUnusedMeetingDocs: kbUnusedMeetingDocs,
+      kbUncitedConversations: kbUncitedConversations,
       kbReferences: kbReferences,
+      kbReviewLevel: kbReviewLevel,
+      kbReviewWhy: kbReviewWhy,
       imSessions: imSessions,
       imCards: imCards,
       imUniqueObjects: imUniqueObjects,

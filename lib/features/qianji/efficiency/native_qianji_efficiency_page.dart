@@ -24,6 +24,98 @@ double efficiencyMetricTileWidth(double maxWidth, {double gap = _metricGap}) {
   return (maxWidth - gap * (cols - 1)) / cols;
 }
 
+const _primaryMetricKeys = <String>{
+  'taskCompletionRate',
+  'onTimeRate',
+  'reworkRate',
+  'minutesReadyRate',
+  'minutesSubstanceRate',
+  'meetingClosedLoopRate',
+  'knowledgeReuseRate',
+  'knowledgeIndexRate',
+};
+
+const _metricGroups = <(String, List<String>)>[
+  ('任务', ['taskCompletionRate', 'onTimeRate', 'reworkRate']),
+  ('会议', ['minutesReadyRate', 'minutesSubstanceRate', 'meetingClosedLoopRate']),
+  ('知识', ['knowledgeReuseRate', 'knowledgeIndexRate']),
+];
+
+bool _metricWorseWhenHigher(String key) {
+  switch (key) {
+    case 'reworkRate':
+    case 'approvalCycle':
+    case 'cardResponseHours':
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool _metricDeltaNeutral(String key) => key == 'collaborationSessions';
+
+Color _deltaColor(EfficiencyMetric metric) {
+  final delta = metric.deltaPct;
+  if (delta == null || _metricDeltaNeutral(metric.key)) {
+    return DunesColors.text3;
+  }
+  final up = delta >= 0;
+  final good = _metricWorseWhenHigher(metric.key) ? !up : up;
+  return good ? DunesColors.green : DunesColors.coral;
+}
+
+String _formatMetricValue(EfficiencyMetric metric) {
+  final value = metric.value;
+  final number = value == value.roundToDouble()
+      ? value.toInt().toString()
+      : value.toStringAsFixed(1);
+  return '$number${metric.unit}';
+}
+
+String? workSituationFilterForEvidence(EfficiencyEvidence item) {
+  switch (item.kind) {
+    case 'task':
+      return 'task';
+    case 'meeting':
+      return 'meet';
+    case 'kb':
+      return 'kb';
+    case 'im':
+      return 'talk';
+    default:
+      return null;
+  }
+}
+
+List<EfficiencyEvidence> _hardFacts(EfficiencySnapshot snapshot) {
+  final seen = <String>{};
+  final out = <EfficiencyEvidence>[];
+  for (final item in [...snapshot.quality, ...snapshot.bottlenecks]) {
+    if (item.count <= 0) continue;
+    final key = item.ref.isNotEmpty ? item.ref : '${item.kind}:${item.label}';
+    if (!seen.add(key)) continue;
+    out.add(item);
+  }
+  out.sort((a, b) {
+    int rank(String severity) {
+      switch (severity) {
+        case 'high':
+          return 0;
+        case 'medium':
+          return 1;
+        default:
+          return 2;
+      }
+    }
+
+    final bySev = rank(a.severity).compareTo(rank(b.severity));
+    if (bySev != 0) return bySev;
+    return b.count.compareTo(a.count);
+  });
+  if (out.length > 8) return out.sublist(0, 8);
+  return out;
+}
+
 class NativeQianjiEfficiencyPage extends StatefulWidget {
   const NativeQianjiEfficiencyPage({
     super.key,
@@ -31,12 +123,15 @@ class NativeQianjiEfficiencyPage extends StatefulWidget {
     required this.onBack,
     this.service,
     this.now,
+    this.onOpenWorkSituation,
   });
 
   final AuthSession session;
   final VoidCallback onBack;
   final EfficiencyService? service;
   final DateTime? now;
+  final void Function({required DateTime month, String? filter})?
+  onOpenWorkSituation;
 
   @override
   State<NativeQianjiEfficiencyPage> createState() =>
@@ -230,8 +325,7 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
                   const SizedBox(height: 16),
                   const _GuideItem(
                     title: '任务完成率 / 按期完成率',
-                    body:
-                        '完成率是当月已完成任务 ÷ 当月任务总数。按期完成率是已完成任务里，在原定日期内做完的占比。',
+                    body: '完成率是当月已完成任务 ÷ 当月任务总数。按期完成率是已完成任务里，在原定日期内做完的占比。',
                   ),
                   const _GuideItem(
                     title: '审批平均周期 / 提案闭环率',
@@ -239,21 +333,19 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
                   ),
                   const _GuideItem(
                     title: '会议纪要生成率 / 纪要实质率',
-                    body:
-                        '生成率只说明这场会有没有纪要。实质率要求摘要满 80 字，空洞纪要不计入质量。',
+                    body: '生成率只说明这场会有没有纪要。实质率要求摘要满 80 字，空洞纪要不计入质量。',
                   ),
                   const _GuideItem(
                     title: '会议闭环率',
-                    body:
-                        '同一场会要同时有实质纪要、知识入库、关联任务，缺一项就算断开。行动项还要有负责人才算可执行。',
+                    body: '转到任务就算有下文。一场空会不否决整月。纪要有没有入库仍可在会议闭环链上查看。',
                   ),
                   const _GuideItem(
                     title: '返工率',
                     body: '任务驳回 + 审批拒绝 + 提案退回，占当月任务/审批/提案总数。越低越好。',
                   ),
                   const _GuideItem(
-                    title: '知识被引用率',
-                    body: '上传后被打开、检索或被任务/审批引用才算沉淀有效。解析成功率只说明文档有没有解析成功。',
+                    title: '知识用上了率',
+                    body: '别人打开、对话引用或绑到任务才算用上，自己打开不算。解析成功率只说明文档有没有解析成功。',
                   ),
                   const _GuideItem(
                     title: '个人和部门有何不同',
@@ -271,16 +363,16 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: const Color(0xFFF7F5FA),
-      child: SafeArea(
+    return Scaffold(
+      backgroundColor: const Color(0xFFF7F5FA),
+      body: SafeArea(
         bottom: false,
         child: Column(
           children: [
             _Header(onBack: widget.onBack, onHelp: _showGuide),
             Container(
               color: Colors.white,
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
               child: Row(
                 children: [
                   Expanded(
@@ -289,19 +381,28 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
                       labelColor: _purple,
                       unselectedLabelColor: DunesColors.text3,
                       indicatorColor: _purple,
+                      indicatorSize: TabBarIndicatorSize.label,
                       dividerColor: Colors.transparent,
+                      labelStyle: DunesTypography.sans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      unselectedLabelStyle: DunesTypography.sans(fontSize: 14),
                       tabs: const [
                         Tab(text: '个人分析'),
                         Tab(text: '部门汇总'),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  OutlinedButton.icon(
+                  const SizedBox(width: 8),
+                  ActionChip(
                     key: const Key('efficiency-month'),
                     onPressed: _pickMonth,
-                    icon: const Icon(Icons.calendar_month_outlined, size: 16),
+                    avatar: const Icon(Icons.calendar_month_outlined, size: 16),
                     label: Text('${_month.year}.${_month.month}'),
+                    visualDensity: VisualDensity.compact,
+                    side: const BorderSide(color: Color(0xFFE8E2EE)),
+                    backgroundColor: const Color(0xFFF7F5FA),
                   ),
                 ],
               ),
@@ -334,65 +435,63 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
     if (snapshot == null) {
       return const Center(child: CircularProgressIndicator());
     }
+    final facts = _hardFacts(snapshot);
     return RefreshIndicator(
       onRefresh: () => _load(scope, force: true),
       child: ListView(
         key: PageStorageKey<String>('efficiency-$scope'),
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
         children: [
-          _OverviewHero(snapshot: snapshot, onHelp: _showGuide),
-          const SizedBox(height: 14),
-          _MetricGrid(metrics: snapshot.metrics),
-          if (snapshot.trends.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            _SectionCard(
-              title: '近6个月趋势',
-              subtitle: '来自每日凌晨落库快照，缺月表示当时尚未生成',
-              child: _TrendList(points: snapshot.trends),
+          _Masthead(snapshot: snapshot),
+          if (facts.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _FactStrip(
+              items: facts,
+              onOpen: widget.onOpenWorkSituation == null
+                  ? null
+                  : (item) => widget.onOpenWorkSituation!(
+                      month: _month,
+                      filter: workSituationFilterForEvidence(item),
+                    ),
             ),
           ],
-          const SizedBox(height: 14),
-          _WidePair(
-            left: snapshot.funnel.isEmpty
-                ? null
-                : _SectionCard(
-                    title: '流程漏斗',
-                    subtitle: '讨论、会议、任务、提案、审批、沉淀；会议和知识按质量而不是件数',
-                    child: _StageList(stages: snapshot.funnel),
-                  ),
-            right: _SectionCard(
+          const SizedBox(height: 12),
+          _AiCard(
+            result: _analyses[key],
+            analyzing: _analyzing.contains(key),
+            error: _errors['$key:ai'],
+            scheduled: snapshot.latestAnalysis?.isScheduled == true,
+            onAnalyze: () => _runAnalysis(scope),
+            onExport: () => _export(scope),
+          ),
+          const SizedBox(height: 12),
+          _RateBoard(metrics: snapshot.metrics),
+          if (snapshot.stages.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _SectionCard(
               title: '工作闭环',
-              subtitle: '完成率由业务状态计算；会议和知识按是否实质可用，AI不参与算分',
+              subtitle: '完成率由业务状态计算；会议和知识按是否实质可用',
               child: _StageList(stages: snapshot.stages),
             ),
-          ),
-          const SizedBox(height: 14),
-          _WidePair(
-            left: _SectionCard(
-              title: '当前阻塞',
-              subtitle: snapshot.bottlenecks.isEmpty
-                  ? '本月暂未发现明确阻塞'
-                  : '仅按流程和事项展示，不做个人效率排名',
-              child: _BottleneckList(items: snapshot.bottlenecks),
-            ),
-            right: snapshot.quality.isEmpty
-                ? null
-                : _SectionCard(
-                    title: '质量信号',
-                    subtitle: '返工、闭环断裂、正文是否可复用',
-                    child: _BottleneckList(items: snapshot.quality),
-                  ),
-          ),
+          ],
           if (snapshot.chains.isNotEmpty) ...[
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             _SectionCard(
               title: '会议闭环',
-              subtitle: '同一场会：纪要 → 知识入库 → 任务',
+              subtitle: '转到任务就算有下文；链上仍可看纪要或入库断在哪',
               child: _ChainList(items: snapshot.chains),
             ),
           ],
+          if (snapshot.trends.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _SectionCard(
+              title: '近6个月',
+              subtitle: '来自凌晨落库快照，缺月表示当时尚未生成',
+              child: _TrendList(points: snapshot.trends),
+            ),
+          ],
           if (snapshot.timeline.isNotEmpty && !snapshot.privacyProtected) ...[
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             _SectionCard(
               title: '事项时间线',
               subtitle: '优先使用业务ID关联，不含聊天正文',
@@ -400,10 +499,10 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
             ),
           ],
           if (_showQualitySamples && snapshot.insights.isNotEmpty) ...[
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             _SectionCard(
               title: '质量抽样',
-              subtitle: '本人纪要摘要，以及知识库正文片段（会议入库 / 自己上传）。不读下属文档。',
+              subtitle: '本人纪要摘要，以及知识库正文片段。不读下属文档。',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -416,17 +515,10 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
               ),
             ),
           ],
-          const SizedBox(height: 14),
-          _AiCard(
-            result: _analyses[key],
-            analyzing: _analyzing.contains(key),
-            error: _errors['$key:ai'],
-            scheduled: snapshot.latestAnalysis?.isScheduled == true,
-            onAnalyze: () => _runAnalysis(scope),
-            onExport: () => _export(scope),
-          ),
-          const SizedBox(height: 14),
-          _SourceCard(sources: snapshot.sources),
+          if (snapshot.sources.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _SourceCard(sources: snapshot.sources),
+          ],
         ],
       ),
     );
@@ -476,79 +568,51 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _OverviewHero extends StatelessWidget {
-  const _OverviewHero({required this.snapshot, required this.onHelp});
+class _Masthead extends StatelessWidget {
+  const _Masthead({required this.snapshot});
 
   final EfficiencySnapshot snapshot;
-  final VoidCallback onHelp;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF5F3E82), Color(0xFF8965B5)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 2, 2, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.insights_rounded, color: Colors.white, size: 28),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: onHelp,
-                icon: const Icon(
-                  Icons.help_outline_rounded,
-                  size: 18,
-                  color: Colors.white,
-                ),
-                label: const Text(
-                  '怎么算',
-                  style: TextStyle(color: Colors.white, fontSize: 13),
-                ),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
           Text(
             snapshot.title,
             style: DunesTypography.sans(
-              fontSize: 22,
+              fontSize: 20,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: DunesColors.text,
             ),
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 4),
           Text(
             snapshot.scope == 'department'
                 ? '覆盖 ${snapshot.peopleCount} 人 · 看闭环和质量，不排名、不读下属文档和聊天'
-                : '会抽样阅读本人知识库正文和会议纪要；数量只作背景',
-            style: const TextStyle(color: Color(0xDFFFFFFF), fontSize: 12),
+                : '按超期、没纪要、没人用等硬事实看，数量只作背景',
+            style: const TextStyle(
+              fontSize: 12,
+              height: 1.4,
+              color: DunesColors.text2,
+            ),
           ),
           if (snapshot.privacyProtected) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 6),
             const Text(
               '当前范围少于5人，已隐藏个人下钻信息',
-              style: TextStyle(color: Colors.white, fontSize: 12),
+              style: TextStyle(fontSize: 12, color: DunesColors.amber),
             ),
           ],
           if (snapshot.schedule?.enabled == true) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 6),
             Text(
               snapshot.latestAnalysis?.isScheduled == true
                   ? '昨夜定时分析已落库，打开即可查看'
-                  : '每天 ${snapshot.schedule!.hour.toString().padLeft(2, '0')}:${snapshot.schedule!.minute.toString().padLeft(2, '0')} 自动分析并写入数据表',
-              style: const TextStyle(color: Color(0xDFFFFFFF), fontSize: 12),
+                  : '每月 1 日 ${snapshot.schedule!.hour.toString().padLeft(2, '0')}:${snapshot.schedule!.minute.toString().padLeft(2, '0')} 自动分析上个月',
+              style: const TextStyle(fontSize: 11, color: DunesColors.text3),
             ),
           ],
         ],
@@ -557,79 +621,197 @@ class _OverviewHero extends StatelessWidget {
   }
 }
 
-class _MetricGrid extends StatelessWidget {
-  const _MetricGrid({required this.metrics});
+class _FactStrip extends StatelessWidget {
+  const _FactStrip({required this.items, this.onOpen});
+
+  final List<EfficiencyEvidence> items;
+  final ValueChanged<EfficiencyEvidence>? onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (onOpen != null)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text(
+              '点标签去工作情况看对应的人',
+              style: TextStyle(fontSize: 11, color: DunesColors.text3),
+            ),
+          ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final item in items) _FactChip(item: item, onOpen: onOpen),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _FactChip extends StatelessWidget {
+  const _FactChip({required this.item, this.onOpen});
+
+  final EfficiencyEvidence item;
+  final ValueChanged<EfficiencyEvidence>? onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final high = item.severity == 'high';
+    final color = high
+        ? DunesColors.coral
+        : item.severity == 'medium'
+        ? DunesColors.amber
+        : DunesColors.text2;
+    final soft = high
+        ? DunesColors.coralSoft
+        : item.severity == 'medium'
+        ? DunesColors.amberSoft
+        : DunesColors.bgSoft;
+    return GestureDetector(
+      onTap: onOpen == null ? null : () => onOpen!(item),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: soft,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          '${item.label} ${item.count}',
+          style: DunesTypography.sans(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RateBoard extends StatelessWidget {
+  const _RateBoard({required this.metrics});
 
   final List<EfficiencyMetric> metrics;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = efficiencyMetricTileWidth(constraints.maxWidth);
-        return Wrap(
-          spacing: _metricGap,
-          runSpacing: _metricGap,
-          children: [
-            for (final metric in metrics)
-              SizedBox(
-                width: width,
-                child: _MetricCard(metric: metric),
-              ),
+    if (metrics.isEmpty) return const SizedBox.shrink();
+    final byKey = {for (final metric in metrics) metric.key: metric};
+    final rest = metrics
+        .where((metric) => !_primaryMetricKeys.contains(metric.key))
+        .toList(growable: false);
+    return _SectionCard(
+      title: '关键比率',
+      subtitle: '返工和周期升高是退步；会话数不作为成绩',
+      child: Column(
+        children: [
+          for (var i = 0; i < _metricGroups.length; i++) ...[
+            if (i > 0) const Divider(height: 22, color: Color(0xFFF0EBF4)),
+            _RateGroup(
+              label: _metricGroups[i].$1,
+              metrics: [
+                for (final key in _metricGroups[i].$2)
+                  if (byKey[key] != null) byKey[key]!,
+              ],
+            ),
           ],
-        );
-      },
+          if (rest.isNotEmpty) ...[
+            const Divider(height: 22, color: Color(0xFFF0EBF4)),
+            Theme(
+              data: Theme.of(
+                context,
+              ).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                dense: true,
+                title: const Text(
+                  '其余指标',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.text2,
+                  ),
+                ),
+                children: [for (final metric in rest) _RateRow(metric: metric)],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
 
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({required this.metric});
+class _RateGroup extends StatelessWidget {
+  const _RateGroup({required this.label, required this.metrics});
+
+  final String label;
+  final List<EfficiencyMetric> metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    if (metrics.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.6,
+            color: DunesColors.text3,
+          ),
+        ),
+        const SizedBox(height: 6),
+        for (final metric in metrics) _RateRow(metric: metric),
+      ],
+    );
+  }
+}
+
+class _RateRow extends StatelessWidget {
+  const _RateRow({required this.metric});
 
   final EfficiencyMetric metric;
 
   @override
   Widget build(BuildContext context) {
     final delta = metric.deltaPct;
-    final improving = delta != null && delta >= 0;
     return Tooltip(
-      message: metric.note,
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 112),
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE9E3EE)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      message: metric.note.isEmpty ? metric.label : metric.note,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
           children: [
-            Text(
-              metric.label,
-              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            Expanded(
+              child: Text(
+                metric.label,
+                style: const TextStyle(fontSize: 13, color: DunesColors.text),
+              ),
             ),
-            const SizedBox(height: 8),
             Text(
-              '${_number(metric.value)}${metric.unit}',
+              _formatMetricValue(metric),
               style: DunesTypography.sans(
-                fontSize: 22,
+                fontSize: 16,
                 fontWeight: FontWeight.w700,
                 color: DunesColors.text,
               ),
             ),
-            const SizedBox(height: 5),
-            Text(
-              delta == null
-                  ? '暂无上月对比'
-                  : '环比 ${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)}%',
-              style: TextStyle(
-                fontSize: 11,
-                color: delta == null
-                    ? DunesColors.text3
-                    : improving
-                    ? DunesColors.green
-                    : DunesColors.coral,
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 72,
+              child: Text(
+                delta == null
+                    ? '—'
+                    : '${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(0)}%',
+                textAlign: TextAlign.right,
+                style: TextStyle(fontSize: 11, color: _deltaColor(metric)),
               ),
             ),
           ],
@@ -637,10 +819,6 @@ class _MetricCard extends StatelessWidget {
       ),
     );
   }
-
-  String _number(double value) => value == value.roundToDouble()
-      ? value.toInt().toString()
-      : value.toStringAsFixed(1);
 }
 
 class _SectionCard extends StatelessWidget {
@@ -657,10 +835,10 @@ class _SectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFFE9E3EE)),
       ),
       child: Column(
@@ -696,21 +874,30 @@ class _StageList extends StatelessWidget {
           if (i > 0) const SizedBox(height: 13),
           Row(
             children: [
-              SizedBox(width: 64, child: Text(stages[i].label)),
+              SizedBox(
+                width: 88,
+                child: Text(
+                  stages[i].label,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: DunesColors.text2,
+                  ),
+                ),
+              ),
               Expanded(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(99),
                   child: LinearProgressIndicator(
-                    minHeight: 8,
+                    minHeight: 7,
                     value: (stages[i].rate / 100).clamp(0.0, 1.0),
                     backgroundColor: _purpleSoft,
                     color: _purple,
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               SizedBox(
-                width: 72,
+                width: 64,
                 child: Text(
                   '${stages[i].completed}/${stages[i].total}',
                   textAlign: TextAlign.right,
@@ -801,53 +988,6 @@ class _TimelineList extends StatelessWidget {
   }
 }
 
-class _BottleneckList extends StatelessWidget {
-  const _BottleneckList({required this.items});
-
-  final List<EfficiencyEvidence> items;
-
-  @override
-  Widget build(BuildContext context) {
-    if (items.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 10),
-          child: Text('暂无阻塞事项', style: TextStyle(color: DunesColors.text3)),
-        ),
-      );
-    }
-    return Column(
-      children: [
-        for (var i = 0; i < items.length; i++) ...[
-          if (i > 0) const Divider(height: 20),
-          Row(
-            children: [
-              Icon(
-                items[i].severity == 'high'
-                    ? Icons.error_outline_rounded
-                    : Icons.schedule_rounded,
-                color: items[i].severity == 'high'
-                    ? DunesColors.coral
-                    : DunesColors.amber,
-                size: 20,
-              ),
-              const SizedBox(width: 10),
-              Expanded(child: Text(items[i].label)),
-              Text(
-                '${items[i].count}项',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: DunesColors.text2,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-}
-
 class _ChainList extends StatelessWidget {
   const _ChainList({required this.items});
 
@@ -873,7 +1013,9 @@ class _ChainList extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  items[i].meetingTitle.isEmpty ? '未命名会议' : items[i].meetingTitle,
+                  items[i].meetingTitle.isEmpty
+                      ? '未命名会议'
+                      : items[i].meetingTitle,
                 ),
               ),
               Text(
@@ -913,93 +1055,170 @@ class _AiCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: _purpleSoft,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFD9C9E8)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE9E3EE)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.auto_awesome_rounded, color: _purple),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'AI效能解读',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 4,
+              decoration: const BoxDecoration(
+                color: _purple,
+                borderRadius: BorderRadius.horizontal(
+                  left: Radius.circular(14),
                 ),
               ),
-              IconButton(
-                tooltip: '复制汇报摘要',
-                onPressed: onExport,
-                icon: const Icon(Icons.copy_all_outlined, color: _purple),
-              ),
-              FilledButton(
-                key: const Key('efficiency-analyze'),
-                onPressed: analyzing ? null : onAnalyze,
-                style: FilledButton.styleFrom(backgroundColor: _purple),
-                child: Text(
-                  analyzing
-                      ? '分析中…'
-                      : result == null
-                      ? '开始分析'
-                      : '重新分析',
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'AI 解读',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: '复制汇报摘要',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: onExport,
+                          icon: const Icon(
+                            Icons.copy_all_outlined,
+                            color: DunesColors.text3,
+                            size: 20,
+                          ),
+                        ),
+                        FilledButton(
+                          key: const Key('efficiency-analyze'),
+                          onPressed: analyzing ? null : onAnalyze,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: _purple,
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                          ),
+                          child: Text(
+                            analyzing
+                                ? '分析中…'
+                                : result == null
+                                ? '开始分析'
+                                : '重新分析',
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (scheduled)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          '当前是定时分析结果，可随时重跑。',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: DunesColors.text3,
+                          ),
+                        ),
+                      ),
+                    if (analyzing)
+                      const LinearProgressIndicator(color: _purple),
+                    if (error != null && error!.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          error!,
+                          style: const TextStyle(color: DunesColors.coral),
+                        ),
+                      ),
+                    if (result != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        result!.summary,
+                        style: const TextStyle(
+                          height: 1.55,
+                          color: DunesColors.text,
+                        ),
+                      ),
+                      if (result!.wins.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        const Text(
+                          '站得住的点',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        for (final win in result!.wins)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 5),
+                            child: Text(
+                              win,
+                              style: const TextStyle(
+                                height: 1.4,
+                                color: DunesColors.green,
+                              ),
+                            ),
+                          ),
+                      ],
+                      if (result!.risks.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        const Text(
+                          '硬事实风险',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        for (final risk in result!.risks)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 5),
+                            child: Text(
+                              risk,
+                              style: const TextStyle(height: 1.4),
+                            ),
+                          ),
+                      ],
+                      if (result!.actions.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        const Text(
+                          '建议动作',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        for (final action in result!.actions)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              '${action.title}${action.ownerRole.isEmpty ? '' : ' · ${action.ownerRole}'}',
+                              style: const TextStyle(height: 1.4),
+                            ),
+                          ),
+                      ],
+                    ] else if (!analyzing &&
+                        (error == null || error!.isEmpty)) ...[
+                      const SizedBox(height: 6),
+                      const Text(
+                        '按超期、没纪要、没人用等硬事实解读，不把会话数和自己打开知识当成绩。',
+                        style: TextStyle(height: 1.5, color: DunesColors.text2),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ],
-          ),
-          if (scheduled) ...[
-            const SizedBox(height: 8),
-            const Text(
-              '当前展示的是凌晨定时分析结果，可随时重新分析。',
-              style: TextStyle(fontSize: 12, color: DunesColors.text3),
             ),
           ],
-          if (analyzing) ...[
-            const SizedBox(height: 14),
-            const LinearProgressIndicator(color: _purple),
-          ],
-          if (error != null && error!.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(error!, style: const TextStyle(color: DunesColors.coral)),
-          ],
-          if (result != null) ...[
-            const SizedBox(height: 14),
-            Text(
-              result!.summary,
-              style: const TextStyle(height: 1.6, color: DunesColors.text2),
-            ),
-            if (result!.risks.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Text('主要风险', style: TextStyle(fontWeight: FontWeight.w700)),
-              for (final risk in result!.risks)
-                Padding(
-                  padding: const EdgeInsets.only(top: 5),
-                  child: Text('• $risk'),
-                ),
-            ],
-            if (result!.actions.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Text('建议动作', style: TextStyle(fontWeight: FontWeight.w700)),
-              for (final action in result!.actions)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    '• ${action.title}${action.ownerRole.isEmpty ? '' : ' · ${action.ownerRole}'}',
-                  ),
-                ),
-            ],
-          ] else if (!analyzing && (error == null || error!.isEmpty)) ...[
-            const SizedBox(height: 10),
-            const Text(
-              'AI将依据当前指标解释趋势、定位阻塞并给出行动建议；不会把聊天数量当成绩效。',
-              style: TextStyle(height: 1.5, color: DunesColors.text2),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -1022,57 +1241,31 @@ class _SourceCard extends StatelessWidget {
           for (final source in sources)
             Tooltip(
               message: source.note,
-              child: Chip(
-                avatar: Icon(
-                  source.available
-                      ? Icons.check_circle_outline
-                      : Icons.hourglass_top_rounded,
-                  size: 16,
-                  color: source.available
-                      ? DunesColors.green
-                      : DunesColors.text3,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
                 ),
-                label: Text(source.label),
-                backgroundColor: source.available
-                    ? Colors.white
-                    : const Color(0xFFF2F0F3),
+                decoration: BoxDecoration(
+                  color: source.available
+                      ? DunesColors.greenSoft
+                      : const Color(0xFFF2F0F3),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  source.label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: source.available
+                        ? DunesColors.green
+                        : DunesColors.text3,
+                  ),
+                ),
               ),
             ),
         ],
       ),
-    );
-  }
-}
-
-class _WidePair extends StatelessWidget {
-  const _WidePair({this.left, this.right});
-
-  final Widget? left;
-  final Widget? right;
-
-  @override
-  Widget build(BuildContext context) {
-    final a = left;
-    final b = right;
-    if (a == null && b == null) return const SizedBox.shrink();
-    if (a == null) return b!;
-    if (b == null) return a;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 960) {
-          return Column(
-            children: [a, const SizedBox(height: 14), b],
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: a),
-            const SizedBox(width: 14),
-            Expanded(child: b),
-          ],
-        );
-      },
     );
   }
 }

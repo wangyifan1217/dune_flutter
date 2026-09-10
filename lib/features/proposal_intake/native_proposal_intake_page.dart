@@ -6394,6 +6394,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   void _addSharedSettle() {
+    if (!kProposalSharedSettleEnabled) return;
     _writeSharedSettlements([
       ...proposalIntakeSharedSettlements(_form),
       ProposalSharedSettleRow(id: proposalIntakeNewSharedSettleId()),
@@ -7308,9 +7309,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
-          '比例一样：点「新增共用结算」勾产品，下面各产品只填规模。比例不一样：不勾共用，直接在各产品卡上填结算。',
-          style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+        Text(
+          kProposalSharedSettleEnabled
+              ? '比例一样：点「新增共用结算」勾产品，下面各产品只填规模。比例不一样：不勾共用，直接在各产品卡上填结算。'
+              : '按渠道产品填写结算。一个产品对应一套结算，可再新增明细。',
+          style: const TextStyle(color: ProposalPalette.text3, fontSize: 11),
         ),
         if (channelRows.isEmpty)
           const Padding(
@@ -7320,18 +7323,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
             ),
           ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: enabled ? _addSharedSettle : null,
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('新增共用结算'),
-          ),
-        ),
-        for (final group in proposalIntakeSharedSettlements(_form)) ...[
+        if (kProposalSharedSettleEnabled) ...[
           const SizedBox(height: 8),
-          _sharedSettleCard(group, wide: wide, enabled: enabled),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: enabled ? _addSharedSettle : null,
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('新增共用结算'),
+            ),
+          ),
+          for (final group in proposalIntakeSharedSettlements(_form)) ...[
+            const SizedBox(height: 8),
+            _sharedSettleCard(group, wide: wide, enabled: enabled),
+          ],
         ],
         for (final sku in channelRows) ...[
           const SizedBox(height: 8),
@@ -7354,7 +7359,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             onPatch: (settleId, terms) =>
                 _patchSkuSettle(sku.id, settleId, terms),
             includeScale: true,
-            scaleOnly: proposalIntakeSharedSettleSkuIds(
+            scaleOnly: proposalIntakeActiveSharedSettleSkuIds(
               _form,
             ).contains(sku.id),
           ),
@@ -8154,22 +8159,44 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       );
     }
 
-    Widget scalePeriodField() => _settleStringSelectField(
-      label: '规模口径',
-      value: terms.scalePeriod.isEmpty
-          ? kProposalScalePeriodYear
-          : terms.scalePeriod,
-      options: kProposalScalePeriods,
-      enabled: enabled,
-      fieldKey: 'settle-$keyPrefix-scale-period',
-      onSelected: (value) => onChanged(
-        terms.copyWith(scalePeriod: value ?? kProposalScalePeriodYear),
-      ),
-    );
+    Widget scalePeriodField() {
+      final locked = kProposalScalePeriodLockedToYear;
+      return ProposalField(
+        label: '规模口径',
+        child: locked || !enabled
+            ? _readonlySelectedText(kProposalScalePeriodYear)
+            : ProposalSelectField<String>(
+                key: ValueKey('settle-$keyPrefix-scale-period'),
+                value: terms.scalePeriod.isEmpty
+                    ? kProposalScalePeriodYear
+                    : terms.scalePeriod,
+                title: '规模口径',
+                hint: '请选择',
+                options: [
+                  for (final item in kProposalScalePeriods)
+                    ProposalSelectOption(value: item, label: item),
+                ],
+                onSelected: (value) => onChanged(
+                  terms.copyWith(
+                    scalePeriod: value ?? kProposalScalePeriodYear,
+                  ),
+                ),
+              ),
+      );
+    }
 
     if (scaleOnly) {
       return _fieldGrid(wide, [
-        field('规模（万元）', terms.scale, (value) => terms.copyWith(scale: value)),
+        field(
+          '规模（万元）',
+          terms.scale,
+          (value) => terms.copyWith(
+            scale: value,
+            scalePeriod: kProposalScalePeriodLockedToYear
+                ? kProposalScalePeriodYear
+                : terms.scalePeriod,
+          ),
+        ),
         scalePeriodField(),
       ], columns: wide ? 2 : 1);
     }
@@ -8266,7 +8293,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             field(
               '规模（万元）',
               terms.scale,
-              (value) => terms.copyWith(scale: value),
+              (value) => terms.copyWith(
+                scale: value,
+                scalePeriod: kProposalScalePeriodLockedToYear
+                    ? kProposalScalePeriodYear
+                    : terms.scalePeriod,
+              ),
             ),
             scalePeriodField(),
           ],

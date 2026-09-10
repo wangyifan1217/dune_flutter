@@ -6,6 +6,8 @@ import '../../../core/theme/dunes_theme.dart';
 import '../../../core/widgets/horizontal_drag_scroll_view.dart';
 import '../../../core/widgets/spotlight_tour.dart';
 import '../../auth/auth_session.dart';
+import '../../kb/native_kb_doc_page.dart';
+import '../../meeting/native_meeting_detail_page.dart';
 import '../../tasks/native_task_action_page.dart';
 import '../../tasks/native_task_detail_page.dart';
 import '../../tasks/task_models.dart';
@@ -25,12 +27,16 @@ class _Item {
     required this.title,
     required this.hint,
     this.taskId = 0,
+    this.meetingId = 0,
+    this.documentId = 0,
   });
 
   final _Kind kind;
   final String title;
   final String hint;
   final int taskId;
+  final int meetingId;
+  final int documentId;
 
   String get kindLabel => _kindMeta[kind]!.label;
 }
@@ -85,6 +91,8 @@ List<_Item> _itemsOf(WorkSituationPerson person) {
             title: item.title.trim(),
             hint: item.hint.trim(),
             taskId: item.taskId,
+            meetingId: item.meetingId,
+            documentId: item.documentId,
           ),
     ];
   }
@@ -98,9 +106,17 @@ List<_Item> _itemsOf(WorkSituationPerson person) {
             : '${person.taskOverdue} 件仍过原定日期',
       ),
     if (person.proposalRejected > 0)
-      _Item(kind: _Kind.proposal, title: '被退回的提案', hint: '${person.proposalRejected} 件还没补齐再交'),
+      _Item(
+        kind: _Kind.proposal,
+        title: '被退回的提案',
+        hint: '${person.proposalRejected} 件还没补齐再交',
+      ),
     if (person.taskDoing > 0)
-      _Item(kind: _Kind.doing, title: '进行中的任务', hint: '${person.taskDoing} 件在办'),
+      _Item(
+        kind: _Kind.doing,
+        title: '进行中的任务',
+        hint: '${person.taskDoing} 件在办',
+      ),
     if (person.taskPending + person.approvalPending > 0)
       _Item(
         kind: _Kind.waiting,
@@ -108,16 +124,35 @@ List<_Item> _itemsOf(WorkSituationPerson person) {
         hint: '${person.taskPending + person.approvalPending} 件还在等别人',
       ),
     if (person.meetings > 0 &&
-        (person.noActionMeetings > 0 || person.meetingsLinkedTask == 0))
-      const _Item(kind: _Kind.meeting, title: '会议待跟进', hint: '纪要或行动项还没变成任务'),
+        (person.minutesGenerated == 0 ||
+            person.meetingsLinkedTask == 0 ||
+            person.assignedOverdue > 0 ||
+            person.waitingOnOthersMeet > 0))
+      _Item(
+        kind: _Kind.meeting,
+        title: '会议待跟进',
+        hint: person.assignedOverdue > 0
+            ? '${person.assignedOverdue} 条行动项已超期'
+            : person.minutesGenerated == 0
+            ? '本月相关会还没有纪要'
+            : '纪要或行动项还没变成任务',
+      ),
     if (person.kbUnused > 0)
-      _Item(kind: _Kind.kb, title: '知识待使用', hint: '${person.kbUnused} 篇上传后未被打开或引用'),
+      _Item(kind: _Kind.kb, title: '知识待使用', hint: '${person.kbUnused} 篇上传后没人用'),
     if (person.taskCompleted > 0)
-      _Item(kind: _Kind.done, title: '本月已完成任务', hint: '${person.taskCompleted} 件'),
+      _Item(
+        kind: _Kind.done,
+        title: '本月已完成任务',
+        hint: '${person.taskCompleted} 件',
+      ),
   ];
 }
 
-void _openWorkSituationTask(BuildContext context, AuthSession session, int taskId) {
+void _openWorkSituationTask(
+  BuildContext context,
+  AuthSession session,
+  int taskId,
+) {
   if (taskId <= 0) return;
   Navigator.of(context).push(
     MaterialPageRoute<void>(
@@ -129,10 +164,18 @@ void _openWorkSituationTask(BuildContext context, AuthSession session, int taskI
           onBack: () => Navigator.of(ctx).pop(),
           backLabel: '工作情况',
           onOpenTask: (id) => _openWorkSituationTask(ctx, session, id),
-          onOpenProgress: (task) =>
-              _openWorkSituationTaskAction(ctx, session, task, TaskActionMode.progress),
-          onOpenEvaluate: (task) =>
-              _openWorkSituationTaskAction(ctx, session, task, TaskActionMode.evaluate),
+          onOpenProgress: (task) => _openWorkSituationTaskAction(
+            ctx,
+            session,
+            task,
+            TaskActionMode.progress,
+          ),
+          onOpenEvaluate: (task) => _openWorkSituationTaskAction(
+            ctx,
+            session,
+            task,
+            TaskActionMode.evaluate,
+          ),
         ),
       ),
     ),
@@ -161,12 +204,43 @@ void _openWorkSituationTaskAction(
   );
 }
 
+void _openWorkSituationMeeting(
+  BuildContext context,
+  AuthSession session,
+  int meetingId,
+) {
+  if (meetingId <= 0) return;
+  unawaited(
+    showNativeMeetingDetail(
+      context: context,
+      session: session,
+      meetingId: meetingId,
+    ),
+  );
+}
+
+void _openWorkSituationKb(
+  BuildContext context,
+  AuthSession session,
+  int documentId,
+) {
+  if (documentId <= 0) return;
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (ctx) => Material(
+        color: DunesColors.bgApp,
+        child: NativeKbDocPage(
+          session: session,
+          docId: '$documentId',
+          onBack: () => Navigator.of(ctx).pop(),
+        ),
+      ),
+    ),
+  );
+}
+
 class _Dept {
-  const _Dept({
-    required this.id,
-    required this.name,
-    required this.people,
-  });
+  const _Dept({required this.id, required this.name, required this.people});
 
   final int id;
   final String name;
@@ -221,7 +295,9 @@ _Sig _taskSig(WorkSituationPerson person) {
       person.approvalPending == 0) {
     return const _Sig(level: _SigLevel.mid, label: '没约期', why: '未完成的单还没有截止日期');
   }
-  if (person.taskDoing > 0 || person.taskPending > 0 || person.approvalPending > 0) {
+  if (person.taskDoing > 0 ||
+      person.taskPending > 0 ||
+      person.approvalPending > 0) {
     return const _Sig(level: _SigLevel.mid, label: '在办', why: '事在推进，还没到点或在等别人');
   }
   final why = person.taskReviewWhy.trim();
@@ -239,7 +315,8 @@ bool _taskAdvancing(_Sig sig) =>
     sig.isGood || sig.label == '在办' || sig.label == '待下级';
 
 @visibleForTesting
-String workSituationTaskChipLabel(WorkSituationPerson person) => _taskSig(person).label;
+String workSituationTaskChipLabel(WorkSituationPerson person) =>
+    _taskSig(person).label;
 
 @visibleForTesting
 bool workSituationTaskIsAdvancing(WorkSituationPerson person) =>
@@ -250,25 +327,155 @@ String workSituationTaskWhy(WorkSituationPerson person) =>
     _whyText(person, '任务', _taskSig(person));
 
 _Sig _meetSig(WorkSituationPerson person) {
-  if (person.meetings > 0 &&
-      (person.noActionMeetings > 0 || person.meetingsLinkedTask == 0)) {
-    return const _Sig(level: _SigLevel.weak, label: '没落地', why: '会开了，纪要还没变成可跟进的事');
+  if (person.meetings > 0 && person.minutesGenerated == 0) {
+    var why = '本月相关会还没有纪要';
+    if (person.transcribeFailed > 0) {
+      why = '有 ${person.transcribeFailed} 场转写失败，还没补纪要';
+    }
+    return _Sig(level: _SigLevel.weak, label: '没纪要', why: why);
   }
-  if (person.meetingsLinkedTask > 0 && person.minutesGenerated > 0) {
-    return const _Sig(level: _SigLevel.good, label: '有闭环', why: '会后有纪要或跟进任务');
+  if (person.assignedOverdue > 0) {
+    return _Sig(
+      level: _SigLevel.weak,
+      label: '行动超期',
+      why: '有 ${person.assignedOverdue} 条会议行动项过期未完成',
+    );
   }
-  return const _Sig(level: _SigLevel.mid, label: '本月少会', why: '这个月开会不多，或会已按期处理');
+  final waitingOnly =
+      person.waitingOnOthersMeet > 0 &&
+      person.noActionMeetings == 0 &&
+      person.meetingsLinkedTask == 0;
+  if (person.meetings > 0 && person.meetingsLinkedTask == 0 && !waitingOnly) {
+    var why = '会开了，一场都没转到可跟进任务';
+    if (person.noActionMeetings > 0) {
+      why = '有 ${person.noActionMeetings} 场会没有行动项，一场都没落到任务';
+    } else if (person.actionWithoutAssignee > 0) {
+      why = '有 ${person.actionWithoutAssignee} 条行动项没指定人，一场都没落到任务';
+    }
+    return _Sig(level: _SigLevel.weak, label: '没落地', why: why);
+  }
+  final leftover = person.noActionMeetings > 0 || person.noMinutesMeetings > 0;
+  final aiGap =
+      person.meetingReviewLevel == 'hollow' ||
+      person.meetingReviewLevel == 'mixed';
+  if (person.meetingsLinkedTask > 0 && (leftover || aiGap)) {
+    final why = person.meetingReviewWhy.trim();
+    return _Sig(
+      level: _SigLevel.mid,
+      label: '部分没落',
+      why: why.isEmpty ? '有的会转到任务了，还有会没有下文' : why,
+    );
+  }
+  if (person.meetingsLinkedTask > 0) {
+    return const _Sig(
+      level: _SigLevel.good,
+      label: '有闭环',
+      why: '会后有纪要，并转到了可跟进的事',
+    );
+  }
+  if (person.meetings == 0 &&
+      person.assignedOverdue == 0 &&
+      (person.assignedLinked > 0 ||
+          (person.assignedOpen > 0 &&
+              person.assignedWithoutDue < person.assignedOpen))) {
+    return const _Sig(level: _SigLevel.good, label: '有闭环', why: '自己的会议跟进未超期');
+  }
+  if (person.waitingOnOthersMeet > 0) {
+    return const _Sig(level: _SigLevel.mid, label: '待下级', why: '会开了，行动项还在别人身上');
+  }
+  if (person.assignedOpen > 0 &&
+      person.assignedWithoutDue >= person.assignedOpen) {
+    return const _Sig(
+      level: _SigLevel.mid,
+      label: '没约期',
+      why: '自己的会议跟进还没有截止日期',
+    );
+  }
+  final why = person.meetingReviewWhy.trim();
+  if (person.meetingReviewLevel == 'quiet' ||
+      (person.meetings <= 0 && person.assignedOpen <= 0)) {
+    return _Sig(
+      level: _SigLevel.mid,
+      label: '本月少会',
+      why: why.isEmpty ? '这个月开会不多，或会已按期处理' : why,
+    );
+  }
+  return const _Sig(
+    level: _SigLevel.mid,
+    label: '本月少会',
+    why: '这个月开会不多，或会已按期处理',
+  );
 }
 
+@visibleForTesting
+String workSituationMeetChipLabel(WorkSituationPerson person) =>
+    _meetSig(person).label;
+
+@visibleForTesting
+String workSituationMeetWhy(WorkSituationPerson person) =>
+    _whyText(person, '开会', _meetSig(person));
+
 _Sig _kbSig(WorkSituationPerson person) {
-  if (person.kbUnused > 0 && person.kbReferences == 0) {
-    return const _Sig(level: _SigLevel.weak, label: '没人用', why: '知识传上去了，没被任务或审批用到');
+  if (person.kbUnused > 0 && person.kbUsed == 0) {
+    final parts = <String>['${person.kbUnused}篇没人用'];
+    if (person.kbUnusedMeetingDocs > 0) {
+      parts.add('${person.kbUnusedMeetingDocs}篇纪要没人翻');
+    }
+    if (person.kbSelfViewOnly > 0) {
+      parts.add('${person.kbSelfViewOnly}篇只自己看过');
+    }
+    return _Sig(level: _SigLevel.weak, label: '没人用', why: parts.join('，'));
   }
-  if (person.kbReferences > 0) {
-    return const _Sig(level: _SigLevel.good, label: '用上了', why: '知识进了库，或已经用在工作里');
+  final leftover = person.kbUnused > 0;
+  final aiGap =
+      person.kbReviewLevel == 'idle' || person.kbReviewLevel == 'mixed';
+  if (person.kbUsed > 0 && (leftover || aiGap)) {
+    final why = person.kbReviewWhy.trim();
+    return _Sig(
+      level: _SigLevel.mid,
+      label: '部分没用',
+      why: why.isEmpty ? '有的知识用上了，还有文档没人用' : why,
+    );
+  }
+  if (person.kbUsed > 0) {
+    return const _Sig(
+      level: _SigLevel.good,
+      label: '用上了',
+      why: '别人打开过、引用过，或已经绑到任务',
+    );
+  }
+  if (person.kbFailed > 0 && person.kbUsed == 0 && person.kbUsable == 0) {
+    return _Sig(
+      level: _SigLevel.mid,
+      label: '入库失败',
+      why: '这个月传了 ${person.kbFailed} 篇，都没入库成功',
+    );
+  }
+  if (person.kbUncitedConversations > 0) {
+    return _Sig(
+      level: _SigLevel.mid,
+      label: '问了没引用',
+      why: '问过知识库 ${person.kbUncitedConversations} 次，助手没有引用文档',
+    );
+  }
+  final why = person.kbReviewWhy.trim();
+  if (person.kbReviewLevel == 'quiet' || person.kbDocuments <= 0) {
+    return _Sig(
+      level: _SigLevel.mid,
+      label: '本月少传',
+      why: why.isEmpty ? '这个月知识库上传不多' : why,
+    );
   }
   return const _Sig(level: _SigLevel.mid, label: '一般', why: '这个月知识库动作不多');
 }
+
+@visibleForTesting
+String workSituationKbChipLabel(WorkSituationPerson person) =>
+    _kbSig(person).label;
+
+@visibleForTesting
+String workSituationKbWhy(WorkSituationPerson person) =>
+    _whyText(person, '知识', _kbSig(person));
 
 _Sig _talkSig(WorkSituationPerson person) {
   final why = person.imTalkWhy.trim();
@@ -292,10 +499,18 @@ _Sig _talkSig(WorkSituationPerson person) {
         why: why.isEmpty ? '抽看会话后，有的在跟事，有的偏水。' : why,
       );
     case 'quiet':
-      return const _Sig(level: _SigLevel.mid, label: '本月少聊', why: '这个月几乎没有可分析的会话');
+      return const _Sig(
+        level: _SigLevel.mid,
+        label: '本月少聊',
+        why: '这个月几乎没有可分析的会话',
+      );
     default:
       if (person.imSessions <= 0) {
-        return const _Sig(level: _SigLevel.mid, label: '本月少聊', why: '这个月几乎没有可分析的会话');
+        return const _Sig(
+          level: _SigLevel.mid,
+          label: '本月少聊',
+          why: '这个月几乎没有可分析的会话',
+        );
       }
       return const _Sig(
         level: _SigLevel.mid,
@@ -338,7 +553,9 @@ class _EffRoll {
     required this.task,
     required this.taskWeak,
     required this.meet,
+    required this.meetWeak,
     required this.kb,
+    required this.kbWeak,
     required this.talk,
     required this.n,
   });
@@ -346,7 +563,9 @@ class _EffRoll {
   final int task;
   final int taskWeak;
   final int meet;
+  final int meetWeak;
   final int kb;
+  final int kbWeak;
   final int talk;
   final int n;
 }
@@ -355,7 +574,9 @@ _EffRoll _effRoll(Iterable<WorkSituationPerson> people) {
   var task = 0;
   var taskWeak = 0;
   var meet = 0;
+  var meetWeak = 0;
   var kb = 0;
+  var kbWeak = 0;
   var talk = 0;
   var n = 0;
   for (final person in people) {
@@ -363,15 +584,21 @@ _EffRoll _effRoll(Iterable<WorkSituationPerson> people) {
     final taskSig = _taskSig(person);
     if (_taskAdvancing(taskSig)) task++;
     if (taskSig.isWeak) taskWeak++;
-    if (_meetSig(person).isGood) meet++;
-    if (_kbSig(person).isGood) kb++;
+    final meetSig = _meetSig(person);
+    if (meetSig.isGood) meet++;
+    if (meetSig.isWeak) meetWeak++;
+    final kbSig = _kbSig(person);
+    if (kbSig.isGood) kb++;
+    if (kbSig.isWeak) kbWeak++;
     if (_talkSig(person).isGood) talk++;
   }
   return _EffRoll(
     task: task,
     taskWeak: taskWeak,
     meet: meet,
+    meetWeak: meetWeak,
     kb: kb,
+    kbWeak: kbWeak,
     talk: talk,
     n: n == 0 ? 1 : n,
   );
@@ -382,6 +609,10 @@ String _glanceSummary(List<WorkSituationPerson> people) {
   final parts = <String>[];
   parts.add('任务 ${e.task}人在推进');
   if (e.taskWeak > 0) parts.add('${e.taskWeak}人超期或空转');
+  parts.add('开会 ${e.meet}人有闭环');
+  if (e.meetWeak > 0) parts.add('${e.meetWeak}人没落地');
+  parts.add('知识 ${e.kb}人用上了');
+  if (e.kbWeak > 0) parts.add('${e.kbWeak}人没人用');
   if (e.talk > 0) parts.add('沟通 ${e.talk}人在跟事');
   return parts.join(' · ');
 }
@@ -412,6 +643,8 @@ class NativeQianjiEfficiencyBossPreview extends StatefulWidget {
     this.now,
     this.viewAll = true,
     this.viewerName = '',
+    this.initialFilter = 'all',
+    this.initialMonth,
   });
 
   final VoidCallback onBack;
@@ -420,6 +653,8 @@ class NativeQianjiEfficiencyBossPreview extends StatefulWidget {
   final DateTime? now;
   final bool viewAll;
   final String viewerName;
+  final String initialFilter;
+  final DateTime? initialMonth;
 
   @override
   State<NativeQianjiEfficiencyBossPreview> createState() =>
@@ -454,8 +689,11 @@ class _NativeQianjiEfficiencyBossPreviewState
   void initState() {
     super.initState();
     final now = widget.now ?? DateTime.now();
-    _month = DateTime(now.year, now.month - 1);
-    _service = widget.service ??
+    final seed = widget.initialMonth ?? DateTime(now.year, now.month - 1);
+    _month = DateTime(seed.year, seed.month);
+    _filter = widget.initialFilter.isEmpty ? 'all' : widget.initialFilter;
+    _service =
+        widget.service ??
         (widget.session == null
             ? null
             : EfficiencyService(session: widget.session!));
@@ -474,9 +712,7 @@ class _NativeQianjiEfficiencyBossPreviewState
 
   List<DateTime> get _recentMonths {
     final now = widget.now ?? DateTime.now();
-    return [
-      for (var i = 0; i < 6; i++) DateTime(now.year, now.month - i),
-    ];
+    return [for (var i = 0; i < 6; i++) DateTime(now.year, now.month - i)];
   }
 
   List<_Dept> get _depts {
@@ -513,11 +749,15 @@ class _NativeQianjiEfficiencyBossPreviewState
 
   List<_Dept> get _scopedDepts {
     if (_departmentId == null) return _depts;
-    return [for (final dept in _depts) if (dept.id == _departmentId) dept];
+    return [
+      for (final dept in _depts)
+        if (dept.id == _departmentId) dept,
+    ];
   }
 
-  List<WorkSituationPerson> get _allPeople =>
-      [for (final dept in _scopedDepts) ...dept.people];
+  List<WorkSituationPerson> get _allPeople => [
+    for (final dept in _scopedDepts) ...dept.people,
+  ];
 
   bool _matchPerson(WorkSituationPerson person) {
     final q = _query.trim();
@@ -721,7 +961,11 @@ class _NativeQianjiEfficiencyBossPreviewState
                   const SizedBox(height: 4),
                   const Text(
                     '按你选的自然月，汇总本人权限范围内的任务、审批/提案、会议纪要、知识库，并抽看 IM 会话。沟通由 AI 判断是否在推进事情，不打分。界面不展示聊天原文。',
-                    style: TextStyle(fontSize: 12, color: DunesColors.text3, height: 1.45),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.text3,
+                      height: 1.45,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   const _GuideItem(
@@ -732,11 +976,12 @@ class _NativeQianjiEfficiencyBossPreviewState
                   const _GuideItem(
                     title: '开会没落地',
                     body:
-                        '来自会议纪要：这个月开过会，但纪要没有行动项，或行动项还没变成可跟进任务。不听录音、不读转写全文。',
+                        '来自会议纪要，含组织者和行动项负责人。看本月开过或补过纪要/跟进的会。没纪要、行动超期、一场都没转到任务是硬事实；一场空会不会把整月打成没落地。AI 抽看标题和纪要截断，判断是有下文还是走过场。点开事项可进会议详情。不听录音、不读转写全文。',
                   ),
                   const _GuideItem(
                     title: '知识没用上',
-                    body: '来自知识库：这个月上传了文档，但没被打开，也没有被任务或审批引用。',
+                    body:
+                        '来自知识库，按上传人看这个月传上去的文档有没有别人用。别人打开、对话引用或绑到任务才算用上，自己打开不算。全月都没人用才算弱项；有的用了有的没用算部分没用。入库失败、问了没引用是中档。点开事项可进知识详情，不展示正文摘录。',
                   ),
                   const _GuideItem(
                     title: '沟通偏浅',
@@ -940,7 +1185,10 @@ class _Header extends StatelessWidget {
                 if (subtitle != null)
                   Text(
                     subtitle!,
-                    style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: DunesColors.text3,
+                    ),
                   ),
               ],
             ),
@@ -1032,7 +1280,10 @@ class _PinnedFilters extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
                   '$monthLabel · ${departmentId == null ? scopeLabel : departments.where((d) => d.id == departmentId).map((d) => d.name).join()}',
-                  style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: DunesColors.text3,
+                  ),
                 ),
               ),
             _SearchField(
@@ -1094,7 +1345,11 @@ class _Board extends StatelessWidget {
       return ListView(
         padding: const EdgeInsets.fromLTRB(24, 48, 24, 36),
         children: [
-          Text(error!, textAlign: TextAlign.center, style: const TextStyle(color: DunesColors.text2)),
+          Text(
+            error!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: DunesColors.text2),
+          ),
           const SizedBox(height: 16),
           Center(
             child: FilledButton(onPressed: onRetry, child: const Text('重试')),
@@ -1103,7 +1358,10 @@ class _Board extends StatelessWidget {
       );
     }
     final searching = query.trim().isNotEmpty;
-    final hitPeople = depts.fold<int>(0, (sum, dept) => sum + dept.people.length);
+    final hitPeople = depts.fold<int>(
+      0,
+      (sum, dept) => sum + dept.people.length,
+    );
     return RefreshIndicator(
       onRefresh: onRetry,
       child: ListView(
@@ -1178,7 +1436,10 @@ class _HeroCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('$monthLabel · $scopeLabel', style: const TextStyle(color: Color(0xDFFFFFFF), fontSize: 13)),
+          Text(
+            '$monthLabel · $scopeLabel',
+            style: const TextStyle(color: Color(0xDFFFFFFF), fontSize: 13),
+          ),
           const SizedBox(height: 6),
           const Text(
             '每个人工作实不实',
@@ -1223,7 +1484,9 @@ class _MonthBar extends StatelessWidget {
           ],
           _Chip(
             label: '更多',
-            selected: !months.any((item) => item.year == month.year && item.month == month.month),
+            selected: !months.any(
+              (item) => item.year == month.year && item.month == month.month,
+            ),
             onTap: onPick,
           ),
         ],
@@ -1288,7 +1551,9 @@ class _Chip extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? _purple : Colors.white,
           borderRadius: BorderRadius.circular(99),
-          border: Border.all(color: selected ? _purple : const Color(0xFFE9E3EE)),
+          border: Border.all(
+            color: selected ? _purple : const Color(0xFFE9E3EE),
+          ),
         ),
         child: Text(
           label,
@@ -1340,7 +1605,10 @@ class _SearchField extends StatelessWidget {
               ),
         filled: true,
         fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 12,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: Color(0xFFE9E3EE)),
@@ -1367,7 +1635,11 @@ class _FilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget chip(String id, String label) {
-      return _Chip(label: label, selected: filter == id, onTap: () => onChanged(id));
+      return _Chip(
+        label: label,
+        selected: filter == id,
+        onTap: () => onChanged(id),
+      );
     }
 
     return Wrap(
@@ -1406,16 +1678,25 @@ class _EffMeter extends StatelessWidget {
             if (goodPct > 0)
               Flexible(
                 flex: (goodPct * 1000).round().clamp(1, 1000),
-                child: const ColoredBox(color: DunesColors.green, child: SizedBox.expand()),
+                child: const ColoredBox(
+                  color: DunesColors.green,
+                  child: SizedBox.expand(),
+                ),
               ),
             if (weakPct > 0)
               Flexible(
                 flex: (weakPct * 1000).round().clamp(1, 1000),
-                child: const ColoredBox(color: DunesColors.coral, child: SizedBox.expand()),
+                child: const ColoredBox(
+                  color: DunesColors.coral,
+                  child: SizedBox.expand(),
+                ),
               ),
             Flexible(
               flex: ((1 - goodPct - weakPct) * 1000).round().clamp(1, 1000),
-              child: const ColoredBox(color: Color(0xFFF3EEF6), child: SizedBox.expand()),
+              child: const ColoredBox(
+                color: Color(0xFFF3EEF6),
+                child: SizedBox.expand(),
+              ),
             ),
           ],
         ),
@@ -1451,7 +1732,10 @@ class _GlanceCardState extends State<_GlanceCard> {
                 const Spacer(),
                 Text(
                   '$good/${e.n} $unit',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
             ),
@@ -1474,7 +1758,7 @@ class _GlanceCardState extends State<_GlanceCard> {
           InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
             borderRadius: BorderRadius.circular(18),
-              child: Padding(
+            child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
               child: Row(
                 children: [
@@ -1484,13 +1768,19 @@ class _GlanceCardState extends State<_GlanceCard> {
                       children: [
                         const Text(
                           '工作实不实',
-                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
                         ),
                         if (!_expanded) ...[
                           const SizedBox(height: 4),
                           Text(
                             _glanceSummary(widget.people),
-                            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: DunesColors.text3,
+                            ),
                           ),
                         ],
                       ],
@@ -1514,12 +1804,16 @@ class _GlanceCardState extends State<_GlanceCard> {
                 children: [
                   const Text(
                     '看任务办没办完、开会有没有下文、知识有没有人用、会话里是不是在跟具体事。沟通抽会话给 AI 看，不打分。',
-                    style: TextStyle(fontSize: 12, color: DunesColors.text3, height: 1.4),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.text3,
+                      height: 1.4,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   row('把事办掉', e.task, '在推进', weak: e.taskWeak),
-                  row('好好开会', e.meet, '有闭环'),
-                  row('用好知识库', e.kb, '用上了'),
+                  row('好好开会', e.meet, '有闭环', weak: e.meetWeak),
+                  row('用好知识库', e.kb, '用上了', weak: e.kbWeak),
                   row('沟通跟得上事', e.talk, '在跟事'),
                 ],
               ),
@@ -1564,11 +1858,20 @@ class _DeptGlanceList extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Text(dept.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                        Text(
+                          dept.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
                         const Spacer(),
                         Text(
                           '${dept.people.length}人 · ${_deptSay(dept)}',
-                          style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: DunesColors.text3,
+                          ),
                         ),
                       ],
                     ),
@@ -1581,10 +1884,16 @@ class _DeptGlanceList extends StatelessWidget {
                           children: [
                             Text(
                               '任务 ${e.task}/${e.n} · 开会 ${e.meet}/${e.n} · 知识 ${e.kb}/${e.n} · 沟通 ${e.talk}/${e.n}',
-                              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: DunesColors.text3,
+                              ),
                             ),
                             const SizedBox(height: 8),
-                            _EffMeter(good: e.task + e.meet + e.kb + e.talk, n: e.n * 4),
+                            _EffMeter(
+                              good: e.task + e.meet + e.kb + e.talk,
+                              n: e.n * 4,
+                            ),
                           ],
                         );
                       },
@@ -1636,12 +1945,17 @@ class _DeptCard extends StatelessWidget {
                       onTap: onSelect,
                       child: Text(
                         '${dept.name} · ${dept.people.length}人',
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
                       ),
                     ),
                   ),
                   Icon(
-                    expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                    expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
                     color: DunesColors.text3,
                   ),
                 ],
@@ -1680,16 +1994,26 @@ class _PersonRow extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text(person.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                      Text(
+                        person.name,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           person.title,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: DunesColors.text3,
+                          ),
                         ),
                       ),
-                      const Icon(Icons.chevron_right_rounded, size: 18, color: DunesColors.text3),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        size: 18,
+                        color: DunesColors.text3,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -1720,9 +2044,7 @@ class _SigPills extends StatelessWidget {
     return Wrap(
       spacing: 6,
       runSpacing: 6,
-      children: [
-        for (final item in items) _sigChip(item.$1, item.$2),
-      ],
+      children: [for (final item in items) _sigChip(item.$1, item.$2)],
     );
   }
 
@@ -1742,7 +2064,10 @@ class _SigPills extends StatelessWidget {
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(99)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(99),
+      ),
       child: Text(
         '$name${sig.label}',
         style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: fg),
@@ -1769,9 +2094,19 @@ class _WhyLines extends StatelessWidget {
       children: [
         for (final row in rows) ...[
           const SizedBox(height: 10),
-          Text('${row.$1}${row.$2.label}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+          Text(
+            '${row.$1}${row.$2.label}',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 4),
-          Text(_whyText(person, row.$1, row.$2), style: const TextStyle(fontSize: 13, height: 1.45, color: DunesColors.text2)),
+          Text(
+            _whyText(person, row.$1, row.$2),
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.45,
+              color: DunesColors.text2,
+            ),
+          ),
         ],
       ],
     );
@@ -1787,6 +2122,41 @@ String _whyText(WorkSituationPerson person, String name, _Sig sig) {
     }
     if (_talkSig(person).isGood && sig.label == '本月少事') {
       return '$why 会话在跟，但本月任务单很少。';
+    }
+    return why;
+  }
+  if (name == '开会') {
+    final ai = person.meetingReviewWhy.trim();
+    var why = sig.why;
+    if (ai.isNotEmpty &&
+        sig.label != '没纪要' &&
+        sig.label != '行动超期' &&
+        sig.label != '没落地') {
+      why = ai;
+    }
+    final task = _taskSig(person);
+    if (_taskAdvancing(task) && (sig.label == '没落地' || sig.label == '没纪要')) {
+      return '$why 事在办，但会没下文。';
+    }
+    if (_talkSig(person).isGood && sig.label == '没落地') {
+      return '$why 会话在跟，会后单子还没落下。';
+    }
+    return why;
+  }
+  if (name == '知识') {
+    final ai = person.kbReviewWhy.trim();
+    var why = sig.why;
+    if (ai.isNotEmpty && sig.label != '没人用') {
+      why = ai;
+    }
+    final task = _taskSig(person);
+    if (_taskAdvancing(task) && sig.label == '没人用') {
+      return '$why 事在办，知识没人用。';
+    }
+    if (_meetSig(person).isGood &&
+        sig.label == '没人用' &&
+        person.kbUnusedMeetingDocs > 0) {
+      return '$why 会落下了，纪要没人翻。';
     }
     return why;
   }
@@ -1834,12 +2204,14 @@ class _PersonDetail extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = _itemsOf(person);
     final taskItems = items
-        .where((i) =>
-            i.kind == _Kind.doing ||
-            i.kind == _Kind.overdue ||
-            i.kind == _Kind.waiting ||
-            i.kind == _Kind.proposal ||
-            i.kind == _Kind.done)
+        .where(
+          (i) =>
+              i.kind == _Kind.doing ||
+              i.kind == _Kind.overdue ||
+              i.kind == _Kind.waiting ||
+              i.kind == _Kind.proposal ||
+              i.kind == _Kind.done,
+        )
         .toList();
     final meetItems = items.where((i) => i.kind == _Kind.meeting).toList();
     final kbItems = items.where((i) => i.kind == _Kind.kb).toList();
@@ -1866,7 +2238,13 @@ class _PersonDetail extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(person.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+                        Text(
+                          person.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 18,
+                          ),
+                        ),
                         Text(
                           '${person.departmentName} · ${person.title} · $monthLabel',
                           style: const TextStyle(color: DunesColors.text3),
@@ -1881,14 +2259,20 @@ class _PersonDetail extends StatelessWidget {
               _WhyLines(person: person),
               if (person.note.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text(person.note, style: const TextStyle(height: 1.5, fontSize: 14)),
+                Text(
+                  person.note,
+                  style: const TextStyle(height: 1.5, fontSize: 14),
+                ),
               ],
               const SizedBox(height: 10),
               GestureDetector(
                 onTap: onOpenDept,
                 child: Text(
                   '看${person.departmentName}',
-                  style: const TextStyle(color: _purple, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    color: _purple,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],
@@ -1906,11 +2290,23 @@ class _PersonDetail extends StatelessWidget {
         ],
         if (meetItems.isNotEmpty) ...[
           const SizedBox(height: 10),
-          _DetailSection(title: '开会怎么看', items: meetItems),
+          _DetailSection(
+            title: '开会怎么看',
+            items: meetItems,
+            onOpenMeeting: session == null
+                ? null
+                : (id) => _openWorkSituationMeeting(context, session!, id),
+          ),
         ],
         if (kbItems.isNotEmpty) ...[
           const SizedBox(height: 10),
-          _DetailSection(title: '知识怎么看', items: kbItems),
+          _DetailSection(
+            title: '知识怎么看',
+            items: kbItems,
+            onOpenKb: session == null
+                ? null
+                : (id) => _openWorkSituationKb(context, session!, id),
+          ),
         ],
         const SizedBox(height: 10),
         Container(
@@ -1924,11 +2320,18 @@ class _PersonDetail extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('沟通怎么看', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              const Text(
+                '沟通怎么看',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+              ),
               const SizedBox(height: 8),
               Text(
                 _talkDetailText(person),
-                style: const TextStyle(fontSize: 13, height: 1.45, color: DunesColors.text2),
+                style: const TextStyle(
+                  fontSize: 13,
+                  height: 1.45,
+                  color: DunesColors.text2,
+                ),
               ),
               if (talkItems.isNotEmpty) ...[
                 const SizedBox(height: 4),
@@ -1947,11 +2350,15 @@ class _DetailSection extends StatelessWidget {
     required this.title,
     required this.items,
     this.onOpenTask,
+    this.onOpenMeeting,
+    this.onOpenKb,
   });
 
   final String title;
   final List<_Item> items;
   final ValueChanged<int>? onOpenTask;
+  final ValueChanged<int>? onOpenMeeting;
+  final ValueChanged<int>? onOpenKb;
 
   @override
   Widget build(BuildContext context) {
@@ -1965,9 +2372,17 @@ class _DetailSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+          Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+          ),
           for (final item in items)
-            _ItemTile(item: item, onOpenTask: onOpenTask),
+            _ItemTile(
+              item: item,
+              onOpenTask: onOpenTask,
+              onOpenMeeting: onOpenMeeting,
+              onOpenKb: onOpenKb,
+            ),
         ],
       ),
     );
@@ -1975,15 +2390,25 @@ class _DetailSection extends StatelessWidget {
 }
 
 class _ItemTile extends StatelessWidget {
-  const _ItemTile({required this.item, this.onOpenTask});
+  const _ItemTile({
+    required this.item,
+    this.onOpenTask,
+    this.onOpenMeeting,
+    this.onOpenKb,
+  });
 
   final _Item item;
   final ValueChanged<int>? onOpenTask;
+  final ValueChanged<int>? onOpenMeeting;
+  final ValueChanged<int>? onOpenKb;
 
   @override
   Widget build(BuildContext context) {
     final meta = _kindMeta[item.kind]!;
-    final canOpen = item.taskId > 0 && onOpenTask != null;
+    final canOpenTask = item.taskId > 0 && onOpenTask != null;
+    final canOpenMeeting = item.meetingId > 0 && onOpenMeeting != null;
+    final canOpenKb = item.documentId > 0 && onOpenKb != null;
+    final canOpen = canOpenTask || canOpenMeeting || canOpenKb;
     final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
@@ -1998,7 +2423,11 @@ class _ItemTile extends StatelessWidget {
             ),
             child: Text(
               meta.label,
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: meta.color),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: meta.color,
+              ),
             ),
           ),
           const SizedBox(width: 10),
@@ -2006,23 +2435,47 @@ class _ItemTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item.title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                Text(
+                  item.title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
                 if (item.hint.isNotEmpty)
-                  Text(item.hint, style: const TextStyle(fontSize: 12, color: DunesColors.text3)),
+                  Text(
+                    item.hint,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.text3,
+                    ),
+                  ),
               ],
             ),
           ),
           if (canOpen)
             const Padding(
               padding: EdgeInsets.only(top: 2),
-              child: Icon(Icons.chevron_right_rounded, size: 18, color: DunesColors.text3),
+              child: Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: DunesColors.text3,
+              ),
             ),
         ],
       ),
     );
     if (!canOpen) return row;
     return InkWell(
-      onTap: () => onOpenTask!(item.taskId),
+      onTap: () {
+        if (canOpenMeeting) {
+          onOpenMeeting!(item.meetingId);
+        } else if (canOpenKb) {
+          onOpenKb!(item.documentId);
+        } else {
+          onOpenTask!(item.taskId);
+        }
+      },
       borderRadius: BorderRadius.circular(12),
       child: row,
     );

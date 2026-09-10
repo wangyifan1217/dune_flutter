@@ -361,6 +361,8 @@ class _NativeChatViewState extends State<NativeChatView>
 
   /// 窗口收起/还原时 reverse 列表会乱跳，这段时间不要把像素变化当成用户上滑。
   bool _backgroundLayoutActive = false;
+  /// 本次失焦是否把窗口收起/夹扁。仅切软件时为 false，恢复后不要重载列表。
+  bool _foregroundPauseWasObscured = false;
   DateTime? _foregroundRestoredAt;
   DateTime? _lastPointerSignalScrollAt;
   double _olderScrollHoldMax = 0;
@@ -821,8 +823,9 @@ class _NativeChatViewState extends State<NativeChatView>
   void didChangeMetrics() {
     super.didChangeMetrics();
     if (!mounted) return;
-    if (!_hasStableChatViewport || windowsTrayIsWindowInactive()) {
+    if (!_hasStableChatViewport || windowsTrayIsWindowObscured()) {
       _backgroundLayoutActive = true;
+      _foregroundPauseWasObscured = true;
       _freezeHistoryViewportForBackground();
     }
     if (_isBrowsingHistory || _locatedMode) return;
@@ -843,14 +846,13 @@ class _NativeChatViewState extends State<NativeChatView>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.hidden ||
-        state == AppLifecycleState.paused) {
-      _backgroundLayoutActive = true;
-      _freezeHistoryViewportForBackground();
-      if (!_historyViewportFrozen && !_locatedMode) {
-        _pendingStickBottomAfterForeground = true;
-      }
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _onChatForegroundPaused(viewportCollapsed: true);
+      return;
+    }
+    if (state == AppLifecycleState.inactive) {
+      _onChatForegroundPaused();
       return;
     }
     if (state == AppLifecycleState.resumed) {
@@ -858,25 +860,49 @@ class _NativeChatViewState extends State<NativeChatView>
     }
   }
 
-  void _onChatForegroundPaused() {
+  void _onChatForegroundPaused({bool viewportCollapsed = false}) {
+    // 先快照再标后台，否则 capture 会被 backgroundLayoutActive 跳过。
+    if (_hasStableChatViewport) {
+      _captureStableHistoryViewport(ignoreNoise: true);
+    }
+    final collapsed =
+        viewportCollapsed ||
+        windowsTrayIsWindowObscured() ||
+        !_hasStableChatViewport;
     _backgroundLayoutActive = true;
+    if (collapsed) {
+      _foregroundPauseWasObscured = true;
+    }
     _freezeHistoryViewportForBackground();
-    if (!_historyViewportFrozen && !_locatedMode) {
+    if (collapsed && !_historyViewportFrozen && !_locatedMode) {
       _pendingStickBottomAfterForeground = true;
     }
   }
 
   void _onChatForegroundResumed() {
     _foregroundRestoredAt = DateTime.now();
-    // 窗口恢复后先用失焦前快照复位；即使补拉被防抖跳过，也不能停在
-    // Windows 最小化时夹出的 pixels=0，也不能停在还原时被拽去的历史位置。
+    final needsRepair = chatForegroundNeedsListRepair(
+      windowObscured: _foregroundPauseWasObscured,
+      viewportCollapsed: !_hasStableChatViewport,
+    );
+    _foregroundPauseWasObscured = false;
     if (_isBrowsingHistory) {
       _restoreHistoryViewportAfterForeground();
-    } else if (!_locatedMode) {
+    } else if (!_locatedMode && needsRepair) {
+      // 最小化/托盘还原：Windows 会把 reverse 列表夹到 0 或拽去历史。
       _pendingStickBottomAfterForeground = true;
       _scrollBottom(force: true, gentle: false);
+    } else if (!_locatedMode &&
+        (_pendingStickBottomAfterForeground || !_rawPixelsNearLatest)) {
+      // 切软件时列表可能漂离最新端；失焦期间来的新消息也只需贴一次底。
+      _scrollBottom(force: true, gentle: true);
+      _pendingStickBottomAfterForeground = false;
     }
-    unawaited(_syncLatestOnForeground());
+    if (needsRepair) {
+      unawaited(_syncLatestOnForeground());
+    } else {
+      unawaited(_reconnectRealtimeOnForeground());
+    }
     // 等视口重新铺开后再允许把滚动当用户操作；过长会卡住滚轮加载历史。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future<void>.delayed(const Duration(milliseconds: 180), () {
@@ -959,6 +985,12 @@ class _NativeChatViewState extends State<NativeChatView>
     }
   }
 
+  Future<void> _reconnectRealtimeOnForeground() async {
+    try {
+      await _realtime.connect();
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
     _loadGeneration++;
@@ -1001,13 +1033,16 @@ class _NativeChatViewState extends State<NativeChatView>
     final pos = _scrollController.position;
     _scheduleUnreadVisibilityCheck();
     if (_isBackgroundLayoutNoise) {
-      if (!_historyViewportFrozen && !_locatedMode) {
-        _freezeHistoryViewportForBackground();
-      }
-      if (_pendingStickBottomAfterForeground &&
-          !_historyViewportFrozen &&
-          !_rawPixelsNearLatest) {
-        _scrollBottom(force: true, gentle: true);
+      // 最小化/视口被夹扁才冻滚动；仅切软件失焦时的 pixels 抖动不要当成在看历史。
+      if (_foregroundPauseWasObscured || !_hasStableChatViewport) {
+        if (!_historyViewportFrozen && !_locatedMode) {
+          _freezeHistoryViewportForBackground();
+        }
+        if (_pendingStickBottomAfterForeground &&
+            !_historyViewportFrozen &&
+            !_rawPixelsNearLatest) {
+          _scrollBottom(force: true, gentle: true);
+        }
       }
       return;
     }
@@ -1677,9 +1712,9 @@ class _NativeChatViewState extends State<NativeChatView>
         (_isScrolledAwayFromLatest || _userInteractedWithScroll);
   }
 
-  void _captureStableHistoryViewport() {
+  void _captureStableHistoryViewport({bool ignoreNoise = false}) {
     if (_historyViewportFrozen) return;
-    if (_isBackgroundLayoutNoise) return;
+    if (!ignoreNoise && _isBackgroundLayoutNoise) return;
     if (!_hasStableChatViewport) return;
     final away =
         !_rawPixelsNearLatest &&

@@ -167,6 +167,7 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
   String _templateFilter = 'ALL';
   Map<String, String> _templateTitles = const <String, String>{};
   List<XflowProposalItem> _all = const <XflowProposalItem>[];
+  int? _copyingId;
 
   /// 快速切换筛选时丢弃过期响应，避免旧请求覆盖新数据。
   int _loadSeq = 0;
@@ -479,6 +480,31 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
     }
   }
 
+  Future<void> _copyApproval(XflowProposalItem item) async {
+    if (_copyingId != null) return;
+    setState(() => _copyingId = item.id);
+    try {
+      final copied = await _service.copyApprovalAsDraft(item);
+      if (!mounted) return;
+      ApprovalListCache.instance.invalidate(
+        userId: widget.session.userId,
+        listType: _cacheListType,
+      );
+      unawaited(_load(silent: true));
+      showDunesToast(context, '已复制为新草稿，可继续填写');
+      _openProposal(copied);
+    } catch (e) {
+      if (!mounted) return;
+      showDunesToast(
+        context,
+        '复制失败：${friendlyErrorText(e)}',
+        kind: DunesToastKind.error,
+      );
+    } finally {
+      if (mounted) setState(() => _copyingId = null);
+    }
+  }
+
   Future<void> _completeB13Task(
     XflowProposalItem item, {
     bool? verifyPassed,
@@ -723,6 +749,12 @@ class _NativeProposalListPageState extends State<_NativeProposalListPage> {
                                         )
                                       : null,
                                   dangerActionLabel: '核验失败',
+                                  onCopy: widget.type == _ListType.b14
+                                      ? () => unawaited(_copyApproval(item))
+                                      : null,
+                                  copying:
+                                      widget.type == _ListType.b14 &&
+                                      _copyingId == item.id,
                                   onDeleteDraft:
                                       widget.type == _ListType.b14 &&
                                           (_normalizeStatus(item.status) ==

@@ -465,7 +465,12 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
             onExport: () => _export(scope),
           ),
           const SizedBox(height: 12),
-          _RateBoard(metrics: snapshot.metrics),
+          _RateBoard(
+            metrics: snapshot.metrics,
+            restMetricsStorageKey: PageStorageKey<String>(
+              'efficiency-$scope-rest-metrics',
+            ),
+          ),
           if (snapshot.stages.isNotEmpty) ...[
             const SizedBox(height: 12),
             _SectionCard(
@@ -693,9 +698,10 @@ class _FactChip extends StatelessWidget {
 }
 
 class _RateBoard extends StatelessWidget {
-  const _RateBoard({required this.metrics});
+  const _RateBoard({required this.metrics, required this.restMetricsStorageKey});
 
   final List<EfficiencyMetric> metrics;
+  final PageStorageKey<String> restMetricsStorageKey;
 
   @override
   Widget build(BuildContext context) {
@@ -725,19 +731,25 @@ class _RateBoard extends StatelessWidget {
               data: Theme.of(
                 context,
               ).copyWith(dividerColor: Colors.transparent),
-              child: ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                childrenPadding: EdgeInsets.zero,
-                dense: true,
-                title: const Text(
-                  '其余指标',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: DunesColors.text2,
+              child: Material(
+                color: Colors.transparent,
+                child: ExpansionTile(
+                  key: restMetricsStorageKey,
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text(
+                    '其余指标',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.text2,
+                    ),
                   ),
+                  children: [
+                    for (final metric in rest) _RateRow(metric: metric),
+                  ],
                 ),
-                children: [for (final metric in rest) _RateRow(metric: metric)],
               ),
             ),
           ],

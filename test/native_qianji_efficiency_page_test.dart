@@ -40,6 +40,18 @@ class _FakeEfficiencyService extends EfficiencyService {
           value: 80,
           unit: '%',
         ),
+        EfficiencyMetric(
+          key: 'approvalCycle',
+          label: '审批平均周期',
+          value: 12,
+          unit: 'h',
+        ),
+        EfficiencyMetric(
+          key: 'collaborationSessions',
+          label: '协作会话',
+          value: 3,
+          unit: '',
+        ),
       ],
       stages: const [
         EfficiencyStage(
@@ -104,6 +116,39 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('部门效能分析'), findsOneWidget);
     expect(find.textContaining('看闭环和质量'), findsOneWidget);
+  });
+
+  testWidgets('switching tabs with extra metrics does not paint an error', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeQianjiEfficiencyPage(
+          session: _session,
+          onBack: () {},
+          service: _FakeEfficiencyService(),
+          now: DateTime(2026, 9, 8),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('其余指标'), findsOneWidget);
+
+    await tester.tap(find.text('部门汇总'));
+    await tester.pumpAndSettle();
+    expect(find.text('部门效能分析'), findsOneWidget);
+    expect(find.text('其余指标'), findsOneWidget);
+
+    await tester.tap(find.text('个人分析'));
+    await tester.pumpAndSettle();
+    expect(find.text('我的效能分析'), findsOneWidget);
+    expect(find.text('其余指标'), findsOneWidget);
+    expect(find.byType(ErrorWidget), findsNothing);
   });
 
   test('maps evidence kinds to work situation filters', () {

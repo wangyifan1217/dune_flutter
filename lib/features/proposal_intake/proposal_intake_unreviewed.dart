@@ -24,9 +24,6 @@ const _kFinanceReviewKeys = {
   'salesScale',
   'revenue',
   'couponProcurementCost',
-  'financeTaxRate',
-  'writeOffAmount',
-  'invoiceAmount',
   'profit',
   'taxCost',
   'margin',
@@ -42,11 +39,11 @@ const _kFinanceReviewKeys = {
   'channelReceiveAccount',
   'generalBusinessAccount',
   'prepaidAccount',
-  'profitAccrualAccount',
   'financeRemark',
   'costItems',
   'operatingCost',
   'rollback',
+  'proposalSubtitle',
 };
 
 const _kTechnologyReviewKeys = {
@@ -57,6 +54,7 @@ const _kTechnologyReviewKeys = {
   'hasRdCost',
   'rdAmount',
   'deliveryDate',
+  'financeInterfaces',
 };
 
 const _kContractReviewFields = {
@@ -68,6 +66,8 @@ const _kContractReviewFields = {
   'Counterparty',
   'ValidPeriod',
   'CoreTerms',
+  'InvoiceType',
+  'InvoiceFlow',
 };
 
 bool _reviewFlag(Map<String, dynamic> review, String key) =>
@@ -107,9 +107,6 @@ bool proposalIntakeFormKeyLocked(
     return _reviewFlag(review, 'financeCompleted');
   }
   if (key == 'hunId') return _reviewFlag(review, 'marketCompleted');
-  if (key == 'financeInterfaces') {
-    return _reviewFlag(review, 'financeInterfaceCompleted');
-  }
   if (_kTechnologyReviewKeys.contains(key) || key == 'technologyRecords') {
     if (_reviewFlag(review, 'technologyCompleted')) return true;
     if (key == 'technologyRecords') {
@@ -131,7 +128,7 @@ bool proposalIntakeFormKeyLocked(
   if (key == 'channelSkus' ||
       key == 'skuDetails' ||
       key == 'skuSettlements' ||
-      key == 'couponPacks') {
+      key == 'sharedSettlements') {
     // 市场已复核或个别结算已复核时不能整表锁死，需按行合并。
     return _reviewFlag(review, 'financeCompleted');
   }
@@ -157,13 +154,13 @@ Map<String, dynamic> proposalIntakeCloneForm(Map<String, dynamic> form) {
 }
 
 String _skuCatalogSettlePrefix(String key) =>
-    key == 'couponPacks' ? 'packSettle' : 'skuSettle';
+    key == 'sharedSettlements' ? 'sharedSettle' : 'skuSettle';
 
 bool _isSkuCatalogKey(String key) =>
     key == 'channelSkus' ||
     key == 'skuDetails' ||
     key == 'skuSettlements' ||
-    key == 'couponPacks';
+    key == 'sharedSettlements';
 
 String _objectRowId(Map<String, dynamic> row) => '${row['id'] ?? ''}'.trim();
 
@@ -231,6 +228,40 @@ List<Map<String, dynamic>> _mergeSkuSettlements({
   return out;
 }
 
+List<Map<String, dynamic>> _mergeSharedSettlements({
+  required Object? existing,
+  required Object? incoming,
+  required Map<String, dynamic> review,
+}) {
+  final existingRows = _objectRowList(existing);
+  final incomingRows = _objectRowList(incoming);
+  final incomingById = {
+    for (final row in incomingRows) _objectRowId(row): row,
+  };
+  final used = <String>{};
+  final out = <Map<String, dynamic>>[];
+  for (final row in existingRows) {
+    final id = _objectRowId(row);
+    if (_skuSettleRowReviewed(review, 'sharedSettle', id, id)) {
+      out.add(Map<String, dynamic>.from(row));
+      used.add(id);
+      continue;
+    }
+    final next = incomingById[id];
+    if (next != null) {
+      out.add(Map<String, dynamic>.from(next));
+      used.add(id);
+    }
+  }
+  for (final row in incomingRows) {
+    final id = _objectRowId(row);
+    if (used.contains(id)) continue;
+    if (_skuSettleRowReviewed(review, 'sharedSettle', id, id)) continue;
+    out.add(Map<String, dynamic>.from(row));
+  }
+  return out;
+}
+
 /// 市场已复核时保住产品字段；财务整板块未完成时按行改被驳回/未复核的结算。
 Object? proposalIntakeMergeSkuCatalog({
   required Object? existing,
@@ -292,6 +323,17 @@ Map<String, dynamic> proposalIntakeKeepUnreviewedForm({
   final out = Map<String, dynamic>.from(current);
   final keys = {...baseline.keys, ...current.keys};
   for (final key in keys) {
+    if (key == 'sharedSettlements') {
+      final existing = baseline[key];
+      final incoming = current[key];
+      if (existing == null && incoming == null) continue;
+      out[key] = _mergeSharedSettlements(
+        existing: existing,
+        incoming: incoming ?? existing,
+        review: review,
+      );
+      continue;
+    }
     if (_isSkuCatalogKey(key)) {
       final existing = baseline[key];
       final incoming = current[key];

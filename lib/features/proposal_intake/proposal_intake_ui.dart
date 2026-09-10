@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'proposal_intake_models.dart';
+
 abstract final class ProposalPalette {
   static const page = Color(0xFFF3F0F7);
   static const app = Color(0xFFFBFAFD);
@@ -24,6 +26,55 @@ abstract final class ProposalPalette {
   static const amberSoft = Color(0xFFF4E8D2);
   static const coral = Color(0xFFBC5C40);
   static const coralSoft = Color(0xFFF5E5DC);
+
+  /// 比 border 再深一档，用于需要压住底色的分隔线与序号列。
+  static const borderStrong = Color(0xFFD8CBE6);
+
+  /// purple 与 purpleDeep 之间的中间色，用于次级强调。
+  static const purpleMid = Color(0xFF7255A8);
+
+  /// 最浅一档文字：占位、禁用态。
+  static const text4 = Color(0xFFC5BFCE);
+}
+
+/// 提案页统一断点与栅格尺寸。
+///
+/// 同类区块必须用同一组阈值判断换行，手机与 PC 上栏位才能对齐；
+/// 各自写 420 / 520 / 620 / 640 是此前对不齐的根因。
+abstract final class ProposalLayout {
+  /// 单列：手机、窄侧栏。
+  static const compact = 560.0;
+
+  /// 双列：平板、窄窗口。
+  static const medium = 900.0;
+
+  /// 三列以上：桌面。
+  static const wide = 1280.0;
+
+  /// 嵌套在卡片内部、可用宽度天然很窄的小行（徽标行、成对按钮）专用。
+  static const tight = 420.0;
+
+  static const radius = 10.0;
+  static const radiusCard = 12.0;
+  static const gap = 8.0;
+  static const pad = 12.0;
+
+  /// 栅格列数阶梯：1 / 2 / 3 / 4。
+  static int columnsFor(double width) {
+    if (width < compact) return 1;
+    if (width < medium) return 2;
+    if (width < wide) return 3;
+    return 4;
+  }
+
+  /// 是否单列堆叠。所有 stacked / compact 判断都走这里。
+  static bool isCompact(double width) => width < compact;
+
+  /// 是否窄于双列上限。
+  static bool isMedium(double width) => width < medium;
+
+  /// 嵌套小行是否堆叠。
+  static bool isTight(double width) => width < tight;
 }
 
 class ProposalStatusChip extends StatelessWidget {
@@ -113,7 +164,7 @@ class ProposalCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final narrow = MediaQuery.sizeOf(context).width < 620;
+    final narrow = ProposalLayout.isCompact(MediaQuery.sizeOf(context).width);
     final resolvedPadding =
         padding ??
         (narrow ? const EdgeInsets.all(12) : const EdgeInsets.all(18));
@@ -125,7 +176,7 @@ class ProposalCard extends StatelessWidget {
         color: gradient == null ? ProposalPalette.card : null,
         gradient: gradient,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE9E2EF)),
+        border: Border.all(color: ProposalPalette.borderSoft),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0C4E3A6C),
@@ -156,7 +207,7 @@ class ProposalSectionTitle extends StatelessWidget {
     padding: const EdgeInsets.only(bottom: 12, top: 4),
     child: LayoutBuilder(
       builder: (context, constraints) {
-        final stacked = constraints.maxWidth < 560;
+        final stacked = ProposalLayout.isCompact(constraints.maxWidth);
         final heading = Wrap(
           spacing: 10,
           runSpacing: 5,
@@ -174,7 +225,7 @@ class ProposalSectionTitle extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: ProposalPalette.purpleSoft,
-                border: Border.all(color: const Color(0xFFDED2EE)),
+                border: Border.all(color: ProposalPalette.borderStrong),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
@@ -233,6 +284,47 @@ ProposalFieldTone proposalFieldTone({required bool enabled, String? source}) {
   return enabled ? ProposalFieldTone.fill : ProposalFieldTone.fill;
 }
 
+class ProposalFormulaHint extends StatelessWidget {
+  const ProposalFormulaHint({
+    super.key,
+    required this.formula,
+    this.detail = '',
+  });
+
+  final String formula;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final extra = detail.trim();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            formula,
+            style: const TextStyle(
+              color: ProposalPalette.text3,
+              fontSize: 11,
+              height: 1.25,
+            ),
+          ),
+          if (extra.isNotEmpty)
+            Text(
+              extra,
+              style: const TextStyle(
+                color: ProposalPalette.text3,
+                fontSize: 10,
+                height: 1.25,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class ProposalField extends StatelessWidget {
   const ProposalField({
     super.key,
@@ -240,6 +332,8 @@ class ProposalField extends StatelessWidget {
     required this.child,
     this.required = false,
     this.source,
+    this.formula,
+    this.formulaDetail,
     this.trailing,
     this.footer,
     this.tone,
@@ -249,6 +343,8 @@ class ProposalField extends StatelessWidget {
   final Widget child;
   final bool required;
   final String? source;
+  final String? formula;
+  final String? formulaDetail;
   final ProposalFieldTone? tone;
 
   /// 行内复核控件，紧贴字段标签右侧展示。
@@ -267,8 +363,8 @@ class ProposalField extends StatelessWidget {
         ProposalChipKind.draft,
       ),
       ProposalFieldTone.locked => (
-        const Color(0xFFF4F5F6),
-        const Color(0xFFD5D8DC),
+        ProposalPalette.page,
+        ProposalPalette.borderStrong,
         ProposalChipKind.draft,
       ),
       ProposalFieldTone.fill => (
@@ -321,6 +417,13 @@ class ProposalField extends StatelessWidget {
                     ?trailing,
                   ],
                 ),
+                if ((formula ?? '').trim().isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  ProposalFormulaHint(
+                    formula: formula!.trim(),
+                    detail: formulaDetail ?? '',
+                  ),
+                ],
                 const SizedBox(height: 2),
                 child,
                 if (footer != null) ...[const SizedBox(height: 6), footer!],
@@ -342,11 +445,6 @@ class ProposalReviewToggle extends StatelessWidget {
     this.onReject,
     this.rejected = false,
     this.pendingLabel = '复核',
-    this.tooltip,
-    this.selectable = false,
-    this.selected = false,
-    this.onSelected,
-    this.selectKey,
   });
 
   final bool reviewed;
@@ -354,11 +452,6 @@ class ProposalReviewToggle extends StatelessWidget {
   final VoidCallback? onPressed;
   final VoidCallback? onReject;
   final String pendingLabel;
-  final String? tooltip;
-  final bool selectable;
-  final bool selected;
-  final ValueChanged<bool>? onSelected;
-  final String? selectKey;
 
   @override
   Widget build(BuildContext context) {
@@ -376,14 +469,14 @@ class ProposalReviewToggle extends StatelessWidget {
               ? ProposalPalette.greenSoft
               : rejected
               ? const Color(0xFFF8E8E8)
-              : const Color(0xFFF3EEF7),
+              : ProposalPalette.page,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: reviewed
                 ? ProposalPalette.green
                 : rejected
                 ? const Color(0xFFD9A3A3)
-                : const Color(0xFFDDD1E8),
+                : ProposalPalette.borderStrong,
           ),
         ),
         child: Text(
@@ -399,15 +492,7 @@ class ProposalReviewToggle extends StatelessWidget {
           ),
         ),
       );
-      return Tooltip(
-        message: tooltip ??
-            (reviewed
-                ? '已复核'
-                : rejected
-                ? '该字段已被驳回'
-                : '等待$pendingLabel，当前账号不能点'),
-        child: chip,
-      );
+      return chip;
     }
     return Wrap(
       spacing: 6,
@@ -415,23 +500,6 @@ class ProposalReviewToggle extends StatelessWidget {
       alignment: WrapAlignment.end,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        if (selectable && onSelected != null)
-          Tooltip(
-            message: selected ? '已选，将一并驳回' : '勾选后可一次驳回多条',
-            child: SizedBox(
-              width: 22,
-              height: 22,
-              child: Checkbox(
-                key: selectKey == null
-                    ? null
-                    : ValueKey<String>('proposal-item-select-$selectKey'),
-                value: selected,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-                onChanged: (value) => onSelected!(value ?? false),
-              ),
-            ),
-          ),
         OutlinedButton(
           onPressed: onPressed,
           style: OutlinedButton.styleFrom(
@@ -687,9 +755,9 @@ InputDecoration proposalInputDecoration({
 }) {
   final fillColor = switch (tone) {
     ProposalFieldTone.auto => const Color(0xFFFFFBF3),
-    ProposalFieldTone.locked => const Color(0xFFF6F7F8),
+    ProposalFieldTone.locked => ProposalPalette.app,
     ProposalFieldTone.fill =>
-      readOnly ? const Color(0xFFF6F7F8) : const Color(0xFFFFFEFF),
+      readOnly ? ProposalPalette.app : ProposalPalette.card,
   };
   return InputDecoration(
     hintText: hint,
@@ -705,15 +773,15 @@ InputDecoration proposalInputDecoration({
     contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: Color(0xFFE1D9E8)),
+      borderSide: const BorderSide(color: ProposalPalette.border),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: Color(0xFF9C82CE)),
+      borderSide: const BorderSide(color: ProposalPalette.purpleLine),
     ),
     disabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: Color(0xFFE9E2F0)),
+      borderSide: const BorderSide(color: ProposalPalette.borderSoft),
     ),
     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
   );
@@ -739,14 +807,14 @@ class ProposalChoiceChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final canTap = enabled && onSelected != null;
     final background = !enabled
-        ? (selected ? const Color(0xFFB7C4B5) : const Color(0xFFF4F5F6))
+        ? (selected ? const Color(0xFFB7C4B5) : ProposalPalette.page)
         : (selected ? selectedFill : Colors.white);
     final foreground = selected
         ? Colors.white
-        : (enabled ? ProposalPalette.text : const Color(0xFF8A8490));
+        : (enabled ? ProposalPalette.text : ProposalPalette.text3);
     final border = selected
-        ? (enabled ? const Color(0xFF1F6B32) : const Color(0xFF9AA0A6))
-        : const Color(0xFFC9C0D4);
+        ? (enabled ? const Color(0xFF1F6B32) : ProposalPalette.text3)
+        : ProposalPalette.text4;
     return Material(
       color: background,
       shape: StadiumBorder(side: BorderSide(color: border)),
@@ -822,65 +890,6 @@ class ProposalPills extends StatelessWidget {
   );
 }
 
-class ProposalBatchRejectBar extends StatelessWidget {
-  const ProposalBatchRejectBar({
-    super.key,
-    required this.count,
-    required this.onClear,
-    required this.onReject,
-  });
-
-  final int count;
-  final VoidCallback onClear;
-  final VoidCallback onReject;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: Color(0xFFFBFAFD),
-          border: Border(top: BorderSide(color: Color(0xFFEAE3F0))),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '已选 $count 条，填一份意见即可一次驳回',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: ProposalPalette.text2,
-                  ),
-                ),
-              ),
-              TextButton(
-                key: const ValueKey('proposal-batch-reject-clear'),
-                onPressed: onClear,
-                child: const Text('取消选择'),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                key: const ValueKey('proposal-batch-reject-submit'),
-                onPressed: onReject,
-                style: FilledButton.styleFrom(
-                  backgroundColor: ProposalPalette.coral,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(0, 40),
-                ),
-                child: Text('驳回所选 ($count)'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class ProposalPresidentDecisionBar extends StatelessWidget {
   const ProposalPresidentDecisionBar({
     super.key,
@@ -898,8 +907,8 @@ class ProposalPresidentDecisionBar extends StatelessWidget {
       top: false,
       child: DecoratedBox(
         decoration: const BoxDecoration(
-          color: Color(0xFFFBFAFD),
-          border: Border(top: BorderSide(color: Color(0xFFEAE3F0))),
+          color: ProposalPalette.app,
+          border: Border(top: BorderSide(color: ProposalPalette.borderSoft)),
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
@@ -967,6 +976,80 @@ class ProposalPresidentDecisionBar extends StatelessWidget {
   }
 }
 
+class ProposalModuleConfirmBar extends StatelessWidget {
+  const ProposalModuleConfirmBar({
+    super.key,
+    required this.onConfirm,
+    this.title = '逐条已完成，还差最后一步',
+    this.message = '点「确认本板块通过」才算科技复核结束。保存只是存内容，不会过关。',
+    this.confirmLabel = '确认本板块通过',
+  });
+
+  final VoidCallback onConfirm;
+  final String title;
+  final String message;
+  final String confirmLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: Color(0xFFECF8EE),
+          border: Border(top: BorderSide(color: Color(0xFFB9DDBE))),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: ProposalPalette.green,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                message,
+                style: const TextStyle(
+                  fontSize: 11,
+                  height: 1.4,
+                  color: Color(0xFF3E6B46),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: FilledButton(
+                  key: const ValueKey('proposal-module-confirm-bar'),
+                  onPressed: onConfirm,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: ProposalPalette.green,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: Text(
+                    confirmLabel,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class ProposalNextPendingFooter extends StatelessWidget {
   const ProposalNextPendingFooter({
     super.key,
@@ -986,8 +1069,8 @@ class ProposalNextPendingFooter extends StatelessWidget {
       top: false,
       child: DecoratedBox(
         decoration: const BoxDecoration(
-          color: Color(0xFFFBFAFD),
-          border: Border(top: BorderSide(color: Color(0xFFEAE3F0))),
+          color: ProposalPalette.app,
+          border: Border(top: BorderSide(color: ProposalPalette.borderSoft)),
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
@@ -1023,7 +1106,7 @@ const proposalIntakeProcessSteps = <(String, String)>[
   ('4', '提交人提交各板块进入复核。'),
   (
     '5',
-    '市场部负责人一复核市场板块；市场部负责人二逐条复核科技；科技部负责人复核财务技术接口；财务部负责人二复核采购/销售合同并逐条复核财务，财务部负责人一整板块复核财务。发现问题可对单条点「驳回」，也可直接整板块驳回，不必先逐条点完复核。',
+    '市场部负责人一复核市场板块；市场部负责人二逐条复核科技（含财务技术接口），底部确认前会检查遗漏；财务部负责人二复核采购/销售合同并逐条复核财务，财务部负责人一整板块复核财务。发现问题可对单条点「驳回」，也可直接整板块驳回，不必先逐条点完复核。',
   ),
   ('6', '各板块复核完成后，提交人通知最终确认人。'),
   ('7', '最终确认人通过即完成；整单驳回则退回提交人重填。板块驳回后，填写人修改再点「重新提交并通知审核人」，系统会通知该板块审核人。'),
@@ -1039,7 +1122,7 @@ const proposalIntakePurchaseProcessSteps = <(String, String)>[
   ('4', '提交人提交各板块进入复核。'),
   (
     '5',
-    '市场部负责人一复核市场板块，并可填写 HUN ID；市场部负责人二逐条复核科技；科技部负责人复核财务技术接口；财务部负责人二复核采购合同。财务板块暂不复核。发现问题可对单条点「驳回」，也可直接整板块驳回，不必先逐条点完复核。',
+    '市场部负责人一复核市场板块，并可填写 HUN ID；市场部负责人二逐条复核科技（含财务技术接口），底部确认前会检查遗漏；财务部负责人二复核采购合同。财务板块暂不复核。发现问题可对单条点「驳回」，也可直接整板块驳回，不必先逐条点完复核。',
   ),
   ('6', '各板块复核完成后，提交人通知最终确认人。'),
   ('7', '最终确认人通过即完成；整单驳回则退回提交人重填。板块驳回后，填写人修改再点「重新提交并通知审核人」，系统会通知该板块审核人。'),
@@ -1107,7 +1190,7 @@ Future<void> showProposalIntakeProcessHelp(
                 const Padding(
                   padding: EdgeInsets.only(top: 4, bottom: 8),
                   child: Text(
-                    '通知TA',
+                    '催办与转发',
                     style: TextStyle(
                       color: ProposalPalette.text,
                       fontSize: 14,
@@ -1116,9 +1199,9 @@ Future<void> showProposalIntakeProcessHelp(
                   ),
                 ),
                 const Text(
-                  '以你本人身份，把提案名片发到本单相关同事的私聊（已指定的创建人、市场/科技/财务负责人、运营）。不含最终确认人。不经过审批助手，也不推进流程。\n'
-                  '和「转发」的区别：「转发」自己选会话；「通知TA」一次发给本单所有已指定的人。\n'
-                  '点「通知科技 / 提交复核 / 通知最终人」仍走审批助手，那是流程待办。',
+                  '「催办」只把当前待办再发一次到审批助手，不改变提案阶段。\n'
+                  '「转发」自己选会话，把提案名片发出去，不经过审批助手，也不推进流程。\n'
+                  '点「通知科技 / 提交复核 / 通知最终人」仍走审批助手，那是第一次派发流程待办。',
                   style: TextStyle(
                     color: ProposalPalette.text,
                     fontSize: 13,
@@ -1211,7 +1294,7 @@ Future<void> showProposalCostFormulaHelp(
     );
   }
 
-  final narrow = MediaQuery.sizeOf(context).width < 620;
+  final narrow = ProposalLayout.isCompact(MediaQuery.sizeOf(context).width);
   if (narrow) {
     return showModalBottomSheet<void>(
       context: context,
@@ -1309,6 +1392,378 @@ class ProposalIntakeProcessHelpButton extends StatelessWidget {
         Icons.help_outline_rounded,
         size: compact ? 20 : 22,
         color: ProposalPalette.purpleDeep,
+      ),
+    );
+  }
+}
+
+class ProposalIntakeProgressTimeline extends StatefulWidget {
+  const ProposalIntakeProgressTimeline({
+    super.key,
+    required this.steps,
+    this.compact = false,
+    this.initiallyExpanded = false,
+  });
+
+  final List<ProposalIntakeProgressStep> steps;
+  final bool compact;
+  final bool initiallyExpanded;
+
+  @override
+  State<ProposalIntakeProgressTimeline> createState() =>
+      _ProposalIntakeProgressTimelineState();
+}
+
+class _ProposalIntakeProgressTimelineState
+    extends State<ProposalIntakeProgressTimeline> {
+  static const _line = Color(0xFF5BB8A8);
+  static const _lineSoft = Color(0xFFD8EDE8);
+  static const _pending = ProposalPalette.text4;
+
+  bool _expanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.initiallyExpanded;
+  }
+
+  @override
+  void didUpdateWidget(ProposalIntakeProgressTimeline oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initiallyExpanded && !oldWidget.initiallyExpanded) {
+      _expanded = true;
+    }
+  }
+
+  bool _isOpen(ProposalIntakeProgressStep step) {
+    if (step.state == ProposalIntakeProgressState.current ||
+        step.state == ProposalIntakeProgressState.rejected) {
+      return true;
+    }
+    return step.id == 'end' &&
+        step.state == ProposalIntakeProgressState.done;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final steps = widget.steps;
+    if (steps.isEmpty) return const SizedBox.shrink();
+    final compact = widget.compact;
+    final headline = proposalIntakeProgressHeadline(steps);
+    final visible = [
+      for (final step in steps)
+        if (_expanded || _isOpen(step)) step,
+    ];
+    final hidden = steps.length - visible.length;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 12, bottom: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: ProposalPalette.borderSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.fromLTRB(
+              compact ? 14 : 16,
+              10,
+              compact ? 14 : 16,
+              10,
+            ),
+            decoration: const BoxDecoration(
+              color: ProposalPalette.page,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '审批进度',
+                        style: TextStyle(
+                          color: ProposalPalette.text2,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (headline.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          headline,
+                          style: const TextStyle(
+                            color: ProposalPalette.text3,
+                            fontSize: 11,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (hidden > 0 || _expanded)
+                  TextButton(
+                    onPressed: () => setState(() => _expanded = !_expanded),
+                    child: Text(_expanded ? '收起步骤' : '查看全部步骤'),
+                  ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              compact ? 14 : 16,
+              14,
+              compact ? 14 : 16,
+              12,
+            ),
+            child: Column(
+              children: [
+                for (var i = 0; i < visible.length; i++)
+                  _ProposalProgressRow(
+                    step: visible[i],
+                    isLast: i == visible.length - 1,
+                    compact: compact,
+                    line: _line,
+                    lineSoft: _lineSoft,
+                    pending: _pending,
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProposalProgressRow extends StatelessWidget {
+  const _ProposalProgressRow({
+    required this.step,
+    required this.isLast,
+    required this.compact,
+    required this.line,
+    required this.lineSoft,
+    required this.pending,
+  });
+
+  final ProposalIntakeProgressStep step;
+  final bool isLast;
+  final bool compact;
+  final Color line;
+  final Color lineSoft;
+  final Color pending;
+
+  bool get _active =>
+      step.state == ProposalIntakeProgressState.done ||
+      step.state == ProposalIntakeProgressState.current ||
+      step.state == ProposalIntakeProgressState.rejected;
+
+  Color get _accent {
+    return switch (step.state) {
+      ProposalIntakeProgressState.rejected => ProposalPalette.coral,
+      ProposalIntakeProgressState.pending => pending,
+      ProposalIntakeProgressState.current => line,
+      ProposalIntakeProgressState.done => line,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = switch (step.state) {
+      ProposalIntakeProgressState.done => line,
+      ProposalIntakeProgressState.current => ProposalPalette.purpleDeep,
+      ProposalIntakeProgressState.rejected => ProposalPalette.coral,
+      ProposalIntakeProgressState.pending => ProposalPalette.text3,
+    };
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 28,
+            child: Column(
+              children: [
+                _ProposalProgressDot(
+                  state: step.state,
+                  isEnd: step.id == 'end',
+                  color: _accent,
+                ),
+                if (!isLast)
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      color: _active ? line : lineSoft,
+                      margin: const EdgeInsets.symmetric(vertical: 2),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: isLast ? 2 : 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Wrap(
+                          spacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              step.title,
+                              style: TextStyle(
+                                color:
+                                    step.state ==
+                                        ProposalIntakeProgressState.pending
+                                    ? ProposalPalette.text3
+                                    : ProposalPalette.text,
+                                fontSize: compact ? 13 : 14,
+                                fontWeight: FontWeight.w700,
+                                height: 1.3,
+                              ),
+                            ),
+                            if (step.id == 'initiate' &&
+                                step.statusText.isNotEmpty &&
+                                step.state !=
+                                    ProposalIntakeProgressState.done)
+                              Text(
+                                step.statusText,
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (step.time.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: Text(
+                            step.time,
+                            style: TextStyle(
+                              color: step.state ==
+                                      ProposalIntakeProgressState.current
+                                  ? ProposalPalette.purpleDeep
+                                  : ProposalPalette.text3,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (step.id != 'initiate' &&
+                      (step.name.isNotEmpty ||
+                          step.action.isNotEmpty ||
+                          step.statusText.isNotEmpty)) ...[
+                    const SizedBox(height: 3),
+                    if (step.action.isNotEmpty)
+                      Text(
+                        step.action,
+                        style: const TextStyle(
+                          color: ProposalPalette.text3,
+                          fontSize: 12,
+                          height: 1.4,
+                        ),
+                      ),
+                    if (step.name.isNotEmpty || step.statusText.isNotEmpty)
+                      Padding(
+                        padding: EdgeInsets.only(
+                          top: step.action.isNotEmpty ? 1 : 0,
+                        ),
+                        child: Wrap(
+                          spacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            if (step.name.isNotEmpty)
+                              Text(
+                                step.name,
+                                style: TextStyle(
+                                  color:
+                                      step.state ==
+                                          ProposalIntakeProgressState.pending
+                                      ? ProposalPalette.text3
+                                      : ProposalPalette.text,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.4,
+                                ),
+                              ),
+                            if (step.statusText.isNotEmpty)
+                              Text(
+                                step.statusText,
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.4,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProposalProgressDot extends StatelessWidget {
+  const _ProposalProgressDot({
+    required this.state,
+    required this.isEnd,
+    required this.color,
+  });
+
+  final ProposalIntakeProgressState state;
+  final bool isEnd;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = state == ProposalIntakeProgressState.pending;
+    if (isEnd) {
+      return Container(
+        width: 16,
+        height: 16,
+        decoration: BoxDecoration(
+          color: pending ? Colors.white : color,
+          border: Border.all(color: color, width: 2),
+          borderRadius: BorderRadius.circular(3),
+        ),
+      );
+    }
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        color: pending ? Colors.white : color,
+        shape: BoxShape.circle,
+        border: Border.all(color: color, width: 1.6),
+      ),
+      child: Icon(
+        state == ProposalIntakeProgressState.rejected
+            ? Icons.close
+            : Icons.person,
+        size: 13,
+        color: pending ? color : Colors.white,
       ),
     );
   }

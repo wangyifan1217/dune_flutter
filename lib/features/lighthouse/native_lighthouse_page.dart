@@ -2277,8 +2277,18 @@ class _TrendLinesPainter extends CustomPainter {
     } else if (heroDrawable) {
       drawFillArea(heroPts, heroColor, heroBounds);
     }
+    // 上下文线只画白名单里的那几条。
+    //
+    //   上面那条「中性阶」的注释已经把道理说透了：上下文线各自归一化，纵轴
+    //   根本不是同一个，所以它们之间不可比 —— 正因如此才不给它们颜色。
+    //   但既然不可比也认不出是哪条，四条就没有意义：实测四条灰线的墨量是
+    //   主线的两倍，背景比主体还响，中段全缠在一起，谁的形状都读不出来。
+    //   收入 / 成本的数就在上面「本期合计」那一排，要看它们的形状，点图例
+    //   把它 solo 成主线 —— 那时它有自己的轴、有 fill、有 MAX/MIN 读数，
+    //   比当一条认不出的灰线有用得多。
     for (var i = 0; i < flags.length; i++) {
       if (!flags[i] || i == heroIndex) continue;
+      if (!lighthouseHeroTrendDrawsContextLine(i)) continue;
       final spec = _trendPaintSpec(
         series: series,
         bounds: bounds,
@@ -2301,6 +2311,7 @@ class _TrendLinesPainter extends CustomPainter {
     }
     for (var i = 0; i < flags.length; i++) {
       if (!flags[i] || i == heroIndex) continue;
+      if (!lighthouseHeroTrendDrawsContextLine(i)) continue;
       final spec = _trendPaintSpec(
         series: series,
         bounds: bounds,
@@ -6674,12 +6685,15 @@ class _TrendChartState extends State<_TrendChart> {
   /// 不是同一个，颜色越强越像在比高低，其实完全不可比。所以规则定成：
   /// **任何时刻画面上最多一个强调色**，其余降成中性、只提供形状上下文。
   /// 想看哪条就点图例，那条变成强调色（solo 已有的交互）。
+  // 六档 alpha 从 0x6B 到 0x99 —— 那是一条不编码任何东西的假梯度：
+  // 深浅既不表示大小、也不表示优先级，只是让人以为它表示了什么。
+  // 上下文线之间本来就不可比，就该长得一模一样。
   static const List<Color> _kContextColors = [
     Color(0x8C5A5C56),
-    Color(0x7A5A5C56),
-    Color(0x995A5C56),
-    Color(0x875A5C56),
-    Color(0x6B5A5C56),
+    Color(0x8C5A5C56),
+    Color(0x8C5A5C56),
+    Color(0x8C5A5C56),
+    Color(0x8C5A5C56),
     Color(0x8C5A5C56),
   ];
 
@@ -6714,6 +6728,17 @@ class _TrendChartState extends State<_TrendChart> {
             ? _accentForSlot(k)
             : (k == 5 ? _kColors[5] : _kContextColors[k]),
     ];
+  }
+
+  /// 图上真正画出来的线数（主线 + 白名单里的上下文线）。
+  /// 「各线自归一」那句提示只在两条以上时才有必要出现。
+  int _drawnLineCount(List<bool> vis, int heroIndex) {
+    var n = 0;
+    for (var i = 0; i < vis.length; i++) {
+      if (!vis[i]) continue;
+      if (i == heroIndex || lighthouseHeroTrendDrawsContextLine(i)) n++;
+    }
+    return n;
   }
 
   /// 强调线的序列下标：solo 时是被点的那条，否则按固定优先级挑。
@@ -7010,6 +7035,25 @@ class _TrendChartState extends State<_TrendChart> {
             padTop + (profitBounds.max - v) / profitBounds.span * usableH;
         final maxY = yOf(actualMaxP);
         final minY = yOf(actualMinP);
+        // MAX/MIN 说的是主线的极值，原来却钉在图的右边缘 —— 离它最近的往往
+        // 是另一条线，读数就挂到了错的线上。改成跟着极值点的横坐标走。
+        final extremeN = extremePts.length;
+        final extremeStep = extremeN <= 1
+            ? 0.0
+            : (w - _kChartPadH * 2) / (extremeN - 1);
+        double extremeX(bool wantMax) {
+          if (!hasProfit || extremeN == 0) return w - 40;
+          var best = 0;
+          for (var i = 1; i < extremeN; i++) {
+            final better = wantMax
+                ? extremePts[i] > extremePts[best]
+                : extremePts[i] < extremePts[best];
+            if (better) best = i;
+          }
+          // 标注挂在点的右边；靠近右沿时翻到左边，别被裁掉。
+          final px = _kChartPadH + best * extremeStep;
+          return (px + 6).clamp(2.0, math.max(2.0, w - 46));
+        }
         final showExtremes =
             hasProfit &&
             (actualMaxP - actualMinP).abs() > 1e-6 &&
@@ -7071,8 +7115,8 @@ class _TrendChartState extends State<_TrendChart> {
                 ),
                 if (showExtremes)
                   Positioned(
-                    right: 2,
-                    top: (maxY - 10).clamp(-2.0, chartH - 12),
+                    left: extremeX(true),
+                    top: (maxY - 11).clamp(-2.0, chartH - 12),
                     child: RichText(
                       text: TextSpan(
                         children: [
@@ -7100,8 +7144,8 @@ class _TrendChartState extends State<_TrendChart> {
                   ),
                 if (showExtremes)
                   Positioned(
-                    right: 2,
-                    top: (minY + 2).clamp(0.0, chartH - 10),
+                    left: extremeX(false),
+                    top: (minY + 3).clamp(0.0, chartH - 10),
                     child: RichText(
                       text: TextSpan(
                         children: [
@@ -7124,6 +7168,22 @@ class _TrendChartState extends State<_TrendChart> {
                             ),
                           ),
                         ],
+                      ),
+                    ),
+                  ),
+                // 两条以上的线同时在图上时，必须说一句：它们各有各的纵轴。
+                // 不说的话，"成本线在毛利线上面""它们在 9.08 交叉"都会被当成
+                // 信息读，而这些在各自归一化的图里什么都不是。
+                if (_drawnLineCount(vis, heroIndex) > 1)
+                  Positioned(
+                    left: _kChartPadH,
+                    top: 0,
+                    child: Text(
+                      '各线自归一',
+                      style: LhTypography.mono(
+                        size: 7,
+                        color: LhColors.mute2.withAlpha(150),
+                        letterSpacing: 0.3,
                       ),
                     ),
                   ),
@@ -7316,9 +7376,12 @@ class _TrendChartState extends State<_TrendChart> {
     // 画在图上的那条（主线，或核销 / 销售那一对）。其余是纯数字。
     final drawn = seriesKey != null && _isDrawnSeries(seriesKey);
     final momUp = momPct != null && momPct >= 0;
+    // 和下面那排指标格同一条规矩：只有越过门槛的环比才上色。
     final momColor = momPct == null
         ? LhColors.mute2
-        : (momUp ? LhColors.neg : LhColors.pos);
+        : (lighthouseDeltaIsLoud(momPct)
+              ? (momUp ? LhColors.neg : LhColors.pos)
+              : LhColors.mute);
     final valueStyle = LhTypography.mono(
       size: 9,
       color: negative
@@ -12509,6 +12572,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                       seriesFor: _biSeriesFor,
                                       loading: _biDimLoading,
                                       windowRowsFor: _biWindowRowsFor,
+                                      reportFor: _biReportFor,
+                                      reportBusy: _biReportBusyFor,
+                                      requestReport: _biRequestReport,
                                       onDimChanged: (d) {
                                         if (!_kBiDims.contains(d)) return;
                                         _biDim = d;
@@ -17256,9 +17322,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       );
     }
 
-    Widget compactCashStrip() {
+    // 经营性净现金流：三列下面的一条通栏窄条。
+    //
+    // 原来它是塞在「成本」列下半截的一张小卡，两个毛病：
+    //   · 语义错位 —— 现金流不是一种成本。会上定的口径是「规模 > 经营现金流 >
+    //     利润」三个核心指标，它跟规模、利润同一档，不该做成本的附属。
+    //   · 它是拿来给成本列补高度的 —— 规模列没东西补，就在卡底空出 79px，
+    //     整块最左边先看到的就是那片空白。
+    // 拎出来做通栏之后：三列都是一列三行、都填满；它只有一个数，横着排
+    // 「标题在左、数在右」比竖着占半列更像它该有的样子。
+    Widget cashBanner() {
       return Container(
-        padding: const EdgeInsets.all(lighthouseHeroCardPadding),
+        padding: const EdgeInsets.fromLTRB(
+          lighthouseHeroCardPadding + 3,
+          6,
+          lighthouseHeroCardPadding + 3,
+          7,
+        ),
         decoration: BoxDecoration(
           color: whiteBackground
               ? const Color(0xFFFFFDFF)
@@ -17279,18 +17359,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               : null,
         ),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  sectionHeader('cash', '经营性净现金流'),
-                  const SizedBox(height: 7),
-                  metric('prepaid', '预收净增', prepaid.toDouble()),
-                ],
-              ),
+            // sectionHeader 内部是 Row + Flexible，得给它一个有界宽度，
+            // 不然它会把整条都吃掉。
+            Expanded(child: sectionHeader('cash', '经营性净现金流')),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 112,
+              child: metric('prepaid', '预收净增', prepaid.toDouble()),
             ),
           ],
         ),
@@ -17590,38 +17667,34 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ),
               const SizedBox(width: lighthouseHeroCardGap),
               Expanded(
-                flex: lighthouseHeroCostColumnFlex,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    strip(
-                      sectionKey: 'cost',
-                      title: '成本',
-                      child: metricGrid([
-                        (
-                          key: 'totalCost',
-                          label: '成本合计',
-                          value: totalCost,
-                          isRate: false,
-                        ),
-                        (
-                          key: 'projectCost',
-                          label: '项目成本',
-                          value: projectCost,
-                          isRate: false,
-                        ),
-                        (
-                          key: 'cost',
-                          label: '业务成本',
-                          value: businessCost,
-                          isRate: false,
-                        ),
-                      ], columns: 2),
+                // 成本列不再是「2 列 + 底下垫一张现金流卡」，改成和规模列
+                // 一样的一列三行 —— 三列同密度，谁也不用给谁补高度。
+                // 列宽跟着从 14 收到和规模一样的 10：一列排就不需要那份额外宽度，
+                // 省下来的给利润列（它是唯一真的两列的）。
+                flex: lighthouseHeroScaleColumnFlex,
+                child: strip(
+                  sectionKey: 'cost',
+                  title: '成本',
+                  child: metricGrid([
+                    (
+                      key: 'totalCost',
+                      label: '成本合计',
+                      value: totalCost,
+                      isRate: false,
                     ),
-                    const SizedBox(height: lighthouseHeroCardGap),
-                    compactCashStrip(),
-                  ],
+                    (
+                      key: 'projectCost',
+                      label: '项目成本',
+                      value: projectCost,
+                      isRate: false,
+                    ),
+                    (
+                      key: 'cost',
+                      label: '业务成本',
+                      value: businessCost,
+                      isRate: false,
+                    ),
+                  ], columns: 1),
                 ),
               ),
               const SizedBox(width: lighthouseHeroCardGap),
@@ -17658,6 +17731,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ],
           ),
         ),
+        const SizedBox(height: lighthouseHeroCardGap),
+        cashBanner(),
         if (interactive && lighthouseHeroShowsFormulaBar)
           _buildHeroFormulaBar({
             'sales': sales.toDouble(),
@@ -17845,9 +17920,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ? _LhPlum.deep
         : (isActive ? LhColors.ink2 : LhColors.mute);
     final unitColor = LhColors.mute;
+    // 涨红跌绿只留给越过门槛的那几个，其余走灰 —— 见
+    // lighthouseDeltaLoudThreshold：满屏都上色等于谁都没上色。
     final deltaColor = delta == null
         ? LhColors.mute2
-        : (delta.isUp ? LhColors.neg : LhColors.pos);
+        : (lighthouseDeltaIsLoud(delta.pct)
+              ? (delta.isUp ? LhColors.neg : LhColors.pos)
+              : LhColors.mute);
     final displayValue = isRate
         ? value
         : lighthouseHeroMetricDisplayAmount(keyId, value);
@@ -22377,6 +22456,57 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     'netProfit' => _readMetricSeries('netProfitSeries'),
     _ => _readMetricSeries('${key}Series'),
   };
+
+  // ── BI 卡片报告 ─────────────────────────────────────────────────────────
+  //
+  //   报告在这一层缓存，不在 BI 视图里 —— BI 视图是叠层，关掉再打开会重建，
+  //   缓存跟着它走的话每次打开都要重新生成一份，token 白烧、人还要等。
+  //   缓存键带 periodLabel：切日/周/月/季/年就是换了一种报，各存各的。
+  final Map<String, LhBiReport> _biReports = <String, LhBiReport>{};
+  final Set<String> _biReportBusy = <String>{};
+
+  String _biReportKey(String dim, String entity) =>
+      lhBiReportKey(dim, entity, _periodLabelFor(_period));
+
+  LhBiReport? _biReportFor(String dim, String entity) =>
+      _biReports[_biReportKey(dim, entity)];
+
+  bool _biReportBusyFor(String dim, String entity) =>
+      _biReportBusy.contains(_biReportKey(dim, entity));
+
+  Future<void> _biRequestReport(String dim, String entity, bool force) async {
+    if (!_kBiDims.contains(dim)) return;
+    final key = _biReportKey(dim, entity);
+    // 已经有了而且不是用户主动刷新 —— 直接用缓存，不打后端。
+    if (!force && _biReports.containsKey(key)) return;
+    if (_biReportBusy.contains(key)) return;
+    setState(() => _biReportBusy.add(key));
+    try {
+      final data = await _service.fetchReport(
+        tab: dim,
+        period: _period,
+        offset: _periodOffset,
+        startDate: _isCustomRange ? _customStart : null,
+        endDate: _isCustomRange ? _customEnd : null,
+        group: _groupFilter,
+        anchor: _anchor == _LhAnchor.verified ? 'verified' : 'sales',
+        hun: _hunFilter,
+        anomaly: _anomalyFilter,
+        entity: entity,
+        refresh: force,
+      );
+      final rep = LhBiReport.fromJson(data);
+      if (!mounted) return;
+      setState(() {
+        _biReportBusy.remove(key);
+        if (rep != null) _biReports[key] = rep;
+      });
+    } catch (_) {
+      // 报告拿不到不该挡住整页 —— 卡片自己会显示「点右下角生成」。
+      if (!mounted) return;
+      setState(() => _biReportBusy.remove(key));
+    }
+  }
 
   Future<void> _biRequestBreakdown(String dim, String name) async {
     // 净TA 不参与联动（资金流与业务三维不同源），其余四维都能拆。

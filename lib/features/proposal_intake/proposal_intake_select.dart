@@ -423,17 +423,13 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
 
   @override
   Widget build(BuildContext context) {
-    final tip = [
-      _selected?.label ?? '',
-      if ((_selected?.meta ?? '').trim().isNotEmpty) _selected!.meta!.trim(),
-    ].where((part) => part.isNotEmpty).join('\n');
     Widget field = TextField(
       controller: _controller,
       focusNode: _focus,
       enabled: _enabled,
       readOnly: !_canSearch,
       minLines: 1,
-      maxLines: 2,
+      maxLines: MediaQuery.sizeOf(context).width < 620 ? 1 : 2,
       style: const TextStyle(
         fontSize: 13,
         height: 1.35,
@@ -483,13 +479,6 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
           : null,
       onChanged: _canSearch ? (_) => setState(() {}) : null,
     );
-    if (tip.isNotEmpty) {
-      field = Tooltip(
-        message: tip,
-        waitDuration: const Duration(milliseconds: 350),
-        child: field,
-      );
-    }
     return TapRegion(
       groupId: _tapGroup,
       onTapOutside: (_) {

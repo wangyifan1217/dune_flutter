@@ -1,4 +1,5 @@
 import 'package:dunes_app/features/proposal_intake/flow_panorama/flow_ctx_mapper.dart';
+import 'package:dunes_app/features/proposal_intake/flow_panorama/flow_topology.dart';
 import 'package:dunes_app/features/proposal_intake/proposal_intake_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -105,6 +106,40 @@ void main() {
     expect(ctx.financePending, 1);
     expect(ctx.owner('market1'), '王一凡');
     expect(ctx.owner('tech'), '待指派');
+  });
+
+  test('tax labels prefer settlement rates over contract text', () {
+    final ctx = FlowCtxMapper.fromForm(
+      form: {
+        'salesCoreTerms': '按核销金额结算 · T+7 回款 · 专票 6%',
+        'purchaseCoreTerms': '供货专票 9%',
+        'salesInvoiceType': '专票',
+        'skuDetails': [
+          {
+            'id': 'sku-1',
+            'settlements': [
+              {'id': 'st-1', 'invoiceType': '专票', 'taxRate': '13%'},
+            ],
+          },
+        ],
+        'supplyProducts': [
+          {
+            'id': 'sup-1',
+            'settlements': [
+              {'id': 'sst-1', 'invoiceType': '专票', 'taxRate': '9%'},
+            ],
+          },
+        ],
+      },
+      review: const {},
+      proposalTitle: '提案',
+      financeReviewKeys: const [],
+      financeInterfaces: const [],
+    );
+    expect(ctx.taxLabel, '专票 13%');
+    expect(ctx.purchaseTaxLabel, '专票 9%');
+    expect(kEdgeById['i1']!.label(ctx), '专票 9%');
+    expect(kEdgeById['isales']!.label(ctx), '专票 13%');
   });
 
   test('billing name falls back to sales our party', () {

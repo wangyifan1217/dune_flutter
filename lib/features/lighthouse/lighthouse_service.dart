@@ -272,6 +272,66 @@ class LighthouseService {
     return map;
   }
 
+  /// BI 卡片报告：日/周/月/季/年跟着 [period] 走，[entity] 为空就是整体那份。
+  ///
+  /// [refresh] 只有用户点了卡片右下角那个刷新才给 true —— 后端会绕过缓存
+  /// 重跑一次模型。平时（含整页刷新）都走缓存，同一份 data_revision 下
+  /// 拿到的永远是同一份报告，不会每开一次页面就烧一次 token。
+  Future<Map<String, dynamic>> fetchReport({
+    required String tab,
+    String? period,
+    String? date,
+    String? fuel,
+    int? offset,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? group,
+    String? anchor,
+    String? hun,
+    String? anomaly,
+    String entity = '',
+    bool refresh = false,
+  }) async {
+    final body = <String, dynamic>{
+      'tab': tab,
+      if (period != null && period.isNotEmpty) 'period': period,
+      if (date != null && date.isNotEmpty) 'date': date,
+      if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
+      if (offset != null && offset != 0) 'offset': offset,
+      if (startDate != null) 'start_date': _fmtDate(startDate),
+      if (endDate != null) 'end_date': _fmtDate(endDate),
+      if (group != null && group.isNotEmpty && group != '全部') 'group': group,
+      if (anchor != null && anchor.isNotEmpty) 'anchor': anchor,
+      if (hun != null && hun.isNotEmpty && hun != '全部') 'hun': hun,
+      if (anomaly != null && anomaly.isNotEmpty && anomaly != '全部')
+        'anomaly': anomaly,
+      if (entity.trim().isNotEmpty) 'entity': entity.trim(),
+      if (refresh) 'refresh': true,
+    };
+    final resp = await _client.post(
+      _uri('/lighthouse/report'),
+      headers: _headers,
+      body: jsonEncode(body),
+    );
+    if (resp.statusCode == 403) {
+      throw Exception('暂无权限');
+    }
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('灯塔报告加载失败: HTTP ${resp.statusCode}');
+    }
+    final decoded = jsonDecode(resp.body);
+    if (decoded is! Map) {
+      throw Exception('灯塔报告格式错误');
+    }
+    final map = Map<String, dynamic>.from(decoded);
+    if (map['success'] == false) {
+      throw Exception((map['message'] ?? '灯塔报告加载失败').toString());
+    }
+    final data = map['data'];
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return map;
+  }
+
   /// 一级页 AI 解读 / 要点（事实层 + 规则/LLM）。
   Future<Map<String, dynamic>> fetchAiSummary({
     required String tab,

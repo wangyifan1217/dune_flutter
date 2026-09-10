@@ -378,6 +378,8 @@ const contractProposalFieldGroups =
     ContractProposalFieldDef('channelSettleCycle', '渠道侧结算周期', maxLines: 2),
     ContractProposalFieldDef('channelPayee', '渠道侧收款主体'),
     ContractProposalFieldDef('channelReceiveAccount', '渠道侧收款账户'),
+    ContractProposalFieldDef('salesInvoiceType', '销售合同发票类型'),
+    ContractProposalFieldDef('salesInvoiceFlow', '销售合同发票流', maxLines: 2),
   ],
 };
 

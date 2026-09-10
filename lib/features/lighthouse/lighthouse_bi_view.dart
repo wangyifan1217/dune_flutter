@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -100,6 +101,95 @@ List<({String key, String label})> lhBiCrossDims(String dim) {
     for (final d in lhBiLedgerCrossDims)
       if (d.key != dim) d,
   ];
+}
+
+/// 一份卡片报告 —— 后端 /lighthouse/report 的返回。
+///
+/// 健康度是后端规则算的，不是模型判的：`healthLevel` / `healthScore` 进来时
+/// 已经定死，前端只负责上色，不要在这边再算一遍或改判。
+@immutable
+class LhBiReport {
+  const LhBiReport({
+    required this.grainLabel,
+    required this.periodLabel,
+    required this.scope,
+    required this.entityName,
+    required this.healthLevel,
+    required this.healthLabel,
+    required this.healthScore,
+    required this.lines,
+    required this.generatedAt,
+    required this.dataThrough,
+    this.degraded = false,
+  });
+
+  /// 日报 / 周报 / 月报 / 季报 / 年报。
+  final String grainLabel;
+  final String periodLabel;
+
+  /// overall | entity
+  final String scope;
+  final String entityName;
+
+  /// good | watch | risk
+  final String healthLevel;
+  final String healthLabel;
+  final int healthScore;
+
+  /// 两三句短报，每句 28 字以内。
+  final List<String> lines;
+
+  /// 这份报告是什么时候生成的 —— 不是打开页面的时间。
+  final DateTime generatedAt;
+
+  /// 数据截止日（T+1）。
+  final String dataThrough;
+
+  /// true = 模型没出来或数字没过回验，正文是规则模板兜的。
+  final bool degraded;
+
+  static LhBiReport? fromJson(Map<String, dynamic>? json) {
+    if (json == null) return null;
+    final health = (json['health'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final rawLines = json['lines'];
+    final lines = <String>[];
+    if (rawLines is List) {
+      for (final e in rawLines) {
+        final t = e?.toString().trim() ?? '';
+        if (t.isNotEmpty) lines.add(t);
+      }
+    }
+    return LhBiReport(
+      grainLabel: json['grain_label']?.toString() ?? '报告',
+      periodLabel: json['period_label']?.toString() ?? '',
+      scope: json['scope']?.toString() ?? 'overall',
+      entityName: json['entity_name']?.toString() ?? '',
+      healthLevel: health['level']?.toString() ?? 'good',
+      healthLabel: health['label']?.toString() ?? '',
+      healthScore: (health['score'] as num?)?.toInt() ?? 0,
+      lines: lines,
+      generatedAt:
+          DateTime.tryParse(json['generated_at']?.toString() ?? '')?.toLocal() ??
+          DateTime.now(),
+      dataThrough: json['data_through']?.toString() ?? '',
+      degraded: json['degraded'] == true,
+    );
+  }
+}
+
+/// 报告缓存键。前端也留一份缓存 —— 整页重建不该重新问后端要报告。
+String lhBiReportKey(String dim, String entity, String periodLabel) =>
+    '$dim|$entity|$periodLabel';
+
+String lhBiClock(DateTime t) =>
+    '${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')} '
+    '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+/// 后端给的是 2026-09-09，卡上只要 09-09。
+String lhBiDay(String iso) {
+  final s = iso.trim();
+  if (s.length >= 10) return s.substring(5, 10);
+  return s;
 }
 
 /// BI 视图能选的一个指标。
@@ -344,6 +434,9 @@ class LhBiViewPage extends StatefulWidget {
     this.periodBar,
     this.loading = false,
     this.windowRowsFor,
+    this.reportFor,
+    this.reportBusy,
+    this.requestReport,
   });
 
   /// 打开时停在哪个维度。
@@ -415,12 +508,23 @@ class LhBiViewPage extends StatefulWidget {
   final List<Map<String, dynamic>>? Function(String dim, String window)?
       windowRowsFor;
 
+  /// 取这一维（[entity] 为空 = 整体）当前期间的报告。null = 还没有。
+  /// 宿主自己留缓存 —— 页面重建不该让报告重新生成一份。
+  final LhBiReport? Function(String dim, String entity)? reportFor;
+
+  /// 这一份报告正在生成中。
+  final bool Function(String dim, String entity)? reportBusy;
+
+  /// 去要一份报告。[force] = 用户点了卡片右下角的刷新，后端绕过缓存重跑模型。
+  final Future<void> Function(String dim, String entity, bool force)?
+      requestReport;
+
   @override
   State<LhBiViewPage> createState() => _LhBiViewPageState();
 }
 
 class _LhBiViewPageState extends State<LhBiViewPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   /// 五个视角：账本三维 + 人效（账本按负责人分组）+ 净TA（资金流五类）。
   /// 前四个同源同口径、可互相拆；净TA 单独挂在最后，只看自己。
   static const List<String> kAllDims = <String>[
@@ -462,6 +566,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
 
   late final AnimationController _anim;
 
+  /// 穿透读数板自己的进度：每次锁定 / 解除都从 0 重跑一遍，
+  /// 大数滚动、占比条、走势描线、扫描线全挂在它上面。
+  /// 初值给 1 —— 刚进页面时右侧是全局总览，不该先空一拍再淡进来。
+  late final AnimationController _pen;
+
   @override
   void initState() {
     super.initState();
@@ -469,6 +578,20 @@ class _LhBiViewPageState extends State<LhBiViewPage>
       vsync: this,
       duration: const Duration(milliseconds: 720),
     )..forward();
+    _pen = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 620),
+      value: 1,
+    );
+    // 进页面就把整体那份要上。已经生成过的（后端按 data_revision 缓存、
+    // 宿主也留了一份）会立刻回来，不会重跑模型。
+    _askReport();
+  }
+
+  void _replayPenetrate() {
+    _pen
+      ..reset()
+      ..forward();
   }
 
   @override
@@ -479,12 +602,16 @@ class _LhBiViewPageState extends State<LhBiViewPage>
       _anim
         ..reset()
         ..forward();
+      // 切了期间就是换了一种报：日 → 周 → 月 → 季 → 年。
+      _replayPenetrate();
+      _askReport();
     }
   }
 
   @override
   void dispose() {
     _anim.dispose();
+    _pen.dispose();
     super.dispose();
   }
 
@@ -561,12 +688,17 @@ class _LhBiViewPageState extends State<LhBiViewPage>
     HapticFeedback.selectionClick();
     if (_drillName == name) {
       setState(() => _drillName = null);
+      _replayPenetrate();
+      _askReport();
       return;
     }
     setState(() {
       _drillName = name;
       _drillBusy = true;
     });
+    _replayPenetrate();
+    // 点中一片 → 这一片自己的报告。整体那份留在缓存里，点回去还是它。
+    _askReport();
     final req = widget.requestBreakdown;
     if (req != null) {
       try {
@@ -600,6 +732,8 @@ class _LhBiViewPageState extends State<LhBiViewPage>
     _anim
       ..reset()
       ..forward();
+    _replayPenetrate();
+    if (_dim != prevDim) _askReport();
   }
 
   void _pickBreak(String key) {
@@ -1515,15 +1649,26 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                 ),
               ),
             ),
+            const SizedBox(height: 10),
+            // 报告卡接在环正下方：环回答「谁占多少」，它回答「这门生意现在
+            // 什么状况」。整宽是必须的 —— 两三句人话在 110px 的窄条里一行
+            // 只放得下八个字，读起来是碎的。
+            _reportCard(),
             if (lhBiCrossDims(_dim).isNotEmpty) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: 10),
               Text(
-                '点扇区或下面任一行，看它拆到'
-                '${lhBiCrossDims(_dim).map((e) => e.label).join(' / ')}',
+                _drillName == null
+                    ? '点扇区或下面任一行，看它拆到'
+                          '${lhBiCrossDims(_dim).map((e) => e.label).join(' / ')}'
+                    : '已锁定「$_drillName」· 再点一次解除',
                 textAlign: TextAlign.center,
                 style: _mono(size: 8.5, color: LhColors.mute2, spacing: 0.2),
               ),
             ],
+            // 拆分条接在双栏正下方 —— 右卡给的是「这一片是谁、多少、占多少」，
+            // 这里给的是「它拆到省份 / 渠道 / 负责人各是谁」，两块要连着读，
+            // 中间不能再隔十几行图例。
+            _drillPanel(),
             const SizedBox(height: 10),
             if (_showsWindowIncrements || slices.isNotEmpty)
               _legendHeader(),
@@ -1541,10 +1686,281 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               const SizedBox(height: 10),
               _windowTotalsRow(items),
             ],
-            _drillPanel(),
           ],
         ),
       ),
+    );
+  }
+
+  // ── 报告卡 ───────────────────────────────────────────────────────────────
+  //
+  //   环下面这张卡是 DeepSeek 写的短报：不点扇区讲整体，点了讲那一片。
+  //   日/周/月/季/年跟着上面的期间条走 —— 切到周它就是周报，切到季就是季报。
+  //
+  //   健康度不是模型判的，是后端规则从数字算的（gradeHealth）。定过的规矩
+  //   「日/周只报事实、月/季/年才下结论」在这里的落地方式是：日报也能给健康度，
+  //   但那个结论必须能从数字推出来，模型只负责把依据写成人话。
+  //
+  //   卡不跟着页面刷新走：报告在后端按 data_revision 缓存，前端也留一份，
+  //   整页重建只会拿到同一份。要新的只有一条路 —— 点右下角那个刷新。
+
+  String get _reportEntity => _drillName ?? '';
+
+  /// 还没拿到报告时的标题占位。期间条给的是「本月 · 2026.09」这种文案，
+  /// 头两个字就够判出粒度；拿到报告后一律用后端给的 grain_label。
+  String get _reportGrainGuess {
+    final l = widget.periodLabel;
+    if (l.startsWith('本日') || l.startsWith('今日')) return '日报';
+    if (l.startsWith('本周')) return '周报';
+    if (l.startsWith('本季')) return '季报';
+    if (l.startsWith('本年')) return '年报';
+    if (l.startsWith('本月')) return '月报';
+    return '报告';
+  }
+
+  Color _healthColor(String level) {
+    switch (level) {
+      case 'risk':
+        return LhColors.neg;
+      case 'watch':
+        return LhColors.copper;
+      default:
+        // 「健康」不能用绿 —— 这个 App 里绿是「跌」和「现金流」的语义色，
+        // 拿它表示状况好会和环比箭头撞含义。用灯塔紫。
+        return LhBiPlum.primary;
+    }
+  }
+
+  /// 一律推到帧后再要 —— didUpdateWidget 里同步调宿主的 setState 会撞上
+  /// 「setState() called during build」，切期间那条路正好会走到这儿。
+  void _askReport({bool force = false}) {
+    final req = widget.requestReport;
+    if (req == null) return;
+    final dim = _dim;
+    final entity = _reportEntity;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(req(dim, entity, force));
+    });
+  }
+
+  void _refreshReport() {
+    HapticFeedback.selectionClick();
+    _askReport(force: true);
+    _replayPenetrate();
+  }
+
+  Widget _reportCard() {
+    final rep = widget.reportFor?.call(_dim, _reportEntity);
+    final busy = widget.reportBusy?.call(_dim, _reportEntity) ?? false;
+    final subject = _drillName ?? '整体';
+    final title = '${rep?.grainLabel ?? _reportGrainGuess} · $subject';
+    final health = rep?.healthLevel ?? '';
+    final accent = _healthColor(health);
+
+    return AnimatedBuilder(
+      animation: _pen,
+      builder: (context, _) {
+        final t = Curves.easeOutCubic.transform(_pen.value);
+        return Container(
+          padding: const EdgeInsets.fromLTRB(11, 10, 10, 8),
+          decoration: BoxDecoration(
+            color: LhBiSection.tint('scale'),
+            borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
+            border: Border.all(color: LhBiSection.edge('scale'), width: 0.8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: lighthouseHeroSectionIconSize,
+                    height: lighthouseHeroSectionIconSize,
+                    decoration: BoxDecoration(
+                      color: accent,
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: const Icon(
+                      Icons.description_outlined,
+                      size: 10.5,
+                      color: LhColors.paper,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  // Expanded 而不是 Flexible + Spacer：两个 flex 会把剩余
+                  // 宽度对半分，标题明明放得下也会被截。
+                  Expanded(
+                    child: LhScrollText(
+                      title,
+                      key: ValueKey('bi-report-title-$title'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: LhTypography.sans(
+                        size: lighthouseHeroGroupTitleFontSize,
+                        color: LhBiSection.title('scale'),
+                        weight: FontWeight.w700,
+                        letterSpacing: 0.2,
+                        height: 1.0,
+                      ),
+                    ),
+                  ),
+                  if (rep != null) ...[
+                    const SizedBox(width: 8),
+                    _healthChip(rep, accent),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 9),
+              _reportBody(rep, busy, t),
+              const SizedBox(height: 9),
+              Container(height: 0.7, color: LhBiSection.edge('scale')),
+              const SizedBox(height: 6),
+              _reportFooter(rep, busy),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _healthChip(LhBiReport rep, Color accent) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.11),
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: accent.withValues(alpha: 0.3), width: 0.7),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            rep.healthLabel,
+            style: _sans(size: 9.5, color: accent, weight: FontWeight.w700),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '${rep.healthScore}',
+            style: _mono(size: 9.5, color: accent, spacing: 0),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _reportBody(LhBiReport? rep, bool busy, double t) {
+    if (rep == null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(
+          busy ? '正在生成${_reportGrainGuess}…' : '还没有${_reportGrainGuess}，点右下角生成。',
+          style: _mono(size: 9.5, color: LhColors.mute2, spacing: 0.1),
+        ),
+      );
+    }
+    if (rep.lines.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(
+          '这一档没有可报的内容。',
+          style: _mono(size: 9.5, color: LhColors.mute2, spacing: 0.1),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < rep.lines.length; i++)
+          Opacity(
+            // 三句错开一点进场。一起亮起来只是一次闪，错开才读得出先后。
+            opacity: ((t - i * 0.12) / 0.5).clamp(0.0, 1.0),
+            child: Padding(
+              padding: EdgeInsets.only(bottom: i == rep.lines.length - 1 ? 0 : 5),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 5.5),
+                    child: Container(
+                      width: 3,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: LhBiPlum.primary.withValues(alpha: 0.55),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      rep.lines[i],
+                      style: LhTypography.sans(
+                        size: 10.5,
+                        color: LhColors.ink2,
+                        weight: FontWeight.w500,
+                        height: 1.45,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _reportFooter(LhBiReport? rep, bool busy) {
+    final bits = <String>[];
+    if (rep != null) {
+      bits.add('${lhBiClock(rep.generatedAt)} 出');
+      if (rep.dataThrough.isNotEmpty) {
+        // T+1 要写在脸上：报的是截止到那一天的账，不是此刻的账。
+        bits.add('数据截至 ${lhBiDay(rep.dataThrough)}（T+1）');
+      }
+      if (rep.degraded) bits.add('规则兜底');
+    } else {
+      bits.add('每天 08:00 自动出');
+    }
+    return Row(
+      children: [
+        Expanded(
+          child: LhScrollText(
+            bits.join(' · '),
+            key: ValueKey('bi-report-foot-${bits.join()}'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _mono(size: 8.5, color: LhColors.mute2, spacing: 0.1),
+          ),
+        ),
+        const SizedBox(width: 8),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: busy ? null : _refreshReport,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 4, 2, 4),
+            child: busy
+                ? SizedBox(
+                    width: 13,
+                    height: 13,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.6,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        LhBiPlum.primary.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  )
+                : Icon(
+                    Icons.refresh_rounded,
+                    size: 15,
+                    color: LhBiPlum.primary.withValues(alpha: 0.85),
+                  ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -2633,6 +3049,8 @@ class _Slice {
   final double value;
   final Color color;
 }
+
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 画笔

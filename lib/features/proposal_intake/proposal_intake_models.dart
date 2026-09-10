@@ -473,6 +473,13 @@ class ProposalIntakeListResult {
   }
 }
 
+const kProposalIntakePeriodFilters = <(String, String)>[
+  ('', '库内提案'),
+  ('day', '本日提案'),
+  ('week', '本周提案'),
+  ('month', '本月提案'),
+];
+
 class ProposalIntakeLibraryStats {
   const ProposalIntakeLibraryStats({
     this.total = 0,
@@ -717,11 +724,14 @@ Map<String, dynamic> proposalSyncCostSelection({
     }
     ..[totalKey] = proposalCostAmountTotal(amounts);
   if (settleTermsKey.isNotEmpty) {
-    final terms = proposalCostSettleTermsMap(form[settleTermsKey])
-      ..removeWhere((id, _) => !keep.contains(id));
-    next[settleTermsKey] = {
-      for (final entry in terms.entries) entry.key: entry.value.toJson(),
-    };
+    final raw = form[settleTermsKey];
+    if (raw is Map) {
+      next[settleTermsKey] = {
+        for (final entry in raw.entries)
+          if (keep.contains('${entry.key}'.trim()))
+            '${entry.key}': entry.value,
+      };
+    }
   }
   return next;
 }
@@ -734,7 +744,14 @@ Map<String, ProposalFinanceSettleTerms> proposalCostSettleTermsMap(
   for (final entry in raw.entries) {
     final id = '${entry.key}'.trim();
     if (id.isEmpty) continue;
-    out[id] = ProposalFinanceSettleTerms.fromJson(entry.value);
+    final rows = proposalCostSettleTermsList(
+      {id: entry.value},
+      name: id,
+      id: id,
+    );
+    out[id] = rows.isEmpty
+        ? ProposalFinanceSettleTerms.fromJson(entry.value)
+        : rows.first;
   }
   return out;
 }
@@ -744,6 +761,34 @@ ProposalFinanceSettleTerms proposalCostSettleTermsOf({
   required String name,
   required String id,
 }) => terms[id] ?? terms[name] ?? const ProposalFinanceSettleTerms();
+
+List<ProposalFinanceSettleTerms> proposalCostSettleTermsList(
+  Object? raw, {
+  required String name,
+  required String id,
+}) {
+  if (raw is! Map) return const [];
+  Object? value = raw[id];
+  value ??= raw[name];
+  if (value == null) return const [];
+  if (value is List) {
+    return [
+      for (final item in value)
+        if (item is Map) ProposalFinanceSettleTerms.fromJson(item),
+    ];
+  }
+  if (value is Map) {
+    final nested = value['settlements'];
+    if (nested is List) {
+      return [
+        for (final item in nested)
+          if (item is Map) ProposalFinanceSettleTerms.fromJson(item),
+      ];
+    }
+    return [ProposalFinanceSettleTerms.fromJson(value)];
+  }
+  return const [];
+}
 
 List<String> proposalIntakeNamedCostSettleIssues(
   Map<String, dynamic> form, {
@@ -759,16 +804,16 @@ List<String> proposalIntakeNamedCostSettleIssues(
       if ('$item'.trim().isNotEmpty) '$item'.trim(),
   ];
   if (names.isEmpty) return const [];
-  final terms = proposalCostSettleTermsMap(form[termsKey]);
   final issues = <String>[];
   for (final name in names) {
     final id = proposalCostAmountId(name, catalog);
-    if (!proposalCostSettleTermsOf(
-      terms: terms,
+    final rows = proposalCostSettleTermsList(
+      form[termsKey],
       name: name,
       id: id,
-    ).isComplete) {
-      issues.add('$label「$name」请填写结算比例或单价、计算公式、对方主体、我方主体、税率');
+    );
+    if (rows.isEmpty || rows.any((row) => !row.isProjectCostComplete)) {
+      issues.add('$label「$name」请填写结算比例或单价');
     }
   }
   return issues;
@@ -778,22 +823,13 @@ List<String> proposalIntakeCostItemSettleIssues(
   Map<String, dynamic> form, {
   List<ProposalCostItemOption> catalog = const [],
   List<ProposalCostItemOption> businessCatalog = const [],
-}) => [
-  ...proposalIntakeNamedCostSettleIssues(
-    form,
-    namesKey: 'costItems',
-    termsKey: 'costItemSettleTerms',
-    label: '项目成本',
-    catalog: catalog,
-  ),
-  ...proposalIntakeNamedCostSettleIssues(
-    form,
-    namesKey: 'businessCostItems',
-    termsKey: 'businessCostItemSettleTerms',
-    label: '业务成本',
-    catalog: businessCatalog,
-  ),
-];
+}) => proposalIntakeNamedCostSettleIssues(
+  form,
+  namesKey: 'businessCostItems',
+  termsKey: 'businessCostItemSettleTerms',
+  label: '业务成本',
+  catalog: businessCatalog,
+);
 
 class ProposalIntakeOptions {
   const ProposalIntakeOptions({
@@ -1074,6 +1110,8 @@ List<String> proposalIntakeContractFillKeys(String prefix) {
       'channelSettleCycle',
       'channelPayee',
       'channelReceiveAccount',
+      'salesInvoiceType',
+      'salesInvoiceFlow',
     ]);
   }
   return keys;
@@ -1177,6 +1215,16 @@ Map<String, dynamic> proposalIntakePatchFromContract({
     _putField(patch, 'channelSettleCycle', pick(['channelSettleCycle']));
     _putField(patch, 'channelPayee', pick(['channelPayee']));
     _putField(patch, 'channelReceiveAccount', pick(['channelReceiveAccount']));
+    _putField(
+      patch,
+      'salesInvoiceType',
+      pick(['salesInvoiceType', 'invoiceType', 'invoiceTypes']),
+    );
+    _putField(
+      patch,
+      'salesInvoiceFlow',
+      pick(['salesInvoiceFlow', 'invoiceFlow']),
+    );
   }
   patch['${prefix}FileName'] = '';
   patch['${prefix}ObjectKey'] = '';
@@ -1365,6 +1413,16 @@ String proposalIntakeActionLabel(
     return '$titled $name';
   }
 
+  String withReviewer(String prefix, {required String fallback}) {
+    final name = proposalIntakeOwnerDisplayName(
+      form,
+      prefix,
+      people: people,
+    );
+    if (name.isEmpty) return fallback;
+    return '待$name复核';
+  }
+
   String withName(String base, String name) {
     final trimmed = name.trim();
     if (trimmed.isEmpty || trimmed == '未指定') return base;
@@ -1382,23 +1440,21 @@ String proposalIntakeActionLabel(
         'financeOwner2',
       ),
     'start_review' => '待重新提交复核',
-    'review_market' => withOwner('待复核市场部', 'marketOwner1'),
-    'review_tech' => withOwner(
-        '待复核市场部',
+    'review_market' => withReviewer('marketOwner1', fallback: '待复核市场部'),
+    'review_tech' => withReviewer(
         'marketOwner2',
         fallback: '待复核科技',
       ),
-    'review_finance' => withOwner('待复核财务', 'financeOwner2'),
-    'review_finance_interface' => withOwner(
-        '待复核财务技术接口',
-        'technologyOwner',
+    'review_finance' => withReviewer('financeOwner2', fallback: '待复核财务'),
+    'review_finance_interface' => withReviewer(
+        'marketOwner2',
+        fallback: '待复核财务技术接口',
       ),
-    'review_finance_module' => withOwner(
-        '待复核财务',
+    'review_finance_module' => withReviewer(
         'financeOwner1',
         fallback: '待整板块复核财务',
       ),
-    'review_contract' => withOwner('待审核合同', 'financeOwner2'),
+    'review_contract' => withReviewer('financeOwner2', fallback: '待审核合同'),
     'submit_president' => '待通知最终人',
     'president_confirm' => withName(
         '待最终确认',
@@ -1413,7 +1469,29 @@ String proposalIntakeActionLabel(
 
 bool proposalIntakeFinanceLineItemsReviewed(ProposalIntakeRow row) {
   final keys = <String>[
-    for (final field in kProposalSalesFinanceFillFields) field.$1,
+    'salesScale',
+    'revenue',
+    'couponProcurementCost',
+    'profit',
+    'margin',
+    'turnoverCash',
+    'turnoverTimes',
+    'supplySettleMode',
+    'supplySettleCycle',
+    'supplyPayer',
+    'supplyPayAccount',
+    'channelSettleMode',
+    'channelSettleCycle',
+    'channelPayee',
+    'channelReceiveAccount',
+    'generalBusinessAccount',
+    'prepaidAccount',
+    'financeRemark',
+    'costItems',
+    'operatingCost',
+    'taxCost',
+    'rollback',
+    'proposalSubtitle',
     ...proposalIntakeLaunchModuleReviewKeys(row.form),
     ...proposalIntakeSkuSettleReviewKeys(row.form),
   ];
@@ -1426,7 +1504,7 @@ bool proposalIntakeFinanceLineItemsReviewed(ProposalIntakeRow row) {
   return true;
 }
 
-/// 列表上给所有人看的待复核对象：市场部/财务 + 已填写的负责人一或二。
+/// 列表上给所有人看的待复核对象：有姓名则「待某某复核」，否则保留短状态。
 List<String> proposalIntakePendingReviewLabels(
   ProposalIntakeRow row, {
   List<ProposalPerson> people = const [],
@@ -1471,6 +1549,513 @@ String proposalIntakeListActionText(
     if (mine.isNotEmpty && !pending.contains(mine)) mine,
   ];
   return labels.join('  ·  ');
+}
+
+const kProposalTechnologyReviewFields = <String>[
+  'technologyPlatform',
+  'technologyCapabilities',
+  'outputForms',
+  'developmentTypes',
+  'hasRdCost',
+  'rdAmount',
+  'deliveryDate',
+  'financeInterfaces',
+];
+
+const kProposalTechnologyReviewLabels = <String, String>{
+  'technologyPlatform': 'τ-标签一',
+  'technologyCapabilities': 'τ-标签二',
+  'outputForms': '能力输出/输入形式',
+  'developmentTypes': '研发类型',
+  'hasRdCost': '是否涉及研发费用',
+  'rdAmount': '研发费用金额',
+  'deliveryDate': '交付时间',
+  'financeInterfaces': '财务技术接口',
+};
+
+List<String> proposalIntakeTechnologyReviewGaps(Map<String, dynamic> review) {
+  final raw = review['technologyItems'];
+  final items = raw is Map ? raw : const {};
+  return [
+    for (final key in kProposalTechnologyReviewFields)
+      if (items[key] != true) kProposalTechnologyReviewLabels[key] ?? key,
+  ];
+}
+
+enum ProposalIntakeNavSection { market, tech, finance, flow }
+
+ProposalIntakeNavSection? proposalIntakeNavSectionForAction(String action) {
+  return switch (action) {
+    'fill' ||
+    'revise' ||
+    'revise_module' ||
+    'start_review' ||
+    'review_market' => ProposalIntakeNavSection.market,
+    'fill_tech' ||
+    'fill_finance_interface' ||
+    'review_tech' ||
+    'review_finance_interface' ||
+    'start_tech_revision' => ProposalIntakeNavSection.tech,
+    'review_finance' ||
+    'review_finance_module' ||
+    'review_contract' => ProposalIntakeNavSection.finance,
+    _ => null,
+  };
+}
+
+String proposalIntakeNavSectionLabel(ProposalIntakeNavSection section) {
+  return switch (section) {
+    ProposalIntakeNavSection.market => '市场部',
+    ProposalIntakeNavSection.tech => '科技部',
+    ProposalIntakeNavSection.finance => '财务部',
+    ProposalIntakeNavSection.flow => '四流',
+  };
+}
+
+bool proposalIntakeActionIsModuleReview(String action) {
+  return action == 'review_market' || action == 'review_finance_module';
+}
+
+bool proposalIntakeAwaitingModuleConfirm(
+  String action,
+  Map<String, dynamic> review,
+) {
+  return action == 'review_tech' &&
+      review['technologyCompleted'] != true &&
+      proposalIntakeTechnologyReviewGaps(review).isEmpty;
+}
+
+String proposalIntakeTaskBannerTitle(
+  String action, {
+  bool awaitingModuleConfirm = false,
+}) {
+  if (awaitingModuleConfirm && action == 'review_tech') {
+    return '逐条已完成，请确认科技部板块';
+  }
+  return switch (action) {
+    'review_market' => '待你整板块复核市场部',
+    'review_finance_module' => '待你整板块复核财务部',
+    'review_tech' => '待你逐条复核科技部',
+    'review_finance' => '待你逐条复核财务部',
+    'review_finance_interface' => '待你逐条复核财务技术接口',
+    'review_contract' => '待你复核合同',
+    'president_confirm' => '待你最终确认',
+    _ => '',
+  };
+}
+
+String proposalIntakeTaskBannerBody(
+  String action, {
+  bool awaitingModuleConfirm = false,
+}) {
+  if (awaitingModuleConfirm && action == 'review_tech') {
+    return '字段旁的「已复核」还不算过。请到科技部最底部点「确认本板块通过」。点保存不会结束复核。';
+  }
+  if (proposalIntakeActionIsModuleReview(action)) {
+    return '看完内容后，到本板块最底部点「整个板块复核通过」。也可直接整板块驳回。';
+  }
+  return switch (action) {
+    'review_tech' =>
+      '到各字段旁点复核，财务技术接口也算科技一条。底部确认前会检查遗漏。也可直接整板块驳回。',
+    'review_finance' => '到各费用字段旁点复核。也可直接整板块驳回。',
+    'review_finance_interface' => '到财务技术接口处点复核。',
+    'review_contract' => '到合同处点复核。也可直接整板块驳回。',
+    'president_confirm' =>
+      '审批进度和其他人看到的一样。看完各板块后，到页面底部点「确认通过」或「驳回」。',
+    _ => '',
+  };
+}
+
+String proposalIntakeNavJumpLabel(
+  String action, {
+  bool awaitingModuleConfirm = false,
+}) {
+  if (awaitingModuleConfirm ||
+      proposalIntakeActionIsModuleReview(action) ||
+      action == 'president_confirm') {
+    return '去底部确认';
+  }
+  final section = proposalIntakeNavSectionForAction(action);
+  if (section == null) return '';
+  final name = proposalIntakeNavSectionLabel(section);
+  if (action.startsWith('review') || action == 'review_contract') {
+    return '去$name复核';
+  }
+  if (action == 'fill' ||
+      action == 'fill_tech' ||
+      action == 'fill_finance_interface' ||
+      action == 'revise' ||
+      action == 'revise_module') {
+    return '去$name填写';
+  }
+  if (action == 'start_tech_revision') return '去$name变更';
+  if (action == 'start_review') return '去$name';
+  return '去$name';
+}
+
+enum ProposalIntakeProgressState { pending, current, done, rejected }
+
+class ProposalIntakeProgressStep {
+  const ProposalIntakeProgressStep({
+    required this.id,
+    required this.title,
+    required this.state,
+    this.role = '',
+    this.name = '',
+    this.action = '',
+    this.statusText = '',
+    this.time = '',
+  });
+
+  final String id;
+  final String title;
+  final String role;
+  final String name;
+  final String action;
+  final String statusText;
+  final String time;
+  final ProposalIntakeProgressState state;
+}
+
+int proposalIntakeStageRank(String stage) {
+  return switch (stage) {
+    'filling' || 'draft' => 0,
+    'awaiting_tech' || 'tech_revising' => 1,
+    'awaiting_start_review' => 2,
+    'reviewing' || 'tech_reviewing' => 3,
+    'awaiting_submit' => 4,
+    'pending_president' => 5,
+    'done' => 6,
+    _ => 0,
+  };
+}
+
+String formatProposalIntakeProgressTime(String raw) {
+  final parsed = parseProposalIntakeInstant(raw);
+  if (parsed == null) return '';
+  final local = parsed.toLocal();
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${two(local.month)}.${two(local.day)} ${two(local.hour)}:${two(local.minute)}';
+}
+
+String proposalIntakeProgressHeadline(List<ProposalIntakeProgressStep> steps) {
+  final current = [
+    for (final step in steps)
+      if (step.state == ProposalIntakeProgressState.current) step,
+  ];
+  if (current.isEmpty) {
+    if (steps.any(
+      (item) =>
+          item.id == 'end' && item.state == ProposalIntakeProgressState.done,
+    )) {
+      return '已完成';
+    }
+    return '';
+  }
+  return current
+      .map((step) {
+        if (step.role.isNotEmpty && step.name.isNotEmpty) {
+          return '${step.role} · ${step.name}';
+        }
+        if (step.name.isNotEmpty) return step.name;
+        return step.title;
+      })
+      .join('、');
+}
+
+List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
+  required ProposalIntakeRow row,
+  List<ProposalPerson> people = const [],
+  ProposalIntakeOptions? options,
+}) {
+  final stage = row.resolvedStage;
+  final rank = proposalIntakeStageRank(stage);
+  final purchase = proposalIntakeIsPurchase(row.kind);
+  final review = row.review;
+  bool flag(String key) => review[key] == true;
+  final presidentRejected = flag('presidentRejected');
+  final reviewRejected = flag('reviewRejected') && !presidentRejected;
+  final rejectSection = '${review['reviewRejectSection'] ?? ''}'.trim();
+  final anyReviewDone = [
+    'marketCompleted',
+    'technologyCompleted',
+    'financeInterfaceCompleted',
+    'financeCompleted',
+    'purchaseContractCompleted',
+    'salesContractCompleted',
+  ].any(flag);
+  final inTechFill = stage == 'awaiting_tech' || stage == 'tech_revising';
+  final inStartReview = stage == 'awaiting_start_review';
+  final inReview = stage == 'reviewing' || stage == 'tech_reviewing';
+  final inTechReview = stage == 'tech_reviewing';
+  final inNotify = stage == 'awaiting_submit';
+  final inPresident = stage == 'pending_president';
+  final finished = stage == 'done';
+  final leftFilling = rank == 0;
+  final crossedTech = rank >= 1 || reviewRejected || anyReviewDone;
+  final initiator = row.initiatorDisplayName(people);
+  final initiatorName = initiator == '未指定' ? '' : initiator;
+  final createdAt = formatProposalIntakeProgressTime(row.createdAt);
+  final handoffAt = formatProposalIntakeProgressTime(
+    '${review['lastHandoffAt'] ?? ''}',
+  );
+  final reviewedAt = formatProposalIntakeProgressTime(
+    '${review['lastReviewedAt'] ?? ''}',
+  );
+  final decidedAt = formatProposalIntakeProgressTime(
+    '${review['presidentDecidedAt'] ?? ''}',
+  );
+
+  String ownerName(String prefix) {
+    return proposalIntakeOwnerDisplayName(
+      row.form,
+      prefix,
+      people: people,
+    );
+  }
+
+  String presidentName() {
+    final fromForm = ownerName('president');
+    final configured = options?.presidentDisplayNames(people).trim() ?? '';
+    if (fromForm.isNotEmpty) {
+      if (configured.isNotEmpty && !fromForm.contains(configured)) {
+        return '$fromForm、$configured';
+      }
+      return fromForm;
+    }
+    return configured;
+  }
+
+  String statusOf(ProposalIntakeProgressState state, {String done = '已通过'}) {
+    return switch (state) {
+      ProposalIntakeProgressState.pending => '待处理',
+      ProposalIntakeProgressState.current => '进行中',
+      ProposalIntakeProgressState.done => done,
+      ProposalIntakeProgressState.rejected => '已驳回',
+    };
+  }
+
+  String timeOf(
+    ProposalIntakeProgressState state, {
+    String done = '',
+    String current = '',
+  }) {
+    if (state == ProposalIntakeProgressState.pending) return '';
+    if (state == ProposalIntakeProgressState.current) {
+      return current.isNotEmpty ? current : '当前';
+    }
+    if (done.isNotEmpty) return done;
+    if (current.isNotEmpty) return current;
+    return '';
+  }
+
+  ProposalIntakeProgressStep person({
+    required String id,
+    required String role,
+    required String name,
+    required String action,
+    required ProposalIntakeProgressState state,
+    String doneStatus = '已通过',
+    String time = '',
+    String currentTime = '',
+    String? title,
+    String? statusText,
+  }) {
+    final resolvedName = name.trim();
+    return ProposalIntakeProgressStep(
+      id: id,
+      title: title ?? role,
+      role: role,
+      name: resolvedName,
+      action: action,
+      statusText: statusText ?? statusOf(state, done: doneStatus),
+      time: timeOf(state, done: time, current: currentTime),
+      state: state,
+    );
+  }
+
+  ProposalIntakeProgressState fillState({required bool current}) {
+    if (current) return ProposalIntakeProgressState.current;
+    if (crossedTech) return ProposalIntakeProgressState.done;
+    return ProposalIntakeProgressState.pending;
+  }
+
+  ProposalIntakeProgressState startReviewState() {
+    if (inStartReview) return ProposalIntakeProgressState.current;
+    if (inTechFill) return ProposalIntakeProgressState.pending;
+    if (presidentRejected && leftFilling) {
+      return ProposalIntakeProgressState.pending;
+    }
+    if (rank >= 3 ||
+        reviewRejected ||
+        finished ||
+        inNotify ||
+        inPresident) {
+      return ProposalIntakeProgressState.done;
+    }
+    return ProposalIntakeProgressState.pending;
+  }
+
+  ProposalIntakeProgressState reviewerState(
+    String flagKey, {
+    bool techRound = false,
+    bool rejected = false,
+    bool completed = false,
+  }) {
+    if (rejected || (reviewRejected && rejectSection == flagKey)) {
+      return ProposalIntakeProgressState.rejected;
+    }
+    if (completed || flag(flagKey)) return ProposalIntakeProgressState.done;
+    if (inReview) {
+      if (inTechReview && !techRound) {
+        return flag(flagKey)
+            ? ProposalIntakeProgressState.done
+            : ProposalIntakeProgressState.pending;
+      }
+      return ProposalIntakeProgressState.current;
+    }
+    if (rank >= 4) return ProposalIntakeProgressState.done;
+    return ProposalIntakeProgressState.pending;
+  }
+
+  ProposalIntakeProgressState notifyState() {
+    if (inNotify) return ProposalIntakeProgressState.current;
+    if (inPresident || finished) return ProposalIntakeProgressState.done;
+    return ProposalIntakeProgressState.pending;
+  }
+
+  ProposalIntakeProgressState presidentState() {
+    if (presidentRejected) return ProposalIntakeProgressState.rejected;
+    if (inPresident) return ProposalIntakeProgressState.current;
+    if (finished) return ProposalIntakeProgressState.done;
+    return ProposalIntakeProgressState.pending;
+  }
+
+  final initiateState = finished || !leftFilling
+      ? ProposalIntakeProgressState.done
+      : ProposalIntakeProgressState.current;
+  final contractsDone = purchase
+      ? flag('purchaseContractCompleted')
+      : flag('purchaseContractCompleted') && flag('salesContractCompleted');
+  final finance2Done = purchase
+      ? contractsDone
+      : flag('financeCompleted') ||
+            (contractsDone && proposalIntakeFinanceLineItemsReviewed(row));
+  final contractRejected =
+      rejectSection == 'purchaseContractCompleted' ||
+      rejectSection == 'salesContractCompleted' ||
+      rejectSection.startsWith('contractItem');
+
+  return [
+    person(
+      id: 'initiate',
+      role: '提交人',
+      name: initiatorName,
+      action: leftFilling ? '填写' : '发起',
+      title: initiatorName.isEmpty ? '提交人 发起' : '$initiatorName 发起',
+      state: initiateState,
+      doneStatus: '已发起',
+      statusText: initiateState == ProposalIntakeProgressState.current
+          ? '填写中'
+          : null,
+      time: createdAt,
+      currentTime: createdAt,
+    ),
+    person(
+      id: 'fill_tech',
+      role: '科技部负责人',
+      name: ownerName('technologyOwner'),
+      action: '填写科技',
+      state: fillState(current: inTechFill),
+      time: handoffAt,
+      currentTime: handoffAt,
+    ),
+    person(
+      id: 'fill_finance_interface',
+      role: '财务部负责人二',
+      name: ownerName('financeOwner2'),
+      action: '填写财务技术接口',
+      state: fillState(current: inTechFill),
+      time: handoffAt,
+      currentTime: handoffAt,
+    ),
+    person(
+      id: 'start_review',
+      role: '提交人',
+      name: initiatorName,
+      action: '提交复核',
+      state: startReviewState(),
+      time: handoffAt,
+      currentTime: handoffAt,
+    ),
+    person(
+      id: 'review_market',
+      role: '市场部负责人一',
+      name: ownerName('marketOwner1'),
+      action: '整板块复核市场',
+      state: reviewerState('marketCompleted', techRound: true),
+      time: reviewedAt,
+    ),
+    person(
+      id: 'review_tech',
+      role: '市场部负责人二',
+      name: ownerName('marketOwner2'),
+      action: '逐条复核科技（含财务技术接口）',
+      state: reviewerState('technologyCompleted', techRound: true),
+      time: reviewedAt,
+    ),
+    person(
+      id: 'review_contract',
+      role: '财务部负责人二',
+      name: ownerName('financeOwner2'),
+      action: purchase ? '复核采购合同' : '复核合同与财务',
+      state: reviewerState(
+        'purchaseContractCompleted',
+        rejected: contractRejected,
+        completed: finance2Done,
+      ),
+      time: reviewedAt,
+    ),
+    if (!purchase)
+      person(
+        id: 'review_finance_module',
+        role: '财务部负责人一',
+        name: ownerName('financeOwner1'),
+        action: '整板块复核财务',
+        state: reviewerState('financeCompleted'),
+        time: reviewedAt,
+      ),
+    person(
+      id: 'notify_president',
+      role: '提交人',
+      name: initiatorName,
+      action: '通知最终人',
+      state: notifyState(),
+      time: handoffAt,
+      currentTime: handoffAt,
+    ),
+    person(
+      id: 'president',
+      role: '最终确认人',
+      name: presidentName(),
+      action: '最终确认',
+      state: presidentState(),
+      time: decidedAt,
+      currentTime: decidedAt,
+    ),
+    ProposalIntakeProgressStep(
+      id: 'end',
+      title: '审批结束',
+      role: '',
+      name: '',
+      action: finished ? '提案已完成' : '各环节通过后结束',
+      statusText: finished ? '已完成' : '待处理',
+      time: finished ? decidedAt : '',
+      state: finished
+          ? ProposalIntakeProgressState.done
+          : ProposalIntakeProgressState.pending,
+    ),
+  ];
 }
 
 class ProposalIntakeNotifyRecipient {
@@ -1588,18 +2173,15 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeNotifyRecipients({
     if (has('marketCompleted')) {
       add(owner('marketOwner1', '市场部负责人一', '请复核市场部板块'));
     }
-    if (has('technologyCompleted')) {
+    if (has('technologyCompleted') || has('financeInterfaceCompleted')) {
       add(
         owner(
           'marketOwner2',
           '市场部负责人二',
-          '请复核科技部内容',
+          '请复核科技部内容（含财务技术接口）',
           fallback: row.createdBy,
         ),
       );
-    }
-    if (has('financeInterfaceCompleted')) {
-      add(owner('technologyOwner', '科技部负责人', '请复核财务技术接口'));
     }
     if (want == null && !purchase) {
       add(owner('financeOwner2', '财务部负责人二', '请复核财务内容'));
@@ -1738,7 +2320,6 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeRemindRecipients({
       final flags = <String>[
         if (!done('marketCompleted')) 'marketCompleted',
         if (!done('technologyCompleted')) 'technologyCompleted',
-        if (!done('financeInterfaceCompleted')) 'financeInterfaceCompleted',
         if (!purchase && !done('financeCompleted')) 'financeCompleted',
         if (!done('purchaseContractCompleted')) 'purchaseContractCompleted',
         if (!purchase && !done('salesContractCompleted'))
@@ -1801,70 +2382,10 @@ List<ProposalIntakeNotifyRecipient> _dedupeNotifyRecipients(
   return out;
 }
 
-/// 「通知TA」：本单已指定的相关人，以当前用户身份转发私聊名片。
-/// 不含自己、不含最终确认人（许总 / 许正阳），避免日常知会打到总裁。
-List<ProposalIntakeNotifyRecipient> proposalIntakeForwardEveryoneRecipients({
-  required ProposalIntakeRow row,
-  List<ProposalPerson> people = const [],
-  ProposalIntakeOptions? options,
-  int excludeUserId = 0,
-}) {
-  final form = row.form;
-  final out = <ProposalIntakeNotifyRecipient>[];
-  void add(int id, String role, String name) {
-    if (id <= 0 || id == excludeUserId) return;
-    if (_skipNotifyTaRecipient(userId: id, name: name, options: options)) {
-      return;
-    }
-    out.add(
-      ProposalIntakeNotifyRecipient(
-        userId: id,
-        role: role,
-        name: name == '未指定' ? '' : name,
-      ),
-    );
-  }
-
-  add(row.createdBy, '创建人', row.initiatorDisplayName(people));
-  const owners = <(String, String)>[
-    ('marketOwner2', '市场部负责人二'),
-    ('marketOwner1', '市场部负责人一'),
-    ('operator', '运营'),
-    ('technologyOwner', '科技部负责人'),
-    ('financeOwner1', '财务部负责人一'),
-    ('financeOwner2', '财务部负责人二'),
-    ('contractAdmin', '合同管理员'),
-  ];
-  for (final owner in owners) {
-    final id =
-        int.tryParse('${form['${owner.$1}UserId'] ?? ''}'.trim()) ?? 0;
-    add(
-      id,
-      owner.$2,
-      proposalIntakeOwnerDisplayName(form, owner.$1, people: people),
-    );
-  }
-  return _dedupeNotifyRecipients(out);
-}
-
-bool _skipNotifyTaRecipient({
-  required int userId,
-  required String name,
-  ProposalIntakeOptions? options,
-}) {
-  if (options != null && options.isConfiguredPresident(userId)) return true;
-  final n = name.trim();
-  return n == '许总' ||
-      n == '许正阳' ||
-      n.contains('许正阳') ||
-      n.contains('许总');
-}
-
 bool proposalIntakeReviewsComplete(ProposalIntakeRow row) {
   bool done(String key) => row.review[key] == true;
   if (!done('marketCompleted') ||
       !done('technologyCompleted') ||
-      !done('financeInterfaceCompleted') ||
       !done('purchaseContractCompleted')) {
     return false;
   }
@@ -1873,18 +2394,8 @@ bool proposalIntakeReviewsComplete(ProposalIntakeRow row) {
 }
 
 bool proposalIntakeTechRevisionReviewsComplete(ProposalIntakeRow row) {
-  if (row.review['technologyCompleted'] != true ||
-      row.review['marketCompleted'] != true) {
-    return false;
-  }
-  if (!proposalIntakeFinanceInterfacesUnchanged(
-        form: row.form,
-        review: row.review,
-      ) &&
-      row.review['financeInterfaceCompleted'] != true) {
-    return false;
-  }
-  return true;
+  return row.review['technologyCompleted'] == true &&
+      row.review['marketCompleted'] == true;
 }
 
 ProposalIntakeNotifyRecipient? proposalIntakeSubmitterNotifyRecipient(
@@ -1943,16 +2454,6 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeAfterReviewNotifyRecipients({
     if (flag == 'technologyCompleted' &&
         after.review['technologyCompleted'] == true) {
       final item = owner('marketOwner1', '市场部负责人一', '请复核本轮市场内容');
-      if (item != null) out.add(item);
-    }
-    if (flag == 'marketCompleted' &&
-        after.review['marketCompleted'] == true &&
-        !proposalIntakeFinanceInterfacesUnchanged(
-          form: after.form,
-          review: after.review,
-        ) &&
-        after.review['financeInterfaceCompleted'] != true) {
-      final item = owner('technologyOwner', '科技部负责人', '请复核财务技术接口');
       if (item != null) out.add(item);
     }
     if (proposalIntakeTechRevisionReviewsComplete(after) &&
@@ -2222,7 +2723,6 @@ void _tallySalesFill(_ProposalFillTally tally, Map<String, dynamic> form) {
   tally.ref(form, 'productRef', 'product');
   tally.ref(form, 'projectRef', 'projectName');
   tally.list(form, 'supplies');
-  tally.list(form, 'channels');
   tally.text(form, 'supplierPolicy');
   tally.text(form, 'channelPolicy');
   tally.text(form, 'executionPlan');
@@ -2238,7 +2738,17 @@ void _tallySalesFill(_ProposalFillTally tally, Map<String, dynamic> form) {
   }
   _tallyContractFill(tally, form, 'sales');
   _tallyTechFill(tally, form);
+  final derivedFinance = proposalIntakeHasProductSalesScale(form);
+  final derivedProcurement =
+      proposalIntakeHasSupplySettleRatio(form) &&
+      (derivedFinance || proposalIntakeFormHasText(form, 'salesScale'));
+  tally.slot(derivedFinance);
   for (final field in kProposalSalesFinanceFillFields) {
+    if (_kDerivedFinanceMetricKeys.contains(field.$1)) continue;
+    if (field.$1 == 'couponProcurementCost' && derivedProcurement) {
+      tally.slot(true);
+      continue;
+    }
     tally.text(form, field.$1);
   }
   for (final module in proposalIntakeFinanceModules(form)) {
@@ -2252,38 +2762,14 @@ void _tallySalesFill(_ProposalFillTally tally, Map<String, dynamic> form) {
 void _tallySkuFill(_ProposalFillTally tally, Map<String, dynamic> form) {
   final channel = proposalIntakeSkuDetails(form);
   final existingBuilt = proposalIntakeExistingBuiltOverride(form) == true;
-  final couponPack = proposalIntakeIsCouponPack(form);
   if (existingBuilt) {
-    if (couponPack) {
-      tally.slot(proposalIntakeCouponPacks(form).isNotEmpty);
-    } else {
-      tally.slot(channel.isNotEmpty);
-    }
+    tally.slot(channel.isNotEmpty);
   }
   for (final sku in channel) {
     if (existingBuilt || sku.isExistingBuilt) {
       tally.slot(sku.syncSourceCode.isNotEmpty);
       tally.slot(sku.assetProduct != null && sku.assetProduct!.isNotEmpty);
     }
-  }
-  if (couponPack) {
-    final packs = proposalIntakeCouponPacks(form);
-    final skuIds = {for (final sku in channel) sku.id};
-    for (final pack in packs) {
-      final existing = existingBuilt || pack.isExistingBuilt;
-      if (existing) {
-        tally.slot(pack.syncSourceCode.isNotEmpty);
-        tally.slot(pack.assetProduct != null && pack.assetProduct!.isNotEmpty);
-      } else if (proposalIntakePackStarted(pack)) {
-        tally.slot(pack.name.isNotEmpty);
-        tally.slot(pack.skuIds.any(skuIds.contains));
-      }
-      if (!existing && !proposalIntakePackStarted(pack)) continue;
-      for (final settle in proposalIntakePackSettlements(pack)) {
-        tally.slot(settle.terms.isSkuComplete);
-      }
-    }
-    return;
   }
   for (final sku in channel) {
     if (!existingBuilt && !sku.isExistingBuilt && !proposalIntakeSkuStarted(sku)) {
@@ -2627,7 +3113,7 @@ ChannelProductHit? proposalIntakeAssetProductFromJson(
   );
 }
 
-/// 产品/券包上的结算渠道：优先自身 [channelRef]，否则从结算明细提升（兼容旧单）。
+/// 产品上的结算渠道：优先自身 [channelRef]，否则从结算明细提升（兼容旧单）。
 CatalogRef? proposalIntakeChannelRefFromJson(Map raw) {
   var ref = catalogRefOrNull(raw['channelRef']);
   if (ref != null && ref.isNotEmpty) return ref;
@@ -2679,6 +3165,9 @@ class ProposalFinanceSettleTerms {
     this.settleModeRef,
     this.settleRatio = '',
     this.settleUnitPrice = '',
+    this.scale = '',
+    this.scalePeriod = '',
+    this.skuIds = const [],
     this.formula = '',
     this.formulaRef,
     this.invoiceType = '',
@@ -2698,6 +3187,15 @@ class ProposalFinanceSettleTerms {
   final CatalogRef? settleModeRef;
   final String settleRatio;
   final String settleUnitPrice;
+
+  /// 产品结算上的销售规模，单位万元。
+  final String scale;
+
+  /// 规模口径：空或「年」按年，「月」按 ×12 年化。
+  final String scalePeriod;
+
+  /// 项目成本/共用规则关联的渠道产品。
+  final List<String> skuIds;
   final String formula;
   final CatalogRef? formulaRef;
   final String invoiceType;
@@ -2766,6 +3264,9 @@ class ProposalFinanceSettleTerms {
       (settleModeRef == null || settleModeRef!.isEmpty) &&
       settleRatio.isEmpty &&
       settleUnitPrice.isEmpty &&
+      scale.isEmpty &&
+      scalePeriod.isEmpty &&
+      skuIds.isEmpty &&
       formula.isEmpty &&
       (formulaRef == null || formulaRef!.isEmpty) &&
       invoiceType.isEmpty &&
@@ -2784,6 +3285,10 @@ class ProposalFinanceSettleTerms {
       ourParty.isNotEmpty &&
       taxRate.isNotEmpty;
 
+  /// 项目成本：有比例或单价就能算，不要求销售结算那套主体和税率。
+  bool get isProjectCostComplete =>
+      displayRatio.trim().isNotEmpty || displayUnitPrice.trim().isNotEmpty;
+
   bool get isSkuComplete {
     if (taxRate.isEmpty || resolvedRule.isEmpty) return false;
     if (proposalIntakeSettleIsTier(this)) return true;
@@ -2800,6 +3305,9 @@ class ProposalFinanceSettleTerms {
     settleModeRef?.identity ?? settleMode,
     displayRatio,
     displayUnitPrice,
+    scale,
+    scalePeriod,
+    skuIds.join(','),
     formulaRef?.identity ?? resolvedRule,
     invoiceType,
     taxRate,
@@ -2817,6 +3325,9 @@ class ProposalFinanceSettleTerms {
     Object? settleModeRef = _catalogUnset,
     String? settleRatio,
     String? settleUnitPrice,
+    String? scale,
+    String? scalePeriod,
+    List<String>? skuIds,
     String? formula,
     Object? formulaRef = _catalogUnset,
     String? invoiceType,
@@ -2841,6 +3352,9 @@ class ProposalFinanceSettleTerms {
         : settleModeRef as CatalogRef?,
     settleRatio: settleRatio ?? this.settleRatio,
     settleUnitPrice: settleUnitPrice ?? this.settleUnitPrice,
+    scale: scale ?? this.scale,
+    scalePeriod: scalePeriod ?? this.scalePeriod,
+    skuIds: skuIds ?? this.skuIds,
     formula: formula ?? this.formula,
     formulaRef: identical(formulaRef, _catalogUnset)
         ? this.formulaRef
@@ -2875,6 +3389,9 @@ class ProposalFinanceSettleTerms {
     'settleModeRef': catalogRefToJson(settleModeRef),
     'settleRatio': settleRatio,
     'settleUnitPrice': settleUnitPrice,
+    'scale': scale,
+    'scalePeriod': scalePeriod,
+    'skuIds': skuIds,
     'formula': displayFormula,
     'formulaRef': catalogRefToJson(formulaRef),
     'invoiceType': invoiceType,
@@ -2898,6 +3415,9 @@ class ProposalFinanceSettleTerms {
       settleModeRef: catalogRefOrNull(raw['settleModeRef']),
       settleRatio: read('settleRatio'),
       settleUnitPrice: read('settleUnitPrice'),
+      scale: read('scale').isNotEmpty ? read('scale') : read('salesScale'),
+      scalePeriod: read('scalePeriod'),
+      skuIds: proposalIntakeParseIdList(raw['skuIds']),
       formula: read('formula'),
       formulaRef: catalogRefOrNull(raw['formulaRef']),
       invoiceType: read('invoiceType'),
@@ -3180,10 +3700,122 @@ class ProposalSkuSettleRow {
 String proposalIntakeNewSkuSettleId() =>
     'st-${DateTime.now().microsecondsSinceEpoch}';
 
-String proposalIntakeSettleLabel(int index) {
+String proposalIntakeNewSharedSettleId() =>
+    'ss-${DateTime.now().microsecondsSinceEpoch}';
+
+List<String> proposalIntakeParseIdList(Object? raw) {
+  if (raw is! List) return const [];
+  final out = <String>[];
+  final seen = <String>{};
+  for (final item in raw) {
+    final id = '$item'.trim();
+    if (id.isEmpty || seen.contains(id)) continue;
+    seen.add(id);
+    out.add(id);
+  }
+  return out;
+}
+
+class ProposalSharedSettleRow {
+  const ProposalSharedSettleRow({
+    required this.id,
+    this.skuIds = const [],
+    this.terms = const ProposalFinanceSettleTerms(),
+  });
+
+  final String id;
+  final List<String> skuIds;
+  final ProposalFinanceSettleTerms terms;
+
+  bool get isBlank => skuIds.isEmpty && terms.isBlank;
+
+  ProposalSharedSettleRow copyWith({
+    List<String>? skuIds,
+    ProposalFinanceSettleTerms? terms,
+  }) => ProposalSharedSettleRow(
+    id: id,
+    skuIds: skuIds ?? this.skuIds,
+    terms: terms ?? this.terms,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'skuIds': skuIds,
+    ...terms.toJson(),
+  };
+
+  factory ProposalSharedSettleRow.fromJson(Object? raw) {
+    if (raw is! Map) return const ProposalSharedSettleRow(id: '');
+    final id = '${raw['id'] ?? ''}'.trim();
+    return ProposalSharedSettleRow(
+      id: id,
+      skuIds: proposalIntakeParseIdList(raw['skuIds']),
+      terms: ProposalFinanceSettleTerms.fromJson(raw),
+    );
+  }
+}
+
+List<ProposalSharedSettleRow> proposalIntakeSharedSettlements(
+  Map<String, dynamic> form,
+) {
+  final raw = form['sharedSettlements'];
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is Map)
+        ProposalSharedSettleRow.fromJson(item),
+  ].where((row) => row.id.isNotEmpty).toList();
+}
+
+Set<String> proposalIntakeSharedSettleSkuIds(Map<String, dynamic> form) {
+  return {
+    for (final row in proposalIntakeSharedSettlements(form))
+      ...row.skuIds,
+  };
+}
+
+bool proposalIntakeHasSupplySettleRatio(Map<String, dynamic> form) {
+  for (final product in proposalIntakeSupplyProducts(form)) {
+    for (final settle in proposalIntakeSupplySettlements(product)) {
+      if (settle.terms.displayRatio.trim().isNotEmpty) return true;
+    }
+  }
+  return false;
+}
+
+/// 规模口径取值：空或「年」按年度值，「月」按 ×12 年化。
+const kProposalScalePeriodYear = '年';
+const kProposalScalePeriodMonth = '月';
+const kProposalScalePeriods = <String>[
+  kProposalScalePeriodYear,
+  kProposalScalePeriodMonth,
+];
+
+/// 年化倍数：按月填写的规模乘 12，其余按年原值。
+double proposalScaleAnnualFactor(String period) =>
+    period.trim() == kProposalScalePeriodMonth ? 12 : 1;
+
+/// 单条结算条款的年化规模（万元）。
+/// 评级、印花税、增值税销项、周转资金一律取年化值，避免按月填写时整体偏 12 倍。
+double proposalAnnualizedScale(ProposalFinanceSettleTerms terms) {
+  if (terms.scale.trim().isEmpty) return 0;
+  return proposalCostAmountValue(terms.scale) *
+      proposalScaleAnnualFactor(terms.scalePeriod);
+}
+
+double proposalIntakeSkuScaleTotal(ProposalSkuDetailRow sku) {
+  var sum = 0.0;
+  for (final settle in proposalIntakeSkuSettlements(sku)) {
+    if (settle.terms.scale.trim().isEmpty) continue;
+    sum += proposalAnnualizedScale(settle.terms);
+  }
+  return sum;
+}
+
+String proposalIntakeSettleLabel(int index, {String kind = '结算'}) {
   const names = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
-  if (index >= 0 && index < names.length) return '结算${names[index]}';
-  return '结算${index + 1}';
+  if (index >= 0 && index < names.length) return '$kind${names[index]}';
+  return '$kind${index + 1}';
 }
 
 List<ProposalSkuSettleRow> proposalIntakeSettlementsOf({
@@ -3267,17 +3899,9 @@ List<ProposalSkuSettleRow> proposalIntakeSettlementsFromChannelCatalog(
   ];
 }
 
-bool proposalIntakeIsCouponPack(Map<String, dynamic> form) {
-  final raw = form['isCouponPack'];
-  if (raw is bool) return raw;
-  final text = '$raw'.trim().toLowerCase();
-  return text == 'true' || text == '1' || text == '是' || text == 'yes';
-}
-
 bool proposalIntakeIsExistingBuilt(Map<String, dynamic> form) {
   return proposalIntakeExistingBuiltOverride(form) ??
-      (proposalIntakeSkuDetails(form).any((item) => item.isExistingBuilt) ||
-          proposalIntakeCouponPacks(form).any((item) => item.isExistingBuilt));
+      proposalIntakeSkuDetails(form).any((item) => item.isExistingBuilt);
 }
 
 bool? proposalIntakeExistingBuiltOverride(Map<String, dynamic> form) {
@@ -3293,34 +3917,50 @@ bool? proposalIntakeExistingBuiltOverride(Map<String, dynamic> form) {
   return null;
 }
 
-List<ProposalSkuSettleRow> proposalIntakePackSettlements(
-  ProposalCouponPackRow pack,
-) => proposalIntakeSettlementsOf(id: pack.id, settlements: pack.settlements);
+List<ProposalFinanceSettleTerms> proposalIntakeProductSalesSettleTerms(
+  Map<String, dynamic> form,
+) {
+  final shared = proposalIntakeSharedSettlements(form);
+  final covered = proposalIntakeSharedSettleSkuIds(form);
+  final skus = {for (final sku in proposalIntakeSkuDetails(form)) sku.id: sku};
+  return [
+    for (final group in shared)
+      for (final skuId in group.skuIds)
+        if (skus[skuId] != null)
+          for (final settle in proposalIntakeSkuSettlements(skus[skuId]!))
+            if (settle.terms.scale.trim().isNotEmpty)
+              group.terms.copyWith(
+                scale: settle.terms.scale,
+                scalePeriod: settle.terms.scalePeriod,
+              ),
+    for (final sku in proposalIntakeSkuDetails(form))
+      if (!covered.contains(sku.id))
+        for (final settle in proposalIntakeSkuSettlements(sku))
+          settle.terms,
+  ];
+}
+
+bool proposalIntakeHasProductSalesScale(Map<String, dynamic> form) {
+  return proposalIntakeProductSalesSettleTerms(form).any(
+    (terms) => terms.scale.trim().isNotEmpty,
+  );
+}
+
+const _kDerivedFinanceMetricKeys = {'salesScale', 'revenue', 'profit', 'margin'};
 
 List<String> proposalIntakeSkuSettleReviewKeys(Map<String, dynamic> form) {
-  if (proposalIntakeIsCouponPack(form)) {
-    return [
-      for (final pack in proposalIntakeCouponPacks(form))
-        for (final settle in proposalIntakePackSettlements(pack))
-          'packSettle:${pack.id}:${settle.id}',
-    ];
-  }
   return [
     for (final sku in proposalIntakeSkuDetails(form))
       for (final settle in proposalIntakeSkuSettlements(sku))
         'skuSettle:${sku.id}:${settle.id}',
+    for (final group in proposalIntakeSharedSettlements(form))
+      'sharedSettle:${group.id}:${group.id}',
   ];
 }
 
 bool proposalIntakeSkuStarted(ProposalSkuDetailRow sku) {
   return sku.productName.trim().isNotEmpty ||
       (sku.assetProduct != null && sku.assetProduct!.isNotEmpty);
-}
-
-bool proposalIntakePackStarted(ProposalCouponPackRow pack) {
-  return pack.name.trim().isNotEmpty ||
-      (pack.assetProduct != null && pack.assetProduct!.isNotEmpty) ||
-      pack.skuIds.isNotEmpty;
 }
 
 List<String> proposalIntakeSkuSettleIssues(
@@ -3330,15 +3970,8 @@ List<String> proposalIntakeSkuSettleIssues(
   final issues = <String>[];
   final channel = proposalIntakeSkuDetails(form);
   final existingBuilt = proposalIntakeExistingBuiltOverride(form) == true;
-  final couponPack = proposalIntakeIsCouponPack(form);
-  if (existingBuilt) {
-    if (couponPack) {
-      if (proposalIntakeCouponPacks(form).isEmpty) {
-        issues.add('已勾选已建产品，请至少添加一条券包并搜索选择已建券包');
-      }
-    } else if (channel.isEmpty) {
-      issues.add('已勾选已建产品，请至少添加一条渠道产品并搜索选择已建产品');
-    }
+  if (existingBuilt && channel.isEmpty) {
+    issues.add('已勾选已建产品，请至少添加一条渠道产品并搜索选择已建产品');
   }
   for (var i = 0; i < channel.length; i++) {
     final sku = channel[i];
@@ -3351,52 +3984,23 @@ List<String> proposalIntakeSkuSettleIssues(
       }
     }
   }
-  if (couponPack) {
-    final packs = proposalIntakeCouponPacks(form);
-    final skuIds = {for (final sku in channel) sku.id};
-    for (var i = 0; i < packs.length; i++) {
-      final pack = packs[i];
-      final existing = existingBuilt || pack.isExistingBuilt;
-      if (existing) {
-        if (pack.syncSourceCode.isEmpty) {
-          issues.add('券包第${i + 1}条请选择业务平台');
-        }
-        if (pack.assetProduct == null || pack.assetProduct!.isEmpty) {
-          issues.add('券包第${i + 1}条请搜索并选择已建券包');
-        }
-      } else if (proposalIntakePackStarted(pack)) {
-        if (pack.name.isEmpty) {
-          issues.add('券包第${i + 1}条请填写券包名称');
-        }
-        final selected = [
-          for (final id in pack.skuIds)
-            if (skuIds.contains(id)) id,
-        ];
-        if (selected.isEmpty) {
-          final name = pack.name.isEmpty ? '第${i + 1}条' : pack.name;
-          issues.add('券包「$name」请选择包含的渠道产品');
-        }
-      }
-      if (!includeSettlements) continue;
-      if (!existing && !proposalIntakePackStarted(pack)) continue;
-      final label = pack.name.isEmpty ? '第${i + 1}条' : pack.name;
-      final settlements = proposalIntakePackSettlements(pack);
-      for (var j = 0; j < settlements.length; j++) {
-        if (!settlements[j].terms.isSkuComplete) {
-          issues.add(
-            '券包「$label」${proposalIntakeSettleLabel(j)}未填完结算方式对应金额、计算公式、税率',
-          );
-        }
-      }
-    }
-    return issues;
-  }
   if (!includeSettlements) return issues;
+  final covered = proposalIntakeSharedSettleSkuIds(form);
+  for (final group in proposalIntakeSharedSettlements(form)) {
+    if (group.isBlank) continue;
+    if (group.skuIds.isEmpty) {
+      issues.add('共用结算请勾选适用的渠道产品');
+    }
+    if (!group.terms.isSkuComplete) {
+      issues.add('共用结算未填完结算方式对应金额、计算公式、税率');
+    }
+  }
   for (var i = 0; i < channel.length; i++) {
     final sku = channel[i];
     if (!existingBuilt && !sku.isExistingBuilt && !proposalIntakeSkuStarted(sku)) {
       continue;
     }
+    if (covered.contains(sku.id)) continue;
     final name = sku.productName.isEmpty ? '第${i + 1}条' : sku.productName;
     final settlements = proposalIntakeSkuSettlements(sku);
     for (var j = 0; j < settlements.length; j++) {
@@ -3730,13 +4334,6 @@ bool proposalIntakeSkuHasManualDetails(ProposalSkuDetailRow sku) {
       sku.inventoryQty.trim().isNotEmpty;
 }
 
-bool proposalIntakePackHasManualDetails(ProposalCouponPackRow pack) {
-  return pack.name.trim().isNotEmpty ||
-      pack.channelName.isNotEmpty ||
-      pack.institutionName.isNotEmpty ||
-      pack.skuIds.isNotEmpty;
-}
-
 List<ProposalSkuDetailRow> proposalIntakeSkuDetails(Map<String, dynamic> form) {
   final primary = _parseSkuDetailRows(form['skuDetails']);
   final aliases = [
@@ -3788,254 +4385,6 @@ bool proposalIntakeChannelCategoryChildOf(CatalogRef child, CatalogRef parent) {
     return true;
   }
   return false;
-}
-
-String proposalIntakeNewCouponPackId() =>
-    'pack-${DateTime.now().microsecondsSinceEpoch}';
-
-int proposalIntakePackSkuQuantity(int? raw) {
-  if (raw == null || raw < 1) return 1;
-  return raw;
-}
-
-Map<String, int> proposalIntakeNormalizeSkuQuantities(
-  List<String> skuIds,
-  Map<String, int>? quantities,
-) {
-  return {
-    for (final id in skuIds) id: proposalIntakePackSkuQuantity(quantities?[id]),
-  };
-}
-
-int proposalIntakeParseSkuQty(Object? raw) {
-  if (raw is int) return raw;
-  if (raw is num) return raw.toInt();
-  return int.tryParse('$raw'.trim()) ?? 0;
-}
-
-Map<String, int> proposalIntakeParseSkuQuantities(
-  Map raw,
-  List<String> skuIds,
-) {
-  final parsed = <String, int>{};
-  final qtyRaw = raw['skuQuantities'];
-  if (qtyRaw is Map) {
-    for (final entry in qtyRaw.entries) {
-      final id = '${entry.key}'.trim();
-      final qty = proposalIntakeParseSkuQty(entry.value);
-      if (id.isNotEmpty && qty >= 1) parsed[id] = qty;
-    }
-  }
-  final skusRaw = raw['skus'];
-  if (skusRaw is List) {
-    for (final item in skusRaw) {
-      if (item is! Map) continue;
-      final id = '${item['id'] ?? item['skuId'] ?? ''}'.trim();
-      final qty = proposalIntakeParseSkuQty(item['quantity'] ?? item['qty']);
-      if (id.isNotEmpty && qty >= 1) parsed[id] = qty;
-    }
-  }
-  return proposalIntakeNormalizeSkuQuantities(skuIds, parsed);
-}
-
-class ProposalCouponPackRow {
-  const ProposalCouponPackRow({
-    required this.id,
-    this.name = '',
-    this.skuIds = const [],
-    this.skuQuantities = const {},
-    this.syncSourceRef,
-    this.institutionRef,
-    this.channelRef,
-    this.existingBuilt = '',
-    this.assetProduct,
-    this.settlements = const [],
-  });
-
-  final String id;
-  final String name;
-  final List<String> skuIds;
-  final Map<String, int> skuQuantities;
-  final CatalogRef? syncSourceRef;
-  final CatalogRef? institutionRef;
-  final CatalogRef? channelRef;
-  final String existingBuilt;
-  final ChannelProductHit? assetProduct;
-  final List<ProposalSkuSettleRow> settlements;
-
-  String get syncSourceCode => (syncSourceRef?.code ?? '').trim();
-  String get institutionCode => (institutionRef?.code ?? '').trim();
-  String get institutionName => (institutionRef?.name ?? '').trim();
-  String get channelCode => (channelRef?.code ?? '').trim();
-  String get channelName => (channelRef?.name ?? '').trim();
-  bool get isExistingBuilt => existingBuilt.trim() == '是';
-
-  int quantityOf(String skuId) =>
-      proposalIntakePackSkuQuantity(skuQuantities[skuId]);
-
-  ProposalCouponPackRow copyWith({
-    String? name,
-    List<String>? skuIds,
-    Map<String, int>? skuQuantities,
-    Object? syncSourceRef = _catalogUnset,
-    Object? institutionRef = _catalogUnset,
-    Object? channelRef = _catalogUnset,
-    String? existingBuilt,
-    Object? assetProduct = _catalogUnset,
-    List<ProposalSkuSettleRow>? settlements,
-  }) {
-    final nextIds = skuIds ?? this.skuIds;
-    return ProposalCouponPackRow(
-      id: id,
-      name: name ?? this.name,
-      skuIds: nextIds,
-      skuQuantities: proposalIntakeNormalizeSkuQuantities(
-        nextIds,
-        skuQuantities ?? this.skuQuantities,
-      ),
-      syncSourceRef: identical(syncSourceRef, _catalogUnset)
-          ? this.syncSourceRef
-          : syncSourceRef as CatalogRef?,
-      institutionRef: identical(institutionRef, _catalogUnset)
-          ? this.institutionRef
-          : institutionRef as CatalogRef?,
-      channelRef: identical(channelRef, _catalogUnset)
-          ? this.channelRef
-          : channelRef as CatalogRef?,
-      existingBuilt: existingBuilt ?? this.existingBuilt,
-      assetProduct: identical(assetProduct, _catalogUnset)
-          ? this.assetProduct
-          : assetProduct as ChannelProductHit?,
-      settlements: settlements ?? this.settlements,
-    );
-  }
-
-  ProposalCouponPackRow applyAssetProduct(
-    ChannelProductHit? hit, {
-    List<ProposalSkuSettleRow>? settlements,
-  }) {
-    return copyWith(
-      assetProduct: hit,
-      name: hit?.productName ?? '',
-      channelRef: hit?.channelRef,
-      settlements: settlements ??
-          (hit == null
-              ? [ProposalSkuSettleRow(id: proposalIntakeNewSkuSettleId())]
-              : [
-                  for (final item in this.settlements)
-                    item.copyWith(
-                      terms: item.terms.copyWith(channelRef: hit.channelRef),
-                    ),
-                ]),
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'skuIds': skuIds,
-    'skuQuantities': {
-      for (final id in skuIds) id: quantityOf(id),
-    },
-    'syncSource': syncSourceCode,
-    'syncSourceRef': catalogRefToJson(syncSourceRef),
-    'institution': institutionName,
-    'institutionCode': institutionCode,
-    'institutionRef': catalogRefToJson(institutionRef),
-    'channel': channelName,
-    'channelCode': channelCode,
-    'channelRef': catalogRefToJson(channelRef),
-    'existingBuilt': existingBuilt,
-    'assetProduct': assetProduct?.toJson(),
-    'settlements': [
-      for (final item in settlements)
-        item
-            .copyWith(terms: item.terms.copyWith(channelRef: channelRef))
-            .toJson(),
-    ],
-  };
-
-  factory ProposalCouponPackRow.fromJson(Object? raw) {
-    if (raw is! Map) return const ProposalCouponPackRow(id: '');
-    final skuRaw = raw['skuIds'];
-    var syncRef = proposalIntakeSyncSourceRefFromJson(raw);
-    var institution = catalogRefOrNull(raw['institutionRef']);
-    if (institution == null) {
-      final name = '${raw['institution'] ?? raw['institutionName'] ?? ''}'
-          .trim();
-      final code = '${raw['institutionCode'] ?? ''}'.trim();
-      if (name.isNotEmpty || code.isNotEmpty) {
-        institution = CatalogRef(
-          code: code.isEmpty ? name : code,
-          name: name.isEmpty ? code : name,
-        );
-      }
-    }
-    var name = '${raw['name'] ?? raw['packName'] ?? raw['productName'] ?? ''}'
-        .trim();
-    var channelRef = proposalIntakeChannelRefFromJson(raw);
-    var asset = proposalIntakeAssetProductFromJson(
-      raw,
-      productName: name,
-      channelRef: channelRef,
-      syncSourceRef: syncRef,
-    );
-    if (name.isEmpty) name = asset?.label ?? '';
-    channelRef ??= asset?.channelRef;
-    var skuIds = [
-      for (final item in skuRaw is List ? skuRaw : const [])
-        '${item ?? ''}'.trim(),
-    ].where((id) => id.isNotEmpty).toList();
-    if (skuIds.isEmpty) {
-      final skusRaw = raw['skus'];
-      if (skusRaw is List) {
-        skuIds = [
-          for (final item in skusRaw)
-            if (item is Map) '${item['id'] ?? item['skuId'] ?? ''}'.trim(),
-        ].where((id) => id.isNotEmpty).toList();
-      }
-    }
-    return ProposalCouponPackRow(
-      id: '${raw['id'] ?? ''}'.trim(),
-      name: name,
-      skuIds: skuIds,
-      skuQuantities: proposalIntakeParseSkuQuantities(raw, skuIds),
-      syncSourceRef: syncRef,
-      institutionRef: institution,
-      channelRef: channelRef,
-      existingBuilt: proposalIntakeExistingBuiltText(raw),
-      assetProduct: asset,
-      settlements: [
-        for (final item in raw['settlements'] is List
-            ? raw['settlements'] as List
-            : const [])
-          if (item is Map) ProposalSkuSettleRow.fromJson(item),
-      ].where((item) => item.id.isNotEmpty).toList(),
-    );
-  }
-}
-
-List<ProposalCouponPackRow> _parseCouponPackRows(Object? raw) {
-  if (raw is! List) return const [];
-  return [
-    for (final item in raw)
-      if (item is Map) ProposalCouponPackRow.fromJson(item),
-  ].where((item) => item.id.isNotEmpty).toList();
-}
-
-List<ProposalCouponPackRow> proposalIntakeCouponPacks(
-  Map<String, dynamic> form,
-) {
-  return _preferFilledCatalogRows(
-    primary: _parseCouponPackRows(form['couponPacks']),
-    aliases: _parseCouponPackRows(form['packs']),
-    idOf: (row) => row.id,
-    isBlank: (row) =>
-        row.name.trim().isEmpty &&
-        (row.assetProduct == null || row.assetProduct!.isEmpty) &&
-        row.skuIds.isEmpty &&
-        (row.syncSourceRef == null || row.syncSourceRef!.isEmpty),
-  );
 }
 
 String proposalIntakeNewFinanceModuleId() =>
@@ -4408,15 +4757,11 @@ bool proposalIntakeFormHasRef(
 }
 
 const kProposalSalesFinanceFillFields = <(String, String)>[
-  ('salesScale', '销售规模目标（万元）'),
+  ('salesScale', '销售规模目标（年·万元）'),
   ('revenue', '收入（万元）'),
   ('couponProcurementCost', '电子券采购成本（万元）'),
-  ('financeTaxRate', '税率'),
-  ('writeOffAmount', '核销金额（万元）'),
-  ('invoiceAmount', '发票（万元）'),
   ('profit', '利润（万元）'),
   ('margin', '毛利率（%）'),
-  ('turnoverCash', '预计周转资金（万元）'),
   ('turnoverTimes', '月周转次数'),
   ('supplySettleMode', '供给侧结算模式'),
   ('supplySettleCycle', '供给侧结算周期'),
@@ -4426,9 +4771,8 @@ const kProposalSalesFinanceFillFields = <(String, String)>[
   ('channelSettleCycle', '渠道侧结算周期'),
   ('channelPayee', '渠道侧收款主体'),
   ('channelReceiveAccount', '渠道侧收款账户'),
-  ('generalBusinessAccount', '普通业务账'),
-  ('prepaidAccount', '预收账户'),
-  ('profitAccrualAccount', '利润计提账户'),
+  ('generalBusinessAccount', '结算账户一'),
+  ('prepaidAccount', '结算账户二'),
   ('financeRemark', '财务备注'),
   ('rollback', '是否回滚'),
 ];
@@ -4485,7 +4829,6 @@ List<String> proposalIntakeSalesMarketIssues(Map<String, dynamic> form) {
   needRef('productRef', 'product', '产品（标签一）');
   needRef('projectRef', 'projectName', '项目名称（标签一二级）');
   needList('supplies', '供给（标签二）');
-  needList('channels', '渠道（标签三）');
   need('supplierPolicy', '供货商政策');
   need('channelPolicy', '渠道政策');
   need('executionPlan', '提案执行计划');
@@ -4513,7 +4856,16 @@ List<String> proposalIntakeSalesMarketIssues(Map<String, dynamic> form) {
 
 List<String> proposalIntakeSalesFinanceFillIssues(Map<String, dynamic> form) {
   final issues = <String>[];
+  final derived = proposalIntakeHasProductSalesScale(form);
+  final derivedProcurement =
+      proposalIntakeHasSupplySettleRatio(form) &&
+      (derived || proposalIntakeFormHasText(form, 'salesScale'));
+  if (!derived) {
+    issues.add('请在产品结算中填写规模（万元）');
+  }
   for (final field in kProposalSalesFinanceFillFields) {
+    if (_kDerivedFinanceMetricKeys.contains(field.$1)) continue;
+    if (field.$1 == 'couponProcurementCost' && derivedProcurement) continue;
     if (!proposalIntakeFormHasText(form, field.$1)) {
       issues.add('请填写${field.$2}');
     }

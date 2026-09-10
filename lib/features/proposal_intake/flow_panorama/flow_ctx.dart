@@ -146,6 +146,10 @@ class FlowCtx {
     required this.financePending,
     required this.owners,
     this.billingName = '',
+    this.salesInvoiceType = '',
+    this.salesTaxRate = '',
+    this.purchaseInvoiceType = '',
+    this.purchaseTaxRate = '',
   });
 
   final String proposal, sector, productTag, project;
@@ -174,6 +178,8 @@ class FlowCtx {
   final int financePending;
   final Map<String, String> owners;
   String billingName;
+  final String salesInvoiceType, salesTaxRate;
+  final String purchaseInvoiceType, purchaseTaxRate;
 
   double get invoiceGap {
     if (!hasRevenue || !hasInvoiceAmount) return 0;
@@ -187,9 +193,22 @@ class FlowCtx {
 
   bool get hasInvoiceGap => hasRevenue && hasInvoiceAmount && invoiceGap > 0;
 
-  String get taxLabel {
-    final m = RegExp(r'(?:专票|普票)?\s*\d+(?:\.\d+)?%').firstMatch(salesTerms);
-    return m?.group(0)?.trim() ?? '票种与税率待确认';
+  String get taxLabel => proposalFlowInvoiceTaxLabel(
+    invoiceType: salesInvoiceType,
+    taxRate: salesTaxRate,
+    fallbackText: salesTerms,
+  );
+
+  String get purchaseTaxLabel => proposalFlowInvoiceTaxLabel(
+    invoiceType: purchaseInvoiceType,
+    taxRate: purchaseTaxRate,
+    fallbackText: purchaseTerms,
+  );
+
+  String get purchaseInvoiceEdgeLabel {
+    if (purchaseTaxLabel != kProposalFlowTaxPending) return purchaseTaxLabel;
+    if (purchaseTerms.isNotEmpty) return purchaseTerms;
+    return purchaseName;
   }
 
   String owner(String key) {
@@ -226,4 +245,32 @@ class FlowCtx {
     ];
     return parts.join(' · ');
   }
+}
+
+const kProposalFlowTaxPending = '票种与税率待确认';
+
+String proposalFlowInvoiceTaxLabel({
+  String invoiceType = '',
+  String taxRate = '',
+  String fallbackText = '',
+}) {
+  final invoice = invoiceType.trim();
+  var rate = taxRate.trim().replaceAll('％', '%');
+  if (rate.isNotEmpty && !rate.contains('%')) {
+    final parsed = double.tryParse(rate);
+    if (parsed != null && parsed > 0) {
+      final pct = parsed.abs() > 1 ? parsed : parsed * 100;
+      rate = pct == pct.roundToDouble()
+          ? '${pct.round()}%'
+          : '${pct.toStringAsFixed(2)}%';
+    }
+  }
+  if (invoice.isNotEmpty && rate.isNotEmpty) {
+    if (RegExp(r'\d+(?:\.\d+)?%').hasMatch(invoice)) return invoice;
+    return '$invoice $rate';
+  }
+  if (rate.isNotEmpty) return rate;
+  if (invoice.isNotEmpty) return invoice;
+  final match = RegExp(r'(?:专票|普票)?\s*\d+(?:\.\d+)?%').firstMatch(fallbackText);
+  return match?.group(0)?.trim() ?? kProposalFlowTaxPending;
 }

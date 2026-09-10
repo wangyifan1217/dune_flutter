@@ -372,6 +372,33 @@ int lighthouseTrendHeroIndex(List<bool> available) {
   return 2;
 }
 
+/// 环比上色的门槛（百分点 / 百分比，取绝对值）。
+///
+/// 一屏十几个 ↓ 全部上色时，绿色退化成一层均匀纹理而不是信息：核销额 −52.3%
+/// 和 −27% 长得一样重，该跳出来的没跳出来。只给越过这条线的上色，剩下的走灰，
+/// 让「掉得狠」这件事重新变成视觉事件。
+///
+/// 30 不是拍脑袋：日环比在这门生意里 ±30% 以内是常态波动，越过就值得问一句。
+const double lighthouseDeltaLoudThreshold = 30;
+
+bool lighthouseDeltaIsLoud(double pct) =>
+    pct.abs() >= lighthouseDeltaLoudThreshold;
+
+/// 上下文线白名单：主线之外还画哪几条。
+///
+/// 序列下标同 lighthouseTrendSeriesKeys：0 收入 / 1 成本 / 2 毛利 /
+/// 3 规模 / 4 规模族另一条 / 5 成本另一条 / 6 存量。
+///
+/// 默认只留两条。留 4（规模族另一条）是因为它和主线同族、共用一根 Y，
+/// 在图上是「销售 − 核销」那条差额带的上缘 —— 那是真的可比。留 2（毛利）
+/// 是给规模一个利润侧的参照。其余的各自归一、互不可比、也认不出是哪条，
+/// 画上去只是墨：实测四条灰线的墨量是主线的两倍，背景比主体还响。
+///
+/// 撤掉的那几条没有消失 —— 点图例把它 solo 成主线，它就有自己的轴、
+/// 自己的 fill 和 MAX/MIN 读数。想让四条灰线全回来，把这里改成 `=> true`。
+bool lighthouseHeroTrendDrawsContextLine(int seriesIndex) =>
+    seriesIndex == 2 || seriesIndex == 4;
+
 /// 核销 / 销售才共用一根 Y（看未核销差额）。项目成本三级量级差百倍，必须各自归一。
 bool lighthouseTrendShareScaleRange({
   required String scaleLabel,
@@ -441,11 +468,19 @@ const lighthouseHeroSectionChipValues = <String, int>{
 ///
 /// 查表取固定值，不用 accent.withAlpha：透明度叠色压在白底上会掉彩度，
 /// 四张卡会一起发灰，那正是「淡」和「脏」的区别。
+// 底色只到「能看出这是一组」为止，不到「这是一块彩色」。
+//
+// 原来四块底色是同一个量级的色块，四个色相（紫 / 琥珀 / 绿 / 品红）在一屏里
+// 同时占大面积、饱和度又接近，眼睛找不到落点。更要命的是颜色的重量压在背景上，
+// 而信息在前景那些深色小字里 —— 屏幕上最响的东西恰好是最不带信息的东西。
+//
+// 现在饱和度压掉约一半，分组交给标题那颗 18px 色块和 0.8px 的边去做，
+// 颜色预算让给数字本身。想找回原来的浓度，把这张表换回上一版即可。
 const lighthouseHeroSectionTintValues = <String, int>{
-  'scale': 0xFFF6F3FD,
-  'cost': 0xFFFCF6EC,
-  'cash': 0xFFEDF8F3,
-  'profit': 0xFFFBF1F7,
+  'scale': 0xFFFAF8FE,
+  'cost': 0xFFFDFAF4,
+  'cash': 0xFFF4FAF7,
+  'profit': 0xFFFDF7FA,
 };
 
 const lighthouseHeroSectionEdgeValues = <String, int>{

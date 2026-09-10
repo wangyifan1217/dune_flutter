@@ -35,7 +35,7 @@ abstract final class FlowCtxMapper {
       productTag: _orDash(_text(form, 'product'), '未选择产品'),
       project: _orDash(_text(form, 'projectName'), '未选择项目'),
       supplies: _listOr(form, 'supplies', '未选择供给'),
-      channels: _listOr(form, 'channels', '未选择渠道'),
+      channels: _tag3Channels(form),
       purchaseProducts: _listOr(form, 'purchaseProducts', '未选择采购产品'),
       purchaseName: _text(form, 'purchaseName'),
       purchaseNo: _text(form, 'purchaseNo'),
@@ -86,11 +86,38 @@ abstract final class FlowCtxMapper {
         'fin2': _text(form, 'financeOwner2'),
       },
       billingName: billing.isEmpty ? salesOurs : billing,
+      salesInvoiceType: _firstNonEmpty([
+        for (final terms in proposalIntakeProductSalesSettleTerms(form))
+          terms.invoiceType,
+        _text(form, 'salesInvoiceType'),
+      ]),
+      salesTaxRate: _firstNonEmpty([
+        for (final terms in proposalIntakeProductSalesSettleTerms(form))
+          terms.taxRate,
+      ]),
+      purchaseInvoiceType: _firstNonEmpty([
+        for (final product in proposalIntakeSupplyProducts(form))
+          for (final settle in proposalIntakeSupplySettlements(product))
+            settle.terms.invoiceType,
+      ]),
+      purchaseTaxRate: _firstNonEmpty([
+        for (final product in proposalIntakeSupplyProducts(form))
+          for (final settle in proposalIntakeSupplySettlements(product))
+            settle.terms.taxRate,
+      ]),
     );
   }
 
   static String _text(Map<String, dynamic> form, String key) =>
       '${form[key] ?? ''}'.trim();
+
+  static String _firstNonEmpty(Iterable<String> values) {
+    for (final value in values) {
+      final text = value.trim();
+      if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
 
   static String _orDash(String value, String fallback) =>
       value.isEmpty ? fallback : value;
@@ -106,6 +133,32 @@ abstract final class FlowCtxMapper {
         : const <String>[];
     final list = items.toList();
     return list.isEmpty ? [fallback] : list;
+  }
+
+  static List<String> _tag3Channels(Map<String, dynamic> form) {
+    final labels = <String>[];
+    void add(String value) {
+      final text = value.trim();
+      if (text.isEmpty || labels.contains(text)) return;
+      labels.add(text);
+    }
+
+    for (final sku in proposalIntakeSkuDetails(form)) {
+      add(
+        proposalIntakeCategoryLabel(
+          sku.resolvedChannelCategoryL1,
+          sku.channelCategoryL1,
+        ),
+      );
+      add(
+        proposalIntakeCategoryLabel(
+          sku.resolvedChannelCategoryL2,
+          sku.channelCategoryL2,
+        ),
+      );
+    }
+    if (labels.isNotEmpty) return labels;
+    return _listOr(form, 'channels', '未选择渠道');
   }
 
   static bool _hasNumber(Map<String, dynamic> form, String key) {

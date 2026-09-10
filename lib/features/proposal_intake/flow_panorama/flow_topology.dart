@@ -221,10 +221,24 @@ final List<EdgeDef> kEdges = [
     b: const Anchor('hub', 'L', 64),
     d: const [105, 105],
     t: 0.68,
-    label: (c) => c.purchaseTerms.isEmpty ? c.purchaseName : c.purchaseTerms,
-    sub: (c) => c.purchaseName,
+    label: (c) => c.purchaseInvoiceEdgeLabel,
+    sub: (c) => c.purchaseTaxLabel == kProposalFlowTaxPending
+        ? c.purchaseName
+        : c.purchaseTaxLabel,
     note: (c) =>
-        '${c.purchaseTheirs} 向 ${c.purchaseOurs} 开票 · ${c.purchaseTerms.isEmpty ? c.purchaseName : c.purchaseTerms}',
+        '${c.purchaseTheirs} 向 ${c.purchaseOurs} 开票 · ${c.purchaseInvoiceEdgeLabel}',
+  ),
+  EdgeDef(
+    id: 'isales',
+    kind: FlowKind.invoice,
+    own: 'fin2',
+    a: const Anchor('hub', 'R', 44),
+    b: const Anchor('channel', 'L', 48),
+    d: const [110, 110],
+    t: 0.42,
+    label: (c) => c.taxLabel,
+    sub: (c) => c.salesInvoiceType.isEmpty ? c.salesName : c.salesInvoiceType,
+    note: (c) => '${c.salesOurs} 向 ${c.salesTheirs} 开票 · ${c.taxLabel}',
   ),
   EdgeDef(
     id: 'n1',

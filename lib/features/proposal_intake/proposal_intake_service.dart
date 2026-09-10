@@ -148,6 +148,7 @@ class ProposalIntakeService {
     String status = '',
     String kind = '',
     String sector = '',
+    String period = '',
     bool actionable = false,
     bool relatedOnly = false,
   }) async {
@@ -158,6 +159,7 @@ class ProposalIntakeService {
       if (status.trim().isNotEmpty) 'status': status.trim(),
       if (kind.trim().isNotEmpty) 'kind': kind.trim(),
       if (sector.trim().isNotEmpty) 'sector': sector.trim(),
+      if (period.trim().isNotEmpty) 'period': period.trim(),
       if (actionable) 'actionable': '1',
       if (relatedOnly) 'related': '1',
     };

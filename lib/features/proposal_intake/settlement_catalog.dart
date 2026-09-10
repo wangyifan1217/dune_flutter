@@ -263,7 +263,7 @@ bool _productL2MatchesSector(
   return rowCode.toLowerCase() == parentName;
 }
 
-/// 已建渠道产品 / 券包查询命中。来自 [GET /out/shaqiu/catalog/channel-product]。
+/// 已建渠道产品查询命中。来自 [GET /out/shaqiu/catalog/channel-product]。
 class ChannelProductHit {
   const ChannelProductHit({
     this.id,
@@ -898,5 +898,15 @@ const kProposalTaxRates = <String>[
   '6%',
   '9%',
   '13%',
+];
+
+const kProposalPreSettleModes = <String>['预付款', '分期', '按月对账'];
+
+const kProposalPreSettleCycles = <String>[
+  '现金 D+2',
+  '补贴 D+1',
+  '核销后 D+1',
+  '折扣应付已扣',
+  '超长专辑抵扣',
 ];
 

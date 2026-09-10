@@ -2567,6 +2567,66 @@ ProposalIntakeRow? nextProposalIntake({
 CatalogRef? proposalIntakeFormRef(Map<String, dynamic> form, String key) =>
     catalogRefOrNull(form[key]);
 
+/// 业务平台：优先 `syncSourceRef`，兼容对外 JSON 里的 `syncSource` 对象或纯 code。
+CatalogRef? proposalIntakeSyncSourceRefFromJson(Map raw) {
+  final fromRef = catalogRefOrNull(raw['syncSourceRef']);
+  if (fromRef != null && fromRef.isNotEmpty) return fromRef;
+  final source = raw['syncSource'];
+  final fromSource = catalogRefOrNull(source);
+  if (fromSource != null && fromSource.isNotEmpty) return fromSource;
+  if (source is String && source.trim().isNotEmpty) {
+    return CatalogRef(code: source.trim(), name: source.trim());
+  }
+  return null;
+}
+
+String proposalIntakeExistingBuiltText(Object? raw) {
+  if (raw is Map) {
+    final labeled = _existingBuiltFlag(raw['existingBuilt']);
+    if (labeled.isNotEmpty) return labeled;
+    return _existingBuiltFlag(raw['isExistingProduct'] ?? raw['isExistingBuilt']);
+  }
+  return _existingBuiltFlag(raw);
+}
+
+String _existingBuiltFlag(Object? value) {
+  if (value is bool) return value ? '是' : '否';
+  final text = '$value'.trim();
+  if (text.isEmpty || text == 'null') return '';
+  final lower = text.toLowerCase();
+  if (lower == 'true' || lower == '1' || lower == 'yes' || text == '是') {
+    return '是';
+  }
+  if (lower == 'false' || lower == '0' || lower == 'no' || text == '否') {
+    return '否';
+  }
+  return text;
+}
+
+ChannelProductHit? proposalIntakeAssetProductFromJson(
+  Map raw, {
+  String productName = '',
+  CatalogRef? channelRef,
+  CatalogRef? syncSourceRef,
+}) {
+  final direct = channelProductHitOrNull(raw['assetProduct']) ??
+      channelProductHitOrNull(raw['existingProduct']);
+  if (direct != null) return direct;
+  final name = productName.trim().isNotEmpty
+      ? productName.trim()
+      : '${raw['productName'] ?? raw['name'] ?? ''}'.trim();
+  final code = '${raw['productCode'] ?? ''}'.trim();
+  if (name.isEmpty && code.isEmpty) return null;
+  if (proposalIntakeExistingBuiltText(raw) != '是' && code.isEmpty) return null;
+  return ChannelProductHit(
+    productName: name,
+    productCode: code,
+    channelId: channelRef?.id,
+    channelName: (channelRef?.name ?? '').trim(),
+    syncSource: (syncSourceRef?.code ?? '').trim(),
+  );
+}
+
 /// 产品/券包上的结算渠道：优先自身 [channelRef]，否则从结算明细提升（兼容旧单）。
 CatalogRef? proposalIntakeChannelRefFromJson(Map raw) {
   var ref = catalogRefOrNull(raw['channelRef']);
@@ -3542,11 +3602,7 @@ class ProposalSkuDetailRow {
 
   factory ProposalSkuDetailRow.fromJson(Object? raw) {
     if (raw is! Map) return const ProposalSkuDetailRow(id: '');
-    var syncRef = catalogRefOrNull(raw['syncSourceRef']);
-    if (syncRef == null) {
-      final code = '${raw['syncSource'] ?? ''}'.trim();
-      if (code.isNotEmpty) syncRef = CatalogRef(code: code, name: code);
-    }
+    var syncRef = proposalIntakeSyncSourceRefFromJson(raw);
     var institution = catalogRefOrNull(raw['institutionRef']);
     if (institution == null) {
       final name = '${raw['institution'] ?? raw['institutionName'] ?? ''}'
@@ -3559,10 +3615,16 @@ class ProposalSkuDetailRow {
         );
       }
     }
-    var asset = channelProductHitOrNull(raw['assetProduct']);
-    var productName = '${raw['productName'] ?? ''}'.trim();
-    if (productName.isEmpty) productName = asset?.productName ?? '';
+    var productName =
+        '${raw['productName'] ?? raw['name'] ?? ''}'.trim();
     var channelRef = proposalIntakeChannelRefFromJson(raw);
+    var asset = proposalIntakeAssetProductFromJson(
+      raw,
+      productName: productName,
+      channelRef: channelRef,
+      syncSourceRef: syncRef,
+    );
+    if (productName.isEmpty) productName = asset?.label ?? '';
     channelRef ??= asset?.channelRef;
     final l1Ref = proposalIntakeResolvedCategoryRef(
       catalogRefOrNull(raw['channelCategoryL1Ref']),
@@ -3594,7 +3656,7 @@ class ProposalSkuDetailRow {
       syncSourceRef: syncRef,
       institutionRef: institution,
       channelRef: channelRef,
-      existingBuilt: '${raw['existingBuilt'] ?? ''}'.trim(),
+      existingBuilt: proposalIntakeExistingBuiltText(raw),
       assetProduct: asset,
       settlements: [
         for (final item in raw['settlements'] is List
@@ -3625,15 +3687,69 @@ ProposalSkuDetailRow? proposalIntakeLegacySkuDetail(Map<String, dynamic> form) {
   return row.isBlank ? null : row;
 }
 
-List<ProposalSkuDetailRow> proposalIntakeSkuDetails(Map<String, dynamic> form) {
-  final raw = form['skuDetails'];
-  if (raw is List) {
-    final rows = [
-      for (final item in raw)
-        if (item is Map) ProposalSkuDetailRow.fromJson(item),
-    ].where((row) => row.id.isNotEmpty).toList();
-    if (rows.isNotEmpty) return rows;
+List<ProposalSkuDetailRow> _parseSkuDetailRows(Object? raw) {
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is Map) ProposalSkuDetailRow.fromJson(item),
+  ].where((row) => row.id.isNotEmpty).toList();
+}
+
+List<T> _preferFilledCatalogRows<T>({
+  required List<T> primary,
+  required List<T> aliases,
+  required String Function(T row) idOf,
+  required bool Function(T row) isBlank,
+}) {
+  if (primary.isEmpty) return aliases;
+  if (aliases.isEmpty) return primary;
+  if (primary.every(isBlank) && aliases.any((row) => !isBlank(row))) {
+    return aliases;
   }
+  final aliasById = {for (final row in aliases) idOf(row): row};
+  return [
+    for (final row in primary)
+      if (isBlank(row) && aliasById[idOf(row)] != null)
+        aliasById[idOf(row)]!
+      else
+        row,
+  ];
+}
+
+bool proposalIntakeSkuHasManualDetails(ProposalSkuDetailRow sku) {
+  return sku.productName.trim().isNotEmpty ||
+      sku.faceValue.trim().isNotEmpty ||
+      sku.channelName.isNotEmpty ||
+      sku.institutionName.isNotEmpty ||
+      sku.channelCategoryL1.trim().isNotEmpty ||
+      sku.channelCategoryL2.trim().isNotEmpty ||
+      sku.syncZhongyouHaoke.trim().isNotEmpty ||
+      sku.effectiveDate.trim().isNotEmpty ||
+      sku.expireDate.trim().isNotEmpty ||
+      sku.supplierCodes.trim().isNotEmpty ||
+      sku.inventoryQty.trim().isNotEmpty;
+}
+
+bool proposalIntakePackHasManualDetails(ProposalCouponPackRow pack) {
+  return pack.name.trim().isNotEmpty ||
+      pack.channelName.isNotEmpty ||
+      pack.institutionName.isNotEmpty ||
+      pack.skuIds.isNotEmpty;
+}
+
+List<ProposalSkuDetailRow> proposalIntakeSkuDetails(Map<String, dynamic> form) {
+  final primary = _parseSkuDetailRows(form['skuDetails']);
+  final aliases = [
+    ..._parseSkuDetailRows(form['channelSkus']),
+    ..._parseSkuDetailRows(form['products']),
+  ];
+  final merged = _preferFilledCatalogRows(
+    primary: primary,
+    aliases: aliases,
+    idOf: (row) => row.id,
+    isBlank: (row) => row.isBlank,
+  );
+  if (merged.isNotEmpty) return merged;
   final legacy = proposalIntakeLegacySkuDetail(form);
   return legacy == null ? const [] : [legacy];
 }
@@ -3842,11 +3958,7 @@ class ProposalCouponPackRow {
   factory ProposalCouponPackRow.fromJson(Object? raw) {
     if (raw is! Map) return const ProposalCouponPackRow(id: '');
     final skuRaw = raw['skuIds'];
-    var syncRef = catalogRefOrNull(raw['syncSourceRef']);
-    if (syncRef == null) {
-      final code = '${raw['syncSource'] ?? ''}'.trim();
-      if (code.isNotEmpty) syncRef = CatalogRef(code: code, name: code);
-    }
+    var syncRef = proposalIntakeSyncSourceRefFromJson(raw);
     var institution = catalogRefOrNull(raw['institutionRef']);
     if (institution == null) {
       final name = '${raw['institution'] ?? raw['institutionName'] ?? ''}'
@@ -3859,10 +3971,16 @@ class ProposalCouponPackRow {
         );
       }
     }
-    var asset = channelProductHitOrNull(raw['assetProduct']);
-    var name = '${raw['name'] ?? raw['packName'] ?? ''}'.trim();
-    if (name.isEmpty) name = asset?.productName ?? '';
+    var name = '${raw['name'] ?? raw['packName'] ?? raw['productName'] ?? ''}'
+        .trim();
     var channelRef = proposalIntakeChannelRefFromJson(raw);
+    var asset = proposalIntakeAssetProductFromJson(
+      raw,
+      productName: name,
+      channelRef: channelRef,
+      syncSourceRef: syncRef,
+    );
+    if (name.isEmpty) name = asset?.label ?? '';
     channelRef ??= asset?.channelRef;
     var skuIds = [
       for (final item in skuRaw is List ? skuRaw : const [])
@@ -3885,7 +4003,7 @@ class ProposalCouponPackRow {
       syncSourceRef: syncRef,
       institutionRef: institution,
       channelRef: channelRef,
-      existingBuilt: '${raw['existingBuilt'] ?? ''}'.trim(),
+      existingBuilt: proposalIntakeExistingBuiltText(raw),
       assetProduct: asset,
       settlements: [
         for (final item in raw['settlements'] is List
@@ -3897,15 +4015,27 @@ class ProposalCouponPackRow {
   }
 }
 
-List<ProposalCouponPackRow> proposalIntakeCouponPacks(
-  Map<String, dynamic> form,
-) {
-  final raw = form['couponPacks'];
+List<ProposalCouponPackRow> _parseCouponPackRows(Object? raw) {
   if (raw is! List) return const [];
   return [
     for (final item in raw)
       if (item is Map) ProposalCouponPackRow.fromJson(item),
   ].where((item) => item.id.isNotEmpty).toList();
+}
+
+List<ProposalCouponPackRow> proposalIntakeCouponPacks(
+  Map<String, dynamic> form,
+) {
+  return _preferFilledCatalogRows(
+    primary: _parseCouponPackRows(form['couponPacks']),
+    aliases: _parseCouponPackRows(form['packs']),
+    idOf: (row) => row.id,
+    isBlank: (row) =>
+        row.name.trim().isEmpty &&
+        (row.assetProduct == null || row.assetProduct!.isEmpty) &&
+        row.skuIds.isEmpty &&
+        (row.syncSourceRef == null || row.syncSourceRef!.isEmpty),
+  );
 }
 
 String proposalIntakeNewFinanceModuleId() =>
@@ -4131,13 +4261,13 @@ class ProposalSupplyProductRow {
 
   factory ProposalSupplyProductRow.fromJson(Object? raw) {
     if (raw is! Map) return const ProposalSupplyProductRow(id: '');
-    var syncRef = catalogRefOrNull(raw['syncSourceRef']);
-    if (syncRef == null) {
-      final code = '${raw['syncSource'] ?? ''}'.trim();
-      if (code.isNotEmpty) syncRef = CatalogRef(code: code, name: code);
-    }
+    var syncRef = proposalIntakeSyncSourceRefFromJson(raw);
     var supplier = catalogRefOrNull(raw['supplierRef']);
-    final asset = channelProductHitOrNull(raw['assetProduct']);
+    final asset = proposalIntakeAssetProductFromJson(
+      raw,
+      productName: '${raw['productName'] ?? raw['name'] ?? ''}'.trim(),
+      syncSourceRef: syncRef,
+    );
     supplier ??= asset?.supplierRef;
     var supplierCode =
         '${raw['supplierCode'] ?? raw['productId'] ?? ''}'.trim();
@@ -4166,7 +4296,7 @@ class ProposalSupplyProductRow {
       expireDate: '${raw['expireDate'] ?? ''}'.trim(),
       oilCategory: '${raw['oilCategory'] ?? ''}'.trim(),
       oilCategoryRef: catalogRefOrNull(raw['oilCategoryRef']),
-      existingBuilt: '${raw['existingBuilt'] ?? ''}'.trim(),
+      existingBuilt: proposalIntakeExistingBuiltText(raw),
       assetProduct: asset,
       settlements: [
         for (final item in raw['settlements'] is List
@@ -4228,15 +4358,28 @@ bool proposalIntakeSupplyStarted(ProposalSupplyProductRow product) {
       product.expireDate.trim().isNotEmpty;
 }
 
-List<ProposalSupplyProductRow> proposalIntakeSupplyProducts(
-  Map<String, dynamic> form,
-) {
-  final raw = form['supplyProducts'];
+List<ProposalSupplyProductRow> _parseSupplyProductRows(Object? raw) {
   if (raw is! List) return const [];
   return [
     for (final item in raw)
       if (item is Map) ProposalSupplyProductRow.fromJson(item),
   ].where((row) => row.id.isNotEmpty).toList();
+}
+
+List<ProposalSupplyProductRow> proposalIntakeSupplyProducts(
+  Map<String, dynamic> form,
+) {
+  return _preferFilledCatalogRows(
+    primary: _parseSupplyProductRows(form['supplyProducts']),
+    aliases: _parseSupplyProductRows(form['products']),
+    idOf: (row) => row.id,
+    isBlank: (row) =>
+        row.supplierCode.trim().isEmpty &&
+        (row.supplierRef == null || row.supplierRef!.isEmpty) &&
+        (row.assetProduct == null || row.assetProduct!.isEmpty) &&
+        row.productCode.trim().isEmpty &&
+        (row.syncSourceRef == null || row.syncSourceRef!.isEmpty),
+  );
 }
 
 List<ProposalSkuSettleRow> proposalIntakeSupplySettlements(

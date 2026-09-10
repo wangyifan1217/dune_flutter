@@ -52,7 +52,7 @@ class DunesApp extends StatelessWidget {
             );
             if (isDesktopCommOnly) {
               wrapped = DesktopEscMinimize(child: wrapped);
-              // 仅隐藏/最小化冻动画；失焦不冻，避免双屏切窗看起来卡死。
+              // 托盘 / 最小化 / Cmd+H / 切桌面：停动画。失焦不冻，避免双屏切窗看起来卡死。
               wrapped = ValueListenableBuilder<bool>(
                 valueListenable: windowsTrayWindowObscuredListenable(),
                 builder: (context, obscured, child) {

@@ -407,17 +407,23 @@ class WorkSituationItem {
     required this.kind,
     required this.title,
     this.hint = '',
+    this.taskId = 0,
+    this.isSubtask = false,
   });
 
   final String kind;
   final String title;
   final String hint;
+  final int taskId;
+  final bool isSubtask;
 
   factory WorkSituationItem.fromJson(Map<String, dynamic> json) {
     return WorkSituationItem(
       kind: '${json['kind'] ?? ''}',
       title: '${json['title'] ?? ''}',
       hint: '${json['hint'] ?? ''}',
+      taskId: (json['taskId'] as num?)?.toInt() ?? 0,
+      isSubtask: json['isSubtask'] == true,
     );
   }
 }
@@ -468,6 +474,17 @@ class WorkSituationPerson {
     this.imDuplicates = 0,
     this.imTalkLevel = '',
     this.imTalkWhy = '',
+    this.taskSubtotal = 0,
+    this.taskSubCompleted = 0,
+    this.taskSubOverdue = 0,
+    this.taskProgressLogs = 0,
+    this.taskNoAcceptance = 0,
+    this.taskWithoutDue = 0,
+    this.taskWaitingOnOthers = 0,
+    this.taskStaleOpen = 0,
+    this.taskOverdueHighWeight = 0,
+    this.taskReviewLevel = '',
+    this.taskReviewWhy = '',
     this.items = const [],
   });
 
@@ -501,6 +518,17 @@ class WorkSituationPerson {
   final int imDuplicates;
   final String imTalkLevel;
   final String imTalkWhy;
+  final int taskSubtotal;
+  final int taskSubCompleted;
+  final int taskSubOverdue;
+  final int taskProgressLogs;
+  final int taskNoAcceptance;
+  final int taskWithoutDue;
+  final int taskWaitingOnOthers;
+  final int taskStaleOpen;
+  final int taskOverdueHighWeight;
+  final String taskReviewLevel;
+  final String taskReviewWhy;
   final List<WorkSituationItem> items;
 
   factory WorkSituationPerson.fromJson(Map<String, dynamic> json) {
@@ -535,6 +563,17 @@ class WorkSituationPerson {
       imDuplicates: (json['imDuplicates'] as num?)?.toInt() ?? 0,
       imTalkLevel: '${json['imTalkLevel'] ?? ''}'.trim(),
       imTalkWhy: '${json['imTalkWhy'] ?? ''}'.trim(),
+      taskSubtotal: (json['taskSubtotal'] as num?)?.toInt() ?? 0,
+      taskSubCompleted: (json['taskSubCompleted'] as num?)?.toInt() ?? 0,
+      taskSubOverdue: (json['taskSubOverdue'] as num?)?.toInt() ?? 0,
+      taskProgressLogs: (json['taskProgressLogs'] as num?)?.toInt() ?? 0,
+      taskNoAcceptance: (json['taskNoAcceptance'] as num?)?.toInt() ?? 0,
+      taskWithoutDue: (json['taskWithoutDue'] as num?)?.toInt() ?? 0,
+      taskWaitingOnOthers: (json['taskWaitingOnOthers'] as num?)?.toInt() ?? 0,
+      taskStaleOpen: (json['taskStaleOpen'] as num?)?.toInt() ?? 0,
+      taskOverdueHighWeight: (json['taskOverdueHighWeight'] as num?)?.toInt() ?? 0,
+      taskReviewLevel: '${json['taskReviewLevel'] ?? ''}'.trim(),
+      taskReviewWhy: '${json['taskReviewWhy'] ?? ''}'.trim(),
       items: (json['items'] as List? ?? const [])
           .whereType<Map>()
           .map((row) => WorkSituationItem.fromJson(Map<String, dynamic>.from(row)))
@@ -574,6 +613,17 @@ class WorkSituationPerson {
       imDuplicates: imDuplicates,
       imTalkLevel: imTalkLevel,
       imTalkWhy: imTalkWhy,
+      taskSubtotal: taskSubtotal,
+      taskSubCompleted: taskSubCompleted,
+      taskSubOverdue: taskSubOverdue,
+      taskProgressLogs: taskProgressLogs,
+      taskNoAcceptance: taskNoAcceptance,
+      taskWithoutDue: taskWithoutDue,
+      taskWaitingOnOthers: taskWaitingOnOthers,
+      taskStaleOpen: taskStaleOpen,
+      taskOverdueHighWeight: taskOverdueHighWeight,
+      taskReviewLevel: taskReviewLevel,
+      taskReviewWhy: taskReviewWhy,
       items: items ?? this.items,
     );
   }

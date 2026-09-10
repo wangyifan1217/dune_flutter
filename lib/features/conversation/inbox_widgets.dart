@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
@@ -1227,34 +1225,11 @@ class _IconBtn extends StatelessWidget {
   }
 }
 
-class _NovaEyesButton extends StatefulWidget {
+class _NovaEyesButton extends StatelessWidget {
   const _NovaEyesButton({required this.onTap, required this.unread});
 
   final VoidCallback onTap;
   final bool unread;
-
-  @override
-  State<_NovaEyesButton> createState() => _NovaEyesButtonState();
-}
-
-class _NovaEyesButtonState extends State<_NovaEyesButton>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2800),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1264,38 +1239,24 @@ class _NovaEyesButtonState extends State<_NovaEyesButton>
         color: Colors.transparent,
         child: InkWell(
           customBorder: const CircleBorder(),
-          onTap: widget.onTap,
+          onTap: onTap,
           child: SizedBox(
             width: 44,
             height: 40,
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                Positioned.fill(
-                  child: AnimatedBuilder(
-                    animation: _controller,
-                    builder: (context, _) {
-                      final t = _controller.value;
-                      final lookOffset = math.sin(t * math.pi * 2) * 3;
-                      final blinkDistance = (t - 0.72).abs();
-                      final eyeScaleY = blinkDistance < 0.055
-                          ? blinkDistance / 0.055
-                          : 1.0;
-                      return Transform.translate(
-                        offset: Offset(lookOffset, 0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _NovaEye(verticalScale: eyeScaleY),
-                            const SizedBox(width: 4),
-                            _NovaEye(verticalScale: eyeScaleY),
-                          ],
-                        ),
-                      );
-                    },
+                const Positioned.fill(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _NovaEye(),
+                      SizedBox(width: 4),
+                      _NovaEye(),
+                    ],
                   ),
                 ),
-                if (widget.unread)
+                if (unread)
                   Positioned(
                     top: 1,
                     right: 1,
@@ -1327,21 +1288,16 @@ class _NovaEyesButtonState extends State<_NovaEyesButton>
 }
 
 class _NovaEye extends StatelessWidget {
-  const _NovaEye({required this.verticalScale});
-
-  final double verticalScale;
+  const _NovaEye();
 
   @override
   Widget build(BuildContext context) {
-    return Transform.scale(
-      scaleY: verticalScale,
-      child: Container(
-        width: 8,
-        height: 8,
-        decoration: BoxDecoration(
-          color: const Color(0xFF7E64BD),
-          shape: BoxShape.circle,
-        ),
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: const BoxDecoration(
+        color: Color(0xFF7E64BD),
+        shape: BoxShape.circle,
       ),
     );
   }

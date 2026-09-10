@@ -7,15 +7,17 @@ import 'task_models.dart';
 
 const kTaskPurple = Color(0xFF7B5CD8);
 
-/// 按进度分段取色：低→红橙、中→琥珀、高→青绿、完成→翠绿；逾期偏琥珀棕。
+/// 按进度分段取色：低→红橙、中→琥珀、高→青绿；办结→翠绿；逾期未办结偏琥珀棕。
+/// 填报 100% 不等于办结，逾期时即使进度拉满也走逾期色。
 Color taskProgressTone(
   num progressPct, {
   bool overdue = false,
   bool completed = false,
 }) {
-  if (overdue && !completed) return const Color(0xFFB45309);
+  if (completed) return const Color(0xFF1F9D76);
+  if (overdue) return const Color(0xFFB45309);
   final p = progressPct.toDouble().clamp(0, 100);
-  if (completed || p >= 100) return const Color(0xFF1F9D76);
+  if (p >= 100) return const Color(0xFF2F8F7E);
   if (p < 30) return const Color(0xFFE35D4C);
   if (p < 60) return const Color(0xFFE0A020);
   if (p < 85) return const Color(0xFF4C7FD4);
@@ -27,13 +29,14 @@ List<Color> taskProgressGradientColors(
   bool overdue = false,
   bool completed = false,
 }) {
-  if (overdue && !completed) {
+  if (completed) {
+    return const [Color(0xFF1F9D76), Color(0xFF6ED4B0)];
+  }
+  if (overdue) {
     return const [Color(0xFFB45309), Color(0xFFE8A868)];
   }
   final p = progressPct.toDouble().clamp(0, 100);
-  if (completed || p >= 100) {
-    return const [Color(0xFF1F9D76), Color(0xFF6ED4B0)];
-  }
+  if (p >= 100) return const [Color(0xFF2F8F7E), Color(0xFF7BCFBC)];
   if (p < 30) return const [Color(0xFFE35D4C), Color(0xFFF0A08A)];
   if (p < 60) return const [Color(0xFFE0A020), Color(0xFFF5D08A)];
   if (p < 85) return const [Color(0xFF4C7FD4), Color(0xFF9BB8F0)];
@@ -219,7 +222,9 @@ class TaskMemberProgressChart extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            bars.length > 1 ? '每个子任务一根柱；同一执行人多任务会并排显示（同色）' : '当前任务进度',
+            bars.length > 1
+                ? '每个事项一根柱。同一人负责的会并排，颜色相同。'
+                : '当前这条任务的填报进度',
             style: const TextStyle(fontSize: 12, color: DunesColors.text3),
           ),
           const SizedBox(height: 12),
@@ -754,6 +759,7 @@ class TaskWorkbenchCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final pending = task.isPending;
     final belong = task.parentTitle.trim();
+    final contextLine = taskCardContextLine(task);
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(14),
@@ -778,9 +784,15 @@ class TaskWorkbenchCard extends StatelessWidget {
               if (groupMode) ...[
                 const SizedBox(height: 6),
                 Text(
-                  task.subtaskCount > 0
-                      ? '${task.subtaskCount} 项 · 汇总 ${task.progressPct}%'
-                      : '还没有事项',
+                  [
+                    if (contextLine != null) contextLine,
+                    if (task.subtaskCount > 0)
+                      '${task.subtaskCount} 项 · 汇总 ${task.progressPct}%'
+                    else
+                      '还没有事项',
+                  ].join(' · '),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 12, color: DunesColors.text3),
                 ),
               ] else ...[
@@ -799,11 +811,14 @@ class TaskWorkbenchCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   [
+                    if (contextLine != null) contextLine,
                     if (_due != null) _due!,
                     if (!pending) '${task.progressPct}%',
                     if (pending && task.ownerName.isNotEmpty)
                       '${task.ownerName}提交',
                   ].join(' · '),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 12, color: DunesColors.text2),
                 ),
               ],

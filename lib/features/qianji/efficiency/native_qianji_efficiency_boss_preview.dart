@@ -6,6 +6,9 @@ import '../../../core/theme/dunes_theme.dart';
 import '../../../core/widgets/horizontal_drag_scroll_view.dart';
 import '../../../core/widgets/spotlight_tour.dart';
 import '../../auth/auth_session.dart';
+import '../../tasks/native_task_action_page.dart';
+import '../../tasks/native_task_detail_page.dart';
+import '../../tasks/task_models.dart';
 import 'efficiency_models.dart';
 import 'efficiency_service.dart';
 import 'work_situation_tour.dart';
@@ -21,11 +24,13 @@ class _Item {
     required this.kind,
     required this.title,
     required this.hint,
+    this.taskId = 0,
   });
 
   final _Kind kind;
   final String title;
   final String hint;
+  final int taskId;
 
   String get kindLabel => _kindMeta[kind]!.label;
 }
@@ -79,12 +84,19 @@ List<_Item> _itemsOf(WorkSituationPerson person) {
             kind: _parseKind(item.kind),
             title: item.title.trim(),
             hint: item.hint.trim(),
+            taskId: item.taskId,
           ),
     ];
   }
   return [
     if (person.taskOverdue > 0)
-      _Item(kind: _Kind.overdue, title: '超期未完成任务', hint: '${person.taskOverdue} 件仍过原定日期'),
+      _Item(
+        kind: _Kind.overdue,
+        title: '超期未完成任务',
+        hint: person.taskSubOverdue > 0
+            ? '${person.taskOverdue} 件仍过原定日期（含子任务 ${person.taskSubOverdue}）'
+            : '${person.taskOverdue} 件仍过原定日期',
+      ),
     if (person.proposalRejected > 0)
       _Item(kind: _Kind.proposal, title: '被退回的提案', hint: '${person.proposalRejected} 件还没补齐再交'),
     if (person.taskDoing > 0)
@@ -103,6 +115,50 @@ List<_Item> _itemsOf(WorkSituationPerson person) {
     if (person.taskCompleted > 0)
       _Item(kind: _Kind.done, title: '本月已完成任务', hint: '${person.taskCompleted} 件'),
   ];
+}
+
+void _openWorkSituationTask(BuildContext context, AuthSession session, int taskId) {
+  if (taskId <= 0) return;
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (ctx) => Material(
+        color: DunesColors.bgApp,
+        child: NativeTaskDetailView(
+          session: session,
+          taskId: taskId,
+          onBack: () => Navigator.of(ctx).pop(),
+          backLabel: '工作情况',
+          onOpenTask: (id) => _openWorkSituationTask(ctx, session, id),
+          onOpenProgress: (task) =>
+              _openWorkSituationTaskAction(ctx, session, task, TaskActionMode.progress),
+          onOpenEvaluate: (task) =>
+              _openWorkSituationTaskAction(ctx, session, task, TaskActionMode.evaluate),
+        ),
+      ),
+    ),
+  );
+}
+
+void _openWorkSituationTaskAction(
+  BuildContext context,
+  AuthSession session,
+  TaskItem task,
+  TaskActionMode mode,
+) {
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (ctx) => Material(
+        color: DunesColors.bgApp,
+        child: NativeTaskActionView(
+          session: session,
+          task: task,
+          mode: mode,
+          onBack: () => Navigator.of(ctx).pop(),
+          onDone: () => Navigator.of(ctx).pop(),
+        ),
+      ),
+    ),
+  );
 }
 
 class _Dept {
@@ -132,19 +188,66 @@ class _Sig {
 
 _Sig _taskSig(WorkSituationPerson person) {
   if (person.taskOverdue > 0) {
-    return const _Sig(level: _SigLevel.weak, label: '超期未结', why: '有过原定日期还没办完的事');
+    var why = '有过原定日期还没办完的事';
+    if (person.taskOverdueHighWeight > 0) {
+      why = '有 ${person.taskOverdueHighWeight} 件重点任务过期未结';
+    } else if (person.taskSubOverdue > 0) {
+      why = '含子任务在内，有过期未结的事';
+    }
+    return _Sig(level: _SigLevel.weak, label: '超期未结', why: why);
   }
   if (person.proposalRejected > 0) {
     return const _Sig(level: _SigLevel.weak, label: '被退回', why: '方案被退回，还没补齐再交');
   }
+  if (person.taskReviewLevel == 'stalled' && person.taskTotal > 0) {
+    final why = person.taskReviewWhy.trim();
+    return _Sig(
+      level: _SigLevel.weak,
+      label: '空转',
+      why: why.isEmpty ? '抽看任务后，多数停在空壳或没有进度' : why,
+    );
+  }
   if (person.taskCompleted > 0 && person.taskOverdue == 0) {
     return const _Sig(level: _SigLevel.good, label: '按期', why: '该办的按期办掉了，没有烂尾');
+  }
+  if (person.taskWaitingOnOthers > 0 &&
+      person.taskDoing > 0 &&
+      person.taskWaitingOnOthers >= person.taskDoing) {
+    return const _Sig(level: _SigLevel.mid, label: '待下级', why: '主任务还在等别人的子任务');
+  }
+  if (person.taskDoing > 0 &&
+      person.taskWithoutDue >= person.taskDoing &&
+      person.taskPending == 0 &&
+      person.approvalPending == 0) {
+    return const _Sig(level: _SigLevel.mid, label: '没约期', why: '未完成的单还没有截止日期');
   }
   if (person.taskDoing > 0 || person.taskPending > 0 || person.approvalPending > 0) {
     return const _Sig(level: _SigLevel.mid, label: '在办', why: '事在推进，还没到点或在等别人');
   }
+  final why = person.taskReviewWhy.trim();
+  if (person.taskReviewLevel == 'quiet' || person.taskTotal <= 0) {
+    return _Sig(
+      level: _SigLevel.mid,
+      label: '本月少事',
+      why: why.isEmpty ? '这个月任务不多' : why,
+    );
+  }
   return const _Sig(level: _SigLevel.mid, label: '本月少事', why: '这个月任务不多');
 }
+
+bool _taskAdvancing(_Sig sig) =>
+    sig.isGood || sig.label == '在办' || sig.label == '待下级';
+
+@visibleForTesting
+String workSituationTaskChipLabel(WorkSituationPerson person) => _taskSig(person).label;
+
+@visibleForTesting
+bool workSituationTaskIsAdvancing(WorkSituationPerson person) =>
+    _taskAdvancing(_taskSig(person));
+
+@visibleForTesting
+String workSituationTaskWhy(WorkSituationPerson person) =>
+    _whyText(person, '任务', _taskSig(person));
 
 _Sig _meetSig(WorkSituationPerson person) {
   if (person.meetings > 0 &&
@@ -233,6 +336,7 @@ bool _hasWeak(WorkSituationPerson person) =>
 class _EffRoll {
   const _EffRoll({
     required this.task,
+    required this.taskWeak,
     required this.meet,
     required this.kb,
     required this.talk,
@@ -240,6 +344,7 @@ class _EffRoll {
   });
 
   final int task;
+  final int taskWeak;
   final int meet;
   final int kb;
   final int talk;
@@ -248,18 +353,37 @@ class _EffRoll {
 
 _EffRoll _effRoll(Iterable<WorkSituationPerson> people) {
   var task = 0;
+  var taskWeak = 0;
   var meet = 0;
   var kb = 0;
   var talk = 0;
   var n = 0;
   for (final person in people) {
     n++;
-    if (_taskSig(person).isGood) task++;
+    final taskSig = _taskSig(person);
+    if (_taskAdvancing(taskSig)) task++;
+    if (taskSig.isWeak) taskWeak++;
     if (_meetSig(person).isGood) meet++;
     if (_kbSig(person).isGood) kb++;
     if (_talkSig(person).isGood) talk++;
   }
-  return _EffRoll(task: task, meet: meet, kb: kb, talk: talk, n: n == 0 ? 1 : n);
+  return _EffRoll(
+    task: task,
+    taskWeak: taskWeak,
+    meet: meet,
+    kb: kb,
+    talk: talk,
+    n: n == 0 ? 1 : n,
+  );
+}
+
+String _glanceSummary(List<WorkSituationPerson> people) {
+  final e = _effRoll(people);
+  final parts = <String>[];
+  parts.add('任务 ${e.task}人在推进');
+  if (e.taskWeak > 0) parts.add('${e.taskWeak}人超期或空转');
+  if (e.talk > 0) parts.add('沟通 ${e.talk}人在跟事');
+  return parts.join(' · ');
 }
 
 String _deptSay(_Dept dept) {
@@ -603,7 +727,7 @@ class _NativeQianjiEfficiencyBossPreviewState
                   const _GuideItem(
                     title: '任务没办完',
                     body:
-                        '来自任务助手：当月有过原定日期仍未完成的任务，或提案被退回还没补齐再交。筛选后只看这类人。',
+                        '来自任务助手，含子任务和共同负责。看本月创建、完成或仍在办的单。超期、提案退回是硬事实；AI 抽看标题、进度、验收和评价，判断是在推进还是空转。点开事项可进任务详情。',
                   ),
                   const _GuideItem(
                     title: '开会没落地',
@@ -721,6 +845,7 @@ class _NativeQianjiEfficiencyBossPreviewState
                         ? _PersonDetail(
                             person: _person!,
                             monthLabel: monthLabel,
+                            session: widget.session,
                             onOpenDept: () {
                               setState(() {
                                 _departmentId = _person!.departmentId;
@@ -1260,48 +1385,61 @@ class _FilterBar extends StatelessWidget {
 }
 
 class _EffMeter extends StatelessWidget {
-  const _EffMeter({required this.good, required this.n});
+  const _EffMeter({required this.good, required this.n, this.weak = 0});
 
   final int good;
+  final int weak;
   final int n;
 
   @override
   Widget build(BuildContext context) {
-    final pct = n <= 0 ? 0.0 : good / n;
-    final color = pct >= 0.6
-        ? DunesColors.green
-        : pct >= 0.35
-            ? DunesColors.amber
-            : DunesColors.coral;
+    final total = n <= 0 ? 1 : n;
+    final goodPct = (good / total).clamp(0.0, 1.0);
+    final weakPct = (weak / total).clamp(0.0, 1.0 - goodPct);
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: SizedBox(
         height: 22,
         width: double.infinity,
-        child: ColoredBox(
-          color: const Color(0xFFF3EEF6),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: FractionallySizedBox(
-              widthFactor: pct.clamp(0.0, 1.0),
-              child: ColoredBox(color: color, child: const SizedBox.expand()),
+        child: Row(
+          children: [
+            if (goodPct > 0)
+              Flexible(
+                flex: (goodPct * 1000).round().clamp(1, 1000),
+                child: const ColoredBox(color: DunesColors.green, child: SizedBox.expand()),
+              ),
+            if (weakPct > 0)
+              Flexible(
+                flex: (weakPct * 1000).round().clamp(1, 1000),
+                child: const ColoredBox(color: DunesColors.coral, child: SizedBox.expand()),
+              ),
+            Flexible(
+              flex: ((1 - goodPct - weakPct) * 1000).round().clamp(1, 1000),
+              child: const ColoredBox(color: Color(0xFFF3EEF6), child: SizedBox.expand()),
             ),
-          ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _GlanceCard extends StatelessWidget {
+class _GlanceCard extends StatefulWidget {
   const _GlanceCard({required this.people});
 
   final List<WorkSituationPerson> people;
 
   @override
+  State<_GlanceCard> createState() => _GlanceCardState();
+}
+
+class _GlanceCardState extends State<_GlanceCard> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
-    final e = _effRoll(people);
-    Widget row(String label, int good, String unit) {
+    final e = _effRoll(widget.people);
+    Widget row(String label, int good, String unit, {int weak = 0}) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: Column(
@@ -1318,14 +1456,13 @@ class _GlanceCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            _EffMeter(good: good, n: e.n),
+            _EffMeter(good: good, n: e.n, weak: weak),
           ],
         ),
       );
     }
 
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
@@ -1334,17 +1471,59 @@ class _GlanceCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('工作实不实', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-          const SizedBox(height: 8),
-          const Text(
-            '看任务办没办完、开会有没有下文、知识有没有人用、会话里是不是在跟具体事。沟通抽会话给 AI 看，不打分。',
-            style: TextStyle(fontSize: 12, color: DunesColors.text3, height: 1.4),
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.circular(18),
+              child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '工作实不实',
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                        ),
+                        if (!_expanded) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            _glanceSummary(widget.people),
+                            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    _expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    color: DunesColors.text3,
+                  ),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 12),
-          row('把事办掉', e.task, '按期'),
-          row('好好开会', e.meet, '有闭环'),
-          row('用好知识库', e.kb, '用上了'),
-          row('沟通跟得上事', e.talk, '在跟事'),
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    '看任务办没办完、开会有没有下文、知识有没有人用、会话里是不是在跟具体事。沟通抽会话给 AI 看，不打分。',
+                    style: TextStyle(fontSize: 12, color: DunesColors.text3, height: 1.4),
+                  ),
+                  const SizedBox(height: 12),
+                  row('把事办掉', e.task, '在推进', weak: e.taskWeak),
+                  row('好好开会', e.meet, '有闭环'),
+                  row('用好知识库', e.kb, '用上了'),
+                  row('沟通跟得上事', e.talk, '在跟事'),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -1592,11 +1771,26 @@ class _WhyLines extends StatelessWidget {
           const SizedBox(height: 10),
           Text('${row.$1}${row.$2.label}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
-          Text(row.$2.why, style: const TextStyle(fontSize: 13, height: 1.45, color: DunesColors.text2)),
+          Text(_whyText(person, row.$1, row.$2), style: const TextStyle(fontSize: 13, height: 1.45, color: DunesColors.text2)),
         ],
       ],
     );
   }
+}
+
+String _whyText(WorkSituationPerson person, String name, _Sig sig) {
+  if (name == '任务') {
+    final ai = person.taskReviewWhy.trim();
+    var why = sig.why;
+    if (ai.isNotEmpty && sig.label != '超期未结' && sig.label != '被退回') {
+      why = ai;
+    }
+    if (_talkSig(person).isGood && sig.label == '本月少事') {
+      return '$why 会话在跟，但本月任务单很少。';
+    }
+    return why;
+  }
+  return sig.why;
 }
 
 class _Avatar extends StatelessWidget {
@@ -1628,11 +1822,13 @@ class _PersonDetail extends StatelessWidget {
     required this.person,
     required this.monthLabel,
     required this.onOpenDept,
+    this.session,
   });
 
   final WorkSituationPerson person;
   final String monthLabel;
   final VoidCallback onOpenDept;
+  final AuthSession? session;
 
   @override
   Widget build(BuildContext context) {
@@ -1700,7 +1896,13 @@ class _PersonDetail extends StatelessWidget {
         ),
         if (taskItems.isNotEmpty) ...[
           const SizedBox(height: 12),
-          _DetailSection(title: '任务怎么看', items: taskItems),
+          _DetailSection(
+            title: '任务怎么看',
+            items: taskItems,
+            onOpenTask: session == null
+                ? null
+                : (id) => _openWorkSituationTask(context, session!, id),
+          ),
         ],
         if (meetItems.isNotEmpty) ...[
           const SizedBox(height: 10),
@@ -1744,10 +1946,12 @@ class _DetailSection extends StatelessWidget {
   const _DetailSection({
     required this.title,
     required this.items,
+    this.onOpenTask,
   });
 
   final String title;
   final List<_Item> items;
+  final ValueChanged<int>? onOpenTask;
 
   @override
   Widget build(BuildContext context) {
@@ -1762,7 +1966,8 @@ class _DetailSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-          for (final item in items) _ItemTile(item: item),
+          for (final item in items)
+            _ItemTile(item: item, onOpenTask: onOpenTask),
         ],
       ),
     );
@@ -1770,14 +1975,16 @@ class _DetailSection extends StatelessWidget {
 }
 
 class _ItemTile extends StatelessWidget {
-  const _ItemTile({required this.item});
+  const _ItemTile({required this.item, this.onOpenTask});
 
   final _Item item;
+  final ValueChanged<int>? onOpenTask;
 
   @override
   Widget build(BuildContext context) {
     final meta = _kindMeta[item.kind]!;
-    return Padding(
+    final canOpen = item.taskId > 0 && onOpenTask != null;
+    final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1805,8 +2012,19 @@ class _ItemTile extends StatelessWidget {
               ],
             ),
           ),
+          if (canOpen)
+            const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Icon(Icons.chevron_right_rounded, size: 18, color: DunesColors.text3),
+            ),
         ],
       ),
+    );
+    if (!canOpen) return row;
+    return InkWell(
+      onTap: () => onOpenTask!(item.taskId),
+      borderRadius: BorderRadius.circular(12),
+      child: row,
     );
   }
 }

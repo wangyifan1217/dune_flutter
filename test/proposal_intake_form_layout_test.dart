@@ -1455,6 +1455,49 @@ void main() {
     );
   });
 
+  testWidgets('readonly existing built products still show filled names', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'pending_president',
+          'createdBy': 11,
+          'form': {
+            'isExistingBuilt': true,
+            'skuDetails': [
+              {
+                'id': 'sku-1',
+                'existingBuilt': '是',
+                'productName': '中石油 100 元现金券',
+                'syncSource': {'code': 'POINTS_REBATE', 'name': '能源积分'},
+              },
+              {
+                'id': 'sku-2',
+                'name': '中石化加油券',
+                'isExistingProduct': true,
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '渠道产品');
+    expect(find.text('中石油 100 元现金券'), findsWidgets);
+    expect(find.text('能源积分'), findsWidgets);
+    expect(find.text('中石化加油券'), findsWidgets);
+    expect(find.text('渠道产品 1 · 中石油 100 元现金券'), findsOneWidget);
+  });
+
   testWidgets('checking existing built product reveals required pickers', (
     tester,
   ) async {

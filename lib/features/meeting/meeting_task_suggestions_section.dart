@@ -8,6 +8,7 @@ import '../kb/kb_document_coordinator.dart';
 import '../shell/dunes_toast.dart';
 import '../tasks/task_link_api.dart';
 import '../tasks/task_link_models.dart';
+import 'meeting_task_create_dialog.dart';
 
 /// 会议详情的「任务建议」区块：AI 分析状态、已同步任务、创建任务建议卡。
 /// 数据按组织者过滤，非组织者拿到空数据时整块不渲染，零打扰。
@@ -102,6 +103,11 @@ class _MeetingTaskSuggestionsSectionState
     MeetingTaskSuggestion sug, {
     String? title,
     String? description,
+    String? acceptanceCriteria,
+    int? ownerUserId,
+    String? priority,
+    required DateTime startAt,
+    required DateTime dueAt,
     bool silent = false,
   }) async {
     try {
@@ -110,6 +116,11 @@ class _MeetingTaskSuggestionsSectionState
         sug.id,
         title: title,
         description: description,
+        acceptanceCriteria: acceptanceCriteria,
+        ownerUserId: ownerUserId,
+        priority: priority,
+        startAt: startAt,
+        dueAt: dueAt,
       );
       if (!mounted) return;
       if (!silent) {
@@ -124,16 +135,24 @@ class _MeetingTaskSuggestionsSectionState
   Future<void> _acceptAll() async {
     if (_busy) return;
     final all = List<MeetingTaskSuggestion>.from(_data.suggestions);
-    final confirmed = await _confirmTaskAction(
-      title: '确认全部创建任务',
-      content: '将根据本次会议纪要创建 ${all.length} 个任务，创建后会同步到相关负责人的任务列表。',
-      confirmLabel: '全部创建',
+    final draft = await showMeetingTaskCreateDialog(
+      context,
+      session: widget.session,
+      title: '全部创建任务',
+      batchCount: all.length,
     );
-    if (!confirmed || !mounted) return;
+    if (draft == null || !mounted) return;
     setState(() => _busy = true);
     try {
       for (final sug in all) {
-        await _accept(sug, silent: true);
+        await _accept(
+          sug,
+          ownerUserId: draft.ownerUserId,
+          priority: draft.priority,
+          startAt: draft.startAt,
+          dueAt: draft.dueAt,
+          silent: true,
+        );
       }
       if (mounted) {
         showDunesCenterToast(context, '已创建 ${all.length} 个任务');
@@ -173,77 +192,30 @@ class _MeetingTaskSuggestionsSectionState
     }
   }
 
-  Future<void> _editAndAccept(MeetingTaskSuggestion sug) async {
-    final titleCtrl = TextEditingController(text: sug.suggestedTitle);
-    final descCtrl = TextEditingController(text: sug.suggestedDescription);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('创建任务'),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleCtrl,
-                decoration: _dialogDecoration('任务标题'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: descCtrl,
-                maxLines: 4,
-                decoration: _dialogDecoration('任务描述'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: DunesColors.brandPurple,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('创建'),
-          ),
-        ],
-      ),
+  Future<void> _createFromSuggestion(MeetingTaskSuggestion sug) async {
+    final draft = await showMeetingTaskCreateDialog(
+      context,
+      session: widget.session,
+      title: sug.suggestedTitle,
+      description: sug.suggestedDescription,
+      acceptanceCriteria: sug.decisionExcerpt,
     );
-    if (ok != true || !mounted) return;
-    final confirmed = await _confirmTaskAction(
-      title: '确认创建任务',
-      content: '将创建任务“${titleCtrl.text.trim()}”，并同步到相关负责人的任务列表。',
-      confirmLabel: '确认创建',
-    );
-    if (!confirmed || !mounted) return;
+    if (draft == null || !mounted) return;
     setState(() => _busy = true);
     try {
       await _accept(
         sug,
-        title: titleCtrl.text.trim(),
-        description: descCtrl.text.trim(),
+        title: draft.title,
+        description: draft.description,
+        acceptanceCriteria: draft.acceptanceCriteria,
+        ownerUserId: draft.ownerUserId,
+        priority: draft.priority,
+        startAt: draft.startAt,
+        dueAt: draft.dueAt,
       );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  InputDecoration _dialogDecoration(String hint) {
-    return InputDecoration(
-      hintText: hint,
-      filled: true,
-      fillColor: const Color(0xFFF5F6F8),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide.none,
-      ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-    );
   }
 
   Future<bool> _confirmTaskAction({
@@ -461,33 +433,8 @@ class _MeetingTaskSuggestionsSectionState
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                 ),
-                onPressed: _busy
-                    ? null
-                    : () async {
-                        final confirmed = await _confirmTaskAction(
-                          title: '确认创建任务',
-                          content:
-                              '将创建任务“${sug.suggestedTitle}”，并同步到相关负责人的任务列表。',
-                          confirmLabel: '确认创建',
-                        );
-                        if (!confirmed || !mounted) return;
-                        setState(() => _busy = true);
-                        try {
-                          await _accept(sug);
-                        } finally {
-                          if (mounted) setState(() => _busy = false);
-                        }
-                      },
+                onPressed: _busy ? null : () => _createFromSuggestion(sug),
                 child: const Text('创建任务'),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                ),
-                onPressed: _busy ? null : () => _editAndAccept(sug),
-                child: const Text('编辑'),
               ),
               const Spacer(),
               TextButton(

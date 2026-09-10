@@ -1562,6 +1562,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final section = reviewSection?.trim() ?? '';
     if (section.isNotEmpty) {
       if (_itemReviewed(section)) return true;
+      if (_itemRejectComment(section).isNotEmpty) return false;
       final parent = _itemParentFlag(section);
       if (parent.isNotEmpty && _moduleReviewed(parent)) return true;
     }
@@ -1614,8 +1615,45 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       !_row.techRevisionOpen &&
       !_moduleReviewed('financeCompleted');
 
-  bool get _canEditSkuSettlements =>
-      !_showSelectedAsText && (_canEditMarket || _canEditFinanceModules);
+  bool get _canEditSkuSettlements {
+    if (_showSelectedAsText || _isLocked || _row.techRevisionOpen) {
+      return false;
+    }
+    if (!(_canEditAsSubmitter || _isOwner('financeOwner2'))) return false;
+    if (!_moduleReviewed('financeCompleted')) return true;
+    return _hasRejectedSkuSettlement;
+  }
+
+  bool get _hasRejectedSkuSettlement {
+    for (final key in proposalIntakeSkuSettleReviewKeys(_form)) {
+      final section = 'financeItem:$key';
+      if (!_itemReviewed(section) && _itemRejectComment(section).isNotEmpty) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _skuSettleItemLocked(
+    String reviewPrefix,
+    String skuId,
+    String settleId,
+  ) {
+    return _reviewLocksField(
+      resetReview: 'financeCompleted',
+      reviewSection: 'financeItem:$reviewPrefix:$skuId:$settleId',
+    );
+  }
+
+  bool _skuSettleRowLocked(
+    String reviewItemPrefix,
+    String reviewPrefix,
+    String skuId,
+    String settleId,
+  ) {
+    if (reviewItemPrefix != 'financeItem') return false;
+    return _skuSettleItemLocked(reviewPrefix, skuId, settleId);
+  }
 
   List<String> get _financeReviewKeys => _isPurchase
       ? const []
@@ -1851,7 +1889,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String? resetReview,
     bool rebuild = true,
   }) {
-    if (resetReview != null && _moduleReviewed(resetReview)) return;
+    if (resetReview != null &&
+        _moduleReviewed(resetReview) &&
+        _review['reviewRejected'] != true) {
+      return;
+    }
     var form = Map<String, dynamic>.from(_form)..[key] = value;
     var estimated = false;
     if (proposalIsFinanceEstimateInputKey(key)) {
@@ -2556,7 +2598,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String? resetReview,
     bool rebuild = true,
   }) {
-    if (resetReview != null && _moduleReviewed(resetReview)) return;
+    if (resetReview != null &&
+        _moduleReviewed(resetReview) &&
+        _review['reviewRejected'] != true) {
+      return;
+    }
     final form = Map<String, dynamic>.from(_form)..addAll(values);
     final review = Map<String, dynamic>.from(_review);
     if (resetReview != null) review[resetReview] = false;
@@ -2898,7 +2944,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     for (final item in options) {
       if (item == current) return item;
     }
-    return current;
+    return catalogMatchByCode(current, options);
   }
 
   List<CatalogRef> _withCurrent(List<CatalogRef> options, CatalogRef? current) {
@@ -5958,11 +6004,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           },
         ),
     ];
-    final form = Map<String, dynamic>.from(_form)
+    var form = Map<String, dynamic>.from(_form)
       ..['skuDetails'] = [for (final row in rows) row.toJson()]
       ..['couponPacks'] = [for (final pack in nextPacks) pack.toJson()];
     if (isCouponPack != null) form['isCouponPack'] = isCouponPack;
     if (isExistingBuilt != null) form['isExistingBuilt'] = isExistingBuilt;
+    form = _keepUnreviewed(form);
     final review = Map<String, dynamic>.from(_review)..[resetReview] = false;
     _dirty = true;
     _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
@@ -6112,7 +6159,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           else
             pack,
       ],
-      resetReview: _canEditMarket ? 'marketCompleted' : 'financeCompleted',
+      resetReview: 'financeCompleted',
       rebuild: rebuild,
     );
   }
@@ -6134,6 +6181,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   void _removePackSettle(String packId, String settleId) {
     if (!_canEditSkuSettlements) return;
+    if (_skuSettleItemLocked('packSettle', packId, settleId)) return;
     final pack = proposalIntakeCouponPacks(
       _form,
     ).where((item) => item.id == packId).firstOrNull;
@@ -6152,6 +6200,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     ProposalFinanceSettleTerms terms,
   ) {
     if (!_canEditSkuSettlements) return;
+    if (_skuSettleItemLocked('packSettle', packId, settleId)) return;
     final pack = proposalIntakeCouponPacks(
       _form,
     ).where((item) => item.id == packId).firstOrNull;
@@ -6200,7 +6249,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           else
             row,
       ],
-      resetReview: _canEditMarket ? 'marketCompleted' : 'financeCompleted',
+      resetReview: 'financeCompleted',
       rebuild: rebuild,
     );
   }
@@ -6222,6 +6271,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   void _removeSkuSettle(String skuId, String settleId) {
     if (!_canEditSkuSettlements) return;
+    if (_skuSettleItemLocked('skuSettle', skuId, settleId)) return;
     final row = proposalIntakeSkuDetails(
       _form,
     ).where((item) => item.id == skuId).firstOrNull;
@@ -6240,6 +6290,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     ProposalFinanceSettleTerms terms,
   ) {
     if (!_canEditSkuSettlements) return;
+    if (_skuSettleItemLocked('skuSettle', skuId, settleId)) return;
     final row = proposalIntakeSkuDetails(
       _form,
     ).where((item) => item.id == skuId).firstOrNull;
@@ -6421,7 +6472,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     bool wide,
     bool locked,
   ) {
-    final existing = proposalIntakeIsExistingBuilt(_form);
+    final existing = proposalIntakeIsExistingBuilt(_form) || pack.isExistingBuilt;
+    final showManual =
+        !existing || (locked && proposalIntakePackHasManualDetails(pack));
+    final titleName = (pack.assetProduct?.label ?? '').trim().isNotEmpty
+        ? pack.assetProduct!.label
+        : pack.name.trim();
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -6437,7 +6493,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             children: [
               Expanded(
                 child: Text(
-                  '券包 $index',
+                  titleName.isEmpty ? '券包 $index' : '券包 $index · $titleName',
                   style: const TextStyle(
                     color: ProposalPalette.text,
                     fontWeight: FontWeight.w700,
@@ -6500,6 +6556,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 syncSource: pack.syncSourceCode,
                 locked: locked,
                 label: '已建券包',
+                fallbackLabel: pack.name,
                 onSelected: (value) {
                   _patchCouponPack(
                     pack.id,
@@ -6513,8 +6570,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ),
                   );
                 },
-              )
-            else ...[
+              ),
+            if (showManual) ...[
             _skuTextCell(
               rowId: pack.id,
               label: '券包名称',
@@ -6554,7 +6611,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ),
             ],
           ]),
-          if (!existing) ...[
+          if (showManual) ...[
           const SizedBox(height: 8),
           const Text(
             '包含渠道产品',
@@ -6650,7 +6707,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
     final locked = _showSelectedAsText || !_canEditMarket;
-    final existing = proposalIntakeIsExistingBuilt(_form);
+    final existing = proposalIntakeIsExistingBuilt(_form) || row.isExistingBuilt;
+    final showManual =
+        !existing || (locked && proposalIntakeSkuHasManualDetails(row));
+    final titleName = (row.assetProduct?.label ?? '').trim().isNotEmpty
+        ? row.assetProduct!.label
+        : row.productName.trim();
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -6666,7 +6728,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             children: [
               Expanded(
                 child: Text(
-                  '渠道产品 $index',
+                  titleName.isEmpty
+                      ? '渠道产品 $index'
+                      : '渠道产品 $index · $titleName',
                   style: const TextStyle(
                     color: ProposalPalette.text,
                     fontWeight: FontWeight.w700,
@@ -6727,6 +6791,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 syncSource: row.syncSourceCode,
                 locked: locked,
                 label: '已建产品',
+                fallbackLabel: row.productName,
                 onSelected: (value) {
                   _patchSkuDetail(
                     row.id,
@@ -6740,8 +6805,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ),
                   );
                 },
-              )
-            else ...[
+              ),
+            if (showManual) ...[
             _skuTextCell(
               rowId: row.id,
               label: '产品名称',
@@ -6864,7 +6929,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ),
             ],
           ]),
-          if (!existing) ...[
+          if (showManual) ...[
           const SizedBox(height: 8),
           _fieldGrid(wide, [
             _skuDateCell(
@@ -6920,12 +6985,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     required String label,
     required ValueChanged<ChannelProductHit?> onSelected,
     bool supplier = false,
+    String fallbackLabel = '',
   }) {
     final noPlatform = syncSource.trim().isEmpty;
     final searching = _assetProductSearching.contains(rowId);
     final syncing = _assetProductSyncing.contains(rowId);
     final hintText = _assetProductSyncHint[rowId] ?? '';
     final hits = _assetProductHits[rowId] ?? const <ChannelProductHit>[];
+    final displayLabel = (current?.label ?? '').trim().isNotEmpty
+        ? current!.label
+        : fallbackLabel.trim();
     final values = [
       if (current != null &&
           current.isNotEmpty &&
@@ -6946,7 +7015,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               ),
             ),
       child: locked
-          ? _readonlySelectedText(current?.label ?? '')
+          ? _readonlySelectedText(displayLabel)
           : ProposalSelectField<ChannelProductHit>(
               value: current == null || current.isEmpty ? null : current,
               title: label,
@@ -7487,8 +7556,21 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               settle: settlements[i],
               index: i,
               wide: wide,
-              enabled: enabled,
-              canRemove: enabled && settlements.length > 1,
+              enabled: enabled &&
+                  !_skuSettleRowLocked(
+                    reviewItemPrefix,
+                    reviewPrefix,
+                    skuId,
+                    settlements[i].id,
+                  ),
+              canRemove: enabled &&
+                  settlements.length > 1 &&
+                  !_skuSettleRowLocked(
+                    reviewItemPrefix,
+                    reviewPrefix,
+                    skuId,
+                    settlements[i].id,
+                  ),
               reviewPrefix: reviewPrefix,
               reviewItemPrefix: reviewItemPrefix,
               itemReviewLabel: itemReviewLabel,
@@ -10652,6 +10734,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 locked: locked,
                 label: '已建供给产品',
                 supplier: true,
+                fallbackLabel: row.productCode,
                 onSelected: (value) {
                   _patchSupplyProduct(
                     row.id,

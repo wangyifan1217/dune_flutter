@@ -122,6 +122,36 @@ void main() {
     expect(snapshot.schedule?.hour, 2);
   });
 
+  test('parses work situation task review fields', () {
+    final person = WorkSituationPerson.fromJson({
+      'userId': 8,
+      'name': '陈可',
+      'taskOverdue': 1,
+      'taskSubOverdue': 1,
+      'taskWaitingOnOthers': 2,
+      'taskStaleOpen': 1,
+      'taskOverdueHighWeight': 1,
+      'taskReviewLevel': 'stalled',
+      'taskReviewWhy': '重点单两周没进度',
+      'items': [
+        {
+          'kind': 'overdue',
+          'title': '渠道方案 / 拆报价',
+          'hint': '子任务 · 已过期',
+          'taskId': 91,
+          'isSubtask': true,
+        },
+      ],
+    });
+    expect(person.taskSubOverdue, 1);
+    expect(person.taskWaitingOnOthers, 2);
+    expect(person.taskStaleOpen, 1);
+    expect(person.taskOverdueHighWeight, 1);
+    expect(person.taskReviewLevel, 'stalled');
+    expect(person.items.single.taskId, 91);
+    expect(person.items.single.isSubtask, isTrue);
+  });
+
   test('parses work situation board', () {
     final board = WorkSituationBoard.fromJson({
       'month': '2026-09',

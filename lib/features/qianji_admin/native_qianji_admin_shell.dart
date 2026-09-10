@@ -550,23 +550,25 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                       InkWell(
                         borderRadius: BorderRadius.circular(8),
                         onTap: _onShellBackOverride ?? () => _goPage(0),
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
                             horizontal: 6,
                             vertical: 6,
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
+                              const Icon(
                                 Icons.arrow_back_ios_new,
                                 size: 14,
                                 color: DunesColors.text2,
                               ),
-                              SizedBox(width: 2),
+                              const SizedBox(width: 2),
                               Text(
-                                '工作台',
-                                style: TextStyle(
+                                (_contentChrome?.backLabel ?? '').trim().isEmpty
+                                    ? '工作台'
+                                    : _contentChrome!.backLabel!.trim(),
+                                style: const TextStyle(
                                   fontSize: 13,
                                   color: DunesColors.text2,
                                 ),
@@ -646,6 +648,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         );
       case _WorkbenchView.hrbp:
         return NativeTaskHrbpPane(
+          key: const ValueKey('workbench-hrbp'),
           session: _session,
           onChromeChanged: _onTaskChrome,
         );

@@ -18,7 +18,7 @@ class AiSummarySparkleIcon extends StatefulWidget {
     super.key,
     required this.onTap,
     this.size = 22,
-    this.animate = true,
+    this.animate = false,
   });
 
   final VoidCallback onTap;

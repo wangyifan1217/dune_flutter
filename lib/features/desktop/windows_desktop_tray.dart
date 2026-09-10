@@ -31,7 +31,7 @@ void windowsTrayNotifyIncomingMessage() =>
 /// 当前桌面窗口是否最小化、失焦或已隐藏到托盘。
 bool windowsTrayIsWindowInactive() => impl.windowsTrayIsWindowInactive();
 
-/// 窗口已隐藏到托盘或最小化（不含失焦）。看不见时才能冻动画。
+/// 窗口已隐藏到托盘、最小化，或 Mac 上 Cmd+H / 切桌面导致看不见。
 bool windowsTrayIsWindowObscured() => impl.windowsTrayIsWindowObscured();
 
 /// [windowsTrayIsWindowObscured] 的可监听版本，供根节点 TickerMode 使用。

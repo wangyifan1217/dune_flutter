@@ -6,6 +6,8 @@ import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../kb/native_kb_doc_page.dart';
+import '../kb/native_kb_models.dart';
+import '../kb/native_kb_service.dart';
 import '../meeting/native_meeting_detail_page.dart';
 import '../shell/dunes_toast.dart';
 import 'task_api.dart';
@@ -436,10 +438,10 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
               children: [
                 Text(
                   running
-                      ? 'AI 正在分析任务描述，匹配相关会议纪要…'
+                      ? 'AI 正在分析任务描述，匹配相关会议…'
                       : widget.task.description.trim().isEmpty && widget.canEdit
-                      ? '还没有任务描述。写清楚任务内容，AI 会自动关联相关的会议纪要与知识库文档。'
-                      : '暂无关联。会议纪要入库后 AI 会自动关联，也可手动添加。',
+                      ? '还没有任务描述。写清楚任务内容，AI 会自动关联相关会议。'
+                      : '暂无关联。AI 会根据描述匹配相关会议，也可手动添加会议或知识库文档。',
                   style: const TextStyle(
                     fontSize: 13,
                     color: DunesColors.text3,
@@ -590,7 +592,7 @@ class _TagChip extends StatelessWidget {
   }
 }
 
-/// 添加关联选择器：搜索 + 「可能相关」分组 + 全部会议 / 知识库文档。
+/// 添加关联选择器：搜索 + 「可能相关」分组 + 会议 / 知识库文档（不含入库纪要）。
 class _TaskLinkPicker extends StatefulWidget {
   const _TaskLinkPicker({required this.api, required this.taskId});
 
@@ -620,9 +622,10 @@ class _TaskLinkPickerState extends State<_TaskLinkPicker> {
     });
     try {
       final c = await widget.api.fetchCandidates(widget.taskId);
+      final docs = await _loadNonMeetingKbDocs(c);
       if (!mounted) return;
       setState(() {
-        _candidates = c;
+        _candidates = TaskLinkCandidates(meetings: c.meetings, docs: docs);
         _loading = false;
       });
     } catch (e) {
@@ -636,6 +639,72 @@ class _TaskLinkPickerState extends State<_TaskLinkPicker> {
 
   bool _matches(String text) =>
       _query.isEmpty || text.toLowerCase().contains(_query.toLowerCase());
+
+  Future<List<TaskLinkCandidateDoc>> _loadNonMeetingKbDocs(
+    TaskLinkCandidates candidates,
+  ) async {
+    final meetingKbIds = {
+      for (final m in candidates.meetings)
+        if (m.kbDocumentId > 0) m.kbDocumentId,
+    };
+    final linkedKb = {
+      for (final d in candidates.docs)
+        if (d.linked && d.kbDocumentId > 0) d.kbDocumentId,
+    };
+    try {
+      final links = await widget.api.fetchLinks(widget.taskId);
+      for (final link in links.links) {
+        final id = link.kbDocumentId;
+        if (id != null && id > 0) linkedKb.add(id);
+      }
+    } catch (_) {}
+
+    final byId = <int, TaskLinkCandidateDoc>{};
+    for (final d in candidates.docs) {
+      if (d.kbDocumentId <= 0 ||
+          d.meetingId > 0 ||
+          meetingKbIds.contains(d.kbDocumentId) ||
+          _looksLikeMeetingMinutesTitle(d.title)) {
+        continue;
+      }
+      byId[d.kbDocumentId] = d;
+    }
+
+    NativeKbService? kb;
+    try {
+      kb = NativeKbService(session: widget.api.session);
+      final page = await kb.listDocuments(size: 80);
+      for (final doc in page.items) {
+        if (_looksLikeMeetingMinutesDoc(doc)) continue;
+        final id = int.tryParse(doc.dunesDocumentId) ?? 0;
+        if (id <= 0 || meetingKbIds.contains(id)) continue;
+        byId.putIfAbsent(
+          id,
+          () => TaskLinkCandidateDoc(
+            kbDocumentId: id,
+            title: doc.title.trim().isEmpty ? doc.fileName : doc.title.trim(),
+            linked: linkedKb.contains(id),
+          ),
+        );
+      }
+    } catch (_) {
+      // 知识库列表失败时仍展示会议；文档组为空即可。
+    } finally {
+      kb?.close();
+    }
+
+    final docs = byId.values.toList(growable: false);
+    return [
+      for (final d in docs)
+        TaskLinkCandidateDoc(
+          kbDocumentId: d.kbDocumentId,
+          title: d.title,
+          meetingId: d.meetingId,
+          score: d.score,
+          linked: d.linked || linkedKb.contains(d.kbDocumentId),
+        ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -714,7 +783,7 @@ class _TaskLinkPickerState extends State<_TaskLinkPicker> {
                       const _PickerGroupLabel('我主持的会议'),
                       if (meetings.isEmpty) const _PickerEmptyHint('没有可关联的会议'),
                       for (final m in meetings) _meetingRow(m),
-                      const _PickerGroupLabel('知识库文档（会议纪要）'),
+                      const _PickerGroupLabel('知识库文档'),
                       if (docs.isEmpty) const _PickerEmptyHint('没有可关联的知识库文档'),
                       for (final doc in docs) _docRow(doc),
                     ],
@@ -791,6 +860,15 @@ class _TaskLinkPickerState extends State<_TaskLinkPicker> {
             }),
     );
   }
+}
+
+bool _looksLikeMeetingMinutesTitle(String title) {
+  final name = title.trim().toLowerCase();
+  return name.contains('会议纪要') || name.contains('meeting-minutes');
+}
+
+bool _looksLikeMeetingMinutesDoc(NativeKbDocument doc) {
+  return _looksLikeMeetingMinutesTitle('${doc.title} ${doc.fileName}');
 }
 
 class _PickerGroupLabel extends StatelessWidget {

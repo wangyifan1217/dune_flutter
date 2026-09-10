@@ -129,13 +129,25 @@ class TaskLinkApi {
     int suggestionId, {
     String? title,
     String? description,
+    String? acceptanceCriteria,
+    int? ownerUserId,
+    String? priority,
+    required DateTime startAt,
+    required DateTime dueAt,
   }) async {
+    final start = DateTime(startAt.year, startAt.month, startAt.day);
+    final due = DateTime(dueAt.year, dueAt.month, dueAt.day, 23, 59, 59);
     final resp = await http.post(
       _uri('meetings/$meetingId/task-suggestions/$suggestionId/accept'),
       headers: _headers,
       body: jsonEncode({
-        'title': ?title,
-        'description': ?description,
+        if (title != null) 'title': title,
+        if (description != null) 'description': description,
+        if (acceptanceCriteria != null) 'acceptanceCriteria': acceptanceCriteria,
+        if (ownerUserId != null) 'ownerUserId': ownerUserId,
+        if (priority != null && priority.isNotEmpty) 'priority': priority,
+        'startAt': start.toUtc().toIso8601String(),
+        'dueAt': due.toUtc().toIso8601String(),
       }),
     );
     final data = _unwrap(resp);

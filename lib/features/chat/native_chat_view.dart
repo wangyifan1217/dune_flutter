@@ -4972,8 +4972,6 @@ class _NativeChatViewState extends State<NativeChatView>
     if (_messageActionsMenuOpen) return;
     _messageActionsMenuOpen = true;
     try {
-      final selection = (selectedText ?? '').trim();
-      final copyText = selection.isNotEmpty ? selection : _messageCopyText(m);
       final kind = m.kind.toUpperCase();
       final isFile = kind == 'FILE';
       final isImage = kind == 'IMAGE';
@@ -5058,7 +5056,7 @@ class _NativeChatViewState extends State<NativeChatView>
                 ? Icons.folder_copy_outlined
                 : Icons.folder_shared_outlined,
           ),
-        if (isImage || copyText.isNotEmpty)
+        if (isImage || (isFile && desktop) || _messageCopyText(m).isNotEmpty)
           const _MessageQuickAction(
             id: 'copy',
             label: '复制',
@@ -5104,18 +5102,10 @@ class _NativeChatViewState extends State<NativeChatView>
           await _transcribeVoiceMessage(m);
           break;
         case 'quote':
-          if (selection.isNotEmpty) {
-            _quoteFromSelectedText(m, selection);
-          } else {
-            _startQuote(m);
-          }
+          _startQuote(m);
           break;
         case 'forward':
-          if (selection.isNotEmpty) {
-            _forwardFromSelectedText(m, selection);
-          } else {
-            _forwardMessage(m);
-          }
+          _forwardMessage(m);
           break;
         case 'favorite':
           await _favoriteMessage(m);
@@ -5133,12 +5123,12 @@ class _NativeChatViewState extends State<NativeChatView>
           await _saveChatAttachmentToDrive(m.payload, attachmentName);
           break;
         case 'copy':
-          if (selection.isEmpty && isImage) {
+          if (isImage) {
             await _copyMessageImage(m);
-          } else if (selection.isEmpty && isFile && desktop) {
+          } else if (isFile && desktop) {
             await _copyMessageFile(m);
           } else {
-            await _copyMessageText(copyText);
+            await _copyMessageText(_messageCopyText(m));
           }
           break;
         case 'download':
@@ -5148,11 +5138,7 @@ class _NativeChatViewState extends State<NativeChatView>
           await _redownloadFile(m.payload, attachmentName);
           break;
         case 'multi_msg':
-          if (selection.isNotEmpty) {
-            _multiFromSelectedText(m, selection);
-          } else {
-            _enterMessageMultiSelect(initialMessageId: m.id);
-          }
+          _enterMessageMultiSelect(initialMessageId: m.id);
           break;
         case 'recall':
           await _tryRecallMessage(m);
@@ -5277,24 +5263,9 @@ class _NativeChatViewState extends State<NativeChatView>
     );
   }
 
-  void _startQuote(NativeChatMessage message, {String? excerpt}) {
-    final selected = excerpt?.trim() ?? '';
-    final full = ChatMessageQuote.fromMessage(message);
-    final useExcerpt =
-        selected.isNotEmpty && selected != message.bodyText.trim();
+  void _startQuote(NativeChatMessage message) {
     setState(() {
-      _quoteDraft = useExcerpt
-          ? ChatMessageQuote(
-              messageId: full.messageId,
-              senderUserId: full.senderUserId,
-              senderName: full.senderName,
-              kind: full.kind,
-              bodyText: selected,
-              preview: selected.length > 80
-                  ? '${selected.substring(0, 80)}…'
-                  : selected,
-            )
-          : full;
+      _quoteDraft = ChatMessageQuote.fromMessage(message);
       _voiceMode = false;
       _emojiOpen = false;
     });
@@ -5519,6 +5490,8 @@ class _NativeChatViewState extends State<NativeChatView>
               return ChatInputBar(
                 controller: _inputController,
                 focusNode: _inputFocusNode,
+                showTopBorder:
+                    _quoteDraft == null || _quoteDraft!.isEmpty || locked,
                 onInputFocused: () {
                   if (!wide && _toolsOpen) setState(() => _toolsOpen = false);
                   _scrollToLatestAfterKeyboard();
@@ -5844,10 +5817,6 @@ class _NativeChatViewState extends State<NativeChatView>
     return value == true || value.toString().toLowerCase() == 'true';
   }
 
-  void _quoteFromSelectedText(NativeChatMessage message, String selectedText) {
-    _startQuote(message, excerpt: selectedText);
-  }
-
   bool _canSelectMessageForMulti(NativeChatMessage message) {
     if (message.id <= 0) return false;
     return !_isSystemKind(message.kind);
@@ -6063,34 +6032,6 @@ class _NativeChatViewState extends State<NativeChatView>
   String _messageForwardText(NativeChatMessage message) {
     if (message.kind.toUpperCase() == 'TEXT') return message.bodyText.trim();
     return ChatMessageQuote.previewForMessage(message);
-  }
-
-  void _forwardFromSelectedText(
-    NativeChatMessage message,
-    String selectedText,
-  ) {
-    final text = selectedText.trim();
-    if (text.isEmpty) {
-      _forwardMessage(message);
-      return;
-    }
-    final unit = (
-      senderName: message.senderName.trim().isEmpty
-          ? '用户${message.senderUserId}'
-          : message.senderName.trim(),
-      timeLabel: InboxFormat.msgTimeLabel(message.createdAt),
-      text: text,
-      kind: 'TEXT',
-      payload: null,
-      avatarPreset: message.senderAvatarPreset,
-      avatarObjectKey: message.senderAvatarObjectKey,
-    );
-    unawaited(_startForwardFlow(<_ForwardUnit>[unit], fromMultiSelect: false));
-  }
-
-  void _multiFromSelectedText(NativeChatMessage message, String selectedText) {
-    if (!_canSelectMessageForMulti(message)) return;
-    _enterMessageMultiSelect(initialMessageId: message.id);
   }
 
   List<_ForwardUnit> _forwardUnitsFromMessages(
@@ -7964,7 +7905,7 @@ class _NativeChatViewState extends State<NativeChatView>
         );
       },
       enableSelection: !_messageMultiSelectMode,
-      selectAllOnLongPress: false,
+      selectAllOnLongPress: true,
       preferPartialTextCopy: !isDesktopCommOnly,
     );
   }

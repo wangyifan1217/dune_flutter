@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -826,37 +824,8 @@ class NovaC4MessageStream extends StatelessWidget {
 }
 
 /// NOVA 新会话的轻量引导页；不承载业务操作，避免改变既有会话能力。
-class NovaC4EmptyState extends StatefulWidget {
+class NovaC4EmptyState extends StatelessWidget {
   const NovaC4EmptyState({super.key});
-
-  @override
-  State<NovaC4EmptyState> createState() => _NovaC4EmptyStateState();
-}
-
-class _NovaC4EmptyStateState extends State<NovaC4EmptyState>
-    with TickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final AnimationController _greetingController;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2800),
-    )..repeat();
-    _greetingController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _greetingController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -866,67 +835,26 @@ class _NovaC4EmptyStateState extends State<NovaC4EmptyState>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AnimatedBuilder(
-              animation: _controller,
-              builder: (context, _) {
-                final t = _controller.value;
-                final lookOffset = math.sin(t * math.pi * 2) * 5;
-                final blinkDistance = (t - 0.72).abs();
-                final eyeScaleY = blinkDistance < 0.055
-                    ? blinkDistance / 0.055
-                    : 1.0;
-                final smiling = t > 0.42 && t < 0.62;
-                return Transform.translate(
-                  offset: Offset(lookOffset, 0),
-                  child: SizedBox(
-                    width: 42,
-                    height: 27,
-                    child: Center(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 160),
-                        child: smiling
-                            ? Text(
-                                '^^',
-                                key: const ValueKey('smile'),
-                                style: DunesTypography.sans(
-                                  fontSize: 25,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 3,
-                                  color: const Color(0xFF7E64BD),
-                                ),
-                              )
-                            : Row(
-                                key: const ValueKey('eyes'),
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _NovaAnimatedEye(verticalScale: eyeScaleY),
-                                  const SizedBox(width: 7),
-                                  _NovaAnimatedEye(verticalScale: eyeScaleY),
-                                ],
-                              ),
-                      ),
-                    ),
-                  ),
-                );
-              },
+            SizedBox(
+              width: 42,
+              height: 27,
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _NovaAnimatedEye(),
+                  SizedBox(width: 7),
+                  _NovaAnimatedEye(),
+                ],
+              ),
             ),
             const SizedBox(height: 10),
-            AnimatedBuilder(
-              animation: _greetingController,
-              builder: (context, _) {
-                const greeting = '今天想做些什么呢？';
-                final length = (greeting.length * _greetingController.value)
-                    .ceil()
-                    .clamp(0, greeting.length);
-                return Text(
-                  greeting.substring(0, length),
-                  style: DunesTypography.sans(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF222222),
-                  ),
-                );
-              },
+            Text(
+              '今天想做些什么呢？',
+              style: DunesTypography.sans(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF222222),
+              ),
             ),
           ],
         ),
@@ -936,21 +864,16 @@ class _NovaC4EmptyStateState extends State<NovaC4EmptyState>
 }
 
 class _NovaAnimatedEye extends StatelessWidget {
-  const _NovaAnimatedEye({required this.verticalScale});
-
-  final double verticalScale;
+  const _NovaAnimatedEye();
 
   @override
   Widget build(BuildContext context) {
-    return Transform.scale(
-      scaleY: verticalScale,
-      child: Container(
-        width: 12,
-        height: 12,
-        decoration: const BoxDecoration(
-          color: Color(0xFF7E64BD),
-          shape: BoxShape.circle,
-        ),
+    return Container(
+      width: 12,
+      height: 12,
+      decoration: const BoxDecoration(
+        color: Color(0xFF7E64BD),
+        shape: BoxShape.circle,
       ),
     );
   }

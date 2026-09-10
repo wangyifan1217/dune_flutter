@@ -413,6 +413,45 @@ void main() {
       ]),
     );
 
+    final outbound = ProposalSkuDetailRow.fromJson({
+      'id': 'sku-2',
+      'isExistingProduct': true,
+      'productName': '中石油 100 元现金券',
+      'syncSource': {'code': 'POINTS_REBATE', 'name': '能源积分'},
+    });
+    expect(outbound.isExistingBuilt, isTrue);
+    expect(outbound.syncSourceRef?.name, '能源积分');
+    expect(outbound.assetProduct?.label, '中石油 100 元现金券');
+
+    final restoredSkus = proposalIntakeSkuDetails({
+      'isExistingBuilt': true,
+      'skuDetails': [
+        {'id': 'sku-1'},
+        {'id': 'sku-2'},
+        {'id': 'sku-3'},
+      ],
+      'products': [
+        {
+          'id': 'sku-1',
+          'productName': '渠道现金券A',
+          'syncSource': {'code': 'DIGITALG', 'name': '能源'},
+        },
+        {
+          'id': 'sku-2',
+          'name': '渠道现金券B',
+          'isExistingProduct': true,
+        },
+        {'id': 'sku-3', 'productCode': 'CP-3', 'existingBuilt': '是'},
+      ],
+    });
+    expect(
+      restoredSkus.map((row) => row.productName).toList(),
+      ['渠道现金券A', '渠道现金券B', 'CP-3'],
+    );
+    expect(restoredSkus[0].syncSourceRef?.name, '能源');
+    expect(restoredSkus[1].assetProduct?.label, '渠道现金券B');
+    expect(restoredSkus[2].assetProduct?.label, 'CP-3');
+
     final synced = proposalIntakeSettlementsFromChannelCatalog(
       ChannelProductSettlement.fromJson({
         'id': 10,

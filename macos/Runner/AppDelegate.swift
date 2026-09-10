@@ -19,6 +19,20 @@ class AppDelegate: FlutterAppDelegate {
     return false
   }
 
+  func notifyDesktopWindow(method: String, arguments: Any?) {
+    desktopWindowChannel?.invokeMethod(method, arguments: arguments)
+  }
+
+  override func applicationDidHide(_ notification: Notification) {
+    super.applicationDidHide(notification)
+    notifyDesktopWindow(method: "appHiddenChanged", arguments: ["hidden": true])
+  }
+
+  override func applicationDidUnhide(_ notification: Notification) {
+    super.applicationDidUnhide(notification)
+    notifyDesktopWindow(method: "appHiddenChanged", arguments: ["hidden": false])
+  }
+
   // Dock 图标点击：窗口已隐藏时通知 Flutter 按托盘恢复路径重新显示
   override func applicationShouldHandleReopen(
     _ sender: NSApplication,

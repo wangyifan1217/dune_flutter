@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/horizontal_drag_scroll_view.dart';
 import '../auth/auth_session.dart';
 import 'native_task_action_page.dart';
 import 'native_task_detail_page.dart';
@@ -50,6 +51,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
 
   /// null = 全部部门
   int? _deptFilter;
+  double _boardScrollOffset = 0;
   late DateTime _dateFrom;
   late DateTime _dateTo;
 
@@ -104,6 +106,15 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
       );
       return;
     }
+    if (_deptFilter != null) {
+      widget.onChromeChanged?.call(
+        TaskShellChrome(
+          onBack: () => unawaited(_selectDept(null)),
+          backLabel: '全部部门',
+        ),
+      );
+      return;
+    }
     widget.onChromeChanged?.call(const TaskShellChrome());
   }
 
@@ -130,6 +141,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
         _deptFilter = filter;
         _loading = false;
       });
+      _publishChrome();
       if (filter != null) {
         await _loadDeptTasks(reset: true);
       }
@@ -209,6 +221,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
       _taskPage = 0;
       _error = null;
     });
+    _publishChrome();
     if (deptId != null) {
       await _loadDeptTasks(reset: true);
     }
@@ -228,9 +241,6 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
   int get _sumOverdue =>
       _visibleDepts.fold(0, (a, d) => a + d.mainOverdue);
 
-  int get _sumPending =>
-      _visibleDepts.fold(0, (a, d) => a + d.pendingApproval);
-
   String get _deptFilterLabel {
     if (_deptFilter == null) return '全部部门';
     final d = _depts.where((e) => e.departmentId == _deptFilter).firstOrNull;
@@ -239,15 +249,19 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
   }
 
   String get _dateRangeLabel {
-    String fmt(DateTime d) => '${d.month}/${d.day}';
-    return '${fmt(_dateFrom)}-${fmt(_dateTo)}';
+    String fmt(DateTime d, {required bool withYear}) {
+      return withYear ? '${d.year}/${d.month}/${d.day}' : '${d.month}/${d.day}';
+    }
+
+    final sameYear = _dateFrom.year == _dateTo.year;
+    return '${fmt(_dateFrom, withYear: true)}–${fmt(_dateTo, withYear: !sameYear)}';
   }
 
   Future<void> _pickDateRange() async {
     final picked = await showTaskDateRangePicker(
       context,
       initialDateRange: DateTimeRange(start: _dateFrom, end: _dateTo),
-      helpText: '按任务起止时间筛选',
+      helpText: '有起止日的按周期筛选；没有起止日的（如会议纪要创建）按创建日计入',
     );
     if (!mounted || picked == null) return;
     setState(() {
@@ -267,7 +281,21 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
     unawaited(_reload());
   }
 
-  void _openBoard() {
+  void _rememberBoardScroll() {
+    if (_page == _HrbpPage.board && _scrollController.hasClients) {
+      _boardScrollOffset = _scrollController.offset;
+    }
+  }
+
+  void _restoreBoardScroll() {
+    Future<void>.delayed(const Duration(milliseconds: 320), () {
+      if (!mounted || !_scrollController.hasClients) return;
+      final max = _scrollController.position.maxScrollExtent;
+      _scrollController.jumpTo(_boardScrollOffset.clamp(0.0, max));
+    });
+  }
+
+  void _openBoard({bool refresh = false}) {
     setState(() {
       _pageNavBack = true;
       _page = _HrbpPage.board;
@@ -277,7 +305,15 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
       _actionMode = null;
     });
     _publishChrome();
-    unawaited(_reload());
+    if (refresh) {
+      unawaited(_reload());
+      return;
+    }
+    if (_deptFilter != null) {
+      unawaited(_loadDeptTasks(reset: true).whenComplete(_restoreBoardScroll));
+    } else {
+      _restoreBoardScroll();
+    }
   }
 
   void _backFromDetail() {
@@ -297,6 +333,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
   }
 
   void _openDetail(int id) {
+    _rememberBoardScroll();
     setState(() {
       _pageNavBack = false;
       if (_page == _HrbpPage.detail &&
@@ -358,6 +395,8 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
         return NativeTaskDetailView(
           session: widget.session,
           taskId: id,
+          backLabel: _deptFilter != null ? _deptFilterLabel : '任务汇总',
+          viewerHint: '这是部门汇总里的只读查看，不能改进度或评价。',
           onBack: _backFromDetail,
           onOpenTask: _openDetail,
           onOpenProgress: (t) => _openAction(t, TaskActionMode.progress),
@@ -428,7 +467,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
                 const SizedBox(width: 4),
               ],
               ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 140),
+                constraints: const BoxConstraints(maxWidth: 200),
                 child: Text(
                   label,
                   overflow: TextOverflow.ellipsis,
@@ -476,7 +515,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
             minMenuWidth: 180,
           ),
           _filterChip(
-            label: _dateRangeLabel,
+            label: '周期 $_dateRangeLabel',
             active: true,
             icon: Icons.date_range_outlined,
             onTap: _pickDateRange,
@@ -535,13 +574,21 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      const Text(
+                        '看各部门主任务办得怎样。进度是填报比例，办结才算完成。没有起止日的任务按创建日计入所选周期。',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: DunesColors.text3,
+                          height: 1.35,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
                       _buildToolbar(),
                       const SizedBox(height: 12),
                       _StatStrip(
                         total: _sumTotal,
                         completed: _sumCompleted,
                         overdue: _sumOverdue,
-                        pending: _sumPending,
                       ),
                       const SizedBox(height: 14),
                       _buildChartCard(),
@@ -578,16 +625,20 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
     if (singleDept) {
       final tasks = _deptTasks;
       return _HrbpBarChart(
-        title: '主任务进度',
+        title: '该部门主任务填报进度',
+        hint: '柱高是每条主任务自己填的进度，点柱打开详情。',
         emptyText: '该部门暂无主任务',
         bars: [
           for (final t in tasks)
             _HrbpBarData(
               id: t.id,
               label: t.title.trim().isEmpty ? '未命名' : t.title.trim(),
-              sublabel: t.ownerName.isEmpty ? '未指定' : t.ownerName,
+              sublabel: [
+                t.ownerName.isEmpty ? '未指定负责人' : t.ownerName,
+                if (t.overdue && t.status != 'completed') '已逾期',
+              ].join(' · '),
               progress: t.progressPct.toDouble(),
-              overdue: t.overdue,
+              overdue: t.overdue && t.status != 'completed',
               completed: t.status == 'completed',
             ),
         ],
@@ -596,7 +647,8 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
     }
 
     return _HrbpBarChart(
-      title: '各部门平均进度',
+      title: '各部门填报进度',
+      hint: '柱高是该部门主任务进度的平均值，点柱查看这个部门。',
       emptyText: '暂无部门数据',
       bars: [
         for (final d in _visibleDepts)
@@ -605,10 +657,13 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
             label: d.departmentName.isEmpty
                 ? '部门 ${d.departmentId}'
                 : d.departmentName,
-            sublabel: '${d.mainTotal} 主任务',
+            sublabel: [
+              '${d.mainTotal} 个主任务',
+              if (d.mainOverdue > 0) '${d.mainOverdue} 逾期',
+            ].join(' · '),
             progress: d.avgProgress,
             overdue: d.mainOverdue > 0,
-            completed: d.avgProgress >= 100,
+            completed: d.allClosed,
           ),
       ],
       onBarTap: (id) => unawaited(_selectDept(id)),
@@ -625,8 +680,8 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
             sliver: SliverToBoxAdapter(
               child: Row(
                 children: [
-                  const Text(
-                    '任务明细',
+                    const Text(
+                    '这个部门的主任务',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                   ),
                   const Spacer(),
@@ -655,7 +710,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
             child: Row(
               children: [
                 const Text(
-                  '任务明细',
+                  '这个部门的主任务',
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                 ),
                 const Spacer(),
@@ -706,7 +761,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
         padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
         sliver: SliverToBoxAdapter(
           child: Text(
-            '部门明细',
+            '部门任务',
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
           ),
         ),
@@ -720,15 +775,14 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
               final name = st.departmentName.isEmpty
                   ? '部门 ${st.departmentId}'
                   : st.departmentName;
-              return Padding(
+                return Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: _DeptStatCard(
                   name: name,
-                  total: st.mainTotal,
-                  completed: st.mainCompleted,
+                  summary: st.summaryLine,
                   overdue: st.mainOverdue,
-                  pending: st.pendingApproval,
                   avgProgress: st.avgProgress,
+                  completed: st.allClosed,
                   onTap: () => unawaited(_selectDept(st.departmentId)),
                 ),
               );
@@ -764,10 +818,12 @@ class _HrbpBarChart extends StatelessWidget {
     required this.title,
     required this.bars,
     required this.emptyText,
+    this.hint,
     this.onBarTap,
   });
 
   final String title;
+  final String? hint;
   final List<_HrbpBarData> bars;
   final String emptyText;
   final ValueChanged<int>? onBarTap;
@@ -775,7 +831,7 @@ class _HrbpBarChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -788,7 +844,18 @@ class _HrbpBarChart extends StatelessWidget {
             title,
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 12),
+          if (hint != null && hint!.trim().isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              hint!,
+              style: const TextStyle(
+                fontSize: 12,
+                color: DunesColors.text3,
+                height: 1.35,
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
           if (bars.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 36),
@@ -801,36 +868,52 @@ class _HrbpBarChart extends StatelessWidget {
             )
           else
             SizedBox(
-              height: 230,
+              height: 248,
               child: LayoutBuilder(
                 builder: (context, c) {
-                  const barW = 52.0;
-                  const gap = 14.0;
-                  final need = bars.length * barW + (bars.length - 1) * gap + 8;
-                  final width = need < c.maxWidth ? c.maxWidth : need;
-                  return SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SizedBox(
-                      width: width,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          for (var i = 0; i < bars.length; i++) ...[
-                            if (i > 0) const SizedBox(width: gap),
-                            SizedBox(
-                              width: barW,
-                              child: _HrbpVerticalBar(
-                                data: bars[i],
-                                onTap: onBarTap == null
-                                    ? null
-                                    : () => onBarTap!(bars[i].id),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
+                  const minColW = 96.0;
+                  const maxColW = 120.0;
+                  const gap = 18.0;
+                  final n = bars.length;
+                  final evenW = n <= 0
+                      ? minColW
+                      : (c.maxWidth - gap * (n - 1)) / n;
+                  final scroll = evenW < minColW;
+                  final colW = scroll
+                      ? minColW
+                      : evenW.clamp(minColW, maxColW);
+                  final rowWidth = n * colW + (n - 1) * gap;
+                  final row = Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = 0; i < n; i++) ...[
+                        if (i > 0) const SizedBox(width: gap),
+                        SizedBox(
+                          width: colW,
+                          child: _HrbpVerticalBar(
+                            data: bars[i],
+                            onTap: onBarTap == null
+                                ? null
+                                : () => onBarTap!(bars[i].id),
+                          ),
+                        ),
+                      ],
+                    ],
                   );
+                  final body = scroll
+                      ? MouseRegion(
+                          cursor: SystemMouseCursors.grab,
+                          child: HorizontalDragScrollView(
+                            child: SizedBox(width: rowWidth, child: row),
+                          ),
+                        )
+                      : rowWidth < c.maxWidth
+                      ? Align(
+                          alignment: Alignment.center,
+                          child: SizedBox(width: rowWidth, child: row),
+                        )
+                      : row;
+                  return body;
                 },
               ),
             ),
@@ -861,71 +944,86 @@ class _HrbpVerticalBar extends StatelessWidget {
     );
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Column(
-        children: [
-          Text(
-            '${data.progress.round()}%',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: tone,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, c) {
-                final h = (c.maxHeight * (pct <= 0 ? 0.05 : pct))
-                    .clamp(6.0, c.maxHeight);
-                return Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Container(
-                    height: h,
-                    width: 30,
-                    decoration: BoxDecoration(
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(9),
-                      ),
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: colors,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: tone.withValues(alpha: 0.22),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Column(
+          children: [
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, c) {
+                  const labelH = 20.0;
+                  final maxBarH = (c.maxHeight - labelH).clamp(8.0, c.maxHeight);
+                  final barH = pct <= 0
+                      ? 5.0
+                      : (maxBarH * pct).clamp(8.0, maxBarH);
+                  final barW = (c.maxWidth * 0.46).clamp(26.0, 36.0);
+                  return Column(
+                    children: [
+                      const Spacer(),
+                      Text(
+                        '${data.progress.round()}%',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          height: 1,
+                          color: tone,
                         ),
-                      ],
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        height: barH,
+                        width: barW,
+                        decoration: BoxDecoration(
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(7),
+                          ),
+                          gradient: LinearGradient(
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                            colors: colors,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            Container(height: 1, color: const Color(0xFFE6E8EC)),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 52,
+              child: Column(
+                children: [
+                  Text(
+                    data.label,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      height: 1.25,
                     ),
                   ),
-                );
-              },
+                  const SizedBox(height: 2),
+                  Text(
+                    data.sublabel,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      height: 1.2,
+                      color: DunesColors.text3,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            data.label,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              height: 1.2,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            data.sublabel,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 10, color: DunesColors.text3),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -936,17 +1034,15 @@ class _StatStrip extends StatelessWidget {
     required this.total,
     required this.completed,
     required this.overdue,
-    required this.pending,
   });
 
   final int total;
   final int completed;
   final int overdue;
-  final int pending;
 
   @override
   Widget build(BuildContext context) {
-    Widget cell(String value, String label, Color color) {
+    Widget cell(String value, String label, String hint, Color color) {
       return Expanded(
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
@@ -970,6 +1066,15 @@ class _StatStrip extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: DunesColors.text,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                hint,
                 style: const TextStyle(fontSize: 11, color: DunesColors.text3),
               ),
             ],
@@ -980,13 +1085,11 @@ class _StatStrip extends StatelessWidget {
 
     return Row(
       children: [
-        cell('$total', '主任务', kTaskPurple),
+        cell('$total', '主任务', '当期一共几条', kTaskPurple),
         const SizedBox(width: 8),
-        cell('$completed', '已完成', const Color(0xFF1F9D76)),
+        cell('$completed', '已办结', '已经闭环', const Color(0xFF1F9D76)),
         const SizedBox(width: 8),
-        cell('$overdue', '逾期', const Color(0xFFB45309)),
-        const SizedBox(width: 8),
-        cell('$pending', '待审', const Color(0xFF4C7FD4)),
+        cell('$overdue', '已逾期', '过期还未办结', const Color(0xFFB45309)),
       ],
     );
   }
@@ -995,26 +1098,29 @@ class _StatStrip extends StatelessWidget {
 class _DeptStatCard extends StatelessWidget {
   const _DeptStatCard({
     required this.name,
-    required this.total,
-    required this.completed,
+    required this.summary,
     required this.overdue,
-    required this.pending,
     required this.avgProgress,
+    required this.completed,
     required this.onTap,
   });
 
   final String name;
-  final int total;
-  final int completed;
+  final String summary;
   final int overdue;
-  final int pending;
   final double avgProgress;
+  final bool completed;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final pct = avgProgress.round().clamp(0, 100);
-    final tone = taskProgressTone(pct, overdue: overdue > 0 && pct < 100);
+    final unfinishedOverdue = overdue > 0 && !completed;
+    final tone = taskProgressTone(
+      pct,
+      overdue: unfinishedOverdue,
+      completed: completed,
+    );
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(14),
@@ -1042,27 +1148,32 @@ class _DeptStatCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '$pct%',
+                    taskFillProgressLabel(pct),
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: tone,
                     ),
+                  ),
+                  const SizedBox(width: 2),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 20,
+                    color: DunesColors.text3.withValues(alpha: 0.8),
                   ),
                 ],
               ),
               const SizedBox(height: 6),
               Text(
-                '主任务 $total · 完成 $completed · 逾期 $overdue'
-                '${pending > 0 ? ' · 待审 $pending' : ''}',
+                summary,
                 style: const TextStyle(fontSize: 12, color: DunesColors.text3),
               ),
               const SizedBox(height: 10),
               TaskProgressBar(
                 progressPct: pct,
                 height: 12,
-                overdue: overdue > 0 && pct < 100,
-                completed: pct >= 100,
+                overdue: unfinishedOverdue,
+                completed: completed,
                 showLabel: false,
               ),
             ],
@@ -1083,20 +1194,24 @@ class _TaskStatCard extends StatelessWidget {
   final VoidCallback onTap;
 
   String _fmtDate(DateTime? d) {
-    if (d == null) return '—';
+    if (d == null) return '未定';
     final local = d.toLocal();
-    final m = local.month.toString().padLeft(2, '0');
-    final day = local.day.toString().padLeft(2, '0');
-    return '${local.year}-$m-$day';
+    return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
   }
 
   @override
   Widget build(BuildContext context) {
     final done = task.status == 'completed';
+    final overdueOpen = task.overdue && !done;
     final tone = taskProgressTone(
       task.progressPct,
+      overdue: overdueOpen,
+      completed: done,
+    );
+    final hint = taskUnfinishedOverdueHint(
       overdue: task.overdue,
       completed: done,
+      progressPct: task.progressPct,
     );
     return Material(
       color: Colors.white,
@@ -1127,35 +1242,65 @@ class _TaskStatCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${task.progressPct}%',
+                    taskFillProgressLabel(task.progressPct),
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: tone,
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  TaskMetaChip(
+                    text: overdueOpen ? '已逾期未办结' : taskStatusLabel(task.status),
+                    color: overdueOpen
+                        ? const Color(0xFFB45309)
+                        : (done
+                            ? const Color(0xFF1F9D76)
+                            : kTaskPurple),
+                  ),
+                  if (task.ownerName.isNotEmpty)
+                    TaskMetaChip(
+                      text: '负责人 ${task.ownerName}',
+                      color: DunesColors.text2,
+                    ),
+                ],
+              ),
               const SizedBox(height: 6),
               Text(
-                [
-                  taskStatusLabel(task.status),
-                  taskPriorityLabel(task.priority),
-                  if (task.ownerName.isNotEmpty) task.ownerName,
-                  if (task.overdue) '逾期',
-                ].join(' · '),
+                '任务周期 ${_fmtDate(task.startAt)} ~ ${_fmtDate(task.dueAt)}',
                 style: const TextStyle(fontSize: 12, color: DunesColors.text3),
               ),
-              const SizedBox(height: 4),
-              Text(
-                '开始 ${_fmtDate(task.startAt)} · 结束 ${_fmtDate(task.dueAt)}',
-                style: const TextStyle(fontSize: 12, color: DunesColors.text3),
-              ),
+              if (taskCardContextLine(task) != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  taskCardContextLine(task)!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                ),
+              ],
+              if (hint != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  hint,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFFB45309),
+                    height: 1.35,
+                  ),
+                ),
+              ],
               const SizedBox(height: 10),
               TaskProgressBar(
                 progressPct: task.progressPct,
                 height: 12,
-                overdue: task.overdue,
+                overdue: overdueOpen,
                 completed: done,
                 showLabel: false,
               ),

@@ -369,6 +369,11 @@ class ChannelProductHit {
 }
 
 ChannelProductHit? channelProductHitOrNull(Object? raw) {
+  if (raw is String) {
+    final text = raw.trim();
+    if (text.isEmpty) return null;
+    return ChannelProductHit(productName: text);
+  }
   final hit = ChannelProductHit.fromJson(raw);
   return hit.isEmpty ? null : hit;
 }

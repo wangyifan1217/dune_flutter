@@ -19,10 +19,21 @@ abstract final class InboxFormat {
     return '${local.month}-${local.day}';
   }
 
-  static String msgTimeLabel(DateTime? at) {
+  static String msgTimeLabel(DateTime? at, {DateTime? now}) {
     if (at == null) return '';
     final local = at.isUtc ? at.toLocal() : at;
-    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+    final hm =
+        '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+    final clock = now ?? DateTime.now();
+    if (_dayKey(local) == _dayKey(clock)) return hm;
+    final yesterday = clock.subtract(const Duration(days: 1));
+    if (_dayKey(local) == _dayKey(yesterday)) return '昨天 $hm';
+    final dayBefore = clock.subtract(const Duration(days: 2));
+    if (_dayKey(local) == _dayKey(dayBefore)) return '前天 $hm';
+    if (local.year == clock.year) {
+      return '${local.month}月${local.day}日 $hm';
+    }
+    return '${local.year}年${local.month}月${local.day}日 $hm';
   }
 
   /// 与 WebView `dayDividerLabel` 对齐。

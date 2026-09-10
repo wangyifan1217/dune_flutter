@@ -42,6 +42,7 @@ class _QuickCreateSheet extends StatefulWidget {
 class _QuickCreateSheetState extends State<_QuickCreateSheet> {
   late final TaskApi _api = TaskApi(widget.session);
   final _title = TextEditingController();
+  final _desc = TextEditingController();
   DateTime? _due;
   int? _groupId;
   List<TaskItem> _groups = const [];
@@ -58,6 +59,7 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
   @override
   void dispose() {
     _title.dispose();
+    _desc.dispose();
     super.dispose();
   }
 
@@ -93,9 +95,13 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
     }
     setState(() => _saving = true);
     try {
+      final desc = _desc.text.trim();
       final body = <String, dynamic>{
         'title': title,
-        if (widget.asGroup || _groupId == null) 'description': title,
+        if (desc.isNotEmpty)
+          'description': desc
+        else if (widget.asGroup || _groupId == null)
+          'description': title,
         if (!widget.asGroup && _due != null)
           'dueAt': DateTime(
             _due!.year,
@@ -163,6 +169,20 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
               autofocus: true,
               decoration: InputDecoration(
                 hintText: widget.asGroup ? '例如：产品周会跟进' : '例如：周五前给客户闭环方案',
+                filled: true,
+                fillColor: const Color(0xFFF5F6F8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _desc,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: widget.asGroup ? '这组事要达成什么（可选）' : '补充背景或做法（可选）',
                 filled: true,
                 fillColor: const Color(0xFFF5F6F8),
                 border: OutlineInputBorder(

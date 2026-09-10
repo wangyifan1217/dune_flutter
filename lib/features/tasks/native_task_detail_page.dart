@@ -11,6 +11,7 @@ import 'task_attachment_tile.dart';
 import 'task_avatar.dart';
 import 'task_link_section.dart';
 import 'task_models.dart';
+import 'task_postpone_dialog.dart';
 import 'task_widgets.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
@@ -22,6 +23,8 @@ class NativeTaskDetailView extends StatefulWidget {
     required this.session,
     required this.taskId,
     required this.onBack,
+    this.backLabel = '任务',
+    this.viewerHint,
     this.onAddSubtask,
     this.onOpenTask,
     this.onOpenProgress,
@@ -32,6 +35,10 @@ class NativeTaskDetailView extends StatefulWidget {
   final AuthSession session;
   final int taskId;
   final VoidCallback onBack;
+  /// 返回条文案，汇总入口用「任务汇总」。
+  final String backLabel;
+  /// 只读提示；为空时用默认句。
+  final String? viewerHint;
   final VoidCallback? onAddSubtask;
   final ValueChanged<int>? onOpenTask;
   final ValueChanged<TaskItem>? onOpenProgress;
@@ -260,6 +267,50 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
     }
   }
 
+  bool get _canPostpone {
+    if (_viewOnly || widget.viewerHint != null) return false;
+    final t = _detail?.task;
+    if (t == null) return false;
+    if (t.isPending ||
+        t.status == 'completed' ||
+        t.status == 'cancelled' ||
+        t.status == 'rejected') {
+      return false;
+    }
+    final uid = widget.session.userId;
+    return t.ownerUserId == uid ||
+        t.creatorUserId == uid ||
+        t.coOwnerUserIds.contains(uid);
+  }
+
+  Future<void> _postpone() async {
+    final task = _detail?.task;
+    if (task == null || _busy) return;
+    final draft = await showTaskPostponeDialog(context, task: task);
+    if (draft == null || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final due = DateTime(
+        draft.dueAt.year,
+        draft.dueAt.month,
+        draft.dueAt.day,
+        23,
+        59,
+        59,
+      );
+      await _api.patchTask(task.id, {
+        'dueAt': due.toUtc().toIso8601String(),
+        if (draft.reason.isNotEmpty) 'progressNote': draft.reason,
+      });
+      await _reload();
+      if (mounted) showDunesCenterToast(context, '已延期');
+    } catch (e) {
+      if (mounted) showDunesCenterToast(context, '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   void _openEvaluate() {
     final task = _detail?.task;
     if (task == null) return;
@@ -377,6 +428,35 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
     );
   }
 
+  Widget _metaLine(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 72,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: DunesColors.text,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _formatTaskRange(DateTime? start, DateTime? due) {
     String fmt(DateTime d) {
       final local = d.toLocal();
@@ -432,23 +512,23 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                     InkWell(
                       borderRadius: BorderRadius.circular(8),
                       onTap: widget.onBack,
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
                           horizontal: 4,
                           vertical: 6,
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.arrow_back_ios_new,
                               size: 14,
                               color: DunesColors.text2,
                             ),
-                            SizedBox(width: 2),
+                            const SizedBox(width: 2),
                             Text(
-                              '任务',
-                              style: TextStyle(
+                              widget.backLabel,
+                              style: const TextStyle(
                                 fontSize: 13,
                                 color: DunesColors.text2,
                               ),
@@ -460,7 +540,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                     const SizedBox(width: 8),
                     const Expanded(
                       child: Text(
-                        '详情',
+                        '任务详情',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
@@ -497,9 +577,10 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                       color: _themePurple.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Text(
-                      '只读：可查看任务信息，不可编辑或操作',
-                      style: TextStyle(
+                    child: Text(
+                      widget.viewerHint ??
+                          '只读：可查看任务信息，不可编辑或操作',
+                      style: const TextStyle(
                         fontSize: 12,
                         color: DunesColors.text2,
                         fontWeight: FontWeight.w500,
@@ -508,7 +589,16 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                   ),
                 ],
                 const SizedBox(height: 10),
-                Container(
+                Builder(
+                  builder: (_) {
+                    final done = d.task.status == 'completed';
+                    final overdueOpen = d.task.overdue && !done;
+                    final overdueHint = taskUnfinishedOverdueHint(
+                      overdue: d.task.overdue,
+                      completed: done,
+                      progressPct: d.task.progressPct,
+                    );
+                    return Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -561,36 +651,96 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                         ),
                       ],
                       const SizedBox(height: 10),
-                      Text(
-                        [
-                          taskStatusLabel(d.task.status),
-                          taskPriorityLabel(d.task.priority),
-                          if (d.task.ownerName.isNotEmpty)
-                            '负责人 ${d.task.ownerName}',
-                          if (d.task.startAt != null || d.task.dueAt != null)
-                            _formatTaskRange(d.task.startAt, d.task.dueAt),
-                        ].join(' · '),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: DunesColors.text3,
-                        ),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          TaskMetaChip(
+                            text: d.task.isMain ? '主任务' : '事项',
+                            color: d.task.isMain
+                                ? _themePurple
+                                : const Color(0xFF2D8A5E),
+                          ),
+                          TaskMetaChip(
+                            text: overdueOpen
+                                ? '已逾期未办结'
+                                : taskStatusLabel(d.task.status),
+                            color: overdueOpen
+                                ? const Color(0xFFB45309)
+                                : (done
+                                    ? const Color(0xFF1F9D76)
+                                    : _themePurple),
+                          ),
+                          TaskMetaChip(
+                            text: '优先级${taskPriorityLabel(d.task.priority)}',
+                            color: DunesColors.text2,
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 12),
+                      _metaLine(
+                        '负责人',
+                        d.task.ownerName.isEmpty ? '未指定' : d.task.ownerName,
+                      ),
+                      if (d.task.startAt != null || d.task.dueAt != null)
+                        _metaLine(
+                          '任务周期',
+                          _formatTaskRange(d.task.startAt, d.task.dueAt),
+                        ),
+                      if (d.task.sourceMeetingTitle.trim().isNotEmpty)
+                        _metaLine(
+                          '来源',
+                          '会议《${d.task.sourceMeetingTitle.trim()}》',
+                        ),
+                      _metaLine(
+                        '填报进度',
+                        '${d.task.progressPct}%${done ? ' · 已办结' : ''}',
+                      ),
+                      const SizedBox(height: 8),
                       TaskProgressBar(
                         progressPct: d.task.progressPct,
-                        overdue: d.task.overdue,
-                        completed: d.task.status == 'completed',
+                        overdue: overdueOpen,
+                        completed: done,
                         height: 10,
+                        showLabel: false,
                       ),
-                      if (d.task.description.trim().isNotEmpty) ...[
+                      if (overdueHint != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          overdueHint,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFFB45309),
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                      if (taskDistinctDescription(d.task).isNotEmpty) ...[
                         const SizedBox(height: 14),
                         Text(
-                          d.task.description,
+                          taskDistinctDescription(d.task),
+                          style: const TextStyle(fontSize: 14, height: 1.45),
+                        ),
+                      ],
+                      if (d.task.acceptanceCriteria.trim().isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        const Text(
+                          '验收标准',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: DunesColors.text3,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          d.task.acceptanceCriteria.trim(),
                           style: const TextStyle(fontSize: 14, height: 1.45),
                         ),
                       ],
                     ],
                   ),
+                );
+                  },
                 ),
                 if (d.task.isPending &&
                     d.task.approverUserId == widget.session.userId) ...[
@@ -626,6 +776,14 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                           ? '进度由事项汇总'
                           : '更新进度',
                     ),
+                  ),
+                ],
+                if (_canPostpone) ...[
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : _postpone,
+                    icon: const Icon(Icons.event_repeat, size: 18),
+                    label: const Text('延期'),
                   ),
                 ],
                 if (_canEvaluate) ...[
@@ -673,7 +831,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                 if (d.task.isMain && d.subtasks.isNotEmpty) ...[
                   const SizedBox(height: 18),
                   const Text(
-                    '事项进度',
+                    '事项填报进度',
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
@@ -707,8 +865,13 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                 if (d.task.isMain) ...[
                   const SizedBox(height: 18),
                   const Text(
-                    '事项',
+                    '拆分事项',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    '这些事项的进度会汇总到上面的主任务',
+                    style: TextStyle(fontSize: 12, color: DunesColors.text3),
                   ),
                   const SizedBox(height: 8),
                   if (d.subtasks.isEmpty)
@@ -721,7 +884,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                         border: Border.all(color: const Color(0xFFE8EAED)),
                       ),
                       child: Text(
-                        _canAddSubtask ? '还没有事项，可点右上角添加' : '还没有事项',
+                        _canAddSubtask ? '还没有拆分事项，可点右上角添加' : '还没有拆分事项',
                         style: const TextStyle(color: DunesColors.text3),
                       ),
                     )

@@ -4,11 +4,12 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
+import '../meeting/meeting_task_create_dialog.dart';
 import '../shell/dunes_toast.dart';
 import '../tasks/task_link_api.dart';
 import '../tasks/task_link_models.dart';
 
-/// 任务助手里的会议任务建议包，按钮直接 accept/dismiss。
+/// 任务助手里的会议任务建议包：创建前需选择开始/结束时间。
 class MeetingSuggestionImCard extends StatefulWidget {
   const MeetingSuggestionImCard({
     super.key,
@@ -48,9 +49,27 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
   }
 
   Future<void> _accept(MeetingTaskSuggestion s) async {
+    final draft = await showMeetingTaskCreateDialog(
+      context,
+      session: widget.session,
+      title: s.suggestedTitle,
+      description: s.suggestedDescription,
+      acceptanceCriteria: s.decisionExcerpt,
+    );
+    if (draft == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      final task = await _api.acceptSuggestion(widget.meetingId, s.id);
+      final task = await _api.acceptSuggestion(
+        widget.meetingId,
+        s.id,
+        title: draft.title,
+        description: draft.description,
+        acceptanceCriteria: draft.acceptanceCriteria,
+        ownerUserId: draft.ownerUserId,
+        priority: draft.priority,
+        startAt: draft.startAt,
+        dueAt: draft.dueAt,
+      );
       if (!mounted) return;
       showDunesCenterToast(context, '已创建「${task.title}」');
       await _refresh();
@@ -76,10 +95,24 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
   }
 
   Future<void> _acceptAll() async {
+    final draft = await showMeetingTaskCreateDialog(
+      context,
+      session: widget.session,
+      title: '全部创建任务',
+      batchCount: _items.length,
+    );
+    if (draft == null || !mounted) return;
     setState(() => _busy = true);
     try {
       for (final s in List<MeetingTaskSuggestion>.from(_items)) {
-        await _api.acceptSuggestion(widget.meetingId, s.id);
+        await _api.acceptSuggestion(
+          widget.meetingId,
+          s.id,
+          ownerUserId: draft.ownerUserId,
+          priority: draft.priority,
+          startAt: draft.startAt,
+          dueAt: draft.dueAt,
+        );
       }
       if (!mounted) return;
       showDunesCenterToast(context, '已全部创建');

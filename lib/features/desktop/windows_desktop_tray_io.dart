@@ -107,6 +107,8 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   bool _hidden = false;
   bool _minimized = false;
   bool _focused = true;
+  bool _occluded = false;
+  bool _appHidden = false;
   bool _allowQuit = false;
   bool _quitting = false;
   bool _flashing = false;
@@ -131,10 +133,13 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   List<WindowsTrayUnreadItem> _peekItems = const <WindowsTrayUnreadItem>[];
 
   /// 最小化、失焦和关闭到托盘时，当前会话不应被视为“正在查看”。
-  bool get isWindowInactive => _hidden || _minimized || !_focused;
+  bool get isWindowInactive =>
+      _hidden || _minimized || !_focused || _occluded || _appHidden;
 
   /// 用户已经看不见窗口。仅此时才能冻 Ticker，避免双屏失焦把可见动画停掉。
-  bool get isWindowObscured => _hidden || _minimized;
+  /// Mac：Cmd+H、切 Space、被其它全屏挡住也会 occlusion。
+  bool get isWindowObscured =>
+      _hidden || _minimized || _occluded || _appHidden;
 
   ValueListenable<bool> get windowObscuredListenable => _windowObscured;
 
@@ -224,16 +229,45 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     if (Platform.isMacOS) {
       await windowManager.setPreventClose(true);
       // Dock 点击 reopen → 原生 AppDelegate 通知，走与托盘相同的恢复路径。
+      // occlusion / Cmd+H 也走这条 channel，用来冻后台排帧。
       const channel = MethodChannel('nova.dunes/desktop_window');
       channel.setMethodCallHandler((call) async {
-        if (call.method == 'revealFromDock') {
-          await _showFromTray();
-          return null;
+        switch (call.method) {
+          case 'revealFromDock':
+            await _showFromTray();
+            return null;
+          case 'occlusionChanged':
+            _setOccluded(!_boolArg(call.arguments, 'visible', true));
+            return null;
+          case 'appHiddenChanged':
+            _setAppHidden(_boolArg(call.arguments, 'hidden', false));
+            return null;
+          default:
+            throw MissingPluginException(call.method);
         }
-        throw MissingPluginException(call.method);
       });
     }
     _ready = true;
+  }
+
+  void _setOccluded(bool occluded) {
+    if (_occluded == occluded) return;
+    _occluded = occluded;
+    _emitInactiveChanged();
+  }
+
+  void _setAppHidden(bool hidden) {
+    if (_appHidden == hidden) return;
+    _appHidden = hidden;
+    _emitInactiveChanged();
+  }
+
+  static bool _boolArg(dynamic arguments, String key, bool fallback) {
+    if (arguments is Map) {
+      final value = arguments[key];
+      if (value is bool) return value;
+    }
+    return fallback;
   }
 
   Future<dynamic> _onPeekChannel(MethodCall call) async {
@@ -367,6 +401,8 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   Future<void> _showFromTray() async {
     _hidden = false;
     _minimized = false;
+    _appHidden = false;
+    _occluded = false;
     _focused = true;
     _pendingAlert = false;
     await _stopFlash();
@@ -579,6 +615,8 @@ class WindowsDesktopTray with WindowListener, TrayListener {
   void onWindowRestore() {
     _hidden = false;
     _minimized = false;
+    _appHidden = false;
+    _occluded = false;
     _focused = true;
     _pendingAlert = false;
     _queueSyncFlash();
@@ -591,6 +629,20 @@ class WindowsDesktopTray with WindowListener, TrayListener {
     _emitInactiveChanged();
     // 最小化后若有未读，开始托盘闪烁提醒。
     _queueSyncFlash();
+  }
+
+  @override
+  void onWindowEvent(String eventName) {
+    switch (eventName) {
+      case 'hide':
+        _appHidden = true;
+        _emitInactiveChanged();
+        break;
+      case 'show':
+        _appHidden = false;
+        _emitInactiveChanged();
+        break;
+    }
   }
 
   @override

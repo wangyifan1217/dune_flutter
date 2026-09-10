@@ -4,6 +4,7 @@ import desktop_multi_window
 
 class MainFlutterWindow: NSWindow {
   private var titleObservers: [NSKeyValueObservation] = []
+  private var visibilityObservers: [NSObjectProtocol] = []
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -21,6 +22,7 @@ class MainFlutterWindow: NSWindow {
     RegisterGeneratedPlugins(registry: flutterViewController)
     FlutterMultiWindowPlugin.setOnWindowCreatedCallback { controller in
       RegisterGeneratedPlugins(registry: controller)
+      MainFlutterWindow.pauseEngineWhenWindowOccluded(controller)
     }
     let messenger = flutterViewController.engine.binaryMessenger
     SparkleUpdaterBridge.shared.setup(with: messenger)
@@ -29,8 +31,55 @@ class MainFlutterWindow: NSWindow {
       appDelegate.setupDesktopWindowChannel(with: messenger)
       appDelegate.setupDesktopFileDragChannel(with: messenger)
     }
+    observeMainWindowVisibility(engine: flutterViewController.engine)
 
     super.awakeFromNib()
+  }
+
+  deinit {
+    for token in visibilityObservers {
+      NotificationCenter.default.removeObserver(token)
+    }
+  }
+
+  /// 切 Space / Cmd+H / 被挡住时停主引擎排帧，并告诉 Dart 冻 Ticker。
+  private func observeMainWindowVisibility(engine: FlutterEngine) {
+    let token = NotificationCenter.default.addObserver(
+      forName: NSWindow.didChangeOcclusionStateNotification,
+      object: self,
+      queue: .main
+    ) { [weak self] notification in
+      engine.handleDidChangeOcclusionState(notification)
+      guard let self else { return }
+      let visible = self.occlusionState.contains(.visible)
+      if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+        appDelegate.notifyDesktopWindow(
+          method: "occlusionChanged",
+          arguments: ["visible": visible]
+        )
+      }
+    }
+    visibilityObservers.append(token)
+  }
+
+  /// 图片预览等 multi_window 子引擎收不到系统 occlusion，自己补一刀停帧。
+  static func pauseEngineWhenWindowOccluded(_ controller: FlutterViewController) {
+    DispatchQueue.main.async { [weak controller] in
+      guard let controller, let window = controller.view.window else { return }
+      NotificationCenter.default.addObserver(
+        forName: NSWindow.didChangeOcclusionStateNotification,
+        object: window,
+        queue: .main
+      ) { [weak controller] notification in
+        controller?.engine.handleDidChangeOcclusionState(notification)
+      }
+      controller.engine.handleDidChangeOcclusionState(
+        Notification(
+          name: NSWindow.didChangeOcclusionStateNotification,
+          object: window
+        )
+      )
+    }
   }
 
   /// macOS 11+ 会把 title / subtitle 叠成两行；Tahoe 上 dual-set 后常见两个「沙丘」。

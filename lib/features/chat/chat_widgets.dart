@@ -366,6 +366,7 @@ class ChatInputBar extends StatelessWidget {
     this.onAttemptPasteImage,
     this.inputHeight,
     this.onInputHeightDrag,
+    this.showTopBorder = true,
   });
 
   final TextEditingController controller;
@@ -415,6 +416,9 @@ class ChatInputBar extends StatelessWidget {
   /// PC：拖拽输入框上沿调整高度（deltaDy>0 为向下拖）。
   final ValueChanged<double>? onInputHeightDrag;
 
+  /// 上方已有引用条时去掉顶部分割线，和输入区连成一块。
+  final bool showTopBorder;
+
   @override
   Widget build(BuildContext context) {
     final wide = isWideChatLayout(context);
@@ -441,7 +445,7 @@ class ChatInputBar extends StatelessWidget {
           child: Container(
             padding: EdgeInsets.fromLTRB(
               wide ? 12 : 10,
-              canResize ? 0 : (wide ? 10 : 8),
+              canResize ? 0 : (showTopBorder ? (wide ? 10 : 8) : (wide ? 6 : 4)),
               wide ? 12 : 10,
               bottomInset > 0
                   ? bottomInset + (wide ? 6 : 4)
@@ -451,13 +455,15 @@ class ChatInputBar extends StatelessWidget {
               color:
                   backgroundColor ??
                   (wide ? DunesColors.bgApp : const Color(0xFFF7F7F7)),
-              border: Border(
-                top: BorderSide(
-                  color: wide
-                      ? DunesColors.borderSoft
-                      : const Color(0xFFE8E8E8),
-                ),
-              ),
+              border: showTopBorder
+                  ? Border(
+                      top: BorderSide(
+                        color: wide
+                            ? DunesColors.borderSoft
+                            : const Color(0xFFE8E8E8),
+                      ),
+                    )
+                  : null,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1474,28 +1480,8 @@ class ChatTextBubble extends StatelessWidget {
   final bool enableSelection;
   final bool selectAllOnLongPress;
 
-  /// APP：长按先出选区手柄，可拖选片段再复制；「更多」才打开宫格菜单。
+  /// APP：长按先出选区手柄并默认全选；拖动手柄可截取。复制跟当前选区；「更多」打开宫格。
   final bool preferPartialTextCopy;
-
-  String _selectedText(TextEditingValue value) {
-    final selection = value.selection;
-    if (!selection.isValid || selection.isCollapsed) return '';
-    final start = selection.start;
-    final end = selection.end;
-    if (start < 0 || end <= start || end > value.text.length) return '';
-    return value.text.substring(start, end).trim();
-  }
-
-  /// 桌面右键常会变成「光标处单词选区」，不等于用户拖选的片段。
-  /// 含空白/换行，或已覆盖整段，才视为明确选区。
-  bool _isExplicitTextSelection(String fullText, TextSelection selection) {
-    if (!selection.isValid || selection.isCollapsed) return false;
-    if (selection.start == 0 && selection.end == fullText.length) {
-      return false;
-    }
-    final selected = fullText.substring(selection.start, selection.end);
-    return RegExp(r'\s').hasMatch(selected);
-  }
 
   TextSpan _buildMentionTextSpan() {
     // 对方气泡正文加深一档并略加重，PC/APP 一致，避免发灰难读。
@@ -1597,156 +1583,17 @@ class ChatTextBubble extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (enableSelection)
-                SelectableText.rich(
-                  _buildMentionTextSpan(),
-                  contextMenuBuilder: (context, editableTextState) {
-                    // APP 默认可拖选片段复制；仅在显式要求时才强制全选。
-                    final selection =
-                        editableTextState.textEditingValue.selection;
-                    final needsSelectAll =
-                        !selection.isValid ||
-                        selection.start != 0 ||
-                        selection.end != text.length;
-                    if (selectAllOnLongPress &&
-                        !preferPartialTextCopy &&
-                        needsSelectAll &&
-                        text.isNotEmpty) {
-                      editableTextState.selectAll(
-                        SelectionChangedCause.longPress,
-                      );
-                    }
-                    var selected = _selectedText(
-                      editableTextState.textEditingValue,
-                    );
-                    // 桌面（尤其 macOS）右键会先选中光标下单词；转发/引用若沿用该选区
-                    // 只会带走一词。无明确拖选时按整条消息处理。
-                    if (!selectAllOnLongPress &&
-                        !preferPartialTextCopy &&
-                        selected.isNotEmpty &&
-                        !_isExplicitTextSelection(text, selection)) {
-                      selected = '';
-                    }
-                    // APP：先留系统选区工具条，方便拖手柄截取一段再复制。
-                    if (preferPartialTextCopy && onActionsMenu != null) {
-                      final anchor =
-                          editableTextState.contextMenuAnchors.primaryAnchor;
-                      return AdaptiveTextSelectionToolbar.buttonItems(
-                        anchors: editableTextState.contextMenuAnchors,
-                        buttonItems: <ContextMenuButtonItem>[
-                          ContextMenuButtonItem(
-                            label: '复制',
-                            onPressed: () async {
-                              final value = selected.isNotEmpty
-                                  ? selected
-                                  : text.trim();
-                              if (value.isNotEmpty) {
-                                await Clipboard.setData(
-                                  ClipboardData(text: value),
-                                );
-                              }
-                              editableTextState.hideToolbar();
-                            },
-                          ),
-                          ContextMenuButtonItem(
-                            label: '全选',
-                            onPressed: () {
-                              editableTextState.selectAll(
-                                SelectionChangedCause.toolbar,
-                              );
-                            },
-                          ),
-                          ContextMenuButtonItem(
-                            label: '更多',
-                            onPressed: () {
-                              editableTextState.hideToolbar();
-                              onActionsMenu!(anchor, selected);
-                            },
-                          ),
-                        ],
-                      );
-                    }
-                    // 与文件消息共用深色宫格菜单：拦截系统选区工具条。
-                    // selected 为空时由上层按整条消息处理，避免把「未选中」误当成「全选」。
-                    if (onActionsMenu != null) {
-                      final anchor =
-                          editableTextState.contextMenuAnchors.primaryAnchor;
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        editableTextState.hideToolbar();
-                        onActionsMenu!(anchor, selected);
-                      });
-                      return const SizedBox.shrink();
-                    }
-                    return AdaptiveTextSelectionToolbar.buttonItems(
-                      anchors: editableTextState.contextMenuAnchors,
-                      buttonItems: <ContextMenuButtonItem>[
-                        ContextMenuButtonItem(
-                          label: '复制',
-                          onPressed: () async {
-                            // Windows 右键弹出菜单时框架可能会清掉当前选区。
-                            // 这时仍应复制整条消息，不能静默写入空字符串。
-                            final value = selected.isNotEmpty
-                                ? selected
-                                : text.trim();
-                            if (value.isNotEmpty) {
-                              await Clipboard.setData(
-                                ClipboardData(text: value),
-                              );
-                            }
-                            editableTextState.hideToolbar();
-                          },
-                        ),
-                        ContextMenuButtonItem(
-                          label: '引用',
-                          onPressed: () {
-                            onSelectionQuote?.call(
-                              selected.isNotEmpty ? selected : text.trim(),
-                            );
-                            editableTextState.hideToolbar();
-                          },
-                        ),
-                        ContextMenuButtonItem(
-                          label: '转发',
-                          onPressed: () {
-                            onSelectionForward?.call(
-                              selected.isNotEmpty ? selected : text.trim(),
-                            );
-                            editableTextState.hideToolbar();
-                          },
-                        ),
-                        if (onSelectionFavorite != null)
-                          ContextMenuButtonItem(
-                            label: '收藏',
-                            onPressed: () {
-                              onSelectionFavorite!();
-                              editableTextState.hideToolbar();
-                            },
-                          ),
-                        ContextMenuButtonItem(
-                          label: '多选',
-                          onPressed: () {
-                            onSelectionMulti?.call(selected);
-                            editableTextState.hideToolbar();
-                          },
-                        ),
-                        ContextMenuButtonItem(
-                          label: '全选',
-                          onPressed: () {
-                            editableTextState.selectAll(
-                              SelectionChangedCause.toolbar,
-                            );
-                          },
-                        ),
-                        if (onSelectionRecall != null)
-                          ContextMenuButtonItem(
-                            label: '撤回',
-                            onPressed: () {
-                              onSelectionRecall?.call();
-                              editableTextState.hideToolbar();
-                            },
-                          ),
-                      ],
-                    );
-                  },
+                _ChatSelectableRichText(
+                  textSpan: _buildMentionTextSpan(),
+                  text: text,
+                  selectAllOnLongPress: selectAllOnLongPress,
+                  preferPartialTextCopy: preferPartialTextCopy,
+                  onActionsMenu: onActionsMenu,
+                  onSelectionQuote: onSelectionQuote,
+                  onSelectionForward: onSelectionForward,
+                  onSelectionFavorite: onSelectionFavorite,
+                  onSelectionMulti: onSelectionMulti,
+                  onSelectionRecall: onSelectionRecall,
                 )
               else
                 RichText(text: _buildMentionTextSpan()),
@@ -1756,6 +1603,224 @@ class ChatTextBubble extends StatelessWidget {
               ],
             ],
           ),
+        );
+      },
+    );
+  }
+}
+
+/// 可选择正文：长按只全选一次，之后拖动手柄截取不会被重新拉回整段。
+class _ChatSelectableRichText extends StatefulWidget {
+  const _ChatSelectableRichText({
+    required this.textSpan,
+    required this.text,
+    required this.selectAllOnLongPress,
+    required this.preferPartialTextCopy,
+    this.onActionsMenu,
+    this.onSelectionQuote,
+    this.onSelectionForward,
+    this.onSelectionFavorite,
+    this.onSelectionMulti,
+    this.onSelectionRecall,
+  });
+
+  final TextSpan textSpan;
+  final String text;
+  final bool selectAllOnLongPress;
+  final bool preferPartialTextCopy;
+  final void Function(Offset anchor, String selectedText)? onActionsMenu;
+  final ValueChanged<String>? onSelectionQuote;
+  final ValueChanged<String>? onSelectionForward;
+  final VoidCallback? onSelectionFavorite;
+  final ValueChanged<String>? onSelectionMulti;
+  final VoidCallback? onSelectionRecall;
+
+  @override
+  State<_ChatSelectableRichText> createState() =>
+      _ChatSelectableRichTextState();
+}
+
+class _ChatSelectableRichTextState extends State<_ChatSelectableRichText> {
+  EditableTextState? _editable;
+  bool _didInitialSelectAll = false;
+
+  String _copyText(EditableTextState state) {
+    final value = state.textEditingValue;
+    final selected = value.selection.textInside(value.text).trim();
+    if (selected.isNotEmpty) return selected;
+    return widget.text.trim();
+  }
+
+  bool _isFullSelection(TextSelection selection) {
+    return selection.isValid &&
+        selection.start == 0 &&
+        selection.end == widget.text.length;
+  }
+
+  EditableTextState? _findEditable() {
+    if (_editable != null && _editable!.mounted) return _editable;
+    EditableTextState? found;
+    void visit(Element element) {
+      if (found != null) return;
+      if (element is StatefulElement && element.state is EditableTextState) {
+        found = element.state as EditableTextState;
+        return;
+      }
+      element.visitChildren(visit);
+    }
+
+    context.visitChildElements(visit);
+    return found;
+  }
+
+  void _scheduleSelectAll() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final state = _findEditable();
+      if (state == null || !state.mounted) return;
+      if (_isFullSelection(state.textEditingValue.selection)) return;
+      state.selectAll(SelectionChangedCause.toolbar);
+    });
+  }
+
+  void _onSelectionChanged(TextSelection selection, SelectionChangedCause? cause) {
+    if (!widget.selectAllOnLongPress) return;
+    if (!selection.isValid || selection.isCollapsed) {
+      _didInitialSelectAll = false;
+      return;
+    }
+    if (_didInitialSelectAll) return;
+    if (_isFullSelection(selection)) {
+      _didInitialSelectAll = true;
+      return;
+    }
+    // 拖动手柄 / 工具条改选区：保持用户截取，不再拉回整段。
+    if (cause == SelectionChangedCause.drag ||
+        cause == SelectionChangedCause.toolbar ||
+        cause == SelectionChangedCause.keyboard) {
+      _didInitialSelectAll = true;
+      return;
+    }
+    _didInitialSelectAll = true;
+    _scheduleSelectAll();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SelectableText.rich(
+      widget.textSpan,
+      onSelectionChanged: _onSelectionChanged,
+      contextMenuBuilder: (context, editableTextState) {
+        _editable = editableTextState;
+        final menuSelection = editableTextState.textEditingValue.selection;
+        if (widget.selectAllOnLongPress &&
+            !_didInitialSelectAll &&
+            menuSelection.isValid &&
+            !menuSelection.isCollapsed &&
+            !_isFullSelection(menuSelection)) {
+          _didInitialSelectAll = true;
+          _scheduleSelectAll();
+        }
+        // APP：先出复制/全选/更多。复制跟当前选区；更多里仍按整条消息。
+        if (widget.preferPartialTextCopy && widget.onActionsMenu != null) {
+          final anchor = editableTextState.contextMenuAnchors.primaryAnchor;
+          return AdaptiveTextSelectionToolbar.buttonItems(
+            anchors: editableTextState.contextMenuAnchors,
+            buttonItems: <ContextMenuButtonItem>[
+              ContextMenuButtonItem(
+                label: '复制',
+                onPressed: () async {
+                  final value = _copyText(editableTextState);
+                  if (value.isNotEmpty) {
+                    await Clipboard.setData(ClipboardData(text: value));
+                  }
+                  editableTextState.hideToolbar();
+                },
+              ),
+              ContextMenuButtonItem(
+                label: '全选',
+                onPressed: () {
+                  editableTextState.selectAll(SelectionChangedCause.toolbar);
+                },
+              ),
+              ContextMenuButtonItem(
+                label: '更多',
+                onPressed: () {
+                  editableTextState.hideToolbar();
+                  // 宫格里的引用/复制/转发/多选按整条。
+                  widget.onActionsMenu!(anchor, '');
+                },
+              ),
+            ],
+          );
+        }
+        // 与文件消息共用深色宫格菜单：拦截系统选区工具条。
+        // 复制/引用/转发/多选按整条消息，不跟长按选区走。
+        if (widget.onActionsMenu != null) {
+          final anchor = editableTextState.contextMenuAnchors.primaryAnchor;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            editableTextState.hideToolbar();
+            widget.onActionsMenu!(anchor, '');
+          });
+          return const SizedBox.shrink();
+        }
+        return AdaptiveTextSelectionToolbar.buttonItems(
+          anchors: editableTextState.contextMenuAnchors,
+          buttonItems: <ContextMenuButtonItem>[
+            ContextMenuButtonItem(
+              label: '复制',
+              onPressed: () async {
+                final value = _copyText(editableTextState);
+                if (value.isNotEmpty) {
+                  await Clipboard.setData(ClipboardData(text: value));
+                }
+                editableTextState.hideToolbar();
+              },
+            ),
+            ContextMenuButtonItem(
+              label: '引用',
+              onPressed: () {
+                widget.onSelectionQuote?.call(widget.text.trim());
+                editableTextState.hideToolbar();
+              },
+            ),
+            ContextMenuButtonItem(
+              label: '转发',
+              onPressed: () {
+                widget.onSelectionForward?.call(widget.text.trim());
+                editableTextState.hideToolbar();
+              },
+            ),
+            if (widget.onSelectionFavorite != null)
+              ContextMenuButtonItem(
+                label: '收藏',
+                onPressed: () {
+                  widget.onSelectionFavorite!();
+                  editableTextState.hideToolbar();
+                },
+              ),
+            ContextMenuButtonItem(
+              label: '多选',
+              onPressed: () {
+                widget.onSelectionMulti?.call('');
+                editableTextState.hideToolbar();
+              },
+            ),
+            ContextMenuButtonItem(
+              label: '全选',
+              onPressed: () {
+                editableTextState.selectAll(SelectionChangedCause.toolbar);
+              },
+            ),
+            if (widget.onSelectionRecall != null)
+              ContextMenuButtonItem(
+                label: '撤回',
+                onPressed: () {
+                  widget.onSelectionRecall?.call();
+                  editableTextState.hideToolbar();
+                },
+              ),
+          ],
         );
       },
     );
@@ -1902,32 +1967,90 @@ class ChatQuotePreviewBar extends StatelessWidget {
   final ChatMessageQuote quote;
   final VoidCallback onCancel;
 
+  static const _accent = Color(0xFF7E64BD);
+  static const _composerGray = Color(0xFFF7F7F7);
+  static const _composerLine = Color(0xFFE8E8E8);
+
   @override
   Widget build(BuildContext context) {
+    final wide = isWideChatLayout(context);
+    final name = quote.senderName.trim().isEmpty
+        ? '消息'
+        : quote.senderName.trim();
+    final preview = quote.preview.trim();
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 8, 0),
-      decoration: const BoxDecoration(
-        color: DunesColors.bgApp,
-        border: Border(top: BorderSide(color: DunesColors.borderSoft)),
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(wide ? 12 : 10, 8, 4, 0),
+      decoration: BoxDecoration(
+        color: wide ? DunesColors.bgApp : _composerGray,
+        border: Border(
+          top: BorderSide(
+            color: wide ? DunesColors.borderSoft : _composerLine,
+          ),
+        ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: ChatQuoteBlock(quote: quote, mine: false, compact: true),
-          ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            onPressed: onCancel,
-            icon: const Icon(
-              Icons.close_rounded,
-              size: 18,
-              color: DunesColors.text3,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 3,
+              margin: const EdgeInsets.symmetric(vertical: 2),
+              decoration: BoxDecoration(
+                color: _accent,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          ),
-        ],
+            const SizedBox(width: 8),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: DunesTypography.sans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                        color: _accent,
+                      ),
+                    ),
+                    if (preview.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        preview,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: DunesTypography.sans(
+                          fontSize: 12,
+                          height: 1.35,
+                          color: const Color(0xFF8A8490),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.all(8),
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              tooltip: '取消引用',
+              onPressed: onCancel,
+              icon: const Icon(
+                Icons.close_rounded,
+                size: 18,
+                color: Color(0xFFB0AAB6),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

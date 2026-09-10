@@ -225,7 +225,7 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                           )
                         : Icon(icon, size: 24, color: color),
                     if (showRedDot)
-                      const Positioned(top: -3, right: -5, child: _PulseDot()),
+                      const Positioned(top: -3, right: -5, child: _UnreadDot()),
                   ],
                 ),
                 const SizedBox(height: 3),
@@ -244,72 +244,19 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
   }
 }
 
-/// 底部 Tab 脉冲小红点（对齐 index.html `.tab-bar .tab .red-dot`，叠加呼吸脉冲）。
-class _PulseDot extends StatefulWidget {
-  const _PulseDot();
-
-  @override
-  State<_PulseDot> createState() => _PulseDotState();
-}
-
-class _PulseDotState extends State<_PulseDot>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+/// 底部 / 侧栏未读小红点。不用呼吸脉冲：循环动画会拖着整窗按刷新率重画。
+class _UnreadDot extends StatelessWidget {
+  const _UnreadDot();
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return Container(
       width: 9,
       height: 9,
-      child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.center,
-        children: [
-          AnimatedBuilder(
-            animation: _controller,
-            builder: (context, child) {
-              final t = Curves.easeOut.transform(_controller.value);
-              return Opacity(
-                opacity: (1 - t) * 0.45,
-                child: Transform.scale(
-                  scale: 1 + t * 1.8,
-                  child: Container(
-                    width: 9,
-                    height: 9,
-                    decoration: const BoxDecoration(
-                      color: DunesColors.coral,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-          Container(
-            width: 9,
-            height: 9,
-            decoration: BoxDecoration(
-              color: DunesColors.coral,
-              shape: BoxShape.circle,
-              border: Border.all(color: DunesColors.bgApp, width: 2),
-            ),
-          ),
-        ],
+      decoration: BoxDecoration(
+        color: DunesColors.coral,
+        shape: BoxShape.circle,
+        border: Border.all(color: DunesColors.bgApp, width: 2),
       ),
     );
   }

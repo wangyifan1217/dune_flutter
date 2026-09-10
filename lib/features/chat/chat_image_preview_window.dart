@@ -22,7 +22,6 @@ const _kReloadMethod = 'reloadPreview';
 /// 主窗口侧缓存：复用同一预览子窗，避免每次点击都冷启动 Flutter Engine。
 WindowController? _warmPreviewWindow;
 Future<void>? _openPreviewGate;
-Future<void>? _warmUpGate;
 Directory? _cachedTempDir;
 
 bool _isPreviewWindowArgument(String arguments) {
@@ -59,42 +58,12 @@ Future<Directory> _tempDir() async {
   return _cachedTempDir ??= await getTemporaryDirectory();
 }
 
-/// 登录后后台预热隐藏预览窗，首点不再冷启动引擎。
+/// 登录后不再预热隐藏预览窗。
 ///
-/// Windows 上不预热：`desktop_multi_window` 会在同进程再起一个 Flutter Engine，
-/// 部分机器上子窗纯黑、关窗还会拖垮主进程。默认走会话内预览；用户在设置中
-/// 开启独立窗口后，才在点击时冷启动（失败则回退应用内预览）。
-Future<void> warmDesktopChatImagePreviewWindow() {
-  if (!isDesktopCommOnly) return Future.value();
-  if (Platform.isWindows) return Future.value();
-  if (_warmPreviewWindow != null) return Future.value();
-  final existing = _warmUpGate;
-  if (existing != null) return existing;
-  final future = _warmDesktopChatImagePreviewWindowImpl();
-  _warmUpGate = future.whenComplete(() {
-    if (identical(_warmUpGate, future)) _warmUpGate = null;
-  });
-  return _warmUpGate!;
-}
-
-Future<void> _warmDesktopChatImagePreviewWindowImpl() async {
-  if (_warmPreviewWindow != null) return;
-  try {
-    final window = await WindowController.create(
-      WindowConfiguration(
-        hiddenAtLaunch: true,
-        arguments: jsonEncode(<String, dynamic>{
-          'type': _kPreviewWindowType,
-          'standby': true,
-        }),
-      ),
-    ).timeout(const Duration(seconds: 4));
-    _warmPreviewWindow = window;
-    // 尺寸/标题由子窗内 window_manager 设置；此处仅保持隐藏待命。
-  } catch (_) {
-    _warmPreviewWindow = null;
-  }
-}
+/// 待命子窗会单独跑一套 Flutter Engine；Mac 上即使用户从没点开图片，
+/// 转圈 loading 也会按屏幕刷新率空转，后台 CPU / 风扇都会上来。
+/// 第一次点开允许稍慢，不要靠后台空转换首开速度。
+Future<void> warmDesktopChatImagePreviewWindow() => Future.value();
 
 /// 桌面端：打开真正的系统级图片预览窗口（独立 HWND / NSWindow）。
 Future<void> openDesktopChatImagePreviewWindow({
@@ -152,22 +121,6 @@ Future<void> _openDesktopChatImagePreviewWindowImpl({
       return;
     } catch (_) {
       _warmPreviewWindow = null;
-    }
-  }
-
-  final warming = _warmUpGate;
-  if (warming != null) {
-    try {
-      await warming.timeout(const Duration(seconds: 2));
-    } catch (_) {}
-    final ready = _warmPreviewWindow;
-    if (ready != null) {
-      try {
-        await showWarm(ready);
-        return;
-      } catch (_) {
-        _warmPreviewWindow = null;
-      }
     }
   }
 
@@ -410,15 +363,17 @@ class _DesktopImagePreviewHostState extends State<_DesktopImagePreviewHost>
     if (initial != null) {
       _session = initial;
       _service = ConversationService(session: initial.session);
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _session == null) _pausePreviewFrames();
+      });
     }
     if (Platform.isMacOS) {
-      // macOS multi_window 停帧绕过：见 MixinNetwork/flutter-plugins#319
+      // macOS multi_window 子窗收不到系统 hidden；inactive 仍会继续排帧。
+      // 见 MixinNetwork/flutter-plugins#319。必须落到 hidden 才会停 vsync。
       _macLifecycleFix = AppLifecycleListener(
-        onHide: () {
-          SchedulerBinding.instance
-              // ignore: invalid_use_of_protected_member
-              .handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-        },
+        onHide: _pausePreviewFrames,
+        onShow: _resumePreviewFrames,
       );
     }
     unawaited(
@@ -436,6 +391,7 @@ class _DesktopImagePreviewHostState extends State<_DesktopImagePreviewHost>
           _service = ConversationService(session: next.session);
           _reloadToken++;
         });
+        _resumePreviewFrames();
         try {
           await windowManager.setTitle('图片预览');
           await windowManager.show();
@@ -467,8 +423,20 @@ class _DesktopImagePreviewHostState extends State<_DesktopImagePreviewHost>
     super.dispose();
   }
 
+  void _pausePreviewFrames() {
+    SchedulerBinding.instance
+        // ignore: invalid_use_of_protected_member
+        .handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+  }
+
+  void _resumePreviewFrames() {
+    SchedulerBinding.instance
+        // ignore: invalid_use_of_protected_member
+        .handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+  }
+
   void _hideWindow() {
-    // 关闭即回到待命态并 hide 保活；勿销毁引擎（主窗侧还在复用）。
+    // 关闭即回到静态待命并 hide；勿销毁引擎（主窗侧还在复用）。
     // macOS Dock 恢复只应亮主窗，见 AppDelegate.applicationShouldHandleReopen。
     if (_session != null || _service != null) {
       _service?.close();
@@ -482,6 +450,7 @@ class _DesktopImagePreviewHostState extends State<_DesktopImagePreviewHost>
         _service = null;
       }
     }
+    _pausePreviewFrames();
     unawaited(widget.controller.hide());
   }
 
@@ -489,21 +458,25 @@ class _DesktopImagePreviewHostState extends State<_DesktopImagePreviewHost>
   Widget build(BuildContext context) {
     final session = _session;
     final service = _service;
-    return MaterialApp(
-      title: '图片预览',
-      debugShowCheckedModeBanner: false,
-      theme: DunesTheme.light(),
-      home: session == null || service == null
-          ? const _PreviewStandbyPage()
-          : ChatImagePreviewPage(
-              key: ValueKey<int>(_reloadToken),
-              service: service,
-              items: session.items,
-              initialIndex: session.initialIndex,
-              conversationId: session.conversationId,
-              initialPreviewBytes: session.seedBytes,
-              onClose: _hideWindow,
-            ),
+    final live = session != null && service != null;
+    return TickerMode(
+      enabled: live,
+      child: MaterialApp(
+        title: '图片预览',
+        debugShowCheckedModeBanner: false,
+        theme: DunesTheme.light(),
+        home: live
+            ? ChatImagePreviewPage(
+                key: ValueKey<int>(_reloadToken),
+                service: service,
+                items: session.items,
+                initialIndex: session.initialIndex,
+                conversationId: session.conversationId,
+                initialPreviewBytes: session.seedBytes,
+                onClose: _hideWindow,
+              )
+            : const _PreviewStandbyPage(),
+      ),
     );
   }
 }
@@ -515,16 +488,7 @@ class _PreviewStandbyPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Scaffold(
       backgroundColor: Colors.black,
-      body: Center(
-        child: SizedBox(
-          width: 28,
-          height: 28,
-          child: CircularProgressIndicator(
-            strokeWidth: 2.4,
-            color: Colors.white70,
-          ),
-        ),
-      ),
+      body: SizedBox.expand(),
     );
   }
 }

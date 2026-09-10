@@ -31,6 +31,7 @@ class TaskItem {
     this.creatorName = '',
     this.approverName = '',
     this.parentTitle = '',
+    this.sourceMeetingTitle = '',
     this.overdue = false,
     this.coOwnerUserIds = const [],
     this.aiState = '',
@@ -67,6 +68,7 @@ class TaskItem {
   final String creatorName;
   final String approverName;
   final String parentTitle;
+  final String sourceMeetingTitle;
   final bool overdue;
   final List<int> coOwnerUserIds;
 
@@ -118,6 +120,7 @@ class TaskItem {
       creatorName: '${json['creatorName'] ?? ''}',
       approverName: '${json['approverName'] ?? ''}',
       parentTitle: '${json['parentTitle'] ?? ''}',
+      sourceMeetingTitle: '${json['sourceMeetingTitle'] ?? ''}',
       overdue: json['overdue'] == true,
       coOwnerUserIds:
           (json['coOwnerUserIds'] as List?)
@@ -380,6 +383,51 @@ class HrbpDeptStat {
       rejected: (json['rejected'] as num?)?.toInt() ?? 0,
     );
   }
+
+  /// 主任务是否都已办结（与填报进度是否 100% 无关）。
+  bool get allClosed => mainTotal > 0 && mainCompleted >= mainTotal;
+
+  String get summaryLine {
+    final parts = <String>[
+      '$mainTotal 个主任务',
+      '$mainCompleted 已办结',
+    ];
+    if (mainOverdue > 0) parts.add('$mainOverdue 已逾期未办结');
+    return parts.join(' · ');
+  }
+}
+
+String taskFillProgressLabel(int progressPct) => '填报 $progressPct%';
+
+/// 逾期且未办结时的说明；进度拉满仍可能返回文案。
+String? taskUnfinishedOverdueHint({
+  required bool overdue,
+  required bool completed,
+  required int progressPct,
+}) {
+  if (!overdue || completed) return null;
+  if (progressPct >= 100) {
+    return '已过截止日，尚未办结。进度填满不等于已经完成。';
+  }
+  return '已过截止日，尚未办结。';
+}
+
+String? taskPostponeError({
+  required DateTime? startAt,
+  required DateTime? currentDue,
+  required DateTime? newDue,
+}) {
+  if (newDue == null) return '请选择新的截止日';
+  final dueDay = DateTime(newDue.year, newDue.month, newDue.day);
+  if (startAt != null) {
+    final startDay = DateTime(startAt.year, startAt.month, startAt.day);
+    if (dueDay.isBefore(startDay)) return '结束时间不能早于开始时间';
+  }
+  if (currentDue != null) {
+    final cur = DateTime(currentDue.year, currentDue.month, currentDue.day);
+    if (!dueDay.isAfter(cur)) return '新的截止日必须晚于当前截止日';
+  }
+  return null;
 }
 
 String taskStatusLabel(String status) {
@@ -410,4 +458,23 @@ String taskPriorityLabel(String priority) {
     default:
       return '中';
   }
+}
+
+/// 描述若只是标题复写，详情不再重复展示。
+String taskDistinctDescription(TaskItem task) {
+  final desc = task.description.trim();
+  if (desc.isEmpty || desc == task.title.trim()) return '';
+  return desc;
+}
+
+/// 列表卡补充信息：会议来源或描述首句。
+String? taskCardContextLine(TaskItem task) {
+  final meeting = task.sourceMeetingTitle.trim();
+  if (meeting.isNotEmpty) return '来自《$meeting》';
+  final desc = taskDistinctDescription(task);
+  if (desc.isEmpty) return null;
+  final line = desc.split('\n').first.trim();
+  if (line.isEmpty) return null;
+  if (line.length <= 36) return line;
+  return '${line.substring(0, 36)}…';
 }

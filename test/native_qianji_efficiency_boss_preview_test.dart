@@ -211,6 +211,11 @@ void main() {
     expect(find.text('工作情况'), findsWidgets);
     expect(find.text('每个人工作实不实'), findsOneWidget);
     expect(find.text('工作实不实'), findsOneWidget);
+    expect(find.textContaining('任务 3人在推进'), findsOneWidget);
+    expect(find.text('把事办掉'), findsNothing);
+
+    await tester.tap(find.text('工作实不实'));
+    await tester.pumpAndSettle();
     expect(find.text('把事办掉'), findsOneWidget);
     expect(find.text('好好开会'), findsOneWidget);
     expect(find.text('用好知识库'), findsOneWidget);
@@ -269,7 +274,7 @@ void main() {
     expect(find.textContaining('来自任务助手'), findsOneWidget);
     expect(find.textContaining('来自会议纪要'), findsOneWidget);
     expect(find.textContaining('来自知识库'), findsOneWidget);
-    expect(find.textContaining('来自 IM 业务卡片'), findsOneWidget);
+    expect(find.textContaining('抽本月活跃会话给 AI'), findsOneWidget);
     expect(find.text('再看一遍指引'), findsOneWidget);
   });
 
@@ -280,6 +285,140 @@ void main() {
     await tester.tap(find.text('跳过').first);
     await tester.pumpAndSettle();
     expect(find.text('先选月份'), findsNothing);
+  });
+
+  test('task judgment prefers overdue and rejected over AI', () {
+    expect(
+      workSituationTaskChipLabel(_person(
+        userId: 1,
+        name: '陈可',
+        title: '产品经理',
+        departmentId: 1,
+        departmentName: '产品部',
+        taskOverdue: 1,
+        taskCompleted: 4,
+      )),
+      '超期未结',
+    );
+    expect(
+      workSituationTaskIsAdvancing(_person(
+        userId: 1,
+        name: '陈可',
+        title: '产品经理',
+        departmentId: 1,
+        departmentName: '产品部',
+        taskOverdue: 1,
+      )),
+      isFalse,
+    );
+    expect(
+      workSituationTaskChipLabel(WorkSituationPerson(
+        userId: 1,
+        name: '陈可',
+        title: '产品经理',
+        departmentId: 1,
+        departmentName: '产品部',
+        proposalRejected: 1,
+        taskReviewLevel: 'delivering',
+      )),
+      '被退回',
+    );
+    expect(
+      workSituationTaskChipLabel(WorkSituationPerson(
+        userId: 1,
+        name: '陈可',
+        title: '产品经理',
+        departmentId: 1,
+        departmentName: '产品部',
+        taskTotal: 3,
+        taskDoing: 3,
+        taskReviewLevel: 'stalled',
+        taskReviewWhy: '抽看后多数空壳',
+      )),
+      '空转',
+    );
+    expect(
+      workSituationTaskChipLabel(_person(
+        userId: 1,
+        name: '陈可',
+        title: '产品经理',
+        departmentId: 1,
+        departmentName: '产品部',
+        taskCompleted: 2,
+      )),
+      '按期',
+    );
+    expect(
+      workSituationTaskIsAdvancing(WorkSituationPerson(
+        userId: 1,
+        name: '陈可',
+        title: '产品经理',
+        departmentId: 1,
+        departmentName: '产品部',
+        taskDoing: 2,
+        taskWaitingOnOthers: 2,
+      )),
+      isTrue,
+    );
+    expect(
+      workSituationTaskChipLabel(WorkSituationPerson(
+        userId: 1,
+        name: '陈可',
+        title: '产品经理',
+        departmentId: 1,
+        departmentName: '产品部',
+        taskDoing: 2,
+        taskWaitingOnOthers: 2,
+      )),
+      '待下级',
+    );
+    expect(
+      workSituationTaskChipLabel(WorkSituationPerson(
+        userId: 1,
+        name: '陈可',
+        title: '产品经理',
+        departmentId: 1,
+        departmentName: '产品部',
+        taskDoing: 1,
+        taskWithoutDue: 1,
+      )),
+      '没约期',
+    );
+    expect(
+      workSituationTaskChipLabel(WorkSituationPerson(
+        userId: 1,
+        name: '陈可',
+        title: '产品经理',
+        departmentId: 1,
+        departmentName: '产品部',
+        taskDoing: 1,
+      )),
+      '在办',
+    );
+    expect(
+      workSituationTaskChipLabel(WorkSituationPerson(
+        userId: 1,
+        name: '陈可',
+        title: '产品经理',
+        departmentId: 1,
+        departmentName: '产品部',
+        imTalkLevel: 'substantial',
+        taskReviewWhy: '这个月任务不多',
+      )),
+      '本月少事',
+    );
+    expect(
+      workSituationTaskWhy(WorkSituationPerson(
+        userId: 1,
+        name: '陈可',
+        title: '产品经理',
+        departmentId: 1,
+        departmentName: '产品部',
+        imTalkLevel: 'substantial',
+        taskReviewWhy: '这个月任务不多',
+      )),
+      contains('会话在跟'),
+    );
   });
 
   test('tour seen flag is per user', () async {

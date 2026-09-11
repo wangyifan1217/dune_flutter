@@ -54,7 +54,7 @@ class ApprovalTodoFlowGuide extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
       children: [
-        _loopGroup('付款 + 回票（行政/业务采购、合同付款、推广费、预付款）', [
+        _loopGroup('付款 + 回票（行政/业务采购、合同付款、推广费、预付款、贷款付息还款）', [
           ['终审通过', '付款', '已付款', '先票后款：核验发票'],
           ['核验失败', '不重审', '发起人「补传发票」', '核验人再核验'],
           ['先款后票：补传发票 → 核验　·　到期未回票催办 → 无法收回'],

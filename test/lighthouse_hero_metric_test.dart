@@ -811,6 +811,23 @@ void main() {
     expect(lighthouseLedgerCollapsedShowsSparkline, isFalse);
     expect(lighthouseLedgerCollapsedShowsGroup, isFalse);
     expect(lighthouseLedgerCollapsedShowsGrossMargin, isTrue);
+    expect(lighthouseLedgerPinnedGrossMarginSharesRowWithExpand, isFalse);
+    expect(lighthouseLedgerPinnedGrossMarginLabelSize, 10.5);
+    expect(lighthouseLedgerPinnedGrossMarginValueSize, 12.0);
+    expect(lighthouseLedgerPinnedGrossMarginText(null), '—');
+    expect(lighthouseLedgerPinnedGrossMarginText(68.64), '68.6%');
+    expect(lighthouseLedgerPinnedGrossMarginText(-1.25), '-1.3%');
+    // 最小冻结列宽下，毛利率行（无展开按钮、只显示百分数）仍应装得下「68.6%」。
+    final marginSlot = lighthouseLedgerPinnedGrossMarginContentWidth(
+      pinnedWidth: lighthouseLedgerPinnedMinWidth,
+    );
+    expect(marginSlot, greaterThanOrEqualTo(60));
+    expect(
+      lighthouseLedgerPinnedGrossMarginContentWidth(
+        pinnedWidth: lighthouseLedgerPinnedWidthFor(390, tab: 'product'),
+      ),
+      greaterThanOrEqualTo(80),
+    );
     expect(lighthouseLedgerSummaryMetricTone('prepaid'), 'cash');
     expect(lighthouseLedgerSummaryMetricTone('netTa'), 'cash');
     expect(lighthouseLedgerSummaryMetricTone('profit'), 'profit');

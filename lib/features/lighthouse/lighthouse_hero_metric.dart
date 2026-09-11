@@ -934,6 +934,32 @@ const bool lighthouseLedgerCollapsedShowsSparkline = false;
 const bool lighthouseLedgerCollapsedShowsGroup = false;
 const bool lighthouseLedgerCollapsedShowsGrossMargin = true;
 
+/// 冻结列「毛利率」字号：要比 mute 灰字大一档，跟右侧核心数字齐平。
+const double lighthouseLedgerPinnedGrossMarginLabelSize = 10.5;
+const double lighthouseLedgerPinnedGrossMarginValueSize = 12.0;
+
+/// 毛利率不得与展开按钮同一行。
+/// 同行时按钮占约 33px，窄冻结列里「毛利率 68.6%」会溢出到右侧网格下方，
+/// 看起来就像被挡住只显示一半。
+const bool lighthouseLedgerPinnedGrossMarginSharesRowWithExpand = false;
+
+/// 冻结列留给毛利率文案的可用宽度（不含展开按钮；展开在名称行）。
+double lighthouseLedgerPinnedGrossMarginContentWidth({
+  required double pinnedWidth,
+  double horizontalPadding = 17, // left 11 + right 6
+  double rankWidth = 28,
+  double rankGap = 6,
+}) {
+  final w = pinnedWidth - horizontalPadding - rankWidth - rankGap;
+  return w < 0 ? 0 : w;
+}
+
+/// 冻结列毛利率文案。null → 「—」。
+String lighthouseLedgerPinnedGrossMarginText(double? pct) {
+  if (pct == null) return '—';
+  return '${pct.toStringAsFixed(1)}%';
+}
+
 /// 分组文字关掉之后，冻结列那条 3px 彩条就没有图例可以解码了 ——
 /// 六种颜色对用户等价于噪点。跟着 ShowsGroup 一起关；要恢复请两个一起开。
 const bool lighthouseLedgerCollapsedShowsGroupColorBar =

@@ -27257,6 +27257,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             const SizedBox(width: 6),
           Expanded(
             // 净TA 收起态没有毛利率第二行：标题、01、展开箭头同一条水平线。
+            // 产品/供给/渠道：展开按钮也挂在名称行（与净TA 同），毛利率独占下一行全宽 ——
+            // 以前按钮和「毛利率 68.6%」抢同一行，溢出被右侧网格盖住，只剩半截。
             child: tab == 'netTa'
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -27271,15 +27273,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      nameRow,
-                      // 对账状态单独占一行。塞进下面那行会和毛利率抢宽度 ——
-                      // 冻结列只有一百出头，「已对账」加「毛利率 68.6%」
-                      // 直接把那行撑溢出（RIGHT OVERFLOWED）。
-                      // 它是这一行的属性，不是某个指标的，本来就该自己一行。
-                      //
-                      // 间距按「一条文字」给，不再按「一个胶囊」给：
-                      // 胶囊自带上下内边距，外面再垫 6 就散了；
-                      // 现在三行是名字 / 对账 / 毛利率，行距要匀。
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: nameRow),
+                          SizedBox(width: _fs(6)),
+                          expandButton,
+                        ],
+                      ),
+                      // 对账状态单独占一行。塞进毛利率行会抢宽度。
+                      // 间距按「一条文字」给，三行是名字 / 对账 / 毛利率。
                       if (reconStatus != null) ...[
                         SizedBox(height: _fs(5)),
                         Align(
@@ -27288,9 +27291,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         ),
                       ],
                       SizedBox(height: _fs(reconStatus != null ? 5 : 8)),
-                      Row(
-                        children: [
-                          if (lighthouseLedgerCollapsedShowsGroup) ...[
+                      if (lighthouseLedgerCollapsedShowsGroup)
+                        Row(
+                          children: [
                             if (hun != null && hun.hasAny) ...[
                               Text(
                                 _hunBadgeFor(hun.primary),
@@ -27326,53 +27329,31 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               ),
                             ),
                           ],
-                          // v19: 毛利率放在名称正下方的左槽（分组关掉后空着的位置），
-                          // 与表头冻结列「产品 / 毛利率」的两行标签对上；
-                          // 旧版被 Spacer 顶到最右，和 22px 的展开箭头零间距贴在一起，
-                          // 看着像一个可点控件，实际左半是静态文本 —— 误触源。
-                          if (lighthouseLedgerCollapsedShowsGrossMargin) ...[
-                            Flexible(
-                              child: Text.rich(
-                                TextSpan(
-                                  children: [
-                                    TextSpan(
-                                      text: '毛利率 ',
-                                      style: LhTypography.mono(
-                                        size: _fs(9.5),
-                                        color: LhColors.mute,
-                                        weight: FontWeight.w500,
-                                        height: 1.0,
-                                      ),
-                                    ),
-                                    TextSpan(
-                                      text: grossMargin == null
-                                          ? '—'
-                                          : '${grossMargin.toStringAsFixed(1)}%',
-                                      style: _tabular(
-                                        LhTypography.mono(
-                                          size: _fs(10),
-                                          color: LhColors.ink,
-                                          weight: FontWeight.w700,
-                                          height: 1.0,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                maxLines: 1,
-                                softWrap: false,
-                                overflow: TextOverflow.fade,
+                        ),
+                      // 毛利率独占全宽，不与展开按钮同行（见
+                      // lighthouseLedgerPinnedGrossMarginSharesRowWithExpand）。
+                      // 表头冻结列已是「产品 / 毛利率」两行，这里只出完整百分数，
+                      // 再写「毛利率」三个字会在最小列宽下把 68.6% 挤成半截。
+                      if (lighthouseLedgerCollapsedShowsGrossMargin)
+                        Text(
+                          lighthouseLedgerPinnedGrossMarginText(grossMargin),
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.clip,
+                          style: _tabular(
+                            LhTypography.mono(
+                              size: _fs(
+                                lighthouseLedgerPinnedGrossMarginValueSize,
                               ),
+                              color: grossMargin != null && grossMargin < 0
+                                  ? LhColors.pos
+                                  : LhColors.ink,
+                              weight: FontWeight.w700,
+                              height: 1.0,
                             ),
-                          ],
-                          if (!lighthouseLedgerCollapsedShowsGroup &&
-                              !lighthouseLedgerCollapsedShowsGrossMargin)
-                            const Spacer(),
-                          SizedBox(width: _fs(6)),
-                          expandButton,
-                        ],
-                      ),
-                      // 折扣进度：第四行，只有供给一级行才有。
+                          ),
+                        ),
+                      // 折扣进度：只有供给一级行才有。
                       if (discountStrip != null) discountStrip,
                     ],
                   ),
@@ -35356,7 +35337,11 @@ class _LedgerGridLine extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // 冻结列不包行级 onTap：展开箭头与名称各自有独立手势。
-              SizedBox(width: pinnedWidth, child: pinned),
+              // ClipRect：防止冻结列内容横向溢出画到右侧网格底下（半截被挡住）。
+              SizedBox(
+                width: pinnedWidth,
+                child: ClipRect(child: pinned),
+              ),
               Expanded(child: grid),
             ],
           ),

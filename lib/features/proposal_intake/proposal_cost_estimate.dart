@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'proposal_intake_models.dart';
+import 'settlement_catalog.dart';
 
 const kProposalCouponProcurementCostKey = 'couponProcurementCost';
 const kProposalSalesScaleKey = 'salesScale';
@@ -320,41 +321,80 @@ double proposalSalesOutputTaxRate(Map<String, dynamic> form) {
   );
 }
 
-double proposalPurchaseInputTaxRate(Map<String, dynamic> form) {
-  return _firstPositiveTaxRate([
-    for (final product in proposalIntakeSupplyProducts(form))
-      for (final settle in proposalIntakeSupplySettlements(product))
-        settle.terms.taxRate,
-  ]);
+/// 进项税率只取「可抵扣票种」那一行的税率；普票、收据、未填票种都不算。
+double _firstDeductibleTaxRate(Iterable<ProposalFinanceSettleTerms> termsList) {
+  for (final terms in termsList) {
+    if (!proposalInvoiceDeductible(terms.invoiceType)) continue;
+    final rate = proposalParseTaxRate(terms.taxRate);
+    if (rate > 0) return rate;
+  }
+  return 0;
 }
 
-double proposalProjectCostTaxRate(Map<String, dynamic> form) {
-  final payable = _firstPositiveTaxRate([
-    for (final hit in proposalPayableProjectCostHits(form)) hit.terms.taxRate,
-  ]);
-  if (payable > 0) return payable;
-  final raw = form['costItemSettleTerms'];
-  if (raw is! Map) return 0;
-  return _firstPositiveTaxRate([
-    for (final name in proposalCostSelectedNames(form, 'costItems'))
-      for (final terms in proposalCostSettleTermsList(
-        raw,
-        name: name,
-        id: proposalCostAmountId(name, const []),
-      ))
-        terms.taxRate,
-    ...proposalCostSettleTermsMap(raw).values.map((terms) => terms.taxRate),
-  ]);
+/// 是否已经明确填过票种。
+///
+/// 用来区分两种「进项税率取不到」的情形：
+/// 票种一行都没填 —— 当作还没填完，沿用销项税率兜底，保持原有行为；
+/// 票种填了但全是普票 —— 这是真的抵不了，进项按 0 算，不能再拿销项税率替它兜。
+bool _anyInvoiceTypeDeclared(Iterable<ProposalFinanceSettleTerms> termsList) {
+  for (final terms in termsList) {
+    if (terms.invoiceType.trim().isNotEmpty) return true;
+  }
+  return false;
 }
+
+Iterable<ProposalFinanceSettleTerms> _purchaseSettleTerms(
+  Map<String, dynamic> form,
+) sync* {
+  for (final product in proposalIntakeSupplyProducts(form)) {
+    for (final settle in proposalIntakeSupplySettlements(product)) {
+      yield settle.terms;
+    }
+  }
+}
+
+Iterable<ProposalFinanceSettleTerms> _projectCostSettleTerms(
+  Map<String, dynamic> form,
+) sync* {
+  for (final hit in proposalPayableProjectCostHits(form)) {
+    yield hit.terms;
+  }
+  final raw = form['costItemSettleTerms'];
+  if (raw is! Map) return;
+  for (final name in proposalCostSelectedNames(form, 'costItems')) {
+    yield* proposalCostSettleTermsList(
+      raw,
+      name: name,
+      id: proposalCostAmountId(name, const []),
+    );
+  }
+  yield* proposalCostSettleTermsMap(raw).values;
+}
+
+double proposalPurchaseInputTaxRate(Map<String, dynamic> form) =>
+    _firstDeductibleTaxRate(_purchaseSettleTerms(form));
+
+double proposalProjectCostTaxRate(Map<String, dynamic> form) =>
+    _firstDeductibleTaxRate(_projectCostSettleTerms(form));
 
 /// 销项按各销售结算「规模 × 比例 × 该行税率」加总；无规模时用收入 × 销项税率。
-/// 进项 = 采购成本 × 供给税率 + 项目成本 × 项目成本税率；缺进项税率时与销项相同。
+/// 销项不看票种——开普票一样要交。
+///
+/// 进项 = 采购成本 × 供给税率 + 项目成本 × 项目成本税率。
+/// 进项税率只取专用发票那一行；票种已填但全是普票时进项按 0 算，
+/// 票种一行都没填时才拿销项税率兜底。
 ProposalVatEstimate proposalVatEstimate(Map<String, dynamic> form) {
   final outputRate = proposalSalesOutputTaxRate(form);
   var inputRate = proposalPurchaseInputTaxRate(form);
-  if (inputRate <= 0) inputRate = outputRate;
+  final purchaseDeclared = _anyInvoiceTypeDeclared(_purchaseSettleTerms(form));
+  if (inputRate <= 0 && !purchaseDeclared) {
+    inputRate = outputRate;
+  }
   var projectRate = proposalProjectCostTaxRate(form);
-  if (projectRate <= 0) projectRate = inputRate;
+  final projectDeclared = _anyInvoiceTypeDeclared(_projectCostSettleTerms(form));
+  if (projectRate <= 0 && !projectDeclared) {
+    projectRate = inputRate;
+  }
 
   var outputTax = 0.0;
   var anyScale = false;

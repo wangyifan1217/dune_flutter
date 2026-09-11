@@ -890,6 +890,13 @@ const kProposalInvoiceTypes = <String>[
   '电子普通发票',
 ];
 
+/// 进项税额只有取得「专用发票」才能抵扣。
+///
+/// 普通发票、电子普通发票、收据以及未填写票种，一律按不可抵处理——
+/// 钱照样花出去，但这部分增值税抵不回来。
+bool proposalInvoiceDeductible(String invoiceType) =>
+    invoiceType.contains('专用');
+
 const kProposalTaxRates = <String>[
   '0%',
   '1%',

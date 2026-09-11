@@ -543,6 +543,52 @@ void main() {
     expect(find.text('定位'), findsOneWidget);
   });
 
+  testWidgets('proposal table of contents sits at the top for jump', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_harness(1440));
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('proposal-nav-toc')), findsOneWidget);
+    expect(find.byKey(const ValueKey('proposal-toc-market')), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('proposal-nav-toc'))).dx,
+      lessThan(
+        tester.getTopLeft(find.byKey(const ValueKey('proposal-nav-market'))).dx,
+      ),
+    );
+    expect(
+      tester.getTopLeft(find.text('审批进度')).dy,
+      lessThan(
+        tester.getTopLeft(find.byKey(const ValueKey('proposal-toc-market'))).dy,
+      ),
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('proposal-toc-market'))).dy,
+      lessThan(tester.getTopLeft(find.text('一、市场部内容')).dy),
+    );
+
+    final techTitle = find.text('二、科技部内容', skipOffstage: false);
+    final before = tester.getTopLeft(techTitle).dy;
+    await tester.tap(find.byKey(const ValueKey('proposal-toc-tech')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.getTopLeft(techTitle).dy, lessThan(before));
+    expect(tester.getTopLeft(techTitle).dy, lessThan(420));
+
+    await tester.tap(find.byKey(const ValueKey('proposal-nav-toc')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('proposal-toc-market'))).dy,
+      lessThan(200),
+    );
+  });
+
   testWidgets('section locator jumps to the technology block', (tester) async {
     tester.view.physicalSize = const Size(1440, 800);
     tester.view.devicePixelRatio = 1;
@@ -562,7 +608,7 @@ void main() {
 
     final after = tester.getTopLeft(techTitle).dy;
     expect(after, lessThan(before));
-    expect(after, lessThan(260));
+    expect(after, lessThan(420));
   });
 
   testWidgets('reviewer jumps to tech and lights the tech nav chip', (
@@ -612,7 +658,7 @@ void main() {
     );
     expect(
       tester.getTopLeft(find.text('二、科技部内容', skipOffstage: false)).dy,
-      lessThan(260),
+      lessThan(420),
     );
   });
 
@@ -1029,22 +1075,14 @@ void main() {
 
     await scrollUntil('市场部负责人二复核');
     expect(find.text('市场部负责人二复核'), findsWidgets);
-    await scrollUntil('销售规模目标（年·万元）');
-    expect(find.text('销售规模目标（年·万元）'), findsOneWidget);
-    expect(
-      tester.widget<ProposalField>(_fieldOf('销售规模目标（年·万元）').first).formula,
-      kProposalSalesScaleFormula,
-    );
-    expect(
-      tester.widget<ProposalField>(_fieldOf('收入（万元）').first).formula,
-      kProposalRevenueFormula,
-    );
-    expect(
-      tester.widget<ProposalField>(_fieldOf('利润（万元）').first).formula,
-      kProposalProfitFormula,
-    );
-    expect(find.text('收入（万元）'), findsOneWidget);
+    await scrollUntil('产品结算还没填规模，这一段暂时算不出数');
+    expect(find.text('产品结算还没填规模，这一段暂时算不出数'), findsOneWidget);
+    expect(find.text('去市场部添加渠道产品 →'), findsOneWidget);
+    expect(find.text('销售规模目标（年·万元）'), findsNothing);
+    expect(find.text('收入（万元）'), findsNothing);
+    expect(find.text('利润（万元）'), findsNothing);
     expect(find.text('电子券采购成本（万元）'), findsOneWidget);
+    expect(find.text('月周转次数'), findsOneWidget);
     expect(find.text('核销金额（万元）'), findsNothing);
     expect(find.text('发票（万元）'), findsNothing);
     expect(find.text('财务部负责人二复核'), findsWidgets);
@@ -3002,9 +3040,12 @@ void main() {
       );
       await _scrollUntil(tester, '产品结算（销售收入）');
       expect(find.text('产品结算（销售收入）'), findsOneWidget);
+      expect(find.text('产品结算还没填规模，这一段暂时算不出数'), findsOneWidget);
       expect(
         tester.getTopLeft(find.text('产品结算（销售收入）')).dy,
-        lessThan(tester.getTopLeft(find.text('销售规模目标（年·万元）')).dy),
+        lessThan(
+          tester.getTopLeft(find.text('产品结算还没填规模，这一段暂时算不出数')).dy,
+        ),
       );
       expect(
         tester.getTopLeft(find.text('产品结算（销售收入）')).dy,
@@ -4126,5 +4167,99 @@ void main() {
     final hunField = _childInField<TextFormField>(tester, 'HUN ID');
     expect(hunField.enabled, isTrue);
     expect(hunField.initialValue, 'HUN-8848');
+  });
+
+  testWidgets('finance item reviews stay as dots until review mode is on', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_harness(1440));
+    await tester.pump();
+    await _scrollUntil(tester, '开始逐条复核');
+    await tester.ensureVisible(find.text('开始逐条复核'));
+    await tester.pump();
+    expect(find.text('开始逐条复核'), findsOneWidget);
+    expect(find.text('退出逐条复核'), findsNothing);
+    expect(
+      find.descendant(
+        of: _fieldOf('是否回滚'),
+        matching: find.text('财务部负责人二复核'),
+      ),
+      findsNothing,
+    );
+
+    await tester.tap(find.text('开始逐条复核'));
+    await tester.pump();
+    expect(find.text('退出逐条复核'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: _fieldOf('是否回滚'),
+        matching: find.text('财务部负责人二复核'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('tapping a four-flow node jumps to the source field and flashes', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_harness(1440));
+    await tester.pump();
+    await _scrollUntil(tester, '提案全链路');
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('flow-lane-node-supplier')).first,
+    );
+    await tester.pump();
+
+    await tester.tap(
+      find.byKey(const ValueKey('flow-lane-node-supplier')).first,
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    final flash = find.byKey(
+      const ValueKey('proposal-flash-purchaseCounterparty'),
+    );
+    expect(flash, findsOneWidget);
+    final box = tester.widget<AnimatedContainer>(flash);
+    final deco = box.decoration as BoxDecoration;
+    expect(deco.color, const Color(0xFFFFF4D6));
+    expect(tester.getRect(flash).top, inInclusiveRange(-4.0, 400.0));
+  });
+
+  testWidgets('tapping a four-flow edge jumps to finance interfaces', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_harness(1440));
+    await tester.pump();
+    await _scrollUntil(tester, '提案全链路');
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('flow-lane-edge-n4')).first,
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('flow-lane-edge-n4')).first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    final flash = find.byKey(
+      const ValueKey('proposal-flash-financeInterfaces'),
+    );
+    expect(flash, findsOneWidget);
+    final box = tester.widget<AnimatedContainer>(flash);
+    final deco = box.decoration as BoxDecoration;
+    expect(deco.color, const Color(0xFFFFF4D6));
+    expect(tester.getRect(flash).top, inInclusiveRange(-4.0, 400.0));
   });
 }

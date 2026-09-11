@@ -1582,7 +1582,7 @@ List<String> proposalIntakeTechnologyReviewGaps(Map<String, dynamic> review) {
   ];
 }
 
-enum ProposalIntakeNavSection { market, tech, finance, flow }
+enum ProposalIntakeNavSection { toc, market, tech, finance, flow }
 
 ProposalIntakeNavSection? proposalIntakeNavSectionForAction(String action) {
   return switch (action) {
@@ -1605,6 +1605,7 @@ ProposalIntakeNavSection? proposalIntakeNavSectionForAction(String action) {
 
 String proposalIntakeNavSectionLabel(ProposalIntakeNavSection section) {
   return switch (section) {
+    ProposalIntakeNavSection.toc => '目录',
     ProposalIntakeNavSection.market => '市场部',
     ProposalIntakeNavSection.tech => '科技部',
     ProposalIntakeNavSection.finance => '财务部',

@@ -3377,6 +3377,7 @@ void main() {
       ProposalIntakeNavSection.finance,
     );
     expect(proposalIntakeNavSectionForAction('president_confirm'), isNull);
+    expect(proposalIntakeNavSectionLabel(ProposalIntakeNavSection.toc), '目录');
     expect(proposalIntakeNavJumpLabel('president_confirm'), '去底部确认');
     expect(proposalIntakeTaskBannerTitle('president_confirm'), '待你最终确认');
     expect(proposalIntakeTaskBannerBody('president_confirm'), contains('审批进度'));

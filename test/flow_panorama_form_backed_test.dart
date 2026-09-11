@@ -1,4 +1,5 @@
 import 'package:dunes_app/features/proposal_intake/flow_panorama/flow_ctx_mapper.dart';
+import 'package:dunes_app/features/proposal_intake/flow_panorama/flow_lanes.dart';
 import 'package:dunes_app/features/proposal_intake/flow_panorama/flow_topology.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -85,6 +86,25 @@ void main() {
 
     for (final word in banned) {
       expect(shown, isNot(contains(word)), reason: word);
+    }
+  });
+
+  test('every panorama node and edge jumps to a form field', () {
+    for (final node in kNodes) {
+      expect(
+        kFlowFieldJumps.containsKey(node.id),
+        isTrue,
+        reason: 'missing jump for node ${node.id}',
+      );
+      expect(kFlowFieldJumps[node.id]!.fieldKeys, isNotEmpty);
+    }
+    for (final edge in kEdges) {
+      expect(
+        kFlowFieldJumps.containsKey(edge.id),
+        isTrue,
+        reason: 'missing jump for edge ${edge.id}',
+      );
+      expect(kFlowFieldJumps[edge.id]!.fieldKeys, isNotEmpty);
     }
   });
 }

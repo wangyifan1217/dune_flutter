@@ -663,7 +663,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
             child: ListView.builder(
               controller: _scroll,
               physics: const AlwaysScrollableScrollPhysics(),
-              scrollCacheExtent: const ScrollCacheExtent.viewport(1),
+              cacheExtent: MediaQuery.sizeOf(context).height,
               addAutomaticKeepAlives: false,
               addRepaintBoundaries: true,
               findChildIndexCallback: _findMessageChildIndex,

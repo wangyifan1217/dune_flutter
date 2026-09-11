@@ -17,6 +17,8 @@ import '../proposal_intake/native_proposal_intake_page.dart';
 import '../proposal_intake/proposal_intake_service.dart';
 import '../kpi/native_workbench_kpi_page.dart';
 import '../kpi/workbench_kpi_service.dart';
+import '../payment_invoice/native_payment_invoice_page.dart';
+import '../payment_invoice/payment_invoice_preview.dart';
 import '../payroll/native_payroll_report_page.dart';
 import '../payroll/payroll_report_service.dart';
 import '../am_sso/am_sso_service.dart';
@@ -91,6 +93,7 @@ enum _WorkbenchView {
   travelImport,
   kpiPerformance,
   payrollReports,
+  paymentInvoice,
 }
 
 class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
@@ -115,6 +118,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   bool? _canSeeTravelImport;
   bool? _canSeeKpiPerformance;
   bool? _canSeePayrollReports;
+  bool? _canSeePaymentInvoice;
   List<WorkbenchSsoApp> _ssoApps = const [];
 
   static const _titles = {
@@ -134,6 +138,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _WorkbenchView.travelImport: '差旅导入',
     _WorkbenchView.kpiPerformance: '业务绩效',
     _WorkbenchView.payrollReports: '工资报表',
+    _WorkbenchView.paymentInvoice: '付款发票审批',
   };
 
   bool get _isQianjiAdmin => _session.effectiveQianjiAdminAccess;
@@ -153,6 +158,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_resolveTravelImportAccess());
     unawaited(_resolveKpiPerformanceAccess());
     unawaited(_resolvePayrollReportAccess());
+    unawaited(_resolvePaymentInvoiceAccess());
     unawaited(_loadSsoApps());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -172,7 +178,9 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         incoming.effectiveBroadcastAccess !=
             _session.effectiveBroadcastAccess ||
         incoming.effectivePayrollReportAccess !=
-            _session.effectivePayrollReportAccess) {
+            _session.effectivePayrollReportAccess ||
+        incoming.effectivePaymentInvoiceAccess !=
+            _session.effectivePaymentInvoiceAccess) {
       _session = incoming;
       unawaited(_resolveTaskSummaryAccess());
       unawaited(_resolveAdministrativeNoticeAccess());
@@ -183,6 +191,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
       unawaited(_resolveTravelImportAccess());
       unawaited(_resolveKpiPerformanceAccess());
       unawaited(_resolvePayrollReportAccess());
+      unawaited(_resolvePaymentInvoiceAccess());
       unawaited(_loadSsoApps());
     }
     if (widget.active != oldWidget.active) {
@@ -224,6 +233,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_resolveTravelImportAccess());
     unawaited(_resolveKpiPerformanceAccess());
     unawaited(_resolvePayrollReportAccess());
+    unawaited(_resolvePaymentInvoiceAccess());
     unawaited(_loadSsoApps());
   }
 
@@ -372,6 +382,18 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     setState(() => _canSeePayrollReports = allowed);
   }
 
+  Future<void> _resolvePaymentInvoiceAccess() async {
+    if (_session.isExternalUser) {
+      if (mounted) setState(() => _canSeePaymentInvoice = false);
+      return;
+    }
+    if (mounted) {
+      setState(
+        () => _canSeePaymentInvoice = _session.effectivePaymentInvoiceAccess,
+      );
+    }
+  }
+
   Future<void> _loadSsoApps() async {
     if (_session.isExternalUser) {
       if (mounted) setState(() => _ssoApps = const []);
@@ -403,7 +425,11 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   bool get _isOverview => _pageIndex == 0;
 
   /// 详情/调整进度等内页：禁用 PageView 横滑，避免一滑就跳出任务栈。
-  bool get _lockPageSwipe => _onShellBackOverride != null || _hideShellHeader;
+  bool get _lockPageSwipe =>
+      !_isOverview &&
+      (_onShellBackOverride != null ||
+          _hideShellHeader ||
+          (_contentChrome?.lockPageSwipe ?? false));
 
   void _installBackInterceptor() {
     widget.navigation.canBackInterceptor = _canHandleInternalBack;
@@ -719,6 +745,13 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           key: const ValueKey<String>('workbench-payroll-reports'),
           session: _session,
         );
+      case _WorkbenchView.paymentInvoice:
+        return NativePaymentInvoicePage(
+          key: const ValueKey<String>('workbench-payment-invoice'),
+          session: _session,
+          staticPreview: kPaymentInvoiceStaticPreview,
+          onChromeChanged: _onTaskChrome,
+        );
       case _WorkbenchView.overview:
         return _buildOverviewPage();
     }
@@ -787,6 +820,16 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           color: const Color(0xFF3D7A8C),
           enabled: true,
           onTap: () => _open(_WorkbenchView.purchaseProposalIntake),
+        ),
+      if (!_session.isExternalUser &&
+          (_canSeePaymentInvoice == true || kPaymentInvoiceStaticPreview))
+        _WorkbenchTile(
+          title: '付款发票审批',
+          subtitle: '对公用途查询 · 未开完/完结',
+          icon: Icons.receipt_long_outlined,
+          color: const Color(0xFF0F766E),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.paymentInvoice),
         ),
     ];
 

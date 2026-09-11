@@ -143,7 +143,7 @@ abstract final class FlowCtxMapper {
       labels.add(text);
     }
 
-    for (final sku in proposalIntakeSkuDetails(form)) {
+    for (final sku in proposalIntakeAllSellableSkus(form)) {
       add(
         proposalIntakeCategoryLabel(
           sku.resolvedChannelCategoryL1,

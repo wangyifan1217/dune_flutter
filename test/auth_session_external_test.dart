@@ -129,6 +129,36 @@ void main() {
       isTrue,
     );
   });
+
+  test('AuthSession reads, copies and persists payment invoice access', () {
+    final fromJwt = AuthSession.fromJwt(
+      phone: '13800138000',
+      userId: 0,
+      token: _fakeJwt({'userId': 7, 'paymentInvoiceAccess': true}),
+      apiBase: 'http://example/api/v1',
+    );
+    expect(fromJwt.paymentInvoiceAccess, isTrue);
+    expect(fromJwt.effectivePaymentInvoiceAccess, isTrue);
+    expect(
+      fromJwt.copyWith(paymentInvoiceAccess: false).paymentInvoiceAccess,
+      isFalse,
+    );
+    expect(AuthSession.fromJson(fromJwt.toJson()).paymentInvoiceAccess, isTrue);
+
+    const base = AuthSession(
+      phone: '13800138000',
+      userId: 7,
+      token: 't',
+      apiBase: 'http://example/api/v1',
+      roles: [],
+    );
+    expect(
+      AuthSession.enrichFromUsersMe(base, {
+        'paymentInvoiceAccess': true,
+      }).paymentInvoiceAccess,
+      isTrue,
+    );
+  });
 }
 
 String _fakeJwt(Map<String, dynamic> claims) {

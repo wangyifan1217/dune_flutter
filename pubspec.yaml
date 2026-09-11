@@ -2,7 +2,7 @@ name: dunes_app
 description: "æ²ä¸ Â· ç»ä¸å®¡æ¹ App â åºäº index.html åå 100% è¿åç Flutter å£³"
 publish_to: 'none'
 
-version: 1.6.3+163
+version: 1.6.4+164
 
 environment:
   sdk: ^3.11.0
@@ -27,6 +27,8 @@ dependencies:
   mime: ^2.0.0
   url_launcher: ^6.3.2
   path_provider: ^2.1.5
+  pdf: ^3.11.3
+  printing: ^5.14.2
   pdfx: ^2.9.2
   centrifuge: ^0.20.0
   flutter_svg: ^2.3.0

@@ -364,148 +364,145 @@ void main() {
     expect(lifted.toJson()['channelCode'], 'C002');
   });
 
-  test(
-    'existing built sku requires catalog product instead of name',
-    () {
-      expect(
-        proposalIntakeSkuSettleIssues({
-          'skuDetails': [
-            {'id': 'sku-1', 'existingBuilt': '是'},
-          ],
-        }),
-        contains('渠道产品第1条请搜索并选择已建产品'),
-      );
-      final sku = ProposalSkuDetailRow.fromJson({
-        'id': 'sku-1',
-        'existingBuilt': '是',
-        'assetProduct': {
-          'id': 10,
-          'productCode': 'CP001',
-          'productName': '中石油100',
-          'channelId': 1,
-          'channelName': '银联商务',
-        },
-      });
-      expect(sku.isExistingBuilt, isTrue);
-      expect(sku.productName, '中石油100');
-      expect(sku.toJson()['assetProduct']['productCode'], 'CP001');
+  test('existing built sku requires catalog product instead of name', () {
+    expect(
+      proposalIntakeSkuSettleIssues({
+        'skuDetails': [
+          {'id': 'sku-1', 'existingBuilt': '是'},
+        ],
+      }),
+      contains('渠道产品第1条请搜索并选择已建产品'),
+    );
+    final sku = ProposalSkuDetailRow.fromJson({
+      'id': 'sku-1',
+      'existingBuilt': '是',
+      'assetProduct': {
+        'id': 10,
+        'productCode': 'CP001',
+        'productName': '中石油100',
+        'channelId': 1,
+        'channelName': '银联商务',
+      },
+    });
+    expect(sku.isExistingBuilt, isTrue);
+    expect(sku.productName, '中石油100');
+    expect(sku.toJson()['assetProduct']['productCode'], 'CP001');
 
-      expect(
-        proposalIntakeSkuSettleIssues({
-          'isExistingBuilt': true,
-          'skuDetails': [
-            {'id': 'sku-1'},
-          ],
-        }),
-        containsAll(['渠道产品第1条请选择业务平台', '渠道产品第1条请搜索并选择已建产品']),
-      );
-
-      final outbound = ProposalSkuDetailRow.fromJson({
-        'id': 'sku-2',
-        'isExistingProduct': true,
-        'productName': '中石油 100 元现金券',
-        'syncSource': {'code': 'POINTS_REBATE', 'name': '能源积分'},
-      });
-      expect(outbound.isExistingBuilt, isTrue);
-      expect(outbound.syncSourceRef?.name, '能源积分');
-      expect(outbound.assetProduct?.label, '中石油 100 元现金券');
-
-      final restoredSkus = proposalIntakeSkuDetails({
+    expect(
+      proposalIntakeSkuSettleIssues({
         'isExistingBuilt': true,
         'skuDetails': [
           {'id': 'sku-1'},
-          {'id': 'sku-2'},
-          {'id': 'sku-3'},
         ],
-        'products': [
+      }),
+      containsAll(['渠道产品第1条请选择业务平台', '渠道产品第1条请搜索并选择已建产品']),
+    );
+
+    final outbound = ProposalSkuDetailRow.fromJson({
+      'id': 'sku-2',
+      'isExistingProduct': true,
+      'productName': '中石油 100 元现金券',
+      'syncSource': {'code': 'POINTS_REBATE', 'name': '能源积分'},
+    });
+    expect(outbound.isExistingBuilt, isTrue);
+    expect(outbound.syncSourceRef?.name, '能源积分');
+    expect(outbound.assetProduct?.label, '中石油 100 元现金券');
+
+    final restoredSkus = proposalIntakeSkuDetails({
+      'isExistingBuilt': true,
+      'skuDetails': [
+        {'id': 'sku-1'},
+        {'id': 'sku-2'},
+        {'id': 'sku-3'},
+      ],
+      'products': [
+        {
+          'id': 'sku-1',
+          'productName': '渠道现金券A',
+          'syncSource': {'code': 'DIGITALG', 'name': '能源'},
+        },
+        {'id': 'sku-2', 'name': '渠道现金券B', 'isExistingProduct': true},
+        {'id': 'sku-3', 'productCode': 'CP-3', 'existingBuilt': '是'},
+      ],
+    });
+    expect(restoredSkus.map((row) => row.productName).toList(), [
+      '渠道现金券A',
+      '渠道现金券B',
+      'CP-3',
+    ]);
+    expect(restoredSkus[0].syncSourceRef?.name, '能源');
+    expect(restoredSkus[1].assetProduct?.label, '渠道现金券B');
+    expect(restoredSkus[2].assetProduct?.label, 'CP-3');
+
+    final synced = proposalIntakeSettlementsFromChannelCatalog(
+      ChannelProductSettlement.fromJson({
+        'id': 10,
+        'productName': '中石油100',
+        'channelId': 1,
+        'channelName': '银联商务',
+        'settlementItems': [
           {
-            'id': 'sku-1',
-            'productName': '渠道现金券A',
-            'syncSource': {'code': 'DIGITALG', 'name': '能源'},
+            'billTypeL1Name': '应收账单',
+            'billTypeL2Name': '销售款',
+            'billTypeL3Code': 'E_COUPON_SALES',
+            'billTypeL3Name': '电子券销售款',
+            'settleMethod': 1,
+            'formulaContent': 1,
+            'settlementRatio': 98.5,
+            'invoiceTypeCode': '专票',
+            'taxRateCode': '13%',
+            'ourEntity': '荷叶',
+            'counterpartyEntity': '某某渠道',
+            'effectiveTime': '2026-09-01 00:00:00',
+            'sortNo': 1,
           },
-          {'id': 'sku-2', 'name': '渠道现金券B', 'isExistingProduct': true},
-          {'id': 'sku-3', 'productCode': 'CP-3', 'existingBuilt': '是'},
         ],
-      });
-      expect(restoredSkus.map((row) => row.productName).toList(), [
-        '渠道现金券A',
-        '渠道现金券B',
-        'CP-3',
-      ]);
-      expect(restoredSkus[0].syncSourceRef?.name, '能源');
-      expect(restoredSkus[1].assetProduct?.label, '渠道现金券B');
-      expect(restoredSkus[2].assetProduct?.label, 'CP-3');
+      }),
+    );
+    expect(synced, hasLength(1));
+    expect(synced.single.terms.settleModeRef?.code, '1');
+    expect(synced.single.terms.settleRatio, '98.5%');
+    expect(synced.single.terms.taxRate, '13%');
+    expect(synced.single.terms.invoiceType, '专票');
+    expect(synced.single.terms.ourParty, '荷叶');
+    expect(synced.single.terms.billTypeRef?.name, '电子券销售款');
+    expect(synced.single.terms.effectiveTime, '2026-09-01');
+    expect(proposalIntakeSettleUsesRatio(synced.single.terms), isTrue);
+    expect(synced.single.terms.formulaRef?.name, '1');
 
-      final synced = proposalIntakeSettlementsFromChannelCatalog(
-        ChannelProductSettlement.fromJson({
-          'id': 10,
-          'productName': '中石油100',
-          'channelId': 1,
-          'channelName': '银联商务',
-          'settlementItems': [
-            {
-              'billTypeL1Name': '应收账单',
-              'billTypeL2Name': '销售款',
-              'billTypeL3Code': 'E_COUPON_SALES',
-              'billTypeL3Name': '电子券销售款',
-              'settleMethod': 1,
-              'formulaContent': 1,
-              'settlementRatio': 98.5,
-              'invoiceTypeCode': '专票',
-              'taxRateCode': '13%',
-              'ourEntity': '荷叶',
-              'counterpartyEntity': '某某渠道',
-              'effectiveTime': '2026-09-01 00:00:00',
-              'sortNo': 1,
-            },
-          ],
-        }),
-      );
-      expect(synced, hasLength(1));
-      expect(synced.single.terms.settleModeRef?.code, '1');
-      expect(synced.single.terms.settleRatio, '98.5%');
-      expect(synced.single.terms.taxRate, '13%');
-      expect(synced.single.terms.invoiceType, '专票');
-      expect(synced.single.terms.ourParty, '荷叶');
-      expect(synced.single.terms.billTypeRef?.name, '电子券销售款');
-      expect(synced.single.terms.effectiveTime, '2026-09-01');
-      expect(proposalIntakeSettleUsesRatio(synced.single.terms), isTrue);
-      expect(synced.single.terms.formulaRef?.name, '1');
-
-      final named = proposalIntakeSettlementsFromChannelCatalog(
-        ChannelProductSettlement.fromJson({
-          'id': 10,
-          'settlementItems': [
-            {
-              'billTypeL3Code': 'E_COUPON_SALES',
-              'billTypeL3Name': '电子券销售款',
-              'settleMethod': 1,
-              'formulaContent': 1,
-              'settlementRatio': 98.5,
-              'taxRateCode': '13%',
-            },
-          ],
-        }),
-        formulas: const [
-          CatalogRef(
-            code: '1',
-            name: '销售额×结算比例',
-            formulaExpression: 'amount * ratio',
-            settleMethod: '1',
-            productSource: 'CHANNEL',
-          ),
+    final named = proposalIntakeSettlementsFromChannelCatalog(
+      ChannelProductSettlement.fromJson({
+        'id': 10,
+        'settlementItems': [
+          {
+            'billTypeL3Code': 'E_COUPON_SALES',
+            'billTypeL3Name': '电子券销售款',
+            'settleMethod': 1,
+            'formulaContent': 1,
+            'settlementRatio': 98.5,
+            'taxRateCode': '13%',
+          },
         ],
-      );
-      expect(named.single.terms.formula, '销售额×结算比例');
+      }),
+      formulas: const [
+        CatalogRef(
+          code: '1',
+          name: '销售额×结算比例',
+          formulaExpression: 'amount * ratio',
+          settleMethod: '1',
+          productSource: 'CHANNEL',
+        ),
+      ],
+    );
+    expect(named.single.terms.formula, '销售额×结算比例');
 
-      final applied = const ProposalSkuDetailRow(id: 'sku-1').applyAssetProduct(
-        const ChannelProductHit(id: 10, productName: '中石油100'),
-        settlements: synced,
-      );
-      expect(applied.productName, '中石油100');
-      expect(applied.settlements.single.terms.taxRate, '13%');
-    },
-  );
+    final applied = const ProposalSkuDetailRow(id: 'sku-1').applyAssetProduct(
+      const ChannelProductHit(id: 10, productName: '中石油100'),
+      settlements: synced,
+    );
+    expect(applied.productName, '中石油100');
+    expect(applied.settlements.single.terms.taxRate, '13%');
+  });
 
   test('proposal options parse configured presidents', () {
     final options = ProposalIntakeOptions.fromJson({
@@ -777,14 +774,14 @@ void main() {
 
       expect(
         proposalTurnoverCashAmount({'salesScale': 100, 'turnoverTimes': 4}),
-        25,
+        2.08,
       );
       expect(
         proposalApplyTurnoverCash({
           'salesScale': 100,
           'turnoverTimes': 4,
         })['turnoverCash'],
-        25,
+        2.08,
       );
       expect(proposalTurnoverCashAmount({'salesScale': 100}), isNull);
       expect(
@@ -920,7 +917,7 @@ void main() {
             },
           ],
         }),
-        50,
+        4.17,
       );
       expect(
         proposalIntakeSalesFinanceFillIssues({
@@ -984,12 +981,12 @@ void main() {
           'id': 'sup-1',
           'supplierCode': 'ZYC',
           'settlements': [
-            {'id': 'sst-1', 'taxRate': '9%'},
+            {'id': 'sst-1', 'taxRate': '9%', 'invoiceType': '增值税专用发票'},
           ],
         },
       ],
       'costItemSettleTerms': {
-        '机构返佣': {'taxRate': '6%'},
+        '机构返佣': {'taxRate': '6%', 'invoiceType': '增值税专用发票'},
       },
       'taxCostItems': ['增值税及附加（能源）'],
     });
@@ -1029,7 +1026,7 @@ void main() {
           'id': 'sup-1',
           'supplierCode': 'ZYC',
           'settlements': [
-            {'id': 'sst-1', 'taxRate': '9%'},
+            {'id': 'sst-1', 'taxRate': '9%', 'invoiceType': '增值税专用发票'},
           ],
         },
       ],
@@ -1146,58 +1143,61 @@ void main() {
     expect(form['salesScale'], 600);
     expect(form['revenue'], 555.6);
     expect(form['taxCostItemAmounts']['印花税'], 0.36);
-    expect(form['turnoverCash'], 50);
+    expect(form['turnoverCash'], 4.17);
   });
 
-  test('procurement cost splits by the channel products each supply rule covers', () {
-    final form = proposalApplyEstimatedFinanceCosts({
-      'skuDetails': [
-        {
-          'id': 'sku-1',
-          'settlements': [
-            {
-              'id': 'st-1',
-              'scale': '400',
-              'settleRatio': '0.926',
-              'taxRate': '13%',
-            },
-          ],
-        },
-        {
-          'id': 'sku-2',
-          'settlements': [
-            {
-              'id': 'st-2',
-              'scale': '200',
-              'settleRatio': '0.926',
-              'taxRate': '13%',
-            },
-          ],
-        },
-      ],
-      'supplyProducts': [
-        {
-          'id': 'sup-1',
-          'settlements': [
-            {
-              'id': 'sst-1',
-              'skuIds': ['sku-1'],
-              'settleRatio': '0.9',
-              'taxRate': '9%',
-            },
-            {
-              'id': 'sst-2',
-              'skuIds': ['sku-2'],
-              'settleRatio': '0.85',
-              'taxRate': '9%',
-            },
-          ],
-        },
-      ],
-    });
-    // 400×0.9 + 200×0.85 = 530；旧口径按第一条比例会算成 600×0.9 = 540。
-    expect(form['couponProcurementCost'], 530);
-  });
+  test(
+    'procurement cost splits by the channel products each supply rule covers',
+    () {
+      final form = proposalApplyEstimatedFinanceCosts({
+        'skuDetails': [
+          {
+            'id': 'sku-1',
+            'settlements': [
+              {
+                'id': 'st-1',
+                'scale': '400',
+                'settleRatio': '0.926',
+                'taxRate': '13%',
+              },
+            ],
+          },
+          {
+            'id': 'sku-2',
+            'settlements': [
+              {
+                'id': 'st-2',
+                'scale': '200',
+                'settleRatio': '0.926',
+                'taxRate': '13%',
+              },
+            ],
+          },
+        ],
+        'supplyProducts': [
+          {
+            'id': 'sup-1',
+            'settlements': [
+              {
+                'id': 'sst-1',
+                'skuIds': ['sku-1'],
+                'settleRatio': '0.9',
+                'taxRate': '9%',
+              },
+              {
+                'id': 'sst-2',
+                'skuIds': ['sku-2'],
+                'settleRatio': '0.85',
+                'taxRate': '9%',
+              },
+            ],
+          },
+        ],
+      });
+      // 400×0.9 + 200×0.85 = 530；旧口径按第一条比例会算成 600×0.9 = 540。
+      expect(form['couponProcurementCost'], 530);
+    },
+  );
 
   test('vat item defaults to the operator kind for operator sectors', () {
     final form = proposalApplyEstimatedFinanceCosts({
@@ -1480,10 +1480,7 @@ void main() {
     if (kProposalSharedSettleEnabled) {
       expect(issues, isEmpty);
     } else {
-      expect(
-        issues,
-        contains('渠道产品「现金券100」结算一未填完结算方式对应金额、计算公式、税率'),
-      );
+      expect(issues, contains('渠道产品「现金券100」结算一未填完结算方式对应金额、计算公式、税率'));
     }
   });
 
@@ -2473,9 +2470,7 @@ void main() {
     );
     expect(proposalIntakeSkuHasManualDetails(named), isFalse);
     expect(
-      proposalIntakeSkuHasManualDetails(
-        named.copyWith(faceValue: '300'),
-      ),
+      proposalIntakeSkuHasManualDetails(named.copyWith(faceValue: '300')),
       isTrue,
     );
   });
@@ -3423,6 +3418,335 @@ void main() {
       isEmpty,
     );
   });
+
+  test(
+    'child products stay off skuDetails and add merged tech review keys',
+    () {
+      final form = {
+        'skuDetails': [
+          {
+            'id': 'sku-1',
+            'productName': '主权益',
+            'settlements': [
+              {
+                'id': 'st-1',
+                'settleMode': '按结算比例',
+                'settleRatio': '8%',
+                'formula': '销售额*比例',
+                'taxRate': '6%',
+                'scale': '100',
+              },
+            ],
+          },
+        ],
+        'childProducts': [
+          {
+            'id': 'child-1',
+            'productName': '加油100',
+            'settlements': [
+              {
+                'id': 'st-c',
+                'settleMode': '按结算比例',
+                'settleRatio': '4%',
+                'formula': '面值*比例',
+                'taxRate': '6%',
+                'scale': '50',
+              },
+            ],
+          },
+        ],
+      };
+      expect(proposalIntakeHasChildProducts(form), isTrue);
+      expect(proposalIntakeSkuDetails(form).single.id, 'sku-1');
+      expect(proposalIntakeChildProducts(form).single.id, 'child-1');
+      expect(proposalIntakeSkuSettleReviewKeys(form), [
+        'skuSettle:sku-1:st-1',
+        'skuSettle:child-1:st-c',
+      ]);
+      expect(
+        proposalIntakeTechnologyReviewItemKeys(form),
+        contains('children:technologyPlatform'),
+      );
+      expect(
+        proposalIntakeTechnologyReviewGaps(const {}, form: form),
+        contains('子产品τ-标签一'),
+      );
+      final synced = proposalIntakeSyncChildProductMeta(form);
+      expect(synced['isCouponPack'], isTrue);
+      expect(synced['financeModules'], isNull);
+      expect(
+        proposalIntakeProductFinance(
+          synced,
+          owner: kProposalProductFinanceChildren,
+        ),
+        isEmpty,
+      );
+      final outbound = proposalIntakeSalesOutboundJson(
+        form: synced,
+        id: 8,
+        code: 'TA-1',
+        title: '权益提案',
+      );
+      expect(outbound['isCouponPack'], isTrue);
+      expect((outbound['products'] as List).single['id'], 'child-1');
+      expect((outbound['packs'] as List).single['skuIds'], ['child-1']);
+      expect((outbound['packs'] as List).single['skuQuantities'], {
+        'child-1': 1,
+      });
+      expect(proposalProductScaleRollup(form)?.salesScale, 150);
+      expect(proposalProductScaleRollup(form)?.revenue, 10);
+    },
+  );
+
+  test('child product quantities are retained on the main product pack', () {
+    final synced = proposalIntakeSyncChildProductMeta({
+      'benefitProduct': {
+        'id': 'benefit-1',
+        'name': '权益包',
+        'skuQuantities': {'child-1': 3, 'removed-child': 9},
+      },
+      'childProducts': [
+        {'id': 'child-1', 'productName': '加油100'},
+        {'id': 'child-2', 'productName': '洗车券'},
+      ],
+    });
+    final benefit = synced['benefitProduct'] as Map;
+    expect(benefit['relatedSkuIds'], ['child-1', 'child-2']);
+    expect(benefit['skuQuantities'], {'child-1': 3, 'child-2': 1});
+    expect(proposalIntakeChildProductQuantity(synced, 'child-1'), 3);
+    expect(proposalIntakeChildProductQuantity(synced, 'child-2'), 1);
+  });
+
+  test('child products require an associated main product', () {
+    final form = {
+      'skuDetails': [
+        {'id': 'main-1', 'productName': '权益主产品'},
+      ],
+      'childProducts': [
+        {'id': 'child-1', 'productName': '加油券'},
+      ],
+    };
+    expect(
+      proposalIntakeSkuSettleIssues(form, includeSettlements: false),
+      contains('子产品「加油券」请选择关联主产品'),
+    );
+    final child = ProposalSkuDetailRow.fromJson({
+      'id': 'child-1',
+      'parentSkuId': 'main-1',
+    });
+    expect(child.parentSkuId, 'main-1');
+    expect(child.toJson()['parentSkuId'], 'main-1');
+  });
+
+  test('legacy multi sku details are not auto-promoted to child products', () {
+    final form = {
+      'skuDetails': [
+        {'id': 'sku-1', 'productName': '券A'},
+        {'id': 'sku-2', 'productName': '券B'},
+      ],
+    };
+    expect(proposalIntakeHasChildProducts(form), isFalse);
+    expect(proposalIntakeSkuDetails(form), hasLength(2));
+    expect(proposalIntakeChildTechFillIssues(form), isEmpty);
+    final outbound = proposalIntakeSalesOutboundJson(
+      form: form,
+      id: 1,
+      code: 'TA-1',
+      title: '旧单',
+    );
+    expect(outbound['isCouponPack'], isFalse);
+    expect(outbound['packs'], isEmpty);
+    expect((outbound['products'] as List), hasLength(2));
+  });
+
+  test('product finance keeps main and child totals isolated', () {
+    final legacy = <String, dynamic>{
+      'revenue': 100,
+      'projectCost': 10,
+      'financeRemark': '旧单主产品财务',
+    };
+    expect(
+      proposalIntakeProductFinance(
+        legacy,
+        owner: kProposalProductFinanceMain,
+      )['revenue'],
+      100,
+    );
+    expect(
+      proposalIntakeProductFinance(
+        legacy,
+        owner: kProposalProductFinanceChildren,
+      ),
+      isEmpty,
+    );
+
+    final grouped = proposalIntakeWriteProductFinance(
+      legacy,
+      owner: kProposalProductFinanceChildren,
+      finance: const {'revenue': 40, 'projectCost': 4, 'financeRemark': '子产品'},
+    );
+    expect(grouped['revenue'], 100);
+    expect(
+      proposalIntakeProductFinance(
+        grouped,
+        owner: kProposalProductFinanceMain,
+      )['projectCost'],
+      10,
+    );
+    expect(
+      proposalIntakeProductFinance(
+        grouped,
+        owner: kProposalProductFinanceChildren,
+      ),
+      {'revenue': 40, 'projectCost': 4, 'financeRemark': '子产品'},
+    );
+  });
+
+  test('product finance scope calculates only its own products', () {
+    final form = {
+      'skuDetails': [
+        {
+          'id': 'main-1',
+          'settlements': [
+            {'id': 's-main', 'scale': '100', 'settleRatio': '0.9'},
+          ],
+        },
+      ],
+      'childProducts': [
+        {
+          'id': 'child-1',
+          'settlements': [
+            {'id': 's-child', 'scale': '50', 'settleRatio': '0.8'},
+          ],
+        },
+      ],
+      'productFinance': {
+        'main': {'projectCost': 10},
+        'children': {'projectCost': 4},
+      },
+    };
+    final main = proposalIntakeProductFinanceScope(form, owner: 'main');
+    final children = proposalIntakeProductFinanceScope(form, owner: 'children');
+    expect(proposalProductScaleRollup(main)?.salesScale, 100);
+    expect(proposalProductScaleRollup(main)?.revenue, 90);
+    expect(proposalProductScaleRollup(children)?.salesScale, 50);
+    expect(proposalProductScaleRollup(children)?.revenue, 40);
+    expect(proposalEstimatedProfitAmount(main, revenue: 90), 80);
+    expect(proposalEstimatedProfitAmount(children, revenue: 40), 36);
+  });
+
+  test('child finance metrics ignore main-product costs and use the same formulas', () {
+    final form = {
+      'skuDetails': [
+        {
+          'id': 'main-1',
+          'settlements': [
+            {'id': 's-main', 'scale': '1000', 'settleRatio': '1'},
+          ],
+        },
+      ],
+      'childProducts': [
+        {
+          'id': 'child-1',
+          'settlements': [
+            {'id': 's-child', 'scale': '200', 'settleRatio': '1'},
+          ],
+        },
+      ],
+      'projectCost': 1000,
+      'couponProcurementCost': 80,
+      'turnoverTimes': 2,
+      'productFinance': {
+        'main': {
+          'projectCost': 1000,
+          'couponProcurementCost': 80,
+          'turnoverTimes': 2,
+        },
+      },
+    };
+    final childScope = proposalIntakeProductFinanceScope(
+      form,
+      owner: kProposalProductFinanceChildren,
+    );
+    expect(childScope['projectCost'], isNull);
+    expect(childScope['couponProcurementCost'], isNull);
+    expect(childScope['turnoverTimes'], isNull);
+    expect(proposalProductScaleRollup(childScope)?.salesScale, 200);
+    expect(proposalProductScaleRollup(childScope)?.revenue, 200);
+    expect(proposalEstimatedProfitAmount(childScope, revenue: 200), 200);
+    expect(proposalTurnoverCashAmount(childScope), isNull);
+
+    final estimated = proposalApplyEstimatedFinanceCosts({
+      ...form,
+      'productFinance': {
+        'main': (form['productFinance'] as Map)['main'],
+        'children': {'turnoverTimes': 2},
+      },
+    });
+    expect(estimated['salesScale'], 1000);
+    expect(estimated['turnoverCash'], 41.67);
+    final childFinance = proposalIntakeProductFinance(
+      estimated,
+      owner: kProposalProductFinanceChildren,
+    );
+    expect(childFinance['salesScale'], 200);
+    expect(childFinance['revenue'], 200);
+    expect(childFinance['turnoverCash'], 8.33);
+    expect(childFinance['profit'], isNot(-880));
+  });
+
+  test('rating and top-level scale follow main products, not children', () {
+    final form = proposalApplyEstimatedFinanceCosts({
+      'skuDetails': [
+        {
+          'id': 'main-1',
+          'productName': '主产品',
+          'settlements': [
+            {'id': 's-main', 'scale': '400', 'settleRatio': '1'},
+          ],
+        },
+      ],
+      'childProducts': [
+        {
+          'id': 'child-1',
+          'productName': '子产品',
+          'settlements': [
+            {'id': 's-child', 'scale': '8000', 'settleRatio': '1'},
+          ],
+        },
+      ],
+      'products': [
+        {
+          'id': 'child-1',
+          'productName': '子产品',
+          'settlements': [
+            {'id': 's-child', 'scale': '8000', 'settleRatio': '1'},
+          ],
+        },
+      ],
+      'turnoverTimes': '2',
+    });
+    expect(proposalIntakeMainProductScale(form), 400);
+    expect(form['salesScale'], 400);
+    expect(form['turnoverCash'], 16.67);
+    expect(
+      proposalProductScaleRollup(
+        proposalIntakeProductFinanceScope(
+          form,
+          owner: kProposalProductFinanceChildren,
+        ),
+      )?.salesScale,
+      8000,
+    );
+    expect(
+      proposalIntakeProductFinance(
+        form,
+        owner: kProposalProductFinanceChildren,
+      )['turnoverCash'],
+      isNull,
+    );
+    expect(proposalProductScaleRollup(form)?.salesScale, 8400);
+  });
 }
 
 int _fillMissingCount(ProposalIntakeRow row) {
@@ -3433,6 +3757,7 @@ int _fillMissingCount(ProposalIntakeRow row) {
   }
   return proposalIntakeSalesMarketIssues(form).length +
       proposalIntakeTechFillIssues(form, purchase: false).length +
+      proposalIntakeChildTechFillIssues(form).length +
       proposalIntakeSalesFinanceFillIssues(form).length +
       proposalIntakeLaunchFinanceIssues(form).length +
       proposalIntakeSkuSettleIssues(form).length;

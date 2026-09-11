@@ -45,14 +45,18 @@ bool assistantShouldLoadOlder({
   required bool hasMore,
   required bool loadingOlder,
   required ScrollPosition pos,
+  bool reverse = false,
 }) {
   if (!hasMore || loadingOlder) return false;
   if (pos.maxScrollExtent <= 24) return true;
+  if (reverse) return pos.maxScrollExtent - pos.pixels <= 72;
   return pos.pixels <= 72;
 }
 
-bool assistantIsAwayFromLatest(ScrollPosition pos) =>
-    pos.maxScrollExtent - pos.pixels > 140;
+bool assistantIsAwayFromLatest(ScrollPosition pos, {bool reverse = false}) {
+  if (reverse) return pos.pixels > 24;
+  return pos.maxScrollExtent - pos.pixels > 140;
+}
 
 /// 静默刷新若内容没变，不要 setState / 跳底，避免打断正在滑的列表。
 bool assistantTranscriptUnchanged(

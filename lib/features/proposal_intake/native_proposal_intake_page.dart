@@ -496,22 +496,34 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
 
   Future<void> _backToList() async {
     final editing = _editing;
-    if (editing != null &&
-        editing.id <= 0 &&
-        proposalIntakeHasMeaningfulContent(editing)) {
+    if (editing != null && proposalIntakeHasMeaningfulContent(editing)) {
       try {
-        await _service.create(
-          title: editing.title,
-          kind: editing.kind,
-          form: proposalIntakeConfirmContractEdits(editing.form),
-          review: editing.review,
-        );
+        final saved = editing.id <= 0
+            ? await _service.create(
+                title: editing.title,
+                kind: editing.kind,
+                form: proposalIntakeConfirmContractEdits(editing.form),
+                review: editing.review,
+              )
+            : await _service.save(editing);
+        _editing = saved;
         if (mounted) _toast('已保存草稿');
       } catch (error) {
         _toast(friendlyErrorText(error, fallback: '保存草稿失败'), error: true);
         return;
       }
     }
+    if (!mounted) return;
+    setState(() {
+      _page = _ProposalPage.list;
+      _editing = null;
+    });
+    widget.onChromeChanged?.call(const TaskShellChrome());
+    await _load(quiet: true);
+    _restoreListScroll();
+  }
+
+  Future<void> _backToListAfterDelete() async {
     if (!mounted) return;
     setState(() {
       _page = _ProposalPage.list;
@@ -555,7 +567,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         setState(() => _editing = next);
       },
       onError: (message) => _toast(message, error: true),
-      onDeleted: () => unawaited(_backToList()),
+      onDeleted: () => unawaited(_backToListAfterDelete()),
       onNext: widget.assistantMode
           ? () => unawaited(_goNext(fromId: row.id, afterDecision: false))
           : null,
@@ -788,8 +800,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
 
   Widget _buildList() {
     return LayoutBuilder(
-      builder: (context, constraints) =>
-          _buildListBody(compact: ProposalLayout.isCompact(constraints.maxWidth)),
+      builder: (context, constraints) => _buildListBody(
+        compact: ProposalLayout.isCompact(constraints.maxWidth),
+      ),
     );
   }
 
@@ -1331,9 +1344,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   final _marketModuleReviewKey = GlobalKey();
   final _techModuleReviewKey = GlobalKey();
   final _financeModuleReviewKey = GlobalKey();
+  String _activeChildProductId = '';
   final Map<String, GlobalKey> _fieldAnchorKeys = {};
   final Set<String> _flashFieldKeys = {};
   Timer? _flashTimer;
+
   /// 财务板块「逐条复核」模式。关闭时每个字段只留一个复核状态圆点。
   bool _financeReviewMode = false;
   ProposalIntakeNavSection _visibleSection = ProposalIntakeNavSection.toc;
@@ -1341,6 +1356,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   List<String> _issues = const [];
   bool _dirty = false;
   int _fieldEpoch = 0;
+  ProposalSkuDetailRow? _skuSettingsClipboard;
+  List<ProposalFinanceSettleTerms>? _skuSettlementsClipboard;
   final Map<String, int> _costAmountStamp = {};
   bool _deleting = false;
   bool _forwarding = false;
@@ -1408,7 +1425,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   ];
 
   /// 与后端 proposalTechnologyReviewFields 保持一致。
-  List<String> get _technologyReviewFields => kProposalTechnologyReviewFields;
+  List<String> get _technologyReviewFields =>
+      proposalIntakeTechnologyReviewItemKeys(_form);
 
   /// 与后端 proposalContractReviewFields 保持一致（复核键为 prefix.字段）。
   static const _contractReviewFields = <String>[
@@ -1437,6 +1455,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   static const _techReviewLabel = '市场部负责人二复核';
   static const _financeReviewLabel = '财务部负责人二复核';
+  static const _subtitleFillLabel = '财务部负责人二填写';
 
   static const _kFinanceReviewKeys = <String>[
     'salesScale',
@@ -1694,6 +1713,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       (_row.isTechRevising && _isTechFiller) ||
       _canEditBusinessCost ||
       _canEditHun ||
+      _canEditProposalSubtitle ||
       _canEditFinanceModules ||
       _canEditFinanceInterface ||
       _canEditAsSubmitter ||
@@ -2217,7 +2237,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       }
     }
     if (key == 'technologyCompleted') {
-      final gaps = proposalIntakeTechnologyReviewGaps(_review);
+      final gaps = proposalIntakeTechnologyReviewGaps(_review, form: _form);
       if (gaps.isNotEmpty) {
         await _showTechnologyOmissions(gaps);
         return;
@@ -2298,10 +2318,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         _row.version,
       );
       if (!mounted) return;
-      final beforeGaps = proposalIntakeTechnologyReviewGaps(_review);
+      final beforeGaps = proposalIntakeTechnologyReviewGaps(
+        _review,
+        form: _form,
+      );
       setState(() => _row = saved.row);
       widget.onChanged(saved.row);
-      final afterGaps = proposalIntakeTechnologyReviewGaps(_review);
+      final afterGaps = proposalIntakeTechnologyReviewGaps(
+        _review,
+        form: _form,
+      );
       final techReady =
           beforeGaps.isNotEmpty &&
           afterGaps.isEmpty &&
@@ -2316,6 +2342,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _jumpToTask();
         });
+      } else if (value && section.startsWith('financeItem:skuSettle:')) {
+        _advanceChildSettleReview(section);
       }
     } catch (error) {
       widget.onError(friendlyErrorText(error));
@@ -2340,6 +2368,31 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   int _reviewedCount(String prefix, List<String> keys) =>
       keys.where((key) => _itemReviewed('$prefix:$key')).length;
+
+  void _advanceChildSettleReview(String section) {
+    final parts = section.split(':');
+    if (parts.length < 4) return;
+    final skuId = parts[2];
+    if (!_isChildSkuId(skuId)) return;
+    final sku = _sellableSkuById(skuId);
+    if (sku == null) return;
+    final done = proposalIntakeSkuSettlements(sku).every(
+      (item) => _itemReviewed('financeItem:skuSettle:${sku.id}:${item.id}'),
+    );
+    if (!done) return;
+    final children = proposalIntakeChildProducts(_form);
+    final index = children.indexWhere((item) => item.id == skuId);
+    for (var i = index + 1; i < children.length; i++) {
+      final next = children[i];
+      final pending = proposalIntakeSkuSettlements(next).any(
+        (item) => !_itemReviewed('financeItem:skuSettle:${next.id}:${item.id}'),
+      );
+      if (pending) {
+        _selectChildProduct(next.id);
+        return;
+      }
+    }
+  }
 
   bool _itemsReviewed(String prefix, List<String> keys) =>
       _reviewedCount(prefix, keys) == keys.length;
@@ -2900,7 +2953,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     _assetProductSyncHint[rowId] = data.items.isEmpty
         ? '该产品暂无结算行，请财务手工填写'
         : '已从资管同步 ${data.items.length} 条结算规则';
-    _patchSkuDetail(rowId, (current) {
+    _patchSellableSku(rowId, (current) {
       if (current.assetProduct?.id != hit.id) return current;
       return current.applyAssetProduct(hit, settlements: rows);
     });
@@ -2910,7 +2963,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       '${syncSource.trim()}|${productSource.trim().toUpperCase()}';
 
   String _assetRowSyncSource(String rowId) {
-    return proposalIntakeSkuDetails(
+    return proposalIntakeAllSellableSkus(
           _form,
         ).where((item) => item.id == rowId).firstOrNull?.syncSourceCode ??
         '';
@@ -3019,9 +3072,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   String get _rating {
-    final raw = _form['salesScale'];
-    if (raw == null || '$raw'.trim().isEmpty) return '—';
-    return widget.options.ratingFor(_number('salesScale'));
+    final scale = proposalIntakeMainProductScale(_form);
+    if (scale == null) return '—';
+    return widget.options.ratingFor(scale);
   }
 
   /// 金额统一按万元展示，并按千分位分组。
@@ -3258,7 +3311,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         !_moduleReviewEnabled('technologyCompleted')) {
       return false;
     }
-    return proposalIntakeTechnologyReviewGaps(_review).isEmpty;
+    return proposalIntakeTechnologyReviewGaps(_review, form: _form).isEmpty;
   }
 
   ProposalIntakeNavSection? get _taskSection =>
@@ -3343,6 +3396,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     } else {
       issues.addAll(proposalIntakeSalesMarketIssues(_form));
       issues.addAll(proposalIntakeTechFillIssues(_form, purchase: false));
+      issues.addAll(proposalIntakeChildTechFillIssues(_form));
       issues.addAll(proposalIntakeSalesFinanceFillIssues(_form));
       issues.addAll(proposalIntakeLaunchFinanceIssues(_form));
       issues.addAll(proposalIntakeSkuSettleIssues(_form));
@@ -3362,13 +3416,27 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   List<String> _missingRequiredFinanceInterfaces() {
+    final missing = <String>[];
+    void collect(Map<String, dynamic> values, String prefix) {
+      for (final item in widget.options.financeInterfaces) {
+        if (item.required && values[item.key] != true) {
+          missing.add('$prefix${item.label}');
+        }
+      }
+    }
+
     final interfaceValues = _form['financeInterfaces'] is Map
         ? Map<String, dynamic>.from(_form['financeInterfaces'])
         : <String, dynamic>{};
-    return widget.options.financeInterfaces
-        .where((item) => item.required && interfaceValues[item.key] != true)
-        .map((item) => item.label)
-        .toList();
+    collect(interfaceValues, '');
+    if (proposalIntakeHasChildProducts(_form)) {
+      final child = proposalIntakeChildTechnology(_form)['financeInterfaces'];
+      collect(
+        child is Map ? Map<String, dynamic>.from(child) : <String, dynamic>{},
+        '子产品',
+      );
+    }
+    return missing;
   }
 
   Future<void> _submit() async {
@@ -3464,7 +3532,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           return;
         }
       } else {
-        final issues = proposalIntakeTechFillIssues(_form, purchase: false);
+        final issues = [
+          ...proposalIntakeTechFillIssues(_form, purchase: false),
+          ...proposalIntakeChildTechFillIssues(_form),
+        ];
         if (issues.isNotEmpty) {
           setState(() => _issues = issues);
           _scrollToTop();
@@ -3742,8 +3813,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                                     _awaitingSubmitBanner(),
                                   _overview(),
                                   ProposalIntakeProgressTimeline(
-                                    compact:
-                                        ProposalLayout.isCompact(MediaQuery.sizeOf(context).width),
+                                    compact: ProposalLayout.isCompact(
+                                      MediaQuery.sizeOf(context).width,
+                                    ),
                                     steps: proposalIntakeProgressSteps(
                                       row: _row,
                                       people: widget.people,
@@ -4128,9 +4200,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         compact ? 10 : 10,
       ),
       decoration: BoxDecoration(
-        color: awaitingModule
-            ? const Color(0xFFECF8EE)
-            : ProposalPalette.soft,
+        color: awaitingModule ? const Color(0xFFECF8EE) : ProposalPalette.soft,
         border: Border(
           bottom: BorderSide(
             color: awaitingModule
@@ -4586,7 +4656,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       gradient: const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [Color(0xFFFBF7F0), ProposalPalette.soft, ProposalPalette.borderSoft],
+        colors: [
+          Color(0xFFFBF7F0),
+          ProposalPalette.soft,
+          ProposalPalette.borderSoft,
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4622,16 +4696,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   /// 点定位条「目录」滚回来；点这一行跳到对应板块。
   Widget _proposalToc(bool wide) {
     final entries =
-        <({
-          ProposalIntakeNavSection section,
-          String no,
-          String desc,
-          String? flag,
-        })>[
+        <
+          ({
+            ProposalIntakeNavSection section,
+            String no,
+            String desc,
+            String? flag,
+          })
+        >[
           (
             section: ProposalIntakeNavSection.market,
             no: '一',
-            desc: '选业务板块与标签、建渠道产品、挂采购与销售合同、写政策与风险',
+            desc: '选业务板块与标签、建主产品、挂采购与销售合同、写政策与风险',
             flag: 'marketCompleted',
           ),
           (
@@ -4692,9 +4768,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             child: Text(
               e.no,
               style: TextStyle(
-                color: active
-                    ? ProposalPalette.purple
-                    : ProposalPalette.text3,
+                color: active ? ProposalPalette.purple : ProposalPalette.text3,
                 fontSize: 12,
                 height: 1.3,
                 fontWeight: FontWeight.w700,
@@ -4704,9 +4778,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           Text(
             proposalIntakeNavSectionLabel(e.section),
             style: TextStyle(
-              color: active
-                  ? ProposalPalette.purpleDeep
-                  : ProposalPalette.text,
+              color: active ? ProposalPalette.purpleDeep : ProposalPalette.text,
               fontSize: 13,
               height: 1.3,
               fontWeight: FontWeight.w700,
@@ -4870,13 +4942,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               resetReview: 'marketCompleted',
             ),
             _textField(
-              '子标题',
+              '子标题（由财务部负责人二填写）',
               'proposalSubtitle',
               hint: '由财务部负责人二填写（选填）',
               writable: _canEditProposalSubtitle,
               resetReview: 'financeCompleted',
               reviewSection: 'financeItem:proposalSubtitle',
-              reviewLabel: _financeReviewLabel,
+              reviewLabel: _subtitleFillLabel,
             ),
             _dropdownField(
               '提案类型',
@@ -5216,6 +5288,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ProposalCard(
           child: Column(
             children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '主产品科技 · ${_productScopeNames(proposalIntakeSkuDetails(_form), fallback: '未命名主产品')}',
+                  style: const TextStyle(
+                    color: ProposalPalette.purpleDeep,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
               _fieldGrid(wide, [
                 _personField(
                   '科技部负责人（填写人）',
@@ -5262,90 +5346,91 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               _anchor(
                 'financeInterfaces',
                 Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(top: 10),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: ProposalPalette.app,
-                  border: Border.all(color: ProposalPalette.border),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(top: 10),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: ProposalPalette.app,
+                    border: Border.all(color: ProposalPalette.border),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '财务技术接口 · 根据项目成本动态生成',
+                                  style: TextStyle(
+                                    color: ProposalPalette.text,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  '由财务部负责人二填写，市场部负责人二随科技板块逐条复核',
+                                  style: TextStyle(
+                                    color: ProposalPalette.text3,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (_rowReviewToggle(
+                                'technologyItem:financeInterfaces',
+                                _techReviewLabel,
+                              )
+                              case final toggle?)
+                            toggle,
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      if (_showSelectedAsText)
+                        _readonlySelectedText(
+                          widget.options.financeInterfaces
+                              .where((item) => interfaces[item.key] == true)
+                              .map((item) => item.label)
+                              .join('、'),
+                        )
+                      else
+                        IgnorePointer(
+                          ignoring: !_canEditFinanceInterface,
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
                             children: [
-                              Text(
-                                '财务技术接口 · 根据项目成本动态生成',
-                                style: TextStyle(
-                                  color: ProposalPalette.text,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
+                              for (final item
+                                  in widget.options.financeInterfaces)
+                                ProposalChoiceChip(
+                                  label:
+                                      '${item.label}${item.required ? ' *' : ''}',
+                                  selected: interfaces[item.key] == true,
+                                  enabled: _canEditFinanceInterface,
+                                  onSelected: (selected) {
+                                    if (!_canEditFinanceInterface) return;
+                                    final next = Map<String, dynamic>.from(
+                                      interfaces,
+                                    )..[item.key] = selected;
+                                    _set(
+                                      'financeInterfaces',
+                                      next,
+                                      resetReview: 'technologyCompleted',
+                                    );
+                                  },
                                 ),
-                              ),
-                              SizedBox(height: 4),
-                              Text(
-                                '由财务部负责人二填写，市场部负责人二随科技板块逐条复核',
-                                style: TextStyle(
-                                  color: ProposalPalette.text3,
-                                  fontSize: 12,
-                                ),
-                              ),
                             ],
                           ),
                         ),
-                        if (_rowReviewToggle(
-                              'technologyItem:financeInterfaces',
-                              _techReviewLabel,
-                            )
-                            case final toggle?)
-                          toggle,
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    if (_showSelectedAsText)
-                      _readonlySelectedText(
-                        widget.options.financeInterfaces
-                            .where((item) => interfaces[item.key] == true)
-                            .map((item) => item.label)
-                            .join('、'),
-                      )
-                    else
-                      IgnorePointer(
-                        ignoring: !_canEditFinanceInterface,
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final item in widget.options.financeInterfaces)
-                              ProposalChoiceChip(
-                                label:
-                                    '${item.label}${item.required ? ' *' : ''}',
-                                selected: interfaces[item.key] == true,
-                                enabled: _canEditFinanceInterface,
-                                onSelected: (selected) {
-                                  if (!_canEditFinanceInterface) return;
-                                  final next = Map<String, dynamic>.from(
-                                    interfaces,
-                                  )..[item.key] = selected;
-                                  _set(
-                                    'financeInterfaces',
-                                    next,
-                                    resetReview: 'technologyCompleted',
-                                  );
-                                },
-                              ),
-                          ],
-                        ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
               ),
               const SizedBox(height: 10),
               _fieldGrid(wide, [
@@ -5408,22 +5493,284 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ],
           ),
         ),
+        if (proposalIntakeHasChildProducts(_form)) ...[
+          const SizedBox(height: 12),
+          _childTechCard(wide),
+        ],
         _moduleReview(
           key: _techModuleReviewKey,
           title: '科技部板块审核',
           description:
               '科技部负责人填写，市场部负责人二逐条复核（含财务技术接口）后统一确认。确认前会检查遗漏。发现问题可直接整板块驳回。',
           keyName: 'technologyCompleted',
-          buttonLabel: proposalIntakeTechnologyReviewGaps(_review).isEmpty
+          buttonLabel:
+              proposalIntakeTechnologyReviewGaps(_review, form: _form).isEmpty
               ? '确认本板块通过'
               : '科技部字段全部复核',
           locked: false,
           progress:
               '逐条复核 ${_reviewedCount('technologyItem', _technologyReviewFields)}/${_technologyReviewFields.length}',
-          omissions: proposalIntakeTechnologyReviewGaps(_review),
+          omissions: proposalIntakeTechnologyReviewGaps(_review, form: _form),
           onCheckOmissions: _showTechnologyOmissions,
         ),
       ],
+    );
+  }
+
+  String _productScopeNames(
+    List<ProposalSkuDetailRow> products, {
+    required String fallback,
+  }) {
+    final names = [
+      for (var i = 0; i < products.length; i++)
+        products[i].productName.trim().isEmpty
+            ? '$fallback ${i + 1}'
+            : products[i].productName.trim(),
+    ];
+    return names.isEmpty ? fallback : names.join('、');
+  }
+
+  Widget _childTechCard(bool wide) {
+    final snap = proposalIntakeChildTechnology(_form);
+    final platformName = '${snap['technologyPlatform'] ?? ''}'.trim();
+    final platform = widget.options.platforms
+        .where((item) => item.value == platformName)
+        .firstOrNull;
+    final interfaces = snap['financeInterfaces'] is Map
+        ? Map<String, dynamic>.from(snap['financeInterfaces'] as Map)
+        : <String, dynamic>{};
+    Set<String> selectedOf(String key) {
+      final value = snap[key];
+      return value is List ? value.map((item) => '$item').toSet() : <String>{};
+    }
+
+    String reviewOf(String field) =>
+        'technologyItem:$kProposalChildTechReviewPrefix$field';
+
+    return ProposalCard(
+      child: Column(
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: const Text(
+              '子产品科技',
+              style: const TextStyle(
+                color: ProposalPalette.green,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '对应子产品：${_productScopeNames(proposalIntakeChildProducts(_form), fallback: '未命名子产品')}',
+              style: const TextStyle(
+                color: ProposalPalette.green,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '子产品合并共用这一套科技字段，不按子产品切换。',
+              style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _fieldGrid(wide, [
+            _dropdownField(
+              'τ-标签一',
+              'technologyPlatform',
+              widget.options.platforms.map((item) => item.value).toList(),
+              required: true,
+              writable: _canEditTech,
+              resetReview: 'technologyCompleted',
+              reviewSection: reviewOf('technologyPlatform'),
+              reviewLabel: _techReviewLabel,
+              valueOverride: platformName,
+              fieldKey: 'child-technologyPlatform',
+              onSelected: (value) =>
+                  _setChildTech('technologyPlatform', value ?? ''),
+            ),
+            _multiField(
+              'τ-标签二 · 与标签一联动',
+              'technologyCapabilities',
+              platform?.children ?? const [],
+              null,
+              required: true,
+              writable: _canEditTech,
+              resetReview: 'technologyCompleted',
+              reviewSection: reviewOf('technologyCapabilities'),
+              reviewLabel: _techReviewLabel,
+              selectedOverride: selectedOf('technologyCapabilities'),
+              fieldKey: 'child-technologyCapabilities',
+              onToggleOverride: (value) =>
+                  _toggleChildTechList('technologyCapabilities', value),
+            ),
+            _multiField(
+              '能力输出形式',
+              'outputForms',
+              widget.options.outputForms,
+              null,
+              required: true,
+              writable: _canEditTech,
+              resetReview: 'technologyCompleted',
+              reviewSection: reviewOf('outputForms'),
+              reviewLabel: _techReviewLabel,
+              selectedOverride: selectedOf('outputForms'),
+              fieldKey: 'child-outputForms',
+              onToggleOverride: (value) =>
+                  _toggleChildTechList('outputForms', value),
+            ),
+          ]),
+          _anchor(
+            'child-financeInterfaces',
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(top: 10),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: ProposalPalette.app,
+                border: Border.all(color: ProposalPalette.border),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '子产品财务技术接口',
+                              style: TextStyle(
+                                color: ProposalPalette.text,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              '由财务部负责人二填写，市场部负责人二随科技板块逐条复核',
+                              style: TextStyle(
+                                color: ProposalPalette.text3,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_rowReviewToggle(
+                            reviewOf('financeInterfaces'),
+                            _techReviewLabel,
+                          )
+                          case final toggle?)
+                        toggle,
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (_showSelectedAsText)
+                    _readonlySelectedText(
+                      widget.options.financeInterfaces
+                          .where((item) => interfaces[item.key] == true)
+                          .map((item) => item.label)
+                          .join('、'),
+                    )
+                  else
+                    IgnorePointer(
+                      ignoring: !_canEditFinanceInterface,
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final item in widget.options.financeInterfaces)
+                            ProposalChoiceChip(
+                              label:
+                                  '${item.label}${item.required ? ' *' : ''}',
+                              selected: interfaces[item.key] == true,
+                              enabled: _canEditFinanceInterface,
+                              onSelected: (selected) {
+                                if (!_canEditFinanceInterface) return;
+                                final next = Map<String, dynamic>.from(
+                                  interfaces,
+                                )..[item.key] = selected;
+                                _setChildTech('financeInterfaces', next);
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _fieldGrid(wide, [
+            _multiField(
+              '研发类型',
+              'developmentTypes',
+              widget.options.developmentTypes,
+              null,
+              required: true,
+              writable: _canEditTech,
+              resetReview: 'technologyCompleted',
+              reviewSection: reviewOf('developmentTypes'),
+              reviewLabel: _techReviewLabel,
+              selectedOverride: selectedOf('developmentTypes'),
+              fieldKey: 'child-developmentTypes',
+              onToggleOverride: (value) =>
+                  _toggleChildTechList('developmentTypes', value),
+            ),
+            _dropdownField(
+              '是否涉及研发费用',
+              'hasRdCost',
+              const ['是', '否'],
+              required: true,
+              writable: _canEditTech,
+              resetReview: 'technologyCompleted',
+              reviewSection: reviewOf('hasRdCost'),
+              reviewLabel: _techReviewLabel,
+              valueOverride: '${snap['hasRdCost'] ?? ''}',
+              fieldKey: 'child-hasRdCost',
+              onSelected: (value) => _setChildTech('hasRdCost', value ?? ''),
+            ),
+            _numberField(
+              '研发费用金额（万元）',
+              'rdAmount',
+              writable: _canEditTech,
+              resetReview: 'technologyCompleted',
+              reviewSection: reviewOf('rdAmount'),
+              reviewLabel: _techReviewLabel,
+              valueOverride: '${snap['rdAmount'] ?? ''}',
+              fieldKey: 'child-rdAmount',
+              onWrite: (value) => _setChildTech(
+                'rdAmount',
+                value.trim().isEmpty ? null : double.tryParse(value) ?? 0,
+                rebuild: false,
+              ),
+            ),
+            _dateField(
+              '交付时间',
+              'deliveryDate',
+              required: true,
+              writable: _canEditTech,
+              resetReview: 'technologyCompleted',
+              reviewSection: reviewOf('deliveryDate'),
+              reviewLabel: _techReviewLabel,
+              valueOverride: '${snap['deliveryDate'] ?? ''}',
+              fieldKey: 'child-deliveryDate',
+              onWrite: (value) => _setChildTech('deliveryDate', value),
+            ),
+          ]),
+        ],
+      ),
     );
   }
 
@@ -5486,139 +5833,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 ),
               ]),
               const SizedBox(height: 12),
-              _skuSettlementsBlock(wide),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      '财务部复核',
-                      style: TextStyle(
-                        color: ProposalPalette.text,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  _financeReviewModeButton(),
-                  const SizedBox(width: 8),
-                  ProposalStatusChip(
-                    label: _review['financeCompleted'] == true
-                        ? '财务部复核已完成'
-                        : '待财务部负责人二逐项复核',
-                    kind: _review['financeCompleted'] == true
-                        ? ProposalChipKind.ok
-                        : ProposalChipKind.purple,
-                  ),
-                ],
-              ),
-              const Padding(
-                padding: EdgeInsets.only(top: 6, bottom: 10),
-                child: Text(
-                  '销售规模、收入、采购、利润、毛利率按产品结算自动测算，填写时不用手填。',
-                  style: TextStyle(
-                    color: ProposalPalette.text3,
-                    fontSize: 11,
-                    height: 1.35,
-                  ),
+              _financeProductContent(wide, owner: kProposalProductFinanceMain),
+              if (proposalIntakeHasChildProducts(_form)) ...[
+                const SizedBox(height: 16),
+                _financeProductContent(
+                  wide,
+                  owner: kProposalProductFinanceChildren,
                 ),
-              ),
-              LayoutBuilder(
-                builder: (_, box) {
-                  final columns = ProposalLayout.isCompact(box.maxWidth) ? 1 : 2;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (proposalIntakeHasProductSalesScale(_form))
-                        _financeFieldRows(_financeMetricFields, columns)
-                      else ...[
-                        _financeMetricSkeleton(),
-                        const SizedBox(height: 10),
-                        _financeFieldRows(
-                          _financeMetricFields
-                              .where(
-                                (field) =>
-                                    _financeComputedMetric(field.$1) == null,
-                              )
-                              .toList(),
-                          columns,
-                        ),
-                      ],
-                      const SizedBox(height: 10),
-                      _financeSideGroup(
-                        title: '供给侧',
-                        child: _financeFieldRows(_financeSupplyFields, columns),
-                      ),
-                      const SizedBox(height: 10),
-                      _financeSideGroup(
-                        title: '渠道侧',
-                        child: _financeFieldRows(
-                          _financeChannelFields,
-                          columns,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      _financeFieldRows(_financeAccountFields, columns),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-              _costSelectField(
-                label: '项目成本',
-                namesKey: 'costItems',
-                amountsKey: 'costItemAmounts',
-                totalKey: 'projectCost',
-                options: kProposalProjectCostItems,
-                catalog: widget.options.costItemOptions,
-                addLabel: widget.options.costItemSource == 'asset'
-                    ? null
-                    : '新增成本项',
-                reviewSection: 'financeItem:costItems',
-                wide: wide,
-              ),
-              const SizedBox(height: 10),
-              _businessCostField(wide: wide),
-              const SizedBox(height: 10),
-              _costSelectField(
-                label: '经营成本',
-                namesKey: 'operatingCostItems',
-                amountsKey: 'operatingCostItemAmounts',
-                totalKey: 'operatingCost',
-                options: kProposalOperatingCostItems,
-                catalog: const [],
-                reviewSection: 'financeItem:operatingCost',
-                wide: wide,
-              ),
-              const SizedBox(height: 10),
-              _costSelectField(
-                label: '税务成本',
-                namesKey: 'taxCostItems',
-                amountsKey: 'taxCostItemAmounts',
-                totalKey: 'taxCost',
-                options: kProposalTaxCostItems,
-                catalog: const [],
-                reviewSection: 'financeItem:taxCost',
-                wide: wide,
-              ),
-              const SizedBox(height: 10),
-              _dropdownField(
-                '是否回滚',
-                'rollback',
-                widget.options.rollbackOptions,
-                required: true,
-                resetReview: 'financeCompleted',
-                reviewSection: 'financeItem:rollback',
-                reviewLabel: _financeReviewLabel,
-              ),
-              if (_isPurchase) ...[
-                const SizedBox(height: 10),
-                _dropdownField('渠道侧 · 白名单', 'channelWhitelist', const [
-                  '是',
-                  '否',
-                ], resetReview: 'financeCompleted'),
               ],
-              const SizedBox(height: 16),
-              _financeModulesBlock(wide),
             ],
           ),
         ),
@@ -5636,6 +5858,596 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   bool get _allFinanceItemsReviewed =>
       _itemsReviewed('financeItem', _financeReviewKeys);
+
+  Widget _financeProductContent(bool wide, {required String owner}) {
+    final children = owner == kProposalProductFinanceChildren;
+    final scope = proposalIntakeProductFinanceScope(_form, owner: owner);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: children
+            ? ProposalPalette.greenSoft.withValues(alpha: 0.22)
+            : ProposalPalette.purpleSoft.withValues(alpha: 0.16),
+        border: Border.all(
+          color: children ? ProposalPalette.green : ProposalPalette.purpleLine,
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _financeProductGroupTitle(
+            children ? '子产品合计' : '主产品合计',
+            children: children,
+            description: children
+                ? '全部子产品的收入、成本、结算、账户、周转资金及复核均在本组内独立核算。'
+                : '全部主产品的收入、成本、结算、账户、周转资金及复核均在本组内独立核算。',
+          ),
+          const SizedBox(height: 12),
+          children ? _childSettlementsBlock(wide) : _skuSettlementsBlock(wide),
+          if (!children)
+            _mainFinanceDetails(wide)
+          else ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    children ? '子产品财务复核' : '主产品财务复核',
+                    style: const TextStyle(
+                      color: ProposalPalette.text,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                _financeReviewModeButton(),
+                const SizedBox(width: 8),
+                ProposalStatusChip(
+                  label: _review['financeCompleted'] == true
+                      ? '财务部复核已完成'
+                      : '待财务部负责人二逐项复核',
+                  kind: _review['financeCompleted'] == true
+                      ? ProposalChipKind.ok
+                      : ProposalChipKind.purple,
+                ),
+              ],
+            ),
+            const Padding(
+              padding: EdgeInsets.only(top: 6, bottom: 10),
+              child: Text(
+                '销售规模、收入、采购、利润、毛利率、周转资金按本组产品结算自动测算。',
+                style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+              ),
+            ),
+            LayoutBuilder(
+              builder: (_, box) {
+                final columns = ProposalLayout.isCompact(box.maxWidth) ? 1 : 2;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _financeMetricSection(
+                      owner: owner,
+                      scope: scope,
+                      columns: columns,
+                    ),
+                    const SizedBox(height: 10),
+                    _financeSideGroup(
+                      title: '供给侧',
+                      child: _scopedFinanceRows(
+                        _financeSupplyFields,
+                        columns,
+                        owner: owner,
+                        scope: scope,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _financeSideGroup(
+                      title: '渠道侧',
+                      child: _scopedFinanceRows(
+                        _financeChannelFields,
+                        columns,
+                        owner: owner,
+                        scope: scope,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _scopedFinanceRows(
+                      _financeAccountFields,
+                      columns,
+                      owner: owner,
+                      scope: scope,
+                    ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            _scopedCostField(
+              label: '项目成本',
+              owner: owner,
+              namesKey: 'costItems',
+              amountsKey: 'costItemAmounts',
+              totalKey: 'projectCost',
+              options: kProposalProjectCostItems,
+            ),
+            const SizedBox(height: 10),
+            _scopedCostField(
+              label: '业务成本',
+              owner: owner,
+              namesKey: 'businessCostItems',
+              amountsKey: 'businessCostItemAmounts',
+              totalKey: 'businessCost',
+              options: widget.options.businessCostItems,
+              writable: _canEditBusinessCost,
+            ),
+            const SizedBox(height: 10),
+            _scopedCostField(
+              label: '经营成本',
+              owner: owner,
+              namesKey: 'operatingCostItems',
+              amountsKey: 'operatingCostItemAmounts',
+              totalKey: 'operatingCost',
+              options: kProposalOperatingCostItems,
+            ),
+            const SizedBox(height: 10),
+            _scopedCostField(
+              label: '税务成本',
+              owner: owner,
+              namesKey: 'taxCostItems',
+              amountsKey: 'taxCostItemAmounts',
+              totalKey: 'taxCost',
+              options: kProposalTaxCostItems,
+            ),
+            const SizedBox(height: 10),
+            _scopedFinanceField(
+              ('rollback', '是否回滚'),
+              owner: owner,
+              scope: scope,
+            ),
+            const SizedBox(height: 16),
+            if (proposalIntakeFinanceModulesOf(
+              _form,
+              owner: kProposalFinanceModuleOwnerChildren,
+            ).isNotEmpty)
+              _financeModulesBlock(
+                wide,
+                owner: kProposalFinanceModuleOwnerChildren,
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _financeMetricSection({
+    required String owner,
+    required Map<String, dynamic> scope,
+    required int columns,
+  }) {
+    if (proposalIntakeHasProductSalesScale(scope)) {
+      return _scopedFinanceRows(
+        _financeMetricFields,
+        columns,
+        owner: owner,
+        scope: scope,
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _financeMetricSkeleton(),
+        const SizedBox(height: 10),
+        _scopedFinanceRows(
+          _financeMetricFields
+              .where(
+                (field) =>
+                    _financeComputedMetric(field.$1, formOverride: scope) ==
+                    null,
+              )
+              .toList(),
+          columns,
+          owner: owner,
+          scope: scope,
+        ),
+      ],
+    );
+  }
+
+  Widget _mainFinanceDetails(bool wide) {
+    const owner = kProposalProductFinanceMain;
+    final scope = proposalIntakeProductFinanceScope(_form, owner: owner);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                '主产品财务复核',
+                style: TextStyle(
+                  color: ProposalPalette.text,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            _financeReviewModeButton(),
+            const SizedBox(width: 8),
+            ProposalStatusChip(
+              label: _review['financeCompleted'] == true
+                  ? '财务部复核已完成'
+                  : '待财务部负责人二逐项复核',
+              kind: _review['financeCompleted'] == true
+                  ? ProposalChipKind.ok
+                  : ProposalChipKind.purple,
+            ),
+          ],
+        ),
+        const Padding(
+          padding: EdgeInsets.only(top: 6, bottom: 10),
+          child: Text(
+            '销售规模、收入、采购、利润、毛利率、周转资金按主产品结算自动测算。',
+            style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+          ),
+        ),
+        LayoutBuilder(
+          builder: (_, box) {
+            final columns = ProposalLayout.isCompact(box.maxWidth) ? 1 : 2;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _financeMetricSection(
+                  owner: owner,
+                  scope: scope,
+                  columns: columns,
+                ),
+                const SizedBox(height: 10),
+                _financeSideGroup(
+                  title: '供给侧',
+                  child: _financeFieldRows(_financeSupplyFields, columns),
+                ),
+                const SizedBox(height: 10),
+                _financeSideGroup(
+                  title: '渠道侧',
+                  child: _financeFieldRows(_financeChannelFields, columns),
+                ),
+                const SizedBox(height: 10),
+                _financeFieldRows(_financeAccountFields, columns),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 16),
+        _costSelectField(
+          label: '项目成本',
+          namesKey: 'costItems',
+          amountsKey: 'costItemAmounts',
+          totalKey: 'projectCost',
+          options: kProposalProjectCostItems,
+          catalog: widget.options.costItemOptions,
+          addLabel: widget.options.costItemSource == 'asset' ? null : '新增成本项',
+          reviewSection: 'financeItem:costItems',
+          wide: wide,
+        ),
+        const SizedBox(height: 10),
+        _businessCostField(wide: wide),
+        const SizedBox(height: 10),
+        _costSelectField(
+          label: '经营成本',
+          namesKey: 'operatingCostItems',
+          amountsKey: 'operatingCostItemAmounts',
+          totalKey: 'operatingCost',
+          options: kProposalOperatingCostItems,
+          catalog: const [],
+          reviewSection: 'financeItem:operatingCost',
+          wide: wide,
+        ),
+        const SizedBox(height: 10),
+        _costSelectField(
+          label: '税务成本',
+          namesKey: 'taxCostItems',
+          amountsKey: 'taxCostItemAmounts',
+          totalKey: 'taxCost',
+          options: kProposalTaxCostItems,
+          catalog: const [],
+          reviewSection: 'financeItem:taxCost',
+          wide: wide,
+        ),
+        const SizedBox(height: 10),
+        _dropdownField(
+          '是否回滚',
+          'rollback',
+          widget.options.rollbackOptions,
+          required: true,
+          resetReview: 'financeCompleted',
+          reviewSection: 'financeItem:rollback',
+          reviewLabel: _financeReviewLabel,
+        ),
+        const SizedBox(height: 16),
+        _financeModulesBlock(wide),
+      ],
+    );
+  }
+
+  Widget _scopedFinanceRows(
+    List<(String, String)> fields,
+    int columns, {
+    required String owner,
+    required Map<String, dynamic> scope,
+  }) {
+    return LayoutBuilder(
+      builder: (_, box) {
+        final itemWidth = columns == 1
+            ? box.maxWidth
+            : math.max(240.0, (box.maxWidth - 12) / 2);
+        return Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          children: [
+            for (final field in fields)
+              SizedBox(
+                width: itemWidth,
+                child: _scopedFinanceField(field, owner: owner, scope: scope),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _scopedFinanceField(
+    (String, String) field, {
+    required String owner,
+    required Map<String, dynamic> scope,
+  }) {
+    final key = field.$1;
+    final prefix = owner == kProposalProductFinanceChildren
+        ? 'children'
+        : 'main';
+    final computed = _financeComputedMetric(key, formOverride: scope);
+    final current = computed?.display ?? '${scope[key] ?? ''}'.trim();
+    final enabled =
+        computed == null && _fillEnabled(null, resetReview: 'financeCompleted');
+    final options = switch (key) {
+      'supplySettleMode' || 'channelSettleMode' => kProposalPreSettleModes,
+      'supplySettleCycle' || 'channelSettleCycle' => kProposalPreSettleCycles,
+      'rollback' => widget.options.rollbackOptions,
+      _ => const <String>[],
+    };
+    final Widget input;
+    if (computed != null || _showSelectedAsText || !enabled) {
+      input = _readonlySelectedText(current);
+    } else if (options.isNotEmpty) {
+      input = ProposalSelectField<String>(
+        value: current.isEmpty ? null : current,
+        title: field.$2,
+        hint: '请选择',
+        options: [
+          for (final value in options)
+            ProposalSelectOption(value: value, label: value),
+        ],
+        onSelected: (value) =>
+            _writeProductFinanceValue(owner, key, value ?? ''),
+      );
+    } else {
+      input = TextFormField(
+        key: ValueKey('finance-$prefix-$key-${_row.id}-$_fieldEpoch'),
+        initialValue: current,
+        maxLines: _isFinanceLongTextKey(key) ? 3 : 1,
+        onChanged: (value) =>
+            _writeProductFinanceValue(owner, key, value, rebuild: false),
+        decoration: proposalInputDecoration(),
+      );
+    }
+    return ProposalField(
+      label: field.$2,
+      required: computed == null,
+      formula: computed?.formula,
+      tone: proposalFieldTone(enabled: enabled),
+      trailing: _rowReviewToggle(
+        'financeItem:$prefix:$key',
+        _financeReviewLabel,
+      ),
+      child: input,
+    );
+  }
+
+  void _writeProductFinanceValue(
+    String owner,
+    String key,
+    Object? value, {
+    bool rebuild = true,
+  }) {
+    final finance = proposalIntakeProductFinance(_form, owner: owner)
+      ..[key] = value;
+    final form = _withEstimatedFinanceCosts(
+      proposalIntakeWriteProductFinance(_form, owner: owner, finance: finance),
+    );
+    final review = Map<String, dynamic>.from(_review)
+      ..['financeCompleted'] = false;
+    _dirty = true;
+    _row = _row.copyWith(form: form, review: review, status: _statusAfterEdit);
+    if (mounted) setState(() {});
+    widget.onChanged(_row);
+  }
+
+  Widget _scopedCostField({
+    required String label,
+    required String owner,
+    required String namesKey,
+    required String amountsKey,
+    required String totalKey,
+    required List<String> options,
+    bool? writable,
+  }) {
+    if (label == '业务成本' && _businessCostSealed) {
+      return const ProposalField(
+        label: '业务成本',
+        tone: ProposalFieldTone.locked,
+        child: Text(
+          '已加密上锁，负责人二不可查看。由市场部负责人一在财务复核时填写。',
+          style: TextStyle(
+            color: ProposalPalette.text2,
+            fontSize: 13,
+            height: 1.45,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+    }
+    final finance = proposalIntakeProductFinance(_form, owner: owner);
+    final names = finance[namesKey] is List
+        ? [
+            for (final value in finance[namesKey] as List)
+              if ('$value'.trim().isNotEmpty) '$value'.trim(),
+          ]
+        : <String>[];
+    final amounts = proposalCostAmountMap(finance[amountsKey]);
+    final enabled = _fillEnabled(writable, resetReview: 'financeCompleted');
+    if (label == '业务成本' && !_canEditBusinessCost && names.isEmpty) {
+      return const ProposalField(
+        label: '业务成本',
+        tone: ProposalFieldTone.locked,
+        child: Text(
+          '由市场部负责人一在财务复核时填写',
+          style: TextStyle(
+            color: ProposalPalette.text3,
+            fontSize: 13,
+            height: 1.45,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+    }
+    void write(List<String> nextNames, Map<String, double> nextAmounts) {
+      final next = Map<String, dynamic>.from(finance)
+        ..[namesKey] = nextNames
+        ..[amountsKey] = nextAmounts
+        ..[totalKey] = proposalCostAmountTotal(nextAmounts);
+      final form = _keepUnreviewed(
+        proposalIntakeWriteProductFinance(_form, owner: owner, finance: next),
+      );
+      final review = Map<String, dynamic>.from(_review)
+        ..['financeCompleted'] = false;
+      setState(() {
+        _dirty = true;
+        _row = _row.copyWith(
+          form: form,
+          review: review,
+          status: _statusAfterEdit,
+        );
+      });
+      widget.onChanged(_row);
+    }
+
+    return _FullWidthField(
+      child: ProposalField(
+        label: label,
+        trailing: _rowReviewToggle(
+          'financeItem:${owner == kProposalProductFinanceChildren ? 'children' : 'main'}:$namesKey',
+          _financeReviewLabel,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ProposalPills(
+              options: [
+                ...options,
+                ...names.where((value) => !options.contains(value)),
+              ],
+              selected: names.toSet(),
+              enabled: enabled,
+              onToggle: (name) {
+                final nextNames = [...names];
+                nextNames.contains(name)
+                    ? nextNames.remove(name)
+                    : nextNames.add(name);
+                final nextAmounts = Map<String, double>.from(amounts);
+                if (!nextNames.contains(name)) nextAmounts.remove(name);
+                write(nextNames, nextAmounts);
+              },
+            ),
+            for (final name in names)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: TextFormField(
+                  key: ValueKey(
+                    'finance-$owner-$amountsKey-$name-$_fieldEpoch',
+                  ),
+                  initialValue: (amounts[name] ?? 0) == 0
+                      ? ''
+                      : _textFromAmount(amounts[name]!),
+                  enabled: enabled,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: proposalInputDecoration(hint: '$name 金额（万元）'),
+                  onChanged: (value) {
+                    final nextAmounts = Map<String, double>.from(amounts);
+                    final amount = double.tryParse(value);
+                    amount == null
+                        ? nextAmounts.remove(name)
+                        : nextAmounts[name] = amount;
+                    write(names, nextAmounts);
+                  },
+                ),
+              ),
+            if (names.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '合计 ${_money(proposalCostAmountTotal(amounts))}',
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    color: ProposalPalette.text2,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _financeProductGroupTitle(
+    String title, {
+    required bool children,
+    required String description,
+  }) {
+    final color = children ? ProposalPalette.green : ProposalPalette.purple;
+    final soft = children
+        ? ProposalPalette.greenSoft.withValues(alpha: 0.28)
+        : ProposalPalette.purpleSoft.withValues(alpha: 0.28);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: soft,
+        border: Border.all(color: color),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(color: color, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            description,
+            style: const TextStyle(
+              color: ProposalPalette.text3,
+              fontSize: 11,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _flowSection(bool wide) {
     final ctx = FlowCtxMapper.fromForm(
@@ -5759,7 +6571,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
-
   Widget _sourceCard(
     String label,
     String value,
@@ -5822,7 +6633,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 ],
               ),
               borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-              border: Border(bottom: BorderSide(color: ProposalPalette.borderSoft)),
+              border: Border(
+                bottom: BorderSide(color: ProposalPalette.borderSoft),
+              ),
             ),
             child: LayoutBuilder(
               builder: (context, box) {
@@ -5890,7 +6703,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ),
           Padding(
             padding: EdgeInsets.all(
-              ProposalLayout.isCompact(MediaQuery.sizeOf(context).width) ? 8 : 10,
+              ProposalLayout.isCompact(MediaQuery.sizeOf(context).width)
+                  ? 8
+                  : 10,
             ),
             child: child,
           ),
@@ -6571,9 +7386,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     bool rebuild = true,
   }) {
     var form = Map<String, dynamic>.from(_form)
-      ..['skuDetails'] = [for (final row in rows) row.toJson()]
-      ..['isCouponPack'] = false
-      ..['couponPacks'] = <Map<String, dynamic>>[];
+      ..['skuDetails'] = [for (final row in rows) row.toJson()];
+    form = proposalIntakeSyncChildProductMeta(form);
     if (isExistingBuilt != null) form['isExistingBuilt'] = isExistingBuilt;
     form = _withEstimatedFinanceCosts(form);
     final review = Map<String, dynamic>.from(_review)..[resetReview] = false;
@@ -6591,6 +7405,245 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             : '否',
         settlements: [ProposalSkuSettleRow(id: proposalIntakeNewSkuSettleId())],
       );
+
+  ProposalSkuDetailRow _newChildProductRow({bool? existing}) =>
+      ProposalSkuDetailRow(
+        id: proposalIntakeNewChildSkuId(),
+        existingBuilt: (existing ?? proposalIntakeIsChildExistingBuilt(_form))
+            ? '是'
+            : '否',
+        settlements: [ProposalSkuSettleRow(id: proposalIntakeNewSkuSettleId())],
+      );
+
+  String get _resolvedChildProductId {
+    final children = proposalIntakeChildProducts(_form);
+    if (children.isEmpty) return '';
+    if (children.any((item) => item.id == _activeChildProductId)) {
+      return _activeChildProductId;
+    }
+    return children.first.id;
+  }
+
+  ProposalSkuDetailRow? get _activeChildProduct {
+    final id = _resolvedChildProductId;
+    if (id.isEmpty) return null;
+    return proposalIntakeChildProducts(
+      _form,
+    ).where((item) => item.id == id).firstOrNull;
+  }
+
+  void _selectChildProduct(String id) {
+    if (_activeChildProductId == id) return;
+    setState(() => _activeChildProductId = id);
+  }
+
+  int _childSettleReviewedCount(ProposalSkuDetailRow sku) {
+    final settlements = proposalIntakeSkuSettlements(sku);
+    if (settlements.isEmpty) return 0;
+    return settlements
+        .where(
+          (item) => _itemReviewed('financeItem:skuSettle:${sku.id}:${item.id}'),
+        )
+        .length;
+  }
+
+  void _writeChildProducts(
+    List<ProposalSkuDetailRow> rows, {
+    String resetReview = 'marketCompleted',
+    bool? isExistingBuilt,
+    Map<String, int>? childQuantities,
+    bool rebuild = true,
+  }) {
+    var form = Map<String, dynamic>.from(_form)
+      ..['childProducts'] = [for (final row in rows) row.toJson()];
+    if (isExistingBuilt != null) form['childIsExistingBuilt'] = isExistingBuilt;
+    if (childQuantities != null) {
+      final benefit = form['benefitProduct'] is Map
+          ? Map<String, dynamic>.from(form['benefitProduct'] as Map)
+          : <String, dynamic>{};
+      benefit['skuQuantities'] = childQuantities;
+      form['benefitProduct'] = benefit;
+    }
+    form = proposalIntakeSyncChildProductMeta(form);
+    form = _withEstimatedFinanceCosts(form);
+    final review = Map<String, dynamic>.from(_review)..[resetReview] = false;
+    _dirty = true;
+    _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
+    if (rebuild && mounted) setState(() {});
+    widget.onChanged(_row);
+  }
+
+  void _addChildProduct() {
+    if (!_canEditMarket) return;
+    final rows = proposalIntakeChildProducts(_form);
+    final next = _newChildProductRow();
+    _activeChildProductId = next.id;
+    _writeChildProducts([...rows, next]);
+  }
+
+  void _patchChildProduct(
+    String id,
+    ProposalSkuDetailRow Function(ProposalSkuDetailRow row) update, {
+    bool rebuild = true,
+  }) {
+    _writeChildProducts([
+      for (final row in proposalIntakeChildProducts(_form))
+        if (row.id == id) update(row) else row,
+    ], rebuild: rebuild);
+  }
+
+  void _removeChildProduct(String id) {
+    if (!_canEditMarket) return;
+    _writeChildProducts([
+      for (final row in proposalIntakeChildProducts(_form))
+        if (row.id != id) row,
+    ]);
+    if (_activeChildProductId == id) _activeChildProductId = '';
+  }
+
+  void _setChildExistingBuiltEnabled(bool enabled) {
+    if (!_canEditMarket) return;
+    final label = enabled ? '是' : '否';
+    var skus = [
+      for (final row in proposalIntakeChildProducts(_form))
+        row.copyWith(
+          existingBuilt: label,
+          assetProduct: enabled ? row.assetProduct : null,
+        ),
+    ];
+    if (enabled && skus.isEmpty) {
+      skus = [_newChildProductRow(existing: true)];
+      _activeChildProductId = skus.first.id;
+    }
+    _writeChildProducts(skus, isExistingBuilt: enabled);
+  }
+
+  void _setChildProductQuantity(String childId, String value) {
+    if (!_canEditMarket) return;
+    final quantity = int.tryParse(value.trim()) ?? 1;
+    final quantities = Map<String, int>.from(
+      proposalIntakeBenefitProduct(_form).skuQuantities,
+    )..[childId] = quantity < 1 ? 1 : quantity;
+    _writeChildProducts(
+      proposalIntakeChildProducts(_form),
+      childQuantities: quantities,
+      rebuild: false,
+    );
+  }
+
+  void _setChildProductParent(String childId, String? parentSkuId) {
+    if (!_canEditMarket) return;
+    _patchChildProduct(
+      childId,
+      (current) => current.copyWith(parentSkuId: parentSkuId ?? ''),
+    );
+  }
+
+  void _jumpToSkuSettlement(ProposalSkuDetailRow sku, {required bool child}) {
+    if (child && _activeChildProductId != sku.id) {
+      setState(() => _activeChildProductId = sku.id);
+    }
+    final key =
+        _fieldAnchorKeys[child
+            ? 'childProductSalesSettle'
+            : 'productSalesSettle'];
+    if (key != null) {
+      _jumpToKey(key, ProposalIntakeNavSection.finance);
+    }
+  }
+
+  void _jumpToSkuProduct(ProposalSkuDetailRow sku, {required bool child}) {
+    final anchor = child ? 'childDetail:${sku.id}' : 'skuDetail:${sku.id}';
+    void jump() {
+      final key = _fieldAnchorKeys[anchor];
+      if (key != null && _jumpToKey(key, ProposalIntakeNavSection.market)) {
+        return;
+      }
+      _jumpToKey(_marketKey, ProposalIntakeNavSection.market);
+    }
+
+    if (child && _activeChildProductId != sku.id) {
+      setState(() => _activeChildProductId = sku.id);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) jump();
+      });
+      return;
+    }
+    jump();
+  }
+
+  List<ProposalSkuSettleRow> _pasteSkuSettlements(
+    List<ProposalSkuSettleRow> current,
+  ) {
+    final copied = _skuSettlementsClipboard;
+    if (copied == null || copied.isEmpty) return current;
+    return [
+      for (var i = 0; i < copied.length; i++)
+        ProposalSkuSettleRow(
+          id: i < current.length
+              ? current[i].id
+              : proposalIntakeNewSkuSettleId(),
+          terms: copied[i],
+        ),
+    ];
+  }
+
+  void _writeChildSettlements(
+    String skuId,
+    List<ProposalSkuSettleRow> settlements, {
+    bool rebuild = true,
+  }) {
+    if (!_canEditSkuSettlements) return;
+    _writeChildProducts(
+      [
+        for (final row in proposalIntakeChildProducts(_form))
+          if (row.id == skuId) row.copyWith(settlements: settlements) else row,
+      ],
+      resetReview: 'financeCompleted',
+      rebuild: rebuild,
+    );
+  }
+
+  void _setChildTech(String key, Object? value, {bool rebuild = true}) {
+    if (_moduleReviewed('technologyCompleted') ||
+        _itemReviewed('technologyItem:$kProposalChildTechReviewPrefix$key')) {
+      return;
+    }
+    final snap = proposalIntakeChildTechnology(_form)..[key] = value;
+    var form = Map<String, dynamic>.from(_form)..['childTechnology'] = snap;
+    form = _keepUnreviewed(form);
+    final review = Map<String, dynamic>.from(_review)
+      ..['technologyCompleted'] = false;
+    if (key == 'financeInterfaces') {
+      review['financeInterfaceCompleted'] = false;
+    }
+    final items = review['technologyItems'];
+    if (items is Map) {
+      final nextItems = Map<String, dynamic>.from(items)
+        ..remove('$kProposalChildTechReviewPrefix$key');
+      review['technologyItems'] = nextItems;
+    }
+    _dirty = true;
+    _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
+    if (rebuild && mounted) setState(() {});
+    widget.onChanged(_row);
+  }
+
+  void _toggleChildTechList(String key, String value, {bool single = false}) {
+    final current = proposalIntakeChildTechnology(_form)[key];
+    final values = current is List
+        ? current.map((item) => '$item').toSet()
+        : <String>{};
+    if (single) {
+      final next = (values.length == 1 && values.contains(value))
+          ? <String>[]
+          : <String>[value];
+      _setChildTech(key, next);
+      return;
+    }
+    values.contains(value) ? values.remove(value) : values.add(value);
+    _setChildTech(key, values.toList());
+  }
 
   void _setExistingBuiltEnabled(bool enabled) {
     if (!_canEditMarket) return;
@@ -6611,33 +7664,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   void _addSkuDetail() {
     if (!_canEditMarket) return;
     final rows = proposalIntakeSkuDetails(_form);
-    var next = _newSkuDetailRow();
-    if (rows.isNotEmpty) {
-      // 归属类字段由「共同设置」统一管，新行必须跟上，
-      // 否则面板显示的是第一行的值，新行却是空的。
-      final base = rows.first;
-      next = next.copyWith(
-        syncSourceRef: base.syncSourceRef,
-        channelRef: base.channelRef,
-        institutionRef: base.institutionRef,
-        channelCategoryL1: base.channelCategoryL1,
-        channelCategoryL2: base.channelCategoryL2,
-        channelCategoryL1Ref: base.channelCategoryL1Ref,
-        channelCategoryL2Ref: base.channelCategoryL2Ref,
-        syncZhongyouHaoke: base.syncZhongyouHaoke,
-      );
-    }
+    final next = _newSkuDetailRow();
     _writeSkuDetails([...rows, next]);
-  }
-
-  /// 共同设置用：一次写进本单所有产品行。
-  void _patchAllSkuDetails(
-    ProposalSkuDetailRow Function(ProposalSkuDetailRow row) update, {
-    bool rebuild = true,
-  }) {
-    _writeSkuDetails([
-      for (final row in proposalIntakeSkuDetails(_form)) update(row),
-    ], rebuild: rebuild);
   }
 
   void _patchSkuDetail(
@@ -6649,6 +7677,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       for (final row in proposalIntakeSkuDetails(_form))
         if (row.id == id) update(row) else row,
     ], rebuild: rebuild);
+  }
+
+  void _patchSellableSku(
+    String id,
+    ProposalSkuDetailRow Function(ProposalSkuDetailRow row) update, {
+    bool rebuild = true,
+  }) {
+    if (proposalIntakeChildProducts(_form).any((row) => row.id == id)) {
+      _patchChildProduct(id, update, rebuild: rebuild);
+      return;
+    }
+    _patchSkuDetail(id, update, rebuild: rebuild);
   }
 
   void _removeSkuDetail(String id) {
@@ -6665,6 +7705,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     bool rebuild = true,
   }) {
     if (!_canEditSkuSettlements) return;
+    if (_isChildSkuId(skuId)) {
+      _writeChildSettlements(skuId, settlements, rebuild: rebuild);
+      return;
+    }
     _writeSkuDetails(
       [
         for (final row in proposalIntakeSkuDetails(_form))
@@ -6675,11 +7719,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
+  bool _isChildSkuId(String id) =>
+      proposalIntakeChildProducts(_form).any((item) => item.id == id);
+
+  ProposalSkuDetailRow? _sellableSkuById(String id) {
+    return proposalIntakeAllSellableSkus(
+      _form,
+    ).where((item) => item.id == id).firstOrNull;
+  }
+
   void _addSkuSettle(String skuId) {
     if (!_canEditSkuSettlements) return;
-    final row = proposalIntakeSkuDetails(
-      _form,
-    ).where((item) => item.id == skuId).firstOrNull;
+    final row = _sellableSkuById(skuId);
     if (row == null) return;
     _writeSkuSettlements(skuId, [
       ...proposalIntakeSkuSettlements(row),
@@ -6693,9 +7744,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   void _removeSkuSettle(String skuId, String settleId) {
     if (!_canEditSkuSettlements) return;
     if (_skuSettleItemLocked('skuSettle', skuId, settleId)) return;
-    final row = proposalIntakeSkuDetails(
-      _form,
-    ).where((item) => item.id == skuId).firstOrNull;
+    final row = _sellableSkuById(skuId);
     if (row == null) return;
     final next = [
       for (final item in proposalIntakeSkuSettlements(row))
@@ -6712,9 +7761,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   ) {
     if (!_canEditSkuSettlements) return;
     if (_skuSettleItemLocked('skuSettle', skuId, settleId)) return;
-    final row = proposalIntakeSkuDetails(
-      _form,
-    ).where((item) => item.id == skuId).firstOrNull;
+    final row = _sellableSkuById(skuId);
     if (row == null) return;
     _writeSkuSettlements(skuId, [
       for (final item in proposalIntakeSkuSettlements(row))
@@ -6802,7 +7849,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ),
           const SizedBox(height: 6),
           const Text(
-            '勾选适用的渠道产品。这是销售收入比例，不是项目成本。',
+            '勾选适用的主产品。这是销售收入比例，不是项目成本。',
             style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
           ),
           const SizedBox(height: 8),
@@ -6810,7 +7857,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final sku in proposalIntakeSkuDetails(_form))
+              for (final sku in proposalIntakeAllSellableSkus(_form))
                 ProposalChoiceChip(
                   label: [
                     if (sku.productName.trim().isNotEmpty)
@@ -6864,7 +7911,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           children: [
             const Expanded(
               child: Text(
-                '渠道产品',
+                '主产品',
                 style: TextStyle(
                   color: ProposalPalette.text,
                   fontWeight: FontWeight.w700,
@@ -6876,45 +7923,162 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               TextButton.icon(
                 onPressed: _addSkuDetail,
                 icon: const Icon(Icons.add, size: 16),
-                label: const Text('新增渠道产品'),
+                label: const Text('新增主产品'),
               ),
           ],
         ),
         const Text(
-          '这里列出这单要卖的产品。下面财务部的规模、收入、采购成本都按这些产品逐个算。',
+          '先新增主产品。关联子产品后，每个子产品需选择对应主产品和关联数量。',
           style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
         ),
-        const SizedBox(height: 8),
-        _existingBuiltToggle(locked: _showSelectedAsText || !_canEditMarket),
         if (rows.isEmpty)
           const Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text(
-              '尚未添加渠道产品',
+              '尚未添加主产品',
               style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
             ),
           ),
         if (rows.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _existingBuiltToggle(locked: _showSelectedAsText || !_canEditMarket),
           const SizedBox(height: 12),
-          _skuSharedSettings(rows.first, wide),
-          const SizedBox(height: 14),
           _skuGroupLabel('产品明细', '每个产品只填不一样的部分'),
         ],
         for (var i = 0; i < rows.length; i++) ...[
           if (i > 0) const SizedBox(height: 10),
-          _skuDetailCard(rows[i], i + 1, wide),
+          _anchor(
+            'skuDetail:${rows[i].id}',
+            _skuDetailCard(rows[i], i + 1, wide),
+          ),
+        ],
+        if (_canEditMarket && rows.isNotEmpty)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _addSkuDetail,
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('继续新增主产品'),
+            ),
+          ),
+        const SizedBox(height: 18),
+        _childProductsBlock(wide),
+      ],
+    );
+  }
+
+  Widget _childProductsBlock(bool wide) {
+    final rows = proposalIntakeChildProducts(_form);
+    final active = _activeChildProduct;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                '关联子产品',
+                style: TextStyle(
+                  color: ProposalPalette.text,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            if (_canEditMarket)
+              TextButton.icon(
+                onPressed: _addChildProduct,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('关联子产品'),
+              ),
+          ],
+        ),
+        const Text(
+          '子产品与主产品分开。彼此共用一套科技和财务模块，明细和结算在下方切换、各归各的。',
+          style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+        ),
+        if (rows.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+              '尚未关联子产品',
+              style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
+            ),
+          )
+        else ...[
+          const SizedBox(height: 8),
+          _existingBuiltToggle(
+            locked: _showSelectedAsText || !_canEditMarket,
+            child: true,
+          ),
+          const SizedBox(height: 10),
+          _childProductSwitcher(rows),
+          const SizedBox(height: 14),
+          _skuGroupLabel('子产品明细', '只显示当前选中的子产品'),
+          if (active != null) ...[
+            const SizedBox(height: 10),
+            _anchor(
+              'childDetail:${active.id}',
+              _skuDetailCard(
+                active,
+                rows.indexWhere((item) => item.id == active.id) + 1,
+                wide,
+                child: true,
+              ),
+            ),
+          ],
+          if (_canEditMarket)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _addChildProduct,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('继续关联子产品'),
+              ),
+            ),
         ],
       ],
     );
   }
 
-  Widget _existingBuiltToggle({required bool locked}) {
-    final enabled = proposalIntakeIsExistingBuilt(_form);
+  Widget _childProductSwitcher(List<ProposalSkuDetailRow> rows) {
+    if (rows.isEmpty) return const SizedBox.shrink();
+    final activeId = _resolvedChildProductId;
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (var i = 0; i < rows.length; i++)
+          ProposalChoiceChip(
+            label: _childSwitcherLabel(rows[i], i + 1),
+            selected: rows[i].id == activeId,
+            onSelected: (_) => _selectChildProduct(rows[i].id),
+          ),
+      ],
+    );
+  }
+
+  String _childSwitcherLabel(ProposalSkuDetailRow sku, int index) {
+    final name = (sku.assetProduct?.label ?? sku.productName).trim();
+    final title = name.isEmpty ? '子产品 $index' : name;
+    final settlements = proposalIntakeSkuSettlements(sku);
+    if (settlements.isEmpty) return title;
+    return '$title · 结算 ${_childSettleReviewedCount(sku)}/${settlements.length}';
+  }
+
+  Widget _existingBuiltToggle({required bool locked, bool child = false}) {
+    final enabled = child
+        ? proposalIntakeIsChildExistingBuilt(_form)
+        : proposalIntakeIsExistingBuilt(_form);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         GestureDetector(
-          onTap: locked ? null : () => _setExistingBuiltEnabled(!enabled),
+          onTap: locked
+              ? null
+              : () => child
+                    ? _setChildExistingBuiltEnabled(!enabled)
+                    : _setExistingBuiltEnabled(!enabled),
           child: Row(
             children: [
               SizedBox(
@@ -6926,12 +8090,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   visualDensity: VisualDensity.compact,
                   onChanged: locked
                       ? null
-                      : (value) => _setExistingBuiltEnabled(value == true),
+                      : (value) => child
+                            ? _setChildExistingBuiltEnabled(value == true)
+                            : _setExistingBuiltEnabled(value == true),
                 ),
               ),
               const SizedBox(width: 6),
-              const Text(
-                '是否已经建产品',
+              Text(
+                child ? '子产品是否已经建产品' : '是否已经建产品',
                 style: TextStyle(
                   color: ProposalPalette.text,
                   fontWeight: FontWeight.w700,
@@ -6945,7 +8111,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           padding: EdgeInsets.only(top: 4, left: 28),
           child: Text(
             '不勾：手工填写产品信息。\n'
-            '勾选：先选业务平台，再搜索选中资管已建的产品；账单类型、结算方式、税率自动同步，下面的字段不用再填。',
+            '勾选：先选业务平台，再搜索选中资管已建的产品。选中后会按资管结算规则同步账单类型、结算方式、税率，下面的字段不用再填。',
             style: TextStyle(
               color: ProposalPalette.text3,
               fontSize: 11,
@@ -6957,7 +8123,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
-  /// 渠道产品卡片里的分组小标题。
+  /// 主产品卡片里的分组小标题。
   ///
   /// 十几个字段平铺成一张网格时，看不出哪些是归类、哪些是产品属性、
   /// 哪些是给外部系统用的。用小标题把它们切开。
@@ -6998,156 +8164,258 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
-    /// 共同设置：本单所有渠道产品共用的归属类字段。
-  ///
-  /// 一单里的产品通常走同一个平台、同一个渠道、同一组标签，
-  /// 逐张卡片重填一遍既慢又容易填岔。这里改一次，写进所有产品行。
-  Widget _skuSharedSettings(ProposalSkuDetailRow row, bool wide) {
+  /// 每条产品自己的渠道设置；可复制到另一条产品，但不会复制产品名称。
+  Widget _skuSettingsEditor(
+    ProposalSkuDetailRow row,
+    bool wide, {
+    required ValueChanged<ProposalSkuDetailRow Function(ProposalSkuDetailRow)>
+    onPatch,
+    bool child = false,
+  }) {
     final locked = _showSelectedAsText || !_canEditMarket;
     final existing =
-        proposalIntakeIsExistingBuilt(_form) || row.isExistingBuilt;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: ProposalPalette.card,
-        border: Border.all(color: ProposalPalette.border),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _skuGroupLabel('共同设置', '改一次，本单所有产品一起生效'),
-          _fieldGrid(wide, [
-            _skuCatalogCell(
-                                      label: '业务平台',
-                                      current: row.syncSourceRef,
-                                      options: _syncSourceCatalog,
-                                      locked: locked,
-                                      required: existing,
-                                      hint: _syncSourceCatalog.isEmpty ? '字典加载中或暂无平台' : '请选择业务平台',
-                                      onSelected: (value) {
-                                        _patchAllSkuDetails( (current) {
-                                          final changed = current.syncSourceCode != (value?.code ?? '');
-                                          var next = current.copyWith(
-                                            syncSourceRef: value,
-                                            channelRef: changed ? null : current.channelRef,
-                                            settlements: changed
-                                                ? [
-                                                    for (final item in proposalIntakeSkuSettlements(
-                                                      current,
-                                                    ))
-                                                      item.copyWith(
-                                                        terms: item.terms.clearedCatalog(
-                                                          keepManual: false,
-                                                        ),
-                                                      ),
-                                                  ]
-                                                : current.settlements,
-                                          );
-                                          if (changed && existing) {
-                                            next = next.applyAssetProduct(null);
-                                            _assetProductSyncSeq[row.id] =
-                                                (_assetProductSyncSeq[row.id] ?? 0) + 1;
-                                            _assetProductSyncHint.remove(row.id);
-                                          }
-                                          return next;
-                                        });
-                                        if (value != null && value.isNotEmpty) {
-                                          _prefetchSettle(value.code, 'CHANNEL');
-                                        }
-                                      },
-                                    ),
-            _skuChannelCell(
-                                          current: row.channelRef,
-                                          locked: locked,
-                                          syncSource: row.syncSourceCode,
-                                          onSelected: (value) => _patchAllSkuDetails(
-                                            (current) => current.copyWith(
-                                              channelRef: value,
-                                              settlements: [
-                                                for (final item in proposalIntakeSkuSettlements(current))
-                                                  item.copyWith(
-                                                    terms: item.terms.copyWith(channelRef: value),
-                                                  ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
+        (child
+            ? proposalIntakeIsChildExistingBuilt(_form)
+            : proposalIntakeIsExistingBuilt(_form)) ||
+        row.isExistingBuilt;
+    void patch(ProposalSkuDetailRow Function(ProposalSkuDetailRow row) update) {
+      onPatch(update);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                child ? '子产品渠道设置' : '渠道设置',
+                style: const TextStyle(
+                  color: ProposalPalette.text2,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (_canEditMarket) ...[
+              TextButton(
+                onPressed: () => setState(() => _skuSettingsClipboard = row),
+                child: const Text('复制设置'),
+              ),
+              TextButton(
+                onPressed: _skuSettingsClipboard == null
+                    ? null
+                    : () => patch(
+                        (current) => _copySkuSettings(
+                          target: current,
+                          source: _skuSettingsClipboard!,
+                        ),
+                      ),
+                child: const Text('粘贴设置'),
+              ),
+            ],
+          ],
+        ),
+        _fieldGrid(wide, [
+          _skuCatalogCell(
+            label: '业务平台',
+            current: row.syncSourceRef,
+            options: _syncSourceCatalog,
+            locked: locked,
+            required: existing,
+            hint: _syncSourceCatalog.isEmpty ? '字典加载中或暂无平台' : '请选择业务平台',
+            onSelected: (value) {
+              patch((current) {
+                final changed = current.syncSourceCode != (value?.code ?? '');
+                var next = current.copyWith(
+                  syncSourceRef: value,
+                  channelRef: changed ? null : current.channelRef,
+                  settlements: changed
+                      ? [
+                          for (final item in proposalIntakeSkuSettlements(
+                            current,
+                          ))
+                            item.copyWith(
+                              terms: item.terms.clearedCatalog(
+                                keepManual: false,
+                              ),
+                            ),
+                        ]
+                      : current.settlements,
+                );
+                if (changed && existing) {
+                  next = next.applyAssetProduct(null);
+                  _assetProductSyncSeq[row.id] =
+                      (_assetProductSyncSeq[row.id] ?? 0) + 1;
+                  _assetProductSyncHint.remove(row.id);
+                }
+                return next;
+              });
+              if (value != null && value.isNotEmpty) {
+                _prefetchSettle(value.code, 'CHANNEL');
+              }
+            },
+          ),
+          _skuChannelCell(
+            current: row.channelRef,
+            locked: locked,
+            syncSource: row.syncSourceCode,
+            onSelected: (value) => patch(
+              (current) => current.copyWith(
+                channelRef: value,
+                settlements: [
+                  for (final item in proposalIntakeSkuSettlements(current))
+                    item.copyWith(
+                      terms: item.terms.copyWith(channelRef: value),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          if (!existing) ...[
             _skuInstitutionCell(
-                                          current: row.institutionRef,
-                                          locked: locked,
-                                          onSelected: (value) => _patchAllSkuDetails(
-                                            (current) => current.copyWith(institutionRef: value),
-                                          ),
-                                        ),
+              current: row.institutionRef,
+              locked: locked,
+              onSelected: (value) =>
+                  patch((current) => current.copyWith(institutionRef: value)),
+            ),
             _skuCatalogCell(
-                                          label: '标签三-一级',
-                                          current: row.resolvedChannelCategoryL1,
-                                          options: _channelCategoryL1,
-                                          locked: locked,
-                                          hint: _channelCategoryL1.isEmpty ? '字典加载中或暂无分类' : '请选择标签三-一级',
-                                          emptyText: _channelCategoryL1.isEmpty ? '字典加载中或暂无分类' : null,
-                                          onSelected: (value) => _patchAllSkuDetails(
-                                            (current) => _applyChannelCategoryL1(current, value),
-                                          ),
-                                        ),
+              label: '标签三-一级',
+              current: row.resolvedChannelCategoryL1,
+              options: _channelCategoryL1,
+              locked: locked,
+              hint: _channelCategoryL1.isEmpty ? '字典加载中或暂无分类' : '请选择标签三-一级',
+              emptyText: _channelCategoryL1.isEmpty ? '字典加载中或暂无分类' : null,
+              onSelected: (value) =>
+                  patch((current) => _applyChannelCategoryL1(current, value)),
+            ),
             _skuCatalogCell(
-                                          label: '标签三-二级',
-                                          current: row.resolvedChannelCategoryL2,
-                                          options: _channelCategoryL2Of(row.resolvedChannelCategoryL1),
-                                          locked: locked,
-                                          hint:
-                                              (row.resolvedChannelCategoryL1 == null ||
-                                                  row.resolvedChannelCategoryL1!.isEmpty)
-                                              ? '请先选择标签三-一级'
-                                              : (_channelCategoryL2Of(
-                                                      row.resolvedChannelCategoryL1,
-                                                    ).isEmpty
-                                                    ? '字典加载中或暂无分类'
-                                                    : '请选择标签三-二级'),
-                                          emptyText:
-                                              (row.resolvedChannelCategoryL1 == null ||
-                                                  row.resolvedChannelCategoryL1!.isEmpty)
-                                              ? '请先选择标签三-一级'
-                                              : '该一级分类暂无二级分类',
-                                          onSelected: (value) => _patchAllSkuDetails(
-                                            (current) => current.copyWith(
-                                              channelCategoryL2Ref: value,
-                                              channelCategoryL2: proposalIntakeCategoryLabel(value, ''),
-                                            ),
-                                          ),
-                                        ),
+              label: '标签三-二级',
+              current: row.resolvedChannelCategoryL2,
+              options: _channelCategoryL2Of(row.resolvedChannelCategoryL1),
+              locked: locked,
+              hint:
+                  (row.resolvedChannelCategoryL1 == null ||
+                      row.resolvedChannelCategoryL1!.isEmpty)
+                  ? '请先选择标签三-一级'
+                  : (_channelCategoryL2Of(row.resolvedChannelCategoryL1).isEmpty
+                        ? '字典加载中或暂无分类'
+                        : '请选择标签三-二级'),
+              emptyText:
+                  (row.resolvedChannelCategoryL1 == null ||
+                      row.resolvedChannelCategoryL1!.isEmpty)
+                  ? '请先选择标签三-一级'
+                  : '该一级分类暂无二级分类',
+              onSelected: (value) => patch(
+                (current) => current.copyWith(
+                  channelCategoryL2Ref: value,
+                  channelCategoryL2: proposalIntakeCategoryLabel(value, ''),
+                ),
+              ),
+            ),
             ProposalField(
-                                          label: '是否同步中油好客',
-                                          child: locked
-                                              ? _readonlySelectedText(row.syncZhongyouHaoke)
-                                              : ProposalSelectField<String>(
-                                                  value: row.syncZhongyouHaoke.isEmpty
-                                                      ? null
-                                                      : row.syncZhongyouHaoke,
-                                                  title: '是否同步中油好客',
-                                                  hint: '请选择',
-                                                  options: const [
-                                                    ProposalSelectOption(value: '同步', label: '同步'),
-                                                    ProposalSelectOption(value: '不同步', label: '不同步'),
-                                                  ],
-                                                  onSelected: (value) => _patchAllSkuDetails(
-                                                    (current) =>
-                                                        current.copyWith(syncZhongyouHaoke: value ?? ''),
-                                                  ),
-                                                ),
-                                        ),
-          ], columns: 2),
-        ],
-      ),
+              label: '是否同步中油好客',
+              child: locked
+                  ? _readonlySelectedText(row.syncZhongyouHaoke)
+                  : ProposalSelectField<String>(
+                      value: row.syncZhongyouHaoke.isEmpty
+                          ? null
+                          : row.syncZhongyouHaoke,
+                      title: '是否同步中油好客',
+                      hint: '请选择',
+                      options: const [
+                        ProposalSelectOption(value: '同步', label: '同步'),
+                        ProposalSelectOption(value: '不同步', label: '不同步'),
+                      ],
+                      onSelected: (value) => patch(
+                        (current) =>
+                            current.copyWith(syncZhongyouHaoke: value ?? ''),
+                      ),
+                    ),
+            ),
+          ],
+        ], columns: 2),
+      ],
     );
   }
 
-Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
+  ProposalSkuDetailRow _copySkuSettings({
+    required ProposalSkuDetailRow target,
+    required ProposalSkuDetailRow source,
+  }) {
+    final platformChanged = target.syncSourceCode != source.syncSourceCode;
+    return target.copyWith(
+      syncSourceRef: source.syncSourceRef,
+      channelRef: source.channelRef,
+      institutionRef: source.institutionRef,
+      channelCategoryL1: source.channelCategoryL1,
+      channelCategoryL2: source.channelCategoryL2,
+      channelCategoryL1Ref: source.channelCategoryL1Ref,
+      channelCategoryL2Ref: source.channelCategoryL2Ref,
+      syncZhongyouHaoke: source.syncZhongyouHaoke,
+      faceValue: source.faceValue,
+      productCategoryL1: source.productCategoryL1,
+      productCategoryL2: source.productCategoryL2,
+      effectiveDate: source.effectiveDate,
+      expireDate: source.expireDate,
+      supplierCodes: source.supplierCodes,
+      inventoryQty: source.inventoryQty,
+      assetProduct: platformChanged ? null : target.assetProduct,
+    );
+  }
+
+  bool _skuNameInUse(String name, String currentId) {
+    final normalized = name.trim();
+    if (normalized.isEmpty) return false;
+    return proposalIntakeAllSellableSkus(_form).any(
+      (item) => item.id != currentId && item.productName.trim() == normalized,
+    );
+  }
+
+  void _changeSkuName({
+    required String id,
+    required String name,
+    required bool child,
+  }) {
+    if (_skuNameInUse(name, id)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('产品名称不能与提案内其他产品重复')));
+      return;
+    }
+    final update = (ProposalSkuDetailRow current) =>
+        current.copyWith(productName: name);
+    if (child) {
+      _patchChildProduct(id, update, rebuild: false);
+    } else {
+      _patchSkuDetail(id, update, rebuild: false);
+    }
+  }
+
+  Widget _skuDetailCard(
+    ProposalSkuDetailRow row,
+    int index,
+    bool wide, {
+    bool child = false,
+  }) {
     final locked = _showSelectedAsText || !_canEditMarket;
     final existing =
-        proposalIntakeIsExistingBuilt(_form) || row.isExistingBuilt;
+        (child
+            ? proposalIntakeIsChildExistingBuilt(_form)
+            : proposalIntakeIsExistingBuilt(_form)) ||
+        row.isExistingBuilt;
+    void patch(
+      String id,
+      ProposalSkuDetailRow Function(ProposalSkuDetailRow row) update, {
+      bool rebuild = true,
+    }) {
+      if (child) {
+        _patchChildProduct(id, update, rebuild: rebuild);
+      } else {
+        _patchSkuDetail(id, update, rebuild: rebuild);
+      }
+    }
+
     final showManual =
         !existing || (locked && proposalIntakeSkuHasManualDetails(row));
     final titleName = (row.assetProduct?.label ?? '').trim().isNotEmpty
@@ -7157,8 +8425,12 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: ProposalPalette.app,
-        border: Border.all(color: ProposalPalette.border),
+        color: child
+            ? ProposalPalette.greenSoft.withValues(alpha: 0.32)
+            : ProposalPalette.purpleSoft.withValues(alpha: 0.24),
+        border: Border.all(
+          color: child ? ProposalPalette.green : ProposalPalette.purpleLine,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -7169,8 +8441,8 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
               Expanded(
                 child: Text(
                   titleName.isEmpty
-                      ? '渠道产品 $index'
-                      : '渠道产品 $index · $titleName',
+                      ? '${child ? '子产品' : '主产品'} $index'
+                      : '${child ? '子产品' : '主产品'} $index · $titleName',
                   style: const TextStyle(
                     color: ProposalPalette.text,
                     fontWeight: FontWeight.w700,
@@ -7180,113 +8452,168 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
               ),
               if (_canEditMarket)
                 TextButton(
-                  onPressed: () => _removeSkuDetail(row.id),
+                  onPressed: () => child
+                      ? _removeChildProduct(row.id)
+                      : _removeSkuDetail(row.id),
                   child: const Text('删除'),
                 ),
+              TextButton.icon(
+                onPressed: () => _jumpToSkuSettlement(row, child: child),
+                icon: const Icon(Icons.arrow_downward_rounded, size: 15),
+                label: const Text('填写结算'),
+              ),
             ],
           ),
+          const SizedBox(height: 8),
+          _skuSettingsEditor(
+            row,
+            wide,
+            child: child,
+            onPatch: (update) => patch(row.id, update),
+          ),
+          if (child) ...[
+            const SizedBox(height: 10),
+            _childMainProductAssociationField(row, locked: locked),
+            const SizedBox(height: 10),
+            _skuTextCell(
+              rowId: row.id,
+              label: '子产品数量',
+              value: '${proposalIntakeChildProductQuantity(_form, row.id)}',
+              fieldKey: 'association-quantity',
+              hint: '至少为 1',
+              locked: locked,
+              required: true,
+              keyboardType: TextInputType.number,
+              onChanged: (value) => _setChildProductQuantity(row.id, value),
+            ),
+          ],
           if (existing)
             _fieldGrid(wide, [
               _assetProductSearchCell(
-                                          rowId: row.id,
-                                          current: row.assetProduct,
-                                          syncSource: row.syncSourceCode,
-                                          locked: locked,
-                                          label: '已建产品',
-                                          fallbackLabel: row.productName,
-                                          onSelected: (value) {
-                                            _patchSkuDetail(
-                                              row.id,
-                                              (current) => current.applyAssetProduct(value),
-                                            );
-                                            unawaited(
-                                              _syncAssetProductSettlement(
-                                                rowId: row.id,
-                                                hit: value,
-                                              ),
-                                            );
-                                          },
-                                        ),
+                rowId: row.id,
+                current: row.assetProduct,
+                syncSource: row.syncSourceCode,
+                locked: locked,
+                label: '已建产品',
+                fallbackLabel: row.productName,
+                onSelected: (value) {
+                  patch(row.id, (current) => current.applyAssetProduct(value));
+                  unawaited(
+                    _syncAssetProductSettlement(rowId: row.id, hit: value),
+                  );
+                },
+              ),
             ], columns: 1),
           if (showManual)
             _fieldGrid(wide, [
               _skuTextCell(
-                                            rowId: row.id,
-                                            label: '产品名称',
-                                            value: row.productName,
-                                            fieldKey: 'name',
-                                            locked: locked,
-                                            onChanged: (value) => _patchSkuDetail(
-                                              row.id,
-                                              (current) => current.copyWith(productName: value),
-                                              rebuild: false,
-                                            ),
-                                          ),
+                rowId: row.id,
+                label: '产品名称',
+                value: row.productName,
+                fieldKey: 'name',
+                locked: locked,
+                onChanged: (value) =>
+                    _changeSkuName(id: row.id, name: value, child: child),
+              ),
               _skuTextCell(
-                                            rowId: row.id,
-                                            label: '面值',
-                                            value: row.faceValue,
-                                            fieldKey: 'face',
-                                            hint: '手填',
-                                            locked: locked,
-                                            onChanged: (value) => _patchSkuDetail(
-                                              row.id,
-                                              (current) => current.copyWith(faceValue: value),
-                                              rebuild: false,
-                                            ),
-                                          ),
+                rowId: row.id,
+                label: '面值',
+                value: row.faceValue,
+                fieldKey: 'face',
+                hint: '手填',
+                locked: locked,
+                onChanged: (value) => patch(
+                  row.id,
+                  (current) => current.copyWith(faceValue: value),
+                  rebuild: false,
+                ),
+              ),
               _skuTextCell(
-                                            rowId: row.id,
-                                            label: '库存数量',
-                                            value: row.inventoryQty,
-                                            fieldKey: 'qty',
-                                            hint: '数字',
-                                            locked: locked,
-                                            keyboardType: TextInputType.number,
-                                            onChanged: (value) => _patchSkuDetail(
-                                              row.id,
-                                              (current) => current.copyWith(inventoryQty: value),
-                                              rebuild: false,
-                                            ),
-                                          ),
+                rowId: row.id,
+                label: '库存数量',
+                value: row.inventoryQty,
+                fieldKey: 'qty',
+                hint: '数字',
+                locked: locked,
+                keyboardType: TextInputType.number,
+                onChanged: (value) => patch(
+                  row.id,
+                  (current) => current.copyWith(inventoryQty: value),
+                  rebuild: false,
+                ),
+              ),
               _skuDateCell(
-                                            rowId: row.id,
-                                            label: '产品生效日期',
-                                            value: row.effectiveDate,
-                                            fieldKey: 'effective',
-                                            locked: locked,
-                                            onPicked: (value) => _patchSkuDetail(
-                                              row.id,
-                                              (current) => current.copyWith(effectiveDate: value),
-                                            ),
-                                          ),
+                rowId: row.id,
+                label: '产品生效日期',
+                value: row.effectiveDate,
+                fieldKey: 'effective',
+                locked: locked,
+                onPicked: (value) => patch(
+                  row.id,
+                  (current) => current.copyWith(effectiveDate: value),
+                ),
+              ),
               _skuDateCell(
-                                            rowId: row.id,
-                                            label: '产品失效日期',
-                                            value: row.expireDate,
-                                            fieldKey: 'expire',
-                                            locked: locked,
-                                            onPicked: (value) => _patchSkuDetail(
-                                              row.id,
-                                              (current) => current.copyWith(expireDate: value),
-                                            ),
-                                          ),
+                rowId: row.id,
+                label: '产品失效日期',
+                value: row.expireDate,
+                fieldKey: 'expire',
+                locked: locked,
+                onPicked: (value) => patch(
+                  row.id,
+                  (current) => current.copyWith(expireDate: value),
+                ),
+              ),
               _skuTextCell(
-                                            rowId: row.id,
-                                            label: '供应商编码',
-                                            value: row.supplierCodes,
-                                            fieldKey: 'suppliers',
-                                            hint: '多个用 | 分隔，越前面的排名越高，例如 A|B|C',
-                                            locked: locked,
-                                            onChanged: (value) => _patchSkuDetail(
-                                              row.id,
-                                              (current) => current.copyWith(supplierCodes: value),
-                                              rebuild: false,
-                                            ),
-                                          ),
+                rowId: row.id,
+                label: '供应商编码',
+                value: row.supplierCodes,
+                fieldKey: 'suppliers',
+                hint: '多个用 | 分隔，越前面的排名越高，例如 A|B|C',
+                locked: locked,
+                onChanged: (value) => patch(
+                  row.id,
+                  (current) => current.copyWith(supplierCodes: value),
+                  rebuild: false,
+                ),
+              ),
             ], columns: 2),
         ],
       ),
+    );
+  }
+
+  Widget _childMainProductAssociationField(
+    ProposalSkuDetailRow child, {
+    required bool locked,
+  }) {
+    final mainProducts = proposalIntakeSkuDetails(_form);
+    return ProposalField(
+      label: '关联主产品',
+      required: true,
+      child: locked
+          ? _readonlySelectedText(
+              mainProducts
+                      .where((item) => item.id == child.parentSkuId)
+                      .map((item) => item.productName)
+                      .firstOrNull ??
+                  '',
+            )
+          : ProposalSelectField<String>(
+              value: child.parentSkuId.isEmpty ? null : child.parentSkuId,
+              hint: mainProducts.isEmpty ? '请先新增主产品' : '请选择关联主产品',
+              emptyText: mainProducts.isEmpty ? '请先在上方新增主产品' : null,
+              options: [
+                for (var i = 0; i < mainProducts.length; i++)
+                  ProposalSelectOption(
+                    value: mainProducts[i].id,
+                    label: mainProducts[i].productName.isEmpty
+                        ? '主产品 ${i + 1}'
+                        : mainProducts[i].productName,
+                  ),
+              ],
+              onSelected: (value) => _setChildProductParent(child.id, value),
+            ),
     );
   }
 
@@ -7658,16 +8985,20 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
     widget.onChanged(_row);
   }
 
-  void _addFinanceModule() {
+  void _addFinanceModule({String owner = kProposalFinanceModuleOwnerMain}) {
     if (!_canEditFinanceModules) return;
     final modules = proposalIntakeFinanceModules(_form);
+    final children = owner == kProposalFinanceModuleOwnerChildren;
     _writeLaunchFinance(
       rows: proposalIntakeLaunchRows(_form),
       modules: [
         ...modules,
         ProposalFinanceModule(
           id: proposalIntakeNewFinanceModuleId(),
-          title: '财务模块${modules.length + 1}',
+          title: children
+              ? '子产品财务模块${modules.where((item) => item.isChildrenOwner).length + 1}'
+              : '财务模块${modules.where((item) => !item.isChildrenOwner).length + 1}',
+          owner: owner,
         ),
       ],
       resetReview: 'financeCompleted',
@@ -7704,85 +9035,158 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
     );
   }
 
+  Widget _childSettlementsBlock(bool wide) {
+    final rows = proposalIntakeChildProducts(_form);
+    final enabled = _canEditSkuSettlements;
+    final sku = _activeChildProduct;
+    return _anchor(
+      'childProductSalesSettle',
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '子产品结算',
+            style: TextStyle(
+              color: ProposalPalette.text,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            '每个子产品自己的结算。用切换条查看，不和主产品混在一起。',
+            style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+          ),
+          if (rows.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                '请先在市场部关联子产品。',
+                style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
+              ),
+            )
+          else ...[
+            const SizedBox(height: 10),
+            _childProductSwitcher(rows),
+            if (sku != null) ...[
+              const SizedBox(height: 8),
+              _skuSettleProductCard(
+                skuId: sku.id,
+                childProduct: true,
+                title: [
+                  if (sku.productName.trim().isNotEmpty) sku.productName.trim(),
+                  if (sku.faceValue.trim().isNotEmpty)
+                    '面值 ${sku.faceValue.trim()}',
+                ].join(' · '),
+                emptyTitle: '未填写子产品名称',
+                reviewPrefix: 'skuSettle',
+                settlements: proposalIntakeSkuSettlements(sku),
+                wide: wide,
+                enabled: enabled,
+                syncSource: sku.syncSourceCode,
+                productSource: 'CHANNEL',
+                onAdd: () => _addSkuSettle(sku.id),
+                onRemove: (settleId) => _removeSkuSettle(sku.id, settleId),
+                onPatch: (settleId, terms) =>
+                    _patchSkuSettle(sku.id, settleId, terms),
+                onReplace: (settlements) =>
+                    _writeSkuSettlements(sku.id, settlements),
+                onJumpToProduct: () => _jumpToSkuProduct(sku, child: true),
+                includeScale: true,
+                scaleOnly: proposalIntakeActiveSharedSettleSkuIds(
+                  _form,
+                ).contains(sku.id),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _skuSettlementsBlock(bool wide) {
     final channelRows = proposalIntakeSkuDetails(_form);
     final enabled = _canEditSkuSettlements;
     return _anchor(
       'productSalesSettle',
       Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          '产品结算（销售收入）',
-          style: TextStyle(
-            color: ProposalPalette.text,
-            fontWeight: FontWeight.w700,
-            fontSize: 13,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          kProposalSharedSettleEnabled
-              ? '比例一样：点「新增共用结算」勾产品，下面各产品只填规模。比例不一样：不勾共用，直接在各产品卡上填结算。'
-              : '按渠道产品填写结算。一个产品对应一套结算，可再新增明细。',
-          style: const TextStyle(color: ProposalPalette.text3, fontSize: 11),
-        ),
-        if (channelRows.isEmpty)
-          const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: Text(
-              '请先在市场部添加渠道产品。',
-              style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            proposalIntakeHasChildProducts(_form) ? '主产品结算' : '产品结算',
+            style: const TextStyle(
+              color: ProposalPalette.text,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
             ),
           ),
-        if (kProposalSharedSettleEnabled) ...[
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: enabled ? _addSharedSettle : null,
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('新增共用结算'),
-            ),
+          const SizedBox(height: 4),
+          Text(
+            kProposalSharedSettleEnabled
+                ? '比例一样：点「新增共用结算」勾产品，下面各产品只填规模。比例不一样：不勾共用，直接在各产品卡上填结算。'
+                : '按主产品填写结算。一个产品对应一套结算，可再新增明细。',
+            style: const TextStyle(color: ProposalPalette.text3, fontSize: 11),
           ),
-          for (final group in proposalIntakeSharedSettlements(_form)) ...[
+          if (channelRows.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                '请先在市场部添加主产品。',
+                style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
+              ),
+            ),
+          if (kProposalSharedSettleEnabled) ...[
             const SizedBox(height: 8),
-            _sharedSettleCard(group, wide: wide, enabled: enabled),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: enabled ? _addSharedSettle : null,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('新增共用结算'),
+              ),
+            ),
+            for (final group in proposalIntakeSharedSettlements(_form)) ...[
+              const SizedBox(height: 8),
+              _sharedSettleCard(group, wide: wide, enabled: enabled),
+            ],
+          ],
+          for (final sku in channelRows) ...[
+            const SizedBox(height: 8),
+            _skuSettleProductCard(
+              skuId: sku.id,
+              childProduct: false,
+              title: [
+                if (sku.productName.trim().isNotEmpty) sku.productName.trim(),
+                if (sku.faceValue.trim().isNotEmpty)
+                  '面值 ${sku.faceValue.trim()}',
+              ].join(' · '),
+              emptyTitle: '未填写产品名称',
+              reviewPrefix: 'skuSettle',
+              settlements: proposalIntakeSkuSettlements(sku),
+              wide: wide,
+              enabled: enabled,
+              syncSource: sku.syncSourceCode,
+              productSource: 'CHANNEL',
+              onAdd: () => _addSkuSettle(sku.id),
+              onRemove: (settleId) => _removeSkuSettle(sku.id, settleId),
+              onPatch: (settleId, terms) =>
+                  _patchSkuSettle(sku.id, settleId, terms),
+              onReplace: (settlements) =>
+                  _writeSkuSettlements(sku.id, settlements),
+              onJumpToProduct: () => _jumpToSkuProduct(sku, child: false),
+              includeScale: true,
+              scaleOnly: proposalIntakeActiveSharedSettleSkuIds(
+                _form,
+              ).contains(sku.id),
+            ),
           ],
         ],
-        for (final sku in channelRows) ...[
-          const SizedBox(height: 8),
-          _skuSettleProductCard(
-            skuId: sku.id,
-            title: [
-              if (sku.productName.trim().isNotEmpty) sku.productName.trim(),
-              if (sku.faceValue.trim().isNotEmpty)
-                '面值 ${sku.faceValue.trim()}',
-            ].join(' · '),
-            emptyTitle: '未填写产品名称',
-            reviewPrefix: 'skuSettle',
-            settlements: proposalIntakeSkuSettlements(sku),
-            wide: wide,
-            enabled: enabled,
-            syncSource: sku.syncSourceCode,
-            productSource: 'CHANNEL',
-            onAdd: () => _addSkuSettle(sku.id),
-            onRemove: (settleId) => _removeSkuSettle(sku.id, settleId),
-            onPatch: (settleId, terms) =>
-                _patchSkuSettle(sku.id, settleId, terms),
-            includeScale: true,
-            scaleOnly: proposalIntakeActiveSharedSettleSkuIds(
-              _form,
-            ).contains(sku.id),
-          ),
-        ],
-      ],
       ),
     );
   }
 
   String _primarySyncSource() {
-    for (final sku in proposalIntakeSkuDetails(_form)) {
+    for (final sku in proposalIntakeAllSellableSkus(_form)) {
       if (sku.syncSourceCode.isNotEmpty) return sku.syncSourceCode;
     }
     return '';
@@ -7790,6 +9194,7 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
 
   Widget _skuSettleProductCard({
     required String skuId,
+    bool childProduct = false,
     required String title,
     required String emptyTitle,
     required String reviewPrefix,
@@ -7802,6 +9207,8 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
     required ValueChanged<String> onRemove,
     required void Function(String settleId, ProposalFinanceSettleTerms terms)
     onPatch,
+    ValueChanged<List<ProposalSkuSettleRow>>? onReplace,
+    VoidCallback? onJumpToProduct,
     String reviewItemPrefix = 'financeItem',
     String? itemReviewLabel,
     bool showItemReview = true,
@@ -7814,8 +9221,14 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: ProposalPalette.app,
-        border: Border.all(color: ProposalPalette.border),
+        color: childProduct
+            ? ProposalPalette.greenSoft.withValues(alpha: 0.26)
+            : ProposalPalette.purpleSoft.withValues(alpha: 0.18),
+        border: Border.all(
+          color: childProduct
+              ? ProposalPalette.green
+              : ProposalPalette.purpleLine,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -7840,6 +9253,28 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
                   icon: const Icon(Icons.add, size: 16),
                   label: const Text('新增明细'),
                 ),
+              if (onReplace != null) ...[
+                TextButton(
+                  onPressed: () => setState(
+                    () => _skuSettlementsClipboard = [
+                      for (final item in settlements) item.terms,
+                    ],
+                  ),
+                  child: const Text('复制结算'),
+                ),
+                TextButton(
+                  onPressed: _skuSettlementsClipboard == null
+                      ? null
+                      : () => onReplace(_pasteSkuSettlements(settlements)),
+                  child: const Text('粘贴结算'),
+                ),
+              ],
+              if (onJumpToProduct != null)
+                TextButton.icon(
+                  onPressed: onJumpToProduct,
+                  icon: const Icon(Icons.arrow_upward_rounded, size: 15),
+                  label: const Text('产品信息'),
+                ),
             ],
           ),
           if (scaleOnly)
@@ -7847,10 +9282,7 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
               padding: EdgeInsets.only(top: 4),
               child: Text(
                 '销售收入已走共用结算，这里只填规模。应付成本请新增明细。',
-                style: TextStyle(
-                  color: ProposalPalette.text3,
-                  fontSize: 11,
-                ),
+                style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
               ),
             ),
           const SizedBox(height: 8),
@@ -8012,7 +9444,10 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
             child: Column(
               children: [
                 if (headerTrailing != null)
-                  Align(alignment: Alignment.centerRight, child: headerTrailing),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: headerTrailing,
+                  ),
                 child,
               ],
             ),
@@ -8022,7 +9457,7 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
     );
   }
 
-  /// 供给结算勾选适用的渠道产品，采购成本按「关联产品年化规模 × 该条比例」拆算。
+  /// 供给结算勾选适用的主产品，采购成本按「关联产品年化规模 × 该条比例」拆算。
   Widget _settleSkuPicker({
     required ProposalFinanceSettleTerms terms,
     required bool enabled,
@@ -8034,7 +9469,7 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '适用的渠道产品：不勾则该条比例按全部产品规模计算采购成本。',
+            '适用的主产品：不勾则该条比例按全部产品规模计算采购成本。',
             style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
           ),
           const SizedBox(height: 6),
@@ -8042,7 +9477,7 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final sku in proposalIntakeSkuDetails(_form))
+              for (final sku in proposalIntakeAllSellableSkus(_form))
                 ProposalChoiceChip(
                   label: [
                     if (sku.productName.trim().isNotEmpty)
@@ -8136,41 +9571,54 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
     );
   }
 
-  Widget _financeModulesBlock(bool wide) {
-    final modules = proposalIntakeFinanceModules(_form);
+  Widget _financeModulesBlock(
+    bool wide, {
+    String owner = kProposalFinanceModuleOwnerMain,
+  }) {
+    final children = owner == kProposalFinanceModuleOwnerChildren;
+    final modules = proposalIntakeFinanceModulesOf(_form, owner: owner);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
-                '财务模块',
-                style: TextStyle(
+                children
+                    ? '子产品合并财务模块'
+                    : proposalIntakeHasChildProducts(_form)
+                    ? '主产品财务模块'
+                    : '财务模块',
+                style: const TextStyle(
                   color: ProposalPalette.text,
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
                 ),
               ),
             ),
-            if (_canEditFinanceModules)
+            if (_canEditFinanceModules && (!children || modules.isEmpty))
               TextButton.icon(
-                onPressed: _addFinanceModule,
+                onPressed: () => _addFinanceModule(owner: owner),
                 icon: const Icon(Icons.add, size: 16),
-                label: const Text('新增财务模块'),
+                label: Text(children ? '新增子产品财务模块' : '新增财务模块'),
               ),
           ],
         ),
-        const Text(
-          '收入和每条成本按结算单填写：账单类型、结算方式、结算比例/单价、计算公式、发票类型、税率、生效/失效时间，以及对方/我方主体。非自然月需选择项目周期。',
-          style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+        Text(
+          children
+              ? '所有子产品只共用这一份财务：共同收入、项目成本和业务成本在这里填写一次。每个子产品自己的规模、比例和税率，请在上方「子产品结算」里填写。'
+              : '收入和每条成本按结算单填写：账单类型、结算方式、结算比例/单价、计算公式、发票类型、税率、生效/失效时间，以及对方/我方主体。非自然月需选择项目周期。',
+          style: const TextStyle(color: ProposalPalette.text3, fontSize: 11),
         ),
         if (modules.isEmpty)
-          const Padding(
-            padding: EdgeInsets.only(top: 8),
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
             child: Text(
-              '尚未添加财务模块',
-              style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
+              children ? '尚未添加子产品财务模块' : '尚未添加财务模块',
+              style: const TextStyle(
+                color: ProposalPalette.text3,
+                fontSize: 12,
+              ),
             ),
           ),
         for (final item in modules) ...[
@@ -8192,8 +9640,14 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: ProposalPalette.app,
-        border: Border.all(color: ProposalPalette.border),
+        color: module.isChildrenOwner
+            ? ProposalPalette.greenSoft.withValues(alpha: 0.28)
+            : ProposalPalette.purpleSoft.withValues(alpha: 0.18),
+        border: Border.all(
+          color: module.isChildrenOwner
+              ? ProposalPalette.green
+              : ProposalPalette.purpleLine,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -8674,8 +10128,10 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
               label: '账单类型',
               current: terms.billTypeRef ?? CatalogRef.fromName(terms.billType),
               options: bundle.billTypes,
-              write: (value) =>
-                  terms.copyWith(billType: value?.name ?? '', billTypeRef: value),
+              write: (value) => terms.copyWith(
+                billType: value?.name ?? '',
+                billTypeRef: value,
+              ),
             ),
             catalogField(
               label: '结算方式',
@@ -8720,8 +10176,9 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
               label: '计算公式',
               current: terms.formulaRef ?? CatalogRef.fromName(terms.formula),
               options: formulaOptions,
-              metaOf: (item) =>
-                  item.formulaExpression.isEmpty ? null : item.formulaExpression,
+              metaOf: (item) => item.formulaExpression.isEmpty
+                  ? null
+                  : item.formulaExpression,
               write: (value) => terms.copyWith(
                 formula: value?.name ?? value?.formulaExpression ?? '',
                 formulaRef: value,
@@ -8769,7 +10226,7 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      '关联渠道产品',
+                      '关联主产品',
                       style: TextStyle(
                         color: ProposalPalette.text2,
                         fontWeight: FontWeight.w600,
@@ -8781,7 +10238,7 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        for (final sku in proposalIntakeSkuDetails(_form))
+                        for (final sku in proposalIntakeAllSellableSkus(_form))
                           ProposalChoiceChip(
                             label: [
                               if (sku.productName.trim().isNotEmpty)
@@ -9568,7 +11025,10 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
               ),
               Text(
                 description,
-                style: const TextStyle(color: ProposalPalette.text3, fontSize: 10),
+                style: const TextStyle(
+                  color: ProposalPalette.text3,
+                  fontSize: 10,
+                ),
               ),
               if (!done && omissions.isNotEmpty)
                 Padding(
@@ -9617,7 +11077,9 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: done ? ProposalPalette.greenSoft : ProposalPalette.purpleSoft,
+              color: done
+                  ? ProposalPalette.greenSoft
+                  : ProposalPalette.purpleSoft,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
@@ -9708,7 +11170,7 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
       ('− 项目成本', '成本明细各项之和', false),
       ('= 利润', '收入 − 采购 − 项目', true),
       ('毛利率', '利润 ÷ 收入', false),
-      ('预计周转资金', '销售规模 ÷ 月周转次数', false),
+      ('预计周转资金', kProposalTurnoverCashFormula, false),
     ];
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -9743,9 +11205,7 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
                         color: ProposalPalette.text2,
                         fontSize: 12.5,
                         height: 1.35,
-                        fontWeight: row.$3
-                            ? FontWeight.w700
-                            : FontWeight.w400,
+                        fontWeight: row.$3 ? FontWeight.w700 : FontWeight.w400,
                       ),
                     ),
                   ),
@@ -9786,7 +11246,7 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
                 border: Border.all(color: ProposalPalette.purpleLine),
               ),
               child: const Text(
-                '去市场部添加渠道产品 →',
+                '去市场部添加主产品 →',
                 style: TextStyle(
                   color: ProposalPalette.purpleDeep,
                   fontSize: 12.5,
@@ -9868,51 +11328,74 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
     );
   }
 
-  ({String display, String formula})? _financeComputedMetric(String key) {
+  ({String display, String formula})? _financeComputedMetric(
+    String key, {
+    Map<String, dynamic>? formOverride,
+  }) {
+    final form = formOverride ?? _form;
     switch (key) {
       case 'turnoverCash':
-        final cash = proposalTurnoverCashAmount(_form);
+        final cash = proposalTurnoverCashAmount(form);
         return (
           display: cash == null ? '' : proposalFormatWan(cash),
           formula: kProposalTurnoverCashFormula,
         );
       case 'couponProcurementCost':
-        final estimated = proposalEstimatedProcurementCost(_form);
+        final estimated = proposalEstimatedProcurementCost(form);
         if (estimated == null) return null;
         return (
           display: proposalFormatWan(estimated),
           formula: kProposalProcurementFormula,
         );
       case 'salesScale':
-        final rollup = proposalProductScaleRollup(_form);
+        final rollup = proposalProductScaleRollup(form);
         return (
           display: rollup == null ? '' : proposalFormatWan(rollup.salesScale),
           formula: kProposalSalesScaleFormula,
         );
       case 'revenue':
-        final rollup = proposalProductScaleRollup(_form);
+        final rollup = proposalProductScaleRollup(form);
         return (
           display: rollup == null ? '' : proposalFormatWan(rollup.revenue),
           formula: kProposalRevenueFormula,
         );
       case 'profit':
-        final rollup = proposalProductScaleRollup(_form);
+        final rollup = proposalProductScaleRollup(form);
+        final procurement =
+            proposalEstimatedProcurementCost(form) ??
+            proposalFinanceAmount(form, kProposalCouponProcurementCostKey);
         return (
           display: rollup == null
               ? ''
               : proposalFormatWan(
-                  proposalEstimatedProfitAmount(_form, revenue: rollup.revenue),
+                  proposalRoundWan(
+                    rollup.revenue -
+                        procurement -
+                        proposalFinanceAmount(form, 'projectCost'),
+                  ),
                 ),
           formula: kProposalProfitFormula,
         );
       case 'margin':
-        final rollup = proposalProductScaleRollup(_form);
+        final rollup = proposalProductScaleRollup(form);
+        if (rollup == null || rollup.revenue == 0) {
+          return (
+            display: rollup == null ? '' : '0',
+            formula: kProposalMarginFormula,
+          );
+        }
+        final procurement =
+            proposalEstimatedProcurementCost(form) ??
+            proposalFinanceAmount(form, kProposalCouponProcurementCostKey);
+        final profit = proposalRoundWan(
+          rollup.revenue -
+              procurement -
+              proposalFinanceAmount(form, 'projectCost'),
+        );
         return (
-          display: rollup == null
-              ? ''
-              : proposalFormatWan(
-                  proposalEstimatedMarginAmount(_form, revenue: rollup.revenue),
-                ),
+          display: proposalFormatWan(
+            proposalRoundWan(profit / rollup.revenue * 100),
+          ),
           formula: kProposalMarginFormula,
         );
       default:
@@ -10017,47 +11500,47 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
   }
 
   /// 栅格宽度上限：与 ProposalLayout 同一阶梯，不再各写各的阈值。
-  int _maxGridColumnsForWidth(double width) =>
-      ProposalLayout.columnsFor(width);
+  int _maxGridColumnsForWidth(double width) => ProposalLayout.columnsFor(width);
 
   /// 结算条款网格：同一阶梯，最多四列。
   int _settleTermsColumnCount(double width) =>
       math.min(4, ProposalLayout.columnsFor(width));
 
-  Widget _fieldGrid(bool wide, List<Widget> fields, {int? columns}) =>
-      LayoutBuilder(
-        builder: (_, constraints) {
-          final requested =
-              columns ??
-              (!wide ? 1 : math.min(3, ProposalLayout.columnsFor(constraints.maxWidth)));
-          final resolved = math.max(
-            1,
-            math.min(requested, _maxGridColumnsForWidth(constraints.maxWidth)),
-          );
-          final rows = _groupFields(fields, resolved);
-          return Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              border: Border.all(color: ProposalPalette.borderSoft),
-              borderRadius: BorderRadius.circular(10),
-              color: Colors.white,
-            ),
-            clipBehavior: Clip.hardEdge,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var row = 0; row < rows.length; row++)
-                  _gridRow(
-                    rows[row],
-                    resolved,
-                    lastRow: row == rows.length - 1,
-                  ),
-              ],
-            ),
-          );
-        },
+  Widget _fieldGrid(
+    bool wide,
+    List<Widget> fields, {
+    int? columns,
+  }) => LayoutBuilder(
+    builder: (_, constraints) {
+      final requested =
+          columns ??
+          (!wide
+              ? 1
+              : math.min(3, ProposalLayout.columnsFor(constraints.maxWidth)));
+      final resolved = math.max(
+        1,
+        math.min(requested, _maxGridColumnsForWidth(constraints.maxWidth)),
       );
+      final rows = _groupFields(fields, resolved);
+      return Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          border: Border.all(color: ProposalPalette.borderSoft),
+          borderRadius: BorderRadius.circular(10),
+          color: Colors.white,
+        ),
+        clipBehavior: Clip.hardEdge,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var row = 0; row < rows.length; row++)
+              _gridRow(rows[row], resolved, lastRow: row == rows.length - 1),
+          ],
+        ),
+      );
+    },
+  );
 
   Widget _gridRow(List<Widget> cells, int columns, {required bool lastRow}) {
     final spanAll =
@@ -10320,16 +11803,19 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
     String reviewLabel = '复核',
     bool? writable,
     bool required = false,
+    String? valueOverride,
+    ValueChanged<String>? onWrite,
+    String? fieldKey,
   }) {
     final enabled = _fillEnabled(
       writable,
       resetReview: resetReview,
       reviewSection: reviewSection,
     );
-    final raw = _text(key).trim();
+    final raw = (valueOverride ?? _text(key)).trim();
     final parsed = _parseDate(raw);
     return _datePickerField(
-      fieldKey: key,
+      fieldKey: fieldKey ?? key,
       label: label,
       display: parsed == null ? raw : _fmtDate(parsed),
       empty: raw.isEmpty,
@@ -10342,7 +11828,12 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
           ? () async {
               final picked = await _pickDate(parsed);
               if (picked != null) {
-                _set(key, _fmtDate(picked), resetReview: resetReview);
+                final text = _fmtDate(picked);
+                if (onWrite != null) {
+                  onWrite(text);
+                } else {
+                  _set(key, text, resetReview: resetReview);
+                }
               }
             }
           : null,
@@ -10429,6 +11920,9 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
     String? source,
     bool? writable,
     bool required = false,
+    String? valueOverride,
+    ValueChanged<String>? onWrite,
+    String? fieldKey,
   }) {
     final enabled = _fillEnabled(
       writable,
@@ -10438,51 +11932,59 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
     final tone = proposalFieldTone(enabled: enabled, source: source);
     final footer = _contractEditFooter(key);
     final trailing = _rowReviewToggle(reviewSection, reviewLabel);
+    final current = valueOverride ?? _text(key);
+    final anchorKey = fieldKey ?? key;
     if (_readValuesOnly(enabled)) {
       return _anchor(
-        key,
+        anchorKey,
         ProposalField(
+          label: label,
+          required: required,
+          source: source,
+          tone: tone,
+          footer: footer,
+          trailing: trailing,
+          child: _readonlySelectedText(current),
+        ),
+      );
+    }
+    return _anchor(
+      anchorKey,
+      ProposalField(
         label: label,
         required: required,
         source: source,
         tone: tone,
         footer: footer,
         trailing: trailing,
-        child: _readonlySelectedText(_text(key)),
+        child: TextFormField(
+          key: ValueKey('$anchorKey-${_row.id}-$_fieldEpoch'),
+          initialValue: current,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          enabled: enabled,
+          readOnly: !enabled,
+          onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+          style: TextStyle(
+            fontSize: 13,
+            height: 1.35,
+            color: enabled ? ProposalPalette.text : ProposalPalette.text3,
+          ),
+          onChanged: enabled
+              ? (value) {
+                  if (onWrite != null) {
+                    onWrite(value);
+                    return;
+                  }
+                  _set(
+                    key,
+                    value.trim().isEmpty ? null : double.tryParse(value) ?? 0,
+                    resetReview: resetReview,
+                    rebuild: false,
+                  );
+                }
+              : null,
+          decoration: proposalInputDecoration(readOnly: !enabled, tone: tone),
         ),
-      );
-    }
-    return _anchor(
-      key,
-      ProposalField(
-      label: label,
-      required: required,
-      source: source,
-      tone: tone,
-      footer: footer,
-      trailing: trailing,
-      child: TextFormField(
-        key: ValueKey('$key-${_row.id}-$_fieldEpoch'),
-        initialValue: _text(key),
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        enabled: enabled,
-        readOnly: !enabled,
-        onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-        style: TextStyle(
-          fontSize: 13,
-          height: 1.35,
-          color: enabled ? ProposalPalette.text : ProposalPalette.text3,
-        ),
-        onChanged: enabled
-            ? (value) => _set(
-                key,
-                value.trim().isEmpty ? null : double.tryParse(value) ?? 0,
-                resetReview: resetReview,
-                rebuild: false,
-              )
-            : null,
-        decoration: proposalInputDecoration(readOnly: !enabled, tone: tone),
-      ),
       ),
     );
   }
@@ -10562,6 +12064,8 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
     String? source,
     bool? writable,
     ValueChanged<String?>? onSelected,
+    String? valueOverride,
+    String? fieldKey,
   }) {
     final enabled = _fillEnabled(
       writable,
@@ -10569,17 +12073,18 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
       reviewSection: reviewSection,
     );
     final tone = proposalFieldTone(enabled: enabled, source: source);
-    final current = _text(key);
+    final current = valueOverride ?? _text(key);
+    final anchorKey = fieldKey ?? key;
     if (_readValuesOnly(enabled)) {
       return _anchor(
-        key,
+        anchorKey,
         ProposalField(
-        label: label,
-        required: required,
-        source: source,
-        tone: tone,
-        trailing: _rowReviewToggle(reviewSection, reviewLabel),
-        child: _readonlySelectedText(current),
+          label: label,
+          required: required,
+          source: source,
+          tone: tone,
+          trailing: _rowReviewToggle(reviewSection, reviewLabel),
+          child: _readonlySelectedText(current),
         ),
       );
     }
@@ -10588,33 +12093,33 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
       values.insert(0, current);
     }
     return _anchor(
-      key,
+      anchorKey,
       ProposalField(
-      label: label,
-      required: required,
-      source: source,
-      tone: tone,
-      trailing: _rowReviewToggle(reviewSection, reviewLabel),
-      child: ProposalSelectField<String>(
-        value: current.isEmpty ? null : current,
-        title: label,
-        hint: values.isEmpty && addLabel == null ? '请先在管理端配置选项' : '请选择或输入搜索',
-        searchable: true,
-        onAdd: addLabel == null || !enabled
-            ? null
-            : () => unawaited(
-                _addDropdownValue(key, addLabel, resetReview: resetReview),
-              ),
-        addLabel: addLabel,
-        options: [
-          for (final value in values)
-            ProposalSelectOption(value: value, label: value),
-        ],
-        onSelected: enabled
-            ? (onSelected ??
-                  (value) => _set(key, value ?? '', resetReview: resetReview))
-            : null,
-      ),
+        label: label,
+        required: required,
+        source: source,
+        tone: tone,
+        trailing: _rowReviewToggle(reviewSection, reviewLabel),
+        child: ProposalSelectField<String>(
+          value: current.isEmpty ? null : current,
+          title: label,
+          hint: values.isEmpty && addLabel == null ? '请先在管理端配置选项' : '请选择或输入搜索',
+          searchable: true,
+          onAdd: addLabel == null || !enabled
+              ? null
+              : () => unawaited(
+                  _addDropdownValue(key, addLabel, resetReview: resetReview),
+                ),
+          addLabel: addLabel,
+          options: [
+            for (final value in values)
+              ProposalSelectOption(value: value, label: value),
+          ],
+          onSelected: enabled
+              ? (onSelected ??
+                    (value) => _set(key, value ?? '', resetReview: resetReview))
+              : null,
+        ),
       ),
     );
   }
@@ -10665,57 +12170,57 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
       return _anchor(
         key,
         ProposalField(
-        label: label,
-        required: required,
-        source: badge,
-        tone: tone,
-        trailing: _rowReviewToggle(reviewSection, reviewLabel),
-        child: _readonlySelectedText(_text(key)),
+          label: label,
+          required: required,
+          source: badge,
+          tone: tone,
+          trailing: _rowReviewToggle(reviewSection, reviewLabel),
+          child: _readonlySelectedText(_text(key)),
         ),
       );
     }
     return _anchor(
       key,
       ProposalField(
-      label: label,
-      required: required,
-      source: badge,
-      tone: tone,
-      trailing: _rowReviewToggle(reviewSection, reviewLabel),
-      child: ProposalSelectField<int>(
-        value: currentId,
-        title: label,
-        hint: source.isEmpty ? '暂无人员，请确认通讯录' : '输入姓名或岗位搜索',
-        searchable: true,
-        requireKeyword: true,
-        options: [
-          for (final person in source)
-            ProposalSelectOption(
-              value: person.userId,
-              label: person.name,
-              meta: [
-                person.positionName,
-                person.departmentName,
-                person.username,
-              ].where((item) => item.isNotEmpty).join(' · '),
-            ),
-        ],
-        onSelected: enabled
-            ? (userId) {
-                final selected = source
-                    .where((person) => person.userId == userId)
-                    .firstOrNull;
-                final form = Map<String, dynamic>.from(_form)
-                  ..[key] = selected?.name ?? ''
-                  ..['${key}UserId'] = selected?.userId;
-                setState(() {
-                  _dirty = true;
-                  _row = _row.copyWith(form: form, status: _statusAfterEdit);
-                });
-                widget.onChanged(_row);
-              }
-            : null,
-      ),
+        label: label,
+        required: required,
+        source: badge,
+        tone: tone,
+        trailing: _rowReviewToggle(reviewSection, reviewLabel),
+        child: ProposalSelectField<int>(
+          value: currentId,
+          title: label,
+          hint: source.isEmpty ? '暂无人员，请确认通讯录' : '输入姓名或岗位搜索',
+          searchable: true,
+          requireKeyword: true,
+          options: [
+            for (final person in source)
+              ProposalSelectOption(
+                value: person.userId,
+                label: person.name,
+                meta: [
+                  person.positionName,
+                  person.departmentName,
+                  person.username,
+                ].where((item) => item.isNotEmpty).join(' · '),
+              ),
+          ],
+          onSelected: enabled
+              ? (userId) {
+                  final selected = source
+                      .where((person) => person.userId == userId)
+                      .firstOrNull;
+                  final form = Map<String, dynamic>.from(_form)
+                    ..[key] = selected?.name ?? ''
+                    ..['${key}UserId'] = selected?.userId;
+                  setState(() {
+                    _dirty = true;
+                    _row = _row.copyWith(form: form, status: _statusAfterEdit);
+                  });
+                  widget.onChanged(_row);
+                }
+              : null,
+        ),
       ),
     );
   }
@@ -10955,9 +12460,7 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
-                  estimated == null
-                      ? '填比例或单价后自动加总'
-                      : '合计 ${_money(estimated)}',
+                  estimated == null ? '填比例或单价后自动加总' : '合计 ${_money(estimated)}',
                   style: const TextStyle(
                     color: ProposalPalette.text2,
                     fontSize: 12,
@@ -10994,8 +12497,7 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        if (namesKey != 'costItems')
-                          ?_costFormulaHint(name),
+                        if (namesKey != 'costItems') ?_costFormulaHint(name),
                       ],
                     ),
                   ),
@@ -11217,6 +12719,9 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
     bool? writable,
     bool single = false,
     bool required = false,
+    Set<String>? selectedOverride,
+    ValueChanged<String>? onToggleOverride,
+    String? fieldKey,
   }) {
     final enabled = _fillEnabled(
       writable,
@@ -11224,10 +12729,11 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
       reviewSection: reviewSection,
     );
     final tone = proposalFieldTone(enabled: enabled, source: source);
-    final selected = _setOf(key);
+    final selected = selectedOverride ?? _setOf(key);
+    final anchorKey = fieldKey ?? key;
     if (_readValuesOnly(enabled)) {
       return _anchor(
-        key,
+        anchorKey,
         _FullWidthField(
           child: ProposalField(
             label: label,
@@ -11241,7 +12747,7 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
       );
     }
     return _anchor(
-      key,
+      anchorKey,
       _FullWidthField(
         child: ProposalField(
           label: label,
@@ -11250,28 +12756,31 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
           tone: tone,
           trailing: _rowReviewToggle(reviewSection, reviewLabel),
           child: ProposalPills(
-          options: [
-            ...options,
-            ..._setOf(key).where((v) => !options.contains(v)),
-          ],
-          selected: _setOf(key),
-          enabled: enabled,
-          single: single,
-          onToggle: (value) {
-            if (enabled) {
+            options: [
+              ...options,
+              ...selected.where((v) => !options.contains(v)),
+            ],
+            selected: selected,
+            enabled: enabled,
+            single: single,
+            onToggle: (value) {
+              if (!enabled) return;
+              if (onToggleOverride != null) {
+                onToggleOverride(value);
+                return;
+              }
               _toggleList(key, value, resetReview: resetReview, single: single);
-            }
-          },
-          onAdd: addLabel == null || !enabled
-              ? null
-              : () => _addOption(
-                  key,
-                  addLabel,
-                  resetReview: resetReview,
-                  single: single,
-                ),
+            },
+            onAdd: addLabel == null || !enabled || onToggleOverride != null
+                ? null
+                : () => _addOption(
+                    key,
+                    addLabel,
+                    resetReview: resetReview,
+                    single: single,
+                  ),
+          ),
         ),
-      ),
       ),
     );
   }
@@ -11312,10 +12821,13 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
               resetReview: 'marketCompleted',
             ),
             _textField(
-              '子标题',
+              '子标题（由财务部负责人二填写）',
               'proposalSubtitle',
               hint: '由财务部负责人二填写（选填）',
               writable: _canEditProposalSubtitle,
+              resetReview: 'financeCompleted',
+              reviewSection: 'financeItem:proposalSubtitle',
+              reviewLabel: _subtitleFillLabel,
             ),
             _dropdownField(
               '提案类型',
@@ -11534,47 +13046,47 @@ Widget _skuDetailCard(ProposalSkuDetailRow row, int index, bool wide) {
     return _anchor(
       'supplyProducts',
       Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                '供给产品',
-                style: TextStyle(
-                  color: ProposalPalette.text,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  '供给产品',
+                  style: TextStyle(
+                    color: ProposalPalette.text,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
                 ),
               ),
-            ),
-            if (_canEditMarket)
-              TextButton.icon(
-                onPressed: _addSupplyProduct,
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('新增供给产品'),
-              ),
-          ],
-        ),
-        const Text(
-          '只填供给侧。未开始填写的卡片可不填。勾选「是否已有供给产品」后必须搜索选择已建供应商产品，选中后同步资管结算规则。新建时请先选供应商。',
-          style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
-        ),
-        const SizedBox(height: 8),
-        _existingSupplyToggle(locked: locked),
-        if (rows.isEmpty)
-          const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: Text(
-              '尚未添加供给产品',
-              style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
-            ),
+              if (_canEditMarket)
+                TextButton.icon(
+                  onPressed: _addSupplyProduct,
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('新增供给产品'),
+                ),
+            ],
           ),
-        for (var i = 0; i < rows.length; i++) ...[
-          const SizedBox(height: 10),
-          _purchaseSupplyProductCard(rows[i], i + 1, wide),
+          const Text(
+            '只填供给侧。未开始填写的卡片可不填。勾选「是否已有供给产品」后必须搜索选择已建供应商产品，选中后同步资管结算规则。新建时请先选供应商。',
+            style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+          ),
+          const SizedBox(height: 8),
+          _existingSupplyToggle(locked: locked),
+          if (rows.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                '尚未添加供给产品',
+                style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
+              ),
+            ),
+          for (var i = 0; i < rows.length; i++) ...[
+            const SizedBox(height: 10),
+            _purchaseSupplyProductCard(rows[i], i + 1, wide),
+          ],
         ],
-      ],
       ),
     );
   }

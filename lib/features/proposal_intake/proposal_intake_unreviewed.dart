@@ -114,7 +114,14 @@ bool proposalIntakeFormKeyLocked(
     }
     return _itemReviewed(review, 'technologyItems', key);
   }
+  if (key == 'childTechnology') {
+    if (_reviewFlag(review, 'technologyCompleted')) return true;
+    return _anyReviewedPrefix(review, 'technologyItems', 'children:');
+  }
   key = _kFinanceAliasKeys[key] ?? key;
+  if (key == 'productFinance') {
+    return _reviewFlag(review, 'financeCompleted');
+  }
   if (_kFinanceReviewKeys.contains(key)) {
     return _reviewFlag(review, 'financeCompleted') ||
         _itemReviewed(review, 'financeItems', key);
@@ -127,6 +134,7 @@ bool proposalIntakeFormKeyLocked(
   }
   if (key == 'channelSkus' ||
       key == 'skuDetails' ||
+      key == 'childProducts' ||
       key == 'skuSettlements' ||
       key == 'sharedSettlements') {
     // 市场已复核或个别结算已复核时不能整表锁死，需按行合并。
@@ -159,6 +167,7 @@ String _skuCatalogSettlePrefix(String key) =>
 bool _isSkuCatalogKey(String key) =>
     key == 'channelSkus' ||
     key == 'skuDetails' ||
+    key == 'childProducts' ||
     key == 'skuSettlements' ||
     key == 'sharedSettlements';
 

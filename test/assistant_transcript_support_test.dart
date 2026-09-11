@@ -1,5 +1,6 @@
 import 'package:dunes_app/features/chat/assistant_transcript_support.dart';
 import 'package:dunes_app/features/conversation/conversation_models.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 NativeChatMessage _msg(int id, {String body = ''}) {
@@ -25,6 +26,58 @@ void main() {
     expect(
       assistantTranscriptUnchanged([_msg(1, body: 'a')], [_msg(1, body: 'b')]),
       isFalse,
+    );
+  });
+
+  testWidgets('reverse list treats pixels=0 as latest', (tester) async {
+    final controller = ScrollController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          height: 400,
+          child: ListView.builder(
+            controller: controller,
+            reverse: true,
+            itemCount: 12,
+            itemBuilder: (_, i) => SizedBox(height: 120, child: Text('i$i')),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(controller.offset, closeTo(0, 1));
+    expect(
+      assistantIsAwayFromLatest(controller.position, reverse: true),
+      isFalse,
+    );
+
+    controller.jumpTo(80);
+    await tester.pump();
+    expect(
+      assistantIsAwayFromLatest(controller.position, reverse: true),
+      isTrue,
+    );
+    expect(
+      assistantShouldLoadOlder(
+        hasMore: true,
+        loadingOlder: false,
+        pos: controller.position,
+        reverse: true,
+      ),
+      isFalse,
+    );
+
+    controller.jumpTo(controller.position.maxScrollExtent);
+    await tester.pump();
+    expect(
+      assistantShouldLoadOlder(
+        hasMore: true,
+        loadingOlder: false,
+        pos: controller.position,
+        reverse: true,
+      ),
+      isTrue,
     );
   });
 }

@@ -65,8 +65,10 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
   final _focus = FocusNode();
   final _controller = TextEditingController();
   final _tapGroup = Object();
+  final _layerLink = LayerLink();
   OverlayEntry? _overlay;
   Timer? _queryDebounce;
+  Timer? _ensureVisibleTimer;
   bool _choosing = false;
   ScrollPosition? _scrollPosition;
 
@@ -136,6 +138,7 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
   void dispose() {
     _hideOverlay();
     _queryDebounce?.cancel();
+    _ensureVisibleTimer?.cancel();
     _focus.removeListener(_onFocus);
     _controller.removeListener(_onQuery);
     _focus.dispose();
@@ -157,7 +160,21 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
       if (onQueryChanged != null) {
         onQueryChanged(_query);
       }
+      if (_canSearch) {
+        _ensureVisibleTimer?.cancel();
+        _ensureVisibleTimer = Timer(const Duration(milliseconds: 180), () {
+          if (!mounted || !_focus.hasFocus) return;
+          Scrollable.ensureVisible(
+            context,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            alignment: 0.22,
+          );
+          _rebuildOverlay();
+        });
+      }
     } else {
+      _ensureVisibleTimer?.cancel();
       _hideOverlay();
       if (!_choosing) _syncFromValue();
     }
@@ -231,17 +248,16 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
 
   Widget _buildOverlay(BuildContext _) {
     final fieldBox = context.findRenderObject();
-    final overlayBox =
-        Overlay.of(context, rootOverlay: true).context.findRenderObject();
+    final overlayBox = Overlay.of(
+      context,
+      rootOverlay: true,
+    ).context.findRenderObject();
     if (fieldBox is! RenderBox ||
         !fieldBox.hasSize ||
         overlayBox is! RenderBox ||
         !overlayBox.hasSize) {
       return const SizedBox.shrink();
     }
-    final origin = overlayBox.globalToLocal(
-      fieldBox.localToGlobal(Offset.zero),
-    );
     final fieldSize = fieldBox.size;
     final overlaySize = overlayBox.size;
     const padding = 12.0;
@@ -250,31 +266,24 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
       menuWidth,
       math.max(160.0, overlaySize.width - padding * 2),
     );
-    var left = origin.dx;
-    if (left + menuWidth > overlaySize.width - padding) {
-      left = overlaySize.width - padding - menuWidth;
-    }
-    if (left < padding) left = padding;
-    final spaceBelow =
-        overlaySize.height - origin.dy - fieldSize.height - padding;
+    final origin = overlayBox.globalToLocal(
+      fieldBox.localToGlobal(Offset.zero),
+    );
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    final usableHeight = overlaySize.height - keyboardInset;
+    final spaceBelow = usableHeight - origin.dy - fieldSize.height - padding;
     final spaceAbove = origin.dy - padding;
+    final openAbove = spaceBelow < 120 && spaceAbove > spaceBelow;
     const preferred = 280.0;
-    final openUp = spaceBelow < 140 && spaceAbove > spaceBelow;
-    final maxHeight = (openUp ? spaceAbove : spaceBelow)
-        .clamp(120.0, preferred)
-        .toDouble();
-    final top = openUp
-        ? origin.dy - maxHeight - 4
-        : origin.dy + fieldSize.height + 4;
+    final available = openAbove ? spaceAbove : spaceBelow;
+    final maxHeight = available.clamp(80.0, preferred).toDouble();
     final matched = _matched;
     final emptyText = () {
       if ((widget.emptyText ?? '').trim().isNotEmpty) {
         return widget.emptyText!.trim();
       }
       if (widget.requireKeyword && _query.isEmpty) {
-        return widget.remoteOptions
-            ? '输入关键词后从合同归集查询'
-            : '输入关键词后显示匹配结果';
+        return widget.remoteOptions ? '输入关键词后从合同归集查询' : '输入关键词后显示匹配结果';
       }
       if (widget.remoteOptions) {
         return _query.isEmpty ? '输入关键词后查询' : '没有匹配的结果';
@@ -284,140 +293,150 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
       }
       return '没有匹配的选项';
     }();
-    return Positioned(
-      left: left,
-      top: top,
-      width: menuWidth,
-      child: TextFieldTapRegion(
-        child: TapRegion(
-          groupId: _tapGroup,
-          child: Material(
-              key: const ValueKey('proposal-select-menu'),
-              color: Colors.white,
-              elevation: 10,
-              shadowColor: const Color(0x334E3A6C),
-              borderRadius: BorderRadius.circular(10),
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (matched.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 14,
-                      ),
-                      child: Text(
-                        emptyText,
-                        style: const TextStyle(
-                          color: ProposalPalette.text3,
-                          fontSize: 12,
-                        ),
-                      ),
-                    )
-                  else
-                    ConstrainedBox(
-                      constraints: BoxConstraints(maxHeight: maxHeight),
-                      child: ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
-                        shrinkWrap: true,
-                        itemCount: matched.length,
-                        itemBuilder: (_, index) {
-                          final option = matched[index];
-                          final active = option.value == widget.value;
-                          return InkWell(
-                            borderRadius: BorderRadius.circular(8),
-                            onTap: () => _choose(option.value),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 8,
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          option.label,
-                                          maxLines: 3,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            color: ProposalPalette.text,
-                                            fontSize: 13,
-                                            height: 1.35,
-                                            fontWeight: active
-                                                ? FontWeight.w700
-                                                : FontWeight.w500,
-                                          ),
-                                        ),
-                                        if ((option.meta ?? '').isNotEmpty)
-                                          Padding(
-                                            padding: const EdgeInsets.only(
-                                              top: 2,
-                                            ),
-                                            child: Text(
-                                              option.meta!,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                color: ProposalPalette.text3,
-                                                fontSize: 11,
-                                                height: 1.3,
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (active)
-                                    const Icon(
-                                      Icons.check_rounded,
-                                      size: 16,
-                                      color: ProposalPalette.purple,
-                                    ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  if (widget.onAdd != null && widget.addLabel != null)
-                    InkWell(
-                      onTap: () {
-                        _focus.unfocus();
-                        _hideOverlay();
-                        widget.onAdd!();
-                      },
-                      child: Container(
-                        width: double.infinity,
+    return CompositedTransformFollower(
+      link: _layerLink,
+      showWhenUnlinked: false,
+      targetAnchor: openAbove ? Alignment.topLeft : Alignment.bottomLeft,
+      followerAnchor: openAbove ? Alignment.bottomLeft : Alignment.topLeft,
+      offset: Offset(0, openAbove ? -4 : 4),
+      child: UnconstrainedBox(
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+          width: menuWidth,
+          child: TextFieldTapRegion(
+            child: TapRegion(
+              groupId: _tapGroup,
+              child: Material(
+                key: const ValueKey('proposal-select-menu'),
+                color: Colors.white,
+                elevation: 10,
+                shadowColor: const Color(0x334E3A6C),
+                borderRadius: BorderRadius.circular(10),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (matched.isEmpty)
+                      Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: const BoxDecoration(
-                          border: Border(
-                            top: BorderSide(color: ProposalPalette.borderSoft),
-                          ),
+                          vertical: 14,
                         ),
                         child: Text(
-                          '+ ${widget.addLabel}',
+                          emptyText,
                           style: const TextStyle(
-                            color: ProposalPalette.purpleDeep,
+                            color: ProposalPalette.text3,
                             fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      )
+                    else
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxHeight: maxHeight),
+                        child: ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+                          shrinkWrap: true,
+                          itemCount: matched.length,
+                          itemBuilder: (_, index) {
+                            final option = matched[index];
+                            final active = option.value == widget.value;
+                            return InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: () => _choose(option.value),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            option.label,
+                                            maxLines: 3,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: ProposalPalette.text,
+                                              fontSize: 13,
+                                              height: 1.35,
+                                              fontWeight: active
+                                                  ? FontWeight.w700
+                                                  : FontWeight.w500,
+                                            ),
+                                          ),
+                                          if ((option.meta ?? '').isNotEmpty)
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                top: 2,
+                                              ),
+                                              child: Text(
+                                                option.meta!,
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  color: ProposalPalette.text3,
+                                                  fontSize: 11,
+                                                  height: 1.3,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (active)
+                                      const Icon(
+                                        Icons.check_rounded,
+                                        size: 16,
+                                        color: ProposalPalette.purple,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    if (widget.onAdd != null && widget.addLabel != null)
+                      InkWell(
+                        onTap: () {
+                          _focus.unfocus();
+                          _hideOverlay();
+                          widget.onAdd!();
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: const BoxDecoration(
+                            border: Border(
+                              top: BorderSide(
+                                color: ProposalPalette.borderSoft,
+                              ),
+                            ),
+                          ),
+                          child: Text(
+                            '+ ${widget.addLabel}',
+                            style: const TextStyle(
+                              color: ProposalPalette.purpleDeep,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
         ),
+      ),
     );
   }
 
@@ -479,15 +498,18 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
           : null,
       onChanged: _canSearch ? (_) => setState(() {}) : null,
     );
-    return TapRegion(
-      groupId: _tapGroup,
-      onTapOutside: (_) {
-        if (_focus.hasFocus) {
-          _focus.unfocus();
-          _hideOverlay();
-        }
-      },
-      child: field,
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: TapRegion(
+        groupId: _tapGroup,
+        onTapOutside: (_) {
+          if (_focus.hasFocus) {
+            _focus.unfocus();
+            _hideOverlay();
+          }
+        },
+        child: field,
+      ),
     );
   }
 }

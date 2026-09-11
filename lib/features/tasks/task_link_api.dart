@@ -162,4 +162,22 @@ class TaskLinkApi {
     );
     _unwrap(resp);
   }
+
+  /// 延迟再通知：建议仍保持待处理，到期后任务助手会再推一次。
+  Future<void> snoozeSuggestion(
+    int meetingId,
+    int suggestionId, {
+    required DateTime remindAt,
+    String preset = '',
+  }) async {
+    final resp = await http.post(
+      _uri('meetings/$meetingId/task-suggestions/$suggestionId/snooze'),
+      headers: _headers,
+      body: jsonEncode({
+        if (preset.isNotEmpty) 'preset': preset,
+        'remindAt': remindAt.toUtc().toIso8601String(),
+      }),
+    );
+    _unwrap(resp);
+  }
 }

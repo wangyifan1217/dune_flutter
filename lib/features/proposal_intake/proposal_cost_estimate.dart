@@ -24,7 +24,39 @@ const kProposalSalesScaleFormula = '各产品年化规模加总';
 const kProposalProcurementFormula = '各供给规则：关联产品年化规模 × 该条比例，加总';
 const kProposalProfitFormula = '收入 − 采购 − 项目';
 const kProposalMarginFormula = '利润 ÷ 收入';
-const kProposalTurnoverCashFormula = '销售规模 ÷ 月周转次数';
+const kProposalTurnoverCashFormula = '年化规模 ÷ 12 ÷ 月周转次数';
+
+const _kEstimatedFinanceOutputKeys = {
+  kProposalSalesScaleKey,
+  'revenue',
+  'profit',
+  'margin',
+  kProposalTurnoverCashKey,
+  kProposalCouponProcurementCostKey,
+  'projectCost',
+  'costItems',
+  'costItemAmounts',
+  'operatingCost',
+  'operatingCostItems',
+  'operatingCostItemAmounts',
+  'taxCost',
+  'taxCostItems',
+  'taxCostItemAmounts',
+  'businessCost',
+  'businessCostItems',
+  'businessCostItemAmounts',
+};
+
+/// 任务评级只看主产品年化规模，子产品规模不计入。
+double? proposalIntakeMainProductScale(Map<String, dynamic> form) {
+  return proposalProductScaleRollup(
+    proposalIntakeProductFinanceScope(
+      form,
+      owner: kProposalProductFinanceMain,
+    ),
+  )?.salesScale;
+}
+
 const kProposalProjectCostFormula = '各产品年化规模 × 结算比例，加总';
 
 const kProposalVatSurcharge = 1.12;
@@ -269,11 +301,11 @@ Map<String, dynamic> proposalWriteDerivedProfit(Map<String, dynamic> form) {
   return next;
 }
 
-/// 周转资金 = 销售规模 ÷ 月周转次数。次数为空或 0 时不写。
+/// 周转资金 = 年化规模 ÷ 12 ÷ 月周转次数。次数为空或 0 时不写。
 double? proposalTurnoverCashAmount(Map<String, dynamic> form) {
   final times = proposalFinanceAmount(form, kProposalTurnoverTimesKey);
   if (times <= 0) return null;
-  return proposalRoundWan(proposalEffectiveSalesScale(form) / times);
+  return proposalRoundWan(proposalEffectiveSalesScale(form) / 12 / times);
 }
 
 Map<String, dynamic> proposalApplyTurnoverCash(Map<String, dynamic> form) {
@@ -391,7 +423,9 @@ ProposalVatEstimate proposalVatEstimate(Map<String, dynamic> form) {
     inputRate = outputRate;
   }
   var projectRate = proposalProjectCostTaxRate(form);
-  final projectDeclared = _anyInvoiceTypeDeclared(_projectCostSettleTerms(form));
+  final projectDeclared = _anyInvoiceTypeDeclared(
+    _projectCostSettleTerms(form),
+  );
   if (projectRate <= 0 && !projectDeclared) {
     projectRate = inputRate;
   }
@@ -632,7 +666,7 @@ double? proposalEstimatedProcurementCost(Map<String, dynamic> form) {
         proposalParseSettleRatio(terms.displayRatio);
     covered.addAll(terms.skuIds);
   }
-  for (final sku in proposalIntakeSkuDetails(form)) {
+  for (final sku in proposalIntakeAllSellableSkus(form)) {
     if (covered.contains(sku.id)) continue;
     sum += proposalIntakeSkuScaleTotal(sku) * fallbackRatio;
   }
@@ -650,7 +684,7 @@ double proposalAssociatedSalesScale(
   if (skuIds.isEmpty) return proposalEffectiveSalesScale(form);
   final want = skuIds.toSet();
   var sum = 0.0;
-  for (final sku in proposalIntakeSkuDetails(form)) {
+  for (final sku in proposalIntakeAllSellableSkus(form)) {
     if (!want.contains(sku.id)) continue;
     sum += proposalIntakeSkuScaleTotal(sku);
   }
@@ -687,7 +721,9 @@ String? proposalPayableBillCostName(ProposalFinanceSettleTerms terms) {
   final path = proposalSettleBillPath(terms);
   if (path.contains('应收')) return null;
   if (path.contains('/') && !path.contains('应付')) return null;
-  final display = proposalProjectCostDisplayName(proposalSettleBillTypeL3(terms));
+  final display = proposalProjectCostDisplayName(
+    proposalSettleBillTypeL3(terms),
+  );
   if (display.isEmpty || !kProposalProjectCostItems.contains(display)) {
     return null;
   }
@@ -752,7 +788,11 @@ List<ProposalPayableCostHit> proposalPayableProjectCostHits(
     ];
     if (ids.isEmpty) {
       hits.add(
-        ProposalPayableCostHit(costName: costName, terms: terms, skuIds: const []),
+        ProposalPayableCostHit(
+          costName: costName,
+          terms: terms,
+          skuIds: const [],
+        ),
       );
       return;
     }
@@ -773,7 +813,7 @@ List<ProposalPayableCostHit> proposalPayableProjectCostHits(
     if (group.isBlank) continue;
     addHit(group.terms, group.skuIds);
   }
-  for (final sku in proposalIntakeSkuDetails(form)) {
+  for (final sku in proposalIntakeAllSellableSkus(form)) {
     for (final settle in proposalIntakeSkuSettlements(sku)) {
       addHit(settle.terms, [sku.id]);
     }
@@ -815,7 +855,9 @@ String proposalProjectCostFormulaSubstitution(
   final aliases = proposalProjectCostNamesOf(
     proposalProjectCostDisplayName(name),
   );
-  final skus = {for (final sku in proposalIntakeSkuDetails(form)) sku.id: sku};
+  final skus = {
+    for (final sku in proposalIntakeAllSellableSkus(form)) sku.id: sku,
+  };
   final grouped = <String, List<double>>{};
   for (final hit in proposalPayableProjectCostHits(form)) {
     if (!aliases.contains(hit.costName)) continue;
@@ -985,7 +1027,7 @@ Map<String, dynamic> proposalEnsureAutoTaxItems(Map<String, dynamic> form) {
   return Map<String, dynamic>.from(form)..['taxCostItems'] = names;
 }
 
-Map<String, dynamic> proposalApplyEstimatedFinanceCosts(
+Map<String, dynamic> _applyEstimatedFinanceCostsOnForm(
   Map<String, dynamic> form, {
   List<ProposalCostItemOption> businessCatalog = const [],
   List<ProposalCostItemOption> costCatalog = const [],
@@ -1022,6 +1064,35 @@ Map<String, dynamic> proposalApplyEstimatedFinanceCosts(
     catalog: const [],
     businessCatalog: businessCatalog,
   );
+  return next;
+}
+
+Map<String, dynamic> proposalApplyEstimatedFinanceCosts(
+  Map<String, dynamic> form, {
+  List<ProposalCostItemOption> businessCatalog = const [],
+  List<ProposalCostItemOption> costCatalog = const [],
+}) {
+  final owners = [
+    kProposalProductFinanceMain,
+    if (proposalIntakeHasChildProducts(form)) kProposalProductFinanceChildren,
+  ];
+  var next = form;
+  for (final owner in owners) {
+    final estimated = _applyEstimatedFinanceCostsOnForm(
+      proposalIntakeProductFinanceScope(next, owner: owner),
+      businessCatalog: businessCatalog,
+      costCatalog: costCatalog,
+    );
+    next = proposalIntakeWriteProductFinance(
+      next,
+      owner: owner,
+      finance: {
+        ...proposalIntakeProductFinance(next, owner: owner),
+        for (final key in _kEstimatedFinanceOutputKeys)
+          if (estimated.containsKey(key)) key: estimated[key],
+      },
+    );
+  }
   return next;
 }
 

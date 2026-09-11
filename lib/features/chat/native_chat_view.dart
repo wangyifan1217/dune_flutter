@@ -862,7 +862,9 @@ class _NativeChatViewState extends State<NativeChatView>
 
   void _onChatForegroundPaused({bool viewportCollapsed = false}) {
     // 先快照再标后台，否则 capture 会被 backgroundLayoutActive 跳过。
-    if (_hasStableChatViewport) {
+    // Windows 收起窗口时 reverse 列表可能已经跳到历史方向，
+    // 不能用跳变后的 pixels 覆盖「贴底」快照，否则还原后会被当成在看历史并往上拽。
+    if (_hasStableChatViewport && !_looksLikeUnsolicitedHistoryJump) {
       _captureStableHistoryViewport(ignoreNoise: true);
     }
     final collapsed =
@@ -886,7 +888,11 @@ class _NativeChatViewState extends State<NativeChatView>
       viewportCollapsed: !_hasStableChatViewport,
     );
     _foregroundPauseWasObscured = false;
-    if (_isBrowsingHistory) {
+    if (_looksLikeUnsolicitedHistoryJump && !_locatedMode) {
+      // 缩小/还原把 reverse 列表拽去历史：贴回最新端，不要 ensureVisible 往上拉。
+      _pendingStickBottomAfterForeground = true;
+      _scrollBottom(force: true, gentle: false);
+    } else if (_isBrowsingHistory) {
       _restoreHistoryViewportAfterForeground();
     } else if (!_locatedMode && needsRepair) {
       // 最小化/托盘还原：Windows 会把 reverse 列表夹到 0 或拽去历史。
@@ -1055,11 +1061,16 @@ class _NativeChatViewState extends State<NativeChatView>
       }
     }
     final viewportUnstable = pos.viewportDimension <= 80;
-    if (viewportUnstable || _looksLikeBackgroundScrollClamp) {
+    final jumpedAway = _looksLikeUnsolicitedHistoryJump;
+    if (viewportUnstable || _looksLikeBackgroundScrollClamp || jumpedAway) {
       if (_enterStickBottomPending || _forceLatestMode) {
         return;
       }
       _freezeHistoryViewportForBackground();
+      if (jumpedAway && !_historyViewportFrozen && !_locatedMode) {
+        _pendingStickBottomAfterForeground = true;
+        _scrollBottom(force: true, gentle: true);
+      }
       return;
     }
     // 定位动画期间不要补历史、不要改贴底状态，否则会和 ensureVisible 对拉。
@@ -1116,6 +1127,7 @@ class _NativeChatViewState extends State<NativeChatView>
     if (_isBackgroundLayoutNoise && !_pendingStickBottomAfterForeground) {
       return false;
     }
+    if (_looksLikeUnsolicitedHistoryJump) return false;
     // 定位落地后未动手滚动前不要自动补历史，否则 prepend 会把视口拽来拽去。
     if (_locatedMode && !_userInteractedWithScroll) return false;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -1194,6 +1206,10 @@ class _NativeChatViewState extends State<NativeChatView>
       return;
     }
     if (_isBackgroundLayoutNoise) return;
+    if (_looksLikeUnsolicitedHistoryJump) {
+      _pendingStickBottomAfterForeground = true;
+      return;
+    }
     if (_historyViewportFrozen) return;
     if (_looksLikeBackgroundScrollClamp) {
       _freezeHistoryViewportForBackground();
@@ -1622,7 +1638,7 @@ class _NativeChatViewState extends State<NativeChatView>
     } else if (notification is ScrollEndNotification) {
       _userScrollActive = false;
       _flushDeferredRealtimePaint();
-      if (!_isBackgroundLayoutNoise) {
+      if (!_isBackgroundLayoutNoise && !_looksLikeUnsolicitedHistoryJump) {
         _updateStickBottomState();
       }
       if (_canMarkReadNow && _isNearBottom) {
@@ -1661,6 +1677,18 @@ class _NativeChatViewState extends State<NativeChatView>
     return _isForegroundSettling &&
         !_userScrollActive &&
         !_hasRecentPointerScroll;
+  }
+
+  /// 贴在最新端时，缩小/还原窗口会把 reverse 列表一次性拽去历史。
+  /// 没有滚轮/拖动就不能记成用户上滑，否则会补历史并把会话往上拽。
+  bool get _looksLikeUnsolicitedHistoryJump {
+    if (_locatedMode || _historyViewportFrozen) return false;
+    if (!_scrollController.hasClients) return false;
+    return chatForegroundJumpedAwayFromLatest(
+      userScrolling: _userScrollActive || _hasRecentPointerScroll,
+      wasAwayFromLatest: _stableAwayFromLatest,
+      pixelsAwayFromLatest: _scrollController.position.pixels > 140,
+    );
   }
 
   /// 最小化等后台场景会把 reverse 列表一下子夹到 0；用户自己滑回底部、
@@ -1706,6 +1734,7 @@ class _NativeChatViewState extends State<NativeChatView>
     if (_pendingStickBottomAfterForeground && !_historyViewportFrozen) {
       return false;
     }
+    if (_looksLikeUnsolicitedHistoryJump) return false;
     if (_historyViewportFrozen || _stableAwayFromLatest) return true;
     if (!_hasStableChatViewport) return false;
     return !_rawPixelsNearLatest &&
@@ -1715,6 +1744,7 @@ class _NativeChatViewState extends State<NativeChatView>
   void _captureStableHistoryViewport({bool ignoreNoise = false}) {
     if (_historyViewportFrozen) return;
     if (!ignoreNoise && _isBackgroundLayoutNoise) return;
+    if (!ignoreNoise && _looksLikeUnsolicitedHistoryJump) return;
     if (!_hasStableChatViewport) return;
     final away =
         !_rawPixelsNearLatest &&

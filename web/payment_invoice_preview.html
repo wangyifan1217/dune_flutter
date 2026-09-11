@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>付款发票审批 · 静态预览</title>
+  <style>
+    :root {
+      --bg: #f5f6f8;
+      --card: #ffffff;
+      --text: #1f2421;
+      --text2: #5a5c56;
+      --text3: #94938a;
+      --line: #e8eaed;
+      --purple: #7b5cd8;
+      --teal: #0f766e;
+      --blue: #1668e8;
+      --green: #00b42a;
+      --green-hover: #009a25;
+      --header: #fafafa;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+    }
+    .app { min-height: 100%; padding: 18px 24px 40px; }
+    .top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .back {
+      border: 0;
+      background: none;
+      color: var(--text2);
+      cursor: pointer;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0;
+    }
+    h1 { margin: 0; font-size: 22px; font-weight: 700; }
+    .hint {
+      margin-left: auto;
+      color: #ad6800;
+      background: #fff7e6;
+      border: 1px solid #ffd591;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+    .section {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 16px 16px;
+    }
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--purple);
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 14px;
+    }
+    .bar { width: 4px; height: 16px; background: var(--purple); border-radius: 2px; }
+    .tiles {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    .tile {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 10px 8px;
+      min-height: 92px;
+      background: #fff;
+      cursor: default;
+      display: flex;
+      flex-direction: column;
+    }
+    .tile.clickable { cursor: pointer; outline: 2px solid var(--teal); outline-offset: 0; }
+    .tile.clickable:hover { background: #f6fffd; }
+    .ico {
+      width: 32px; height: 32px; border-radius: 8px;
+      display: grid; place-items: center; margin-bottom: auto;
+      font-size: 16px;
+    }
+    .tile b { font-size: 13px; margin-top: 10px; }
+    .tile span { font-size: 11px; color: var(--text3); margin-top: 2px; }
+    .tabs {
+      display: flex;
+      gap: 22px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 14px;
+    }
+    .tabs button {
+      border: 0; background: none; padding: 8px 0 10px;
+      font-size: 14px; color: var(--text2); cursor: pointer;
+    }
+    .tabs button.on {
+      color: var(--teal);
+      font-weight: 700;
+      box-shadow: inset 0 -2px 0 var(--teal);
+    }
+    .filters {
+      background: #fff;
+      padding: 4px 0 8px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px 18px;
+    }
+    label.f { display: flex; flex-direction: column; gap: 6px; color: var(--text2); font-size: 12px; }
+    input, select {
+      height: 32px;
+      border: 1px solid #dcdfe6;
+      border-radius: 4px;
+      padding: 0 10px;
+      font-size: 13px;
+      color: var(--text);
+      background: #fff;
+    }
+    input::placeholder { color: #c0c4cc; }
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .btn {
+      height: 32px; padding: 0 16px; border-radius: 4px; border: 1px solid #dcdfe6;
+      background: #fff; cursor: pointer; font-size: 13px;
+    }
+    .btn.primary { background: var(--green); color: #fff; border-color: var(--green); }
+    .btn.primary:hover { background: var(--green-hover); }
+    .toolbar {
+      display: flex; align-items: center; gap: 8px; margin: 8px 0 10px;
+    }
+    .btn.green { background: #00b42a; color: #fff; border-color: #00b42a; }
+    .count { color: var(--text3); margin-left: 8px; }
+    table { width: 100%; border-collapse: collapse; background: #fff; }
+    th {
+      background: var(--header);
+      font-weight: 600;
+      color: var(--text2);
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+    }
+    td {
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      color: var(--text);
+    }
+    .purpose { white-space: pre-line; line-height: 1.55; max-width: 360px; }
+    .account { white-space: pre-line; line-height: 1.55; color: var(--text2); }
+    .ops { white-space: nowrap; }
+    .link {
+      color: var(--blue); background: none; border: 0; cursor: pointer; padding: 0 4px; font-size: 13px;
+    }
+    .ghost {
+      border: 1px solid #dcdfe6; background: #fff; border-radius: 4px;
+      padding: 4px 8px; cursor: pointer; font-size: 12px; margin-right: 6px;
+    }
+    .money { color: var(--teal); text-decoration: underline; cursor: pointer; }
+    .hidden { display: none; }
+    .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+    .dialog {
+      position: fixed; inset: 0; background: rgba(0,0,0,.35);
+      display: grid; place-items: center;
+    }
+    .dialog .box {
+      width: 480px; background: #fff; border-radius: 8px; padding: 18px 20px;
+    }
+    .dialog h3 { margin: 0 0 12px; font-size: 16px; }
+    .dialog pre { white-space: pre-wrap; font-family: inherit; color: var(--text2); line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <section id="home">
+      <div class="top">
+        <h1>工作台</h1>
+        <div class="hint">静态预览 · 示例数据，不连接口</div>
+      </div>
+      <div class="section">
+        <div class="section-title"><i class="bar"></i>协作</div>
+        <div class="tiles">
+          <div class="tile"><div class="ico" style="background:#f3eefa;color:#7b5cd8">✓</div><b>任务</b><span>待我处理 · 我发起的</span></div>
+          <div class="tile"><div class="ico" style="background:#eaf3f4;color:#3d7a8c">↗</div><b>任务汇总</b><span>部门进度</span></div>
+          <div class="tile"><div class="ico" style="background:#f3eefa;color:#7b5cd8">☁</div><b>企业微盘</b><span>文件 · 共享空间</span></div>
+          <div class="tile"><div class="ico" style="background:#eef1fb;color:#5b6fc4">⇄</div><b>每日对账</b><span>账期快照 · 分板块核对</span></div>
+          <div class="tile"><div class="ico" style="background:#eef1fb;color:#5b6fc4">▤</div><b>合同归集</b><span>编号 · 名称 · 附件</span></div>
+          <div class="tile"><div class="ico" style="background:#f3eefa;color:#7b5cd8">✎</div><b>销售提案</b><span>分板块填写 · 复核</span></div>
+          <div class="tile"><div class="ico" style="background:#eaf3f4;color:#3d7a8c">👜</div><b>采购提案</b><span>采购合同 · 供货商政策</span></div>
+          <div class="tile clickable" onclick="openLedger()">
+            <div class="ico" style="background:#e7f5f3;color:#0f766e">▭</div>
+            <b>付款发票审批</b><span>对公用途查询 · 未开完/完结</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="ledger" class="hidden">
+      <div class="top">
+        <button class="back" onclick="goHome()">‹ 工作台</button>
+        <h1>付款发票审批</h1>
+        <div class="hint">静态预览 · 可切 Tab、筛选、改已开金额、点完结</div>
+      </div>
+      <div class="tabs">
+        <button id="tab-pay" class="on" onclick="setTab('pay')">付款审批</button>
+        <button id="tab-inv" onclick="setTab('inv')">发票审批</button>
+      </div>
+      <div class="filters">
+        <div class="grid" id="filter-grid"></div>
+        <div class="actions">
+          <button class="btn primary" onclick="applyFilter()">提交</button>
+          <button class="btn" onclick="resetFilter()">重置</button>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="btn" onclick="applyFilter()">刷新</button>
+        <button class="btn green">导出</button>
+        <span class="count" id="count"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead id="thead"></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const pay = [
+      {
+        id: "2079879674728558593", date: "2026-07-20 18:33:00", title: "叶子扬行政采购审批", user: "叶子扬",
+        purpose: "沅星智联（江苏）注销代理服务费\n根据持股比例，费用由股东分别承担，源畅\n承担1100*49%=539元；\n付款方：上海卓悦优泰\n发票、注销完成回执，见附件",
+        account: "收款账户：苏州灵辰财税咨询有限公司\n上海浦东发展银行\n8901007880110",
+        type: "对公", status: "已通过", done: "未完结", payStatus: "待支付"
+      },
+      {
+        id: "1999371572867100674", date: "2025-12-10 15:57:14", title: "洪梅行政采购审批", user: "洪梅",
+        purpose: "苏州元兴智联股东变更（工商、税务、银行）费用合计1500元。\n付款单位:苏州元兴智联",
+        account: "收款账户:苏州灵辰财税咨询有限公司\n开户行: 中国民生银行",
+        type: "对公", status: "已通过", done: "未完结", payStatus: "已支付"
+      },
+      {
+        id: "1981284008486617090", date: "2025-10-22 09:57:56", title: "叶子扬行政采购审批", user: "叶子扬",
+        purpose: "森禄科技工商税务银行全流程办理\n服务商: 苏州灵辰财税\n合计4500元",
+        account: "6979999\n苏州灵辰财税咨询\n中国民生银行苏州分行",
+        type: "对公", status: "已通过", done: "已完结", payStatus: "已支付"
+      },
+      {
+        id: "188200110022334455", date: "2026-08-12 11:20:08", title: "推广费付款申请单", user: "王敏",
+        purpose: "渠道投放-信息流推广费，对应8月结算",
+        account: "推广收款：杭州推客网络科技有限公司\n招商银行 5719 **** 8821",
+        type: "对公", status: "已通过", done: "未完结", payStatus: "待支付", vendor: "杭州推客"
+      }
+    ];
+    const inv = [
+      {
+        id: "INV-202609-018", date: "2026-09-03 09:12:00", title: "发票申请", user: "赵六",
+        purpose: "信息服务费 / 平安分批开票",
+        vendor: "中国平安", applied: 200000, issued: 80000, status: "已通过", issue: "部分开"
+      },
+      {
+        id: "INV-202608-007", date: "2026-08-21 16:40:00", title: "发票申请", user: "陈青",
+        purpose: "软件实施费",
+        vendor: "平安银行", applied: 56000, issued: 0, status: "已通过", issue: "未开"
+      },
+      {
+        id: "INV-202607-003", date: "2026-07-09 10:05:00", title: "发票申请", user: "赵六",
+        purpose: "年度框架开票",
+        vendor: "平安产险", applied: 120000, issued: 120000, status: "已通过", issue: "已完结"
+      }
+    ];
+
+    let tab = "pay";
+    let f = {};
+
+    function money(n) {
+      return Number(n).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function openLedger() {
+      document.getElementById("home").classList.add("hidden");
+      document.getElementById("ledger").classList.remove("hidden");
+      renderFilters();
+      renderTable();
+    }
+    function goHome() {
+      document.getElementById("ledger").classList.add("hidden");
+      document.getElementById("home").classList.remove("hidden");
+    }
+    function setTab(next) {
+      tab = next;
+      document.getElementById("tab-pay").classList.toggle("on", next === "pay");
+      document.getElementById("tab-inv").classList.toggle("on", next === "inv");
+      f = {};
+      renderFilters();
+      renderTable();
+    }
+    function field(key, label, type, options) {
+      if (type === "select") {
+        const opts = options.map(o => `<option value="${o[0]}" ${f[key]===o[0]?"selected":""}>${o[1]}</option>`).join("");
+        return `<label class="f">${label}<select data-k="${key}">${opts}</select></label>`;
+      }
+      return `<label class="f">${label}<input data-k="${key}" placeholder="${label}" value="${f[key]||""}"></label>`;
+    }
+    function renderFilters() {
+      const el = document.getElementById("filter-grid");
+      if (tab === "pay") {
+        el.innerHTML = [
+          field("id", "ID"),
+          field("date", "发起日期"),
+          field("title", "审批名称"),
+          field("user", "审批发起人"),
+          field("account", "收款账户信息"),
+          field("payStatus", "付款状态", "select", [["","选择"],["待支付","待支付"],["已支付","已支付"]]),
+          field("type", "付款类型", "select", [["","无"],["对公","对公"],["对私","对私"]]),
+          field("done", "是否完结", "select", [["","选择"],["未完结","未完结"],["已完结","已完结"]]),
+          field("vendor", "推广商名称"),
+          field("payAccount", "推广收款账户"),
+          field("promoStatus", "推广付款状态", "select", [["","选择"],["待支付","待支付"],["已支付","已支付"]]),
+        ].join("");
+      } else {
+        el.innerHTML = [
+          field("id", "ID"),
+          field("date", "发起日期"),
+          field("title", "审批名称"),
+          field("user", "审批发起人"),
+          field("vendor", "客户/推广商"),
+          field("issue", "开票状态", "select", [["未完结","未完结"],["未开","未开"],["部分开","部分开"],["已完结","已完结"],["","全部"]]),
+        ].join("");
+        if (f.issue === undefined) f.issue = "未完结";
+        el.querySelector('[data-k="issue"]').value = f.issue || "未完结";
+      }
+    }
+    function readFilters() {
+      f = {};
+      document.querySelectorAll("[data-k]").forEach(n => { f[n.dataset.k] = n.value.trim(); });
+    }
+    function applyFilter() { readFilters(); renderTable(); }
+    function resetFilter() { f = tab === "inv" ? { issue: "未完结" } : {}; renderFilters(); renderTable(); }
+    function match(row) {
+      const has = (a,b) => !b || String(a||"").includes(b);
+      if (!has(row.id, f.id) || !has(row.date, f.date) || !has(row.title, f.title) || !has(row.user, f.user)) return false;
+      if (tab === "pay") {
+        if (!has(row.account, f.account) || !has(row.vendor, f.vendor)) return false;
+        if (f.type && row.type !== f.type) return false;
+        if (f.done && row.done !== f.done) return false;
+        if (f.payStatus && row.payStatus !== f.payStatus) return false;
+      } else {
+        if (!has(row.vendor, f.vendor)) return false;
+        const left = Math.max(0, row.applied - row.issued);
+        const issue = row.issued <= 0 ? "未开" : (left <= 0 ? "已完结" : "部分开");
+        row.issue = issue;
+        if (f.issue === "未完结" && issue === "已完结") return false;
+        if (f.issue && f.issue !== "未完结" && issue !== f.issue) return false;
+      }
+      return true;
+    }
+    function renderTable() {
+      const rows = (tab === "pay" ? pay : inv).filter(match);
+      document.getElementById("count").textContent = rows.length + " 条";
+      const thead = document.getElementById("thead");
+      const tbody = document.getElementById("tbody");
+      if (tab === "pay") {
+        thead.innerHTML = `<tr><th>ID</th><th>发起日期</th><th>审批名称</th><th>审批发起人</th><th>申请事由</th><th>收款账户</th><th>操作</th></tr>`;
+        tbody.innerHTML = rows.map((r,i) => `<tr>
+          <td>${r.id}</td><td>${r.date}</td><td>${r.title}</td><td>${r.user}</td>
+          <td class="purpose">${r.purpose}</td><td class="account">${r.account}</td>
+          <td class="ops"><button class="ghost" onclick="printRow('pay',${i})">审批单打印</button><button class="link" onclick="viewRow('pay',${i})">查看</button></td>
+        </tr>`).join("");
+      } else {
+        thead.innerHTML = `<tr><th>ID</th><th>发起日期</th><th>审批名称</th><th>审批发起人</th><th>申请事由</th><th>客户/推广商</th><th>申请金额</th><th>已开金额</th><th>未开金额</th><th>开票状态</th><th>操作</th></tr>`;
+        tbody.innerHTML = rows.map((r) => {
+          const left = Math.max(0, r.applied - r.issued);
+          const issue = r.issued <= 0 ? "未开" : (left <= 0 ? "已完结" : "部分开");
+          const idx = inv.indexOf(r);
+          return `<tr>
+            <td>${r.id}</td><td>${r.date}</td><td>${r.title}</td><td>${r.user}</td>
+            <td class="purpose">${r.purpose}</td><td>${r.vendor}</td>
+            <td>${money(r.applied)}</td>
+            <td><span class="money" onclick="editIssued(${idx})">${money(r.issued)}</span></td>
+            <td>${money(left)}</td><td>${issue}</td>
+            <td class="ops">
+              <button class="ghost" onclick="printRow('inv',${idx})">审批单打印</button>
+              <button class="link" onclick="viewRow('inv',${idx})">查看</button>
+              ${issue !== "已完结" ? `<button class="link" onclick="complete(${idx})">完结</button>` : ""}
+            </td>
+          </tr>`;
+        }).join("");
+      }
+    }
+    function editIssued(i) {
+      const next = prompt("已开金额（累计）", inv[i].issued);
+      if (next == null) return;
+      const n = Number(String(next).replace(/,/g, ""));
+      if (!Number.isFinite(n)) return;
+      inv[i].issued = n;
+      renderTable();
+    }
+    function complete(i) {
+      if (!confirm("确认这张发票已经开完？完结后默认列表不再显示。")) return;
+      inv[i].issued = inv[i].applied;
+      renderTable();
+    }
+    function viewRow(kind, i) {
+      const r = kind === "pay" ? (tab==="pay"? pay.filter(match)[i] : pay[i]) : inv[i];
+      alert("静态预览：正式环境会打开原审批详情\n\n" + r.title + "\n" + r.id);
+    }
+    function printRow(kind, i) {
+      const list = kind === "pay" ? (tab==="pay" ? pay.filter(match) : pay) : inv;
+      const r = list[i] || (kind === "inv" ? inv[i] : pay[i]);
+      const box = document.createElement("div");
+      box.className = "dialog";
+      box.innerHTML = `<div class="box"><h3>打印摘要</h3><pre>${JSON.stringify(r, null, 2)}</pre><div class="actions"><button class="btn" onclick="this.closest('.dialog').remove()">关闭</button></div></div>`;
+      document.body.appendChild(box);
+    }
+  </script>
+</body>
+</html>

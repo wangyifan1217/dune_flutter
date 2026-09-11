@@ -93,6 +93,58 @@ void main() {
     );
   });
 
+  test('rejected child product settlement can change while reviewed rows stay', () {
+    const review = {
+      'marketCompleted': true,
+      'financeCompleted': false,
+      'financeItems': {
+        'skuSettle:child-1:st-a': true,
+        'skuSettle:child-1:st-b': false,
+      },
+    };
+    const baseline = {
+      'childProducts': [
+        {
+          'id': 'child-1',
+          'productName': '加油100',
+          'settlements': [
+            {'id': 'st-a', 'settleRatio': '90'},
+            {'id': 'st-b', 'settleRatio': '97.5'},
+          ],
+        },
+      ],
+      'childTechnology': {'technologyPlatform': '已复核平台'},
+    };
+    final got = proposalIntakeKeepUnreviewedForm(
+      baseline: baseline,
+      current: {
+        'childProducts': [
+          {
+            'id': 'child-1',
+            'productName': '被改掉的子产品',
+            'settlements': [
+              {'id': 'st-a', 'settleRatio': '1'},
+              {'id': 'st-b', 'settleRatio': '88'},
+            ],
+          },
+        ],
+        'childTechnology': {'technologyPlatform': '不该改'},
+      },
+      review: review,
+    );
+    final rows = got['childProducts'] as List;
+    final child = rows.single as Map;
+    expect(child['productName'], '加油100');
+    final settlements = child['settlements'] as List;
+    expect(settlements[0]['settleRatio'], '90');
+    expect(settlements[1]['settleRatio'], '88');
+    expect(got['childTechnology']['technologyPlatform'], '不该改');
+    expect(
+      proposalIntakeFormKeyLocked('childProducts', baseline, review),
+      isFalse,
+    );
+  });
+
   test('rejected shared settlement can change while reviewed rows stay', () {
     const review = {
       'financeCompleted': false,
@@ -128,6 +180,37 @@ void main() {
     expect(
       proposalIntakeFormKeyLocked('salesScale', const {}, review),
       isFalse,
+    );
+  });
+
+  test('productFinance stays editable after market review', () {
+    const review = {'marketCompleted': true};
+    expect(
+      proposalIntakeFormKeyLocked('productFinance', const {}, review),
+      isFalse,
+    );
+    expect(
+      proposalIntakeFormKeyLocked('productFinance', const {}, {
+        'financeCompleted': true,
+      }),
+      isTrue,
+    );
+    final got = proposalIntakeKeepUnreviewedForm(
+      baseline: {
+        'productFinance': {
+          'main': {'turnoverTimes': 2},
+        },
+      },
+      current: {
+        'productFinance': {
+          'main': {'turnoverTimes': 4, 'turnoverCash': 16.67},
+        },
+      },
+      review: review,
+    );
+    expect(
+      (got['productFinance'] as Map)['main']['turnoverTimes'],
+      4,
     );
   });
 

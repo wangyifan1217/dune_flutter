@@ -43,6 +43,7 @@ class AuthSession {
     this.workSituationViewAll = false,
     this.kpiPerformanceAccess = false,
     this.payrollReportAccess = false,
+    this.paymentInvoiceAccess = false,
   });
 
   final String phone;
@@ -115,6 +116,9 @@ class AuthSession {
   /// 工作台行政「工资报表」。
   final bool payrollReportAccess;
 
+  /// 工作台协作「付款发票审批」。
+  final bool paymentInvoiceAccess;
+
   /// 后端下发的「任务汇总」能力开关；未下发时工作台会走接口探测。
   final bool hrbpAccess;
 
@@ -177,6 +181,9 @@ class AuthSession {
 
   bool get effectivePayrollReportAccess =>
       payrollReportAccess || DunesDefaults.localLighthouseAccessBypass;
+
+  bool get effectivePaymentInvoiceAccess =>
+      paymentInvoiceAccess || DunesDefaults.localLighthouseAccessBypass;
 
   AuthSession withLocalDevGrants() {
     var next = this;
@@ -273,6 +280,7 @@ class AuthSession {
     bool? workSituationViewAll,
     bool? kpiPerformanceAccess,
     bool? payrollReportAccess,
+    bool? paymentInvoiceAccess,
   }) {
     return AuthSession(
       phone: phone ?? this.phone,
@@ -318,6 +326,7 @@ class AuthSession {
       workSituationViewAll: workSituationViewAll ?? this.workSituationViewAll,
       kpiPerformanceAccess: kpiPerformanceAccess ?? this.kpiPerformanceAccess,
       payrollReportAccess: payrollReportAccess ?? this.payrollReportAccess,
+      paymentInvoiceAccess: paymentInvoiceAccess ?? this.paymentInvoiceAccess,
     );
   }
 
@@ -396,6 +405,7 @@ class AuthSession {
       workSituationViewAll: data['workSituationViewAll'] == true,
       kpiPerformanceAccess: data['kpiPerformanceAccess'] == true,
       payrollReportAccess: data['payrollReportAccess'] == true,
+      paymentInvoiceAccess: data['paymentInvoiceAccess'] == true,
     );
   }
 
@@ -452,6 +462,7 @@ class AuthSession {
       workSituationViewAll: claims['workSituationViewAll'] == true,
       kpiPerformanceAccess: claims['kpiPerformanceAccess'] == true,
       payrollReportAccess: claims['payrollReportAccess'] == true,
+      paymentInvoiceAccess: claims['paymentInvoiceAccess'] == true,
     );
   }
 
@@ -513,6 +524,7 @@ class AuthSession {
       'workSituationViewAll': workSituationViewAll,
       'kpiPerformanceAccess': kpiPerformanceAccess,
       'payrollReportAccess': payrollReportAccess,
+      'paymentInvoiceAccess': paymentInvoiceAccess,
     };
   }
 
@@ -563,6 +575,7 @@ class AuthSession {
       workSituationViewAll: json['workSituationViewAll'] == true,
       kpiPerformanceAccess: json['kpiPerformanceAccess'] == true,
       payrollReportAccess: json['payrollReportAccess'] == true,
+      paymentInvoiceAccess: json['paymentInvoiceAccess'] == true,
     );
   }
 

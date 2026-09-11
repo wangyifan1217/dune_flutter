@@ -19,9 +19,8 @@ String normalizeProposalIntakeKind(String raw) {
 bool proposalIntakeIsPurchase(String kind) =>
     normalizeProposalIntakeKind(kind) == 'purchase';
 
-String proposalIntakeUntitledTitle(String kind) => proposalIntakeIsPurchase(kind)
-    ? '未命名采购业务提案'
-    : '未命名销售业务提案';
+String proposalIntakeUntitledTitle(String kind) =>
+    proposalIntakeIsPurchase(kind) ? '未命名采购业务提案' : '未命名销售业务提案';
 
 String proposalIntakeKindEyebrow(String kind) =>
     proposalIntakeIsPurchase(kind) ? '采购业务提案' : '销售业务提案';
@@ -171,8 +170,7 @@ class ProposalApprovedPurchaseHit {
       supplyPayAccount: '${json['supplyPayAccount'] ?? ''}'.trim(),
       purchaseProducts: products is List
           ? [
-              for (final item in products)
-                '$item'.trim(),
+              for (final item in products) '$item'.trim(),
             ].where((item) => item.isNotEmpty).toList(growable: false)
           : const [],
     );
@@ -612,12 +610,7 @@ const kProposalProjectCostItems = [
 const kProposalOperatingCostItems = ['差旅成本', '招待费'];
 
 /// 协作提案「税务成本」表头。
-const kProposalTaxCostItems = [
-  '增值税及附加（能源）',
-  '增值税及附加（运营商+公共出行）',
-  '印花税',
-  '所得税',
-];
+const kProposalTaxCostItems = ['增值税及附加（能源）', '增值税及附加（运营商+公共出行）', '印花税', '所得税'];
 
 String proposalProjectCostDisplayName(String name) {
   final text = name.trim();
@@ -707,8 +700,7 @@ Map<String, dynamic> proposalSyncCostSelection({
 }) {
   final catalogCodes = {for (final item in catalog) item.code};
   final codes = [
-    for (final name in names)
-      proposalCostAmountId(name, catalog),
+    for (final name in names) proposalCostAmountId(name, catalog),
   ].where(catalogCodes.contains).toList();
   final keep = <String>{
     for (final name in names) ...proposalProjectCostNamesOf(name),
@@ -728,8 +720,7 @@ Map<String, dynamic> proposalSyncCostSelection({
     if (raw is Map) {
       next[settleTermsKey] = {
         for (final entry in raw.entries)
-          if (keep.contains('${entry.key}'.trim()))
-            '${entry.key}': entry.value,
+          if (keep.contains('${entry.key}'.trim())) '${entry.key}': entry.value,
       };
     }
   }
@@ -1050,8 +1041,7 @@ List<CatalogRef> _catalogChoices(Object? raw) {
     }
     if (item is! Map) continue;
     final map = Map<String, dynamic>.from(item);
-    final name =
-        '${map['label'] ?? map['name'] ?? map['value'] ?? ''}'.trim();
+    final name = '${map['label'] ?? map['name'] ?? map['value'] ?? ''}'.trim();
     final code = '${map['code'] ?? map['key'] ?? ''}'.trim();
     if (name.isEmpty && code.isEmpty) continue;
     out.add(
@@ -1404,21 +1394,13 @@ String proposalIntakeActionLabel(
         ? '负责人二'
         : '';
     final titled = suffix.isEmpty ? base : '$base$suffix';
-    final name = proposalIntakeOwnerDisplayName(
-      form,
-      prefix,
-      people: people,
-    );
+    final name = proposalIntakeOwnerDisplayName(form, prefix, people: people);
     if (name.isEmpty) return titled;
     return '$titled $name';
   }
 
   String withReviewer(String prefix, {required String fallback}) {
-    final name = proposalIntakeOwnerDisplayName(
-      form,
-      prefix,
-      people: people,
-    );
+    final name = proposalIntakeOwnerDisplayName(form, prefix, people: people);
     if (name.isEmpty) return fallback;
     return '待$name复核';
   }
@@ -1430,36 +1412,27 @@ String proposalIntakeActionLabel(
   }
 
   return switch (action) {
-    'fill' => withName(
-        '待填写',
-        row?.initiatorDisplayName(people) ?? '',
-      ),
+    'fill' => withName('待填写', row?.initiatorDisplayName(people) ?? ''),
     'fill_tech' => withOwner('待填写科技', 'technologyOwner'),
-    'fill_finance_interface' => withOwner(
-        '待填写财务技术接口',
-        'financeOwner2',
-      ),
+    'fill_finance_interface' => withOwner('待填写财务技术接口', 'financeOwner2'),
     'start_review' => '待重新提交复核',
     'review_market' => withReviewer('marketOwner1', fallback: '待复核市场部'),
-    'review_tech' => withReviewer(
-        'marketOwner2',
-        fallback: '待复核科技',
-      ),
+    'review_tech' => withReviewer('marketOwner2', fallback: '待复核科技'),
     'review_finance' => withReviewer('financeOwner2', fallback: '待复核财务'),
     'review_finance_interface' => withReviewer(
-        'marketOwner2',
-        fallback: '待复核财务技术接口',
-      ),
+      'marketOwner2',
+      fallback: '待复核财务技术接口',
+    ),
     'review_finance_module' => withReviewer(
-        'financeOwner1',
-        fallback: '待整板块复核财务',
-      ),
+      'financeOwner1',
+      fallback: '待整板块复核财务',
+    ),
     'review_contract' => withReviewer('financeOwner2', fallback: '待审核合同'),
     'submit_president' => '待通知最终人',
     'president_confirm' => withName(
-        '待最终确认',
-        proposalIntakeOwnerDisplayName(form, 'president', people: people),
-      ),
+      '待最终确认',
+      proposalIntakeOwnerDisplayName(form, 'president', people: people),
+    ),
     'start_tech_revision' => '待发起科技变更',
     'revise' => '最终人已驳回请从头填写',
     'revise_module' => '板块已驳回请修改',
@@ -1531,7 +1504,10 @@ List<String> proposalIntakePendingReviewLabels(
       labels.add(label('review_finance_module'));
     }
   }
-  return [for (final item in labels) if (item.isNotEmpty) item];
+  return [
+    for (final item in labels)
+      if (item.isNotEmpty) item,
+  ];
 }
 
 String proposalIntakeListActionText(
@@ -1573,12 +1549,26 @@ const kProposalTechnologyReviewLabels = <String, String>{
   'financeInterfaces': '财务技术接口',
 };
 
-List<String> proposalIntakeTechnologyReviewGaps(Map<String, dynamic> review) {
+List<String> proposalIntakeTechnologyReviewGaps(
+  Map<String, dynamic> review, {
+  Map<String, dynamic>? form,
+}) {
   final raw = review['technologyItems'];
   final items = raw is Map ? raw : const {};
+  final keys = form == null
+      ? kProposalTechnologyReviewFields
+      : proposalIntakeTechnologyReviewItemKeys(form);
+  String labelOf(String key) {
+    if (key.startsWith(kProposalChildTechReviewPrefix)) {
+      final field = key.substring(kProposalChildTechReviewPrefix.length);
+      return '子产品${kProposalTechnologyReviewLabels[field] ?? field}';
+    }
+    return kProposalTechnologyReviewLabels[key] ?? key;
+  }
+
   return [
-    for (final key in kProposalTechnologyReviewFields)
-      if (items[key] != true) kProposalTechnologyReviewLabels[key] ?? key,
+    for (final key in keys)
+      if (items[key] != true) labelOf(key),
   ];
 }
 
@@ -1619,11 +1609,12 @@ bool proposalIntakeActionIsModuleReview(String action) {
 
 bool proposalIntakeAwaitingModuleConfirm(
   String action,
-  Map<String, dynamic> review,
-) {
+  Map<String, dynamic> review, {
+  Map<String, dynamic>? form,
+}) {
   return action == 'review_tech' &&
       review['technologyCompleted'] != true &&
-      proposalIntakeTechnologyReviewGaps(review).isEmpty;
+      proposalIntakeTechnologyReviewGaps(review, form: form).isEmpty;
 }
 
 String proposalIntakeTaskBannerTitle(
@@ -1656,13 +1647,11 @@ String proposalIntakeTaskBannerBody(
     return '看完内容后，到本板块最底部点「整个板块复核通过」。也可直接整板块驳回。';
   }
   return switch (action) {
-    'review_tech' =>
-      '到各字段旁点复核，财务技术接口也算科技一条。底部确认前会检查遗漏。也可直接整板块驳回。',
+    'review_tech' => '到各字段旁点复核，财务技术接口也算科技一条。底部确认前会检查遗漏。也可直接整板块驳回。',
     'review_finance' => '到各费用字段旁点复核。也可直接整板块驳回。',
     'review_finance_interface' => '到财务技术接口处点复核。',
     'review_contract' => '到合同处点复核。也可直接整板块驳回。',
-    'president_confirm' =>
-      '审批进度和其他人看到的一样。看完各板块后，到页面底部点「确认通过」或「驳回」。',
+    'president_confirm' => '审批进度和其他人看到的一样。看完各板块后，到页面底部点「确认通过」或「驳回」。',
     _ => '',
   };
 }
@@ -1808,11 +1797,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
   );
 
   String ownerName(String prefix) {
-    return proposalIntakeOwnerDisplayName(
-      row.form,
-      prefix,
-      people: people,
-    );
+    return proposalIntakeOwnerDisplayName(row.form, prefix, people: people);
   }
 
   String presidentName() {
@@ -1887,11 +1872,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
     if (presidentRejected && leftFilling) {
       return ProposalIntakeProgressState.pending;
     }
-    if (rank >= 3 ||
-        reviewRejected ||
-        finished ||
-        inNotify ||
-        inPresident) {
+    if (rank >= 3 || reviewRejected || finished || inNotify || inPresident) {
       return ProposalIntakeProgressState.done;
     }
     return ProposalIntakeProgressState.pending;
@@ -2203,10 +2184,12 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeNotifyRecipients({
 
   switch (action) {
     case 'notify_tech':
-      return _dedupeNotifyRecipients([
-        owner('technologyOwner', '科技部负责人', '请填写科技部内容'),
-        owner('financeOwner2', '财务部负责人二', '请填写财务技术接口'),
-      ].whereType<ProposalIntakeNotifyRecipient>().toList());
+      return _dedupeNotifyRecipients(
+        [
+          owner('technologyOwner', '科技部负责人', '请填写科技部内容'),
+          owner('financeOwner2', '财务部负责人二', '请填写财务技术接口'),
+        ].whereType<ProposalIntakeNotifyRecipient>().toList(),
+      );
     case 'notify_market2':
     case 'confirm_tech':
     case 'start_review':
@@ -2218,18 +2201,17 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeNotifyRecipients({
       }
       return reviewers();
     case 'confirm_tech_revision':
-      return _dedupeNotifyRecipients([
-        owner(
-          'marketOwner2',
-          '市场部负责人二',
-          '请复核本轮科技变更',
-          fallback: row.createdBy,
-        ),
-      ].whereType<ProposalIntakeNotifyRecipient>().toList());
+      return _dedupeNotifyRecipients(
+        [owner('marketOwner2', '市场部负责人二', '请复核本轮科技变更', fallback: row.createdBy)]
+            .whereType<ProposalIntakeNotifyRecipient>()
+            .toList(),
+      );
     case 'start_tech_revision':
-      return _dedupeNotifyRecipients([
-        owner('financeOwner2', '财务部负责人二', '本轮科技变更可填写财务技术接口'),
-      ].whereType<ProposalIntakeNotifyRecipient>().toList());
+      return _dedupeNotifyRecipients(
+        [
+          owner('financeOwner2', '财务部负责人二', '本轮科技变更可填写财务技术接口'),
+        ].whereType<ProposalIntakeNotifyRecipient>().toList(),
+      );
     case 'submit_president':
       final ids = options?.presidentUserIds ?? const <int>[];
       if (ids.isNotEmpty) {
@@ -2244,9 +2226,11 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeNotifyRecipients({
               ),
         ];
       }
-      return _dedupeNotifyRecipients([
-        owner('president', '最终确认人', '请查看提案并给出意见'),
-      ].whereType<ProposalIntakeNotifyRecipient>().toList());
+      return _dedupeNotifyRecipients(
+        [
+          owner('president', '最终确认人', '请查看提案并给出意见'),
+        ].whereType<ProposalIntakeNotifyRecipient>().toList(),
+      );
     case 'remind':
       return proposalIntakeRemindRecipients(
         row: row,
@@ -2421,7 +2405,11 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeAfterReviewNotifyRecipients({
   required bool approved,
   List<ProposalPerson> people = const [],
 }) {
-  ProposalIntakeNotifyRecipient? owner(String prefix, String role, String task) {
+  ProposalIntakeNotifyRecipient? owner(
+    String prefix,
+    String role,
+    String task,
+  ) {
     return proposalIntakeNotifyOwner(
       form: row.form,
       people: people,
@@ -2447,9 +2435,7 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeAfterReviewNotifyRecipients({
     return [if (item != null) item];
   }
 
-  final after = row.copyWith(
-    review: {...row.review, flag: true},
-  );
+  final after = row.copyWith(review: {...row.review, flag: true});
   if (row.techRevisionOpen || after.isTechReviewing || after.isTechRevising) {
     final out = <ProposalIntakeNotifyRecipient>[];
     if (flag == 'technologyCompleted' &&
@@ -2586,16 +2572,14 @@ List<ProposalIntakeDateGroup> groupProposalIntakeRowsByDate(
     }
     buckets.putIfAbsent(day, () => []).add(row);
   }
-  final days = buckets.keys.toList()
-    ..sort((a, b) => b.compareTo(a));
+  final days = buckets.keys.toList()..sort((a, b) => b.compareTo(a));
   return [
     for (final day in days)
       ProposalIntakeDateGroup(
         label: proposalIntakeDateSectionLabel(day, now: now),
         rows: buckets[day]!,
       ),
-    if (undated.isNotEmpty)
-      ProposalIntakeDateGroup(label: '更早', rows: undated),
+    if (undated.isNotEmpty) ProposalIntakeDateGroup(label: '更早', rows: undated),
   ];
 }
 
@@ -2739,6 +2723,9 @@ void _tallySalesFill(_ProposalFillTally tally, Map<String, dynamic> form) {
   }
   _tallyContractFill(tally, form, 'sales');
   _tallyTechFill(tally, form);
+  if (proposalIntakeHasChildProducts(form)) {
+    _tallyTechFill(tally, proposalIntakeChildTechnology(form));
+  }
   final derivedFinance = proposalIntakeHasProductSalesScale(form);
   final derivedProcurement =
       proposalIntakeHasSupplySettleRatio(form) &&
@@ -2761,8 +2748,25 @@ void _tallySalesFill(_ProposalFillTally tally, Map<String, dynamic> form) {
 }
 
 void _tallySkuFill(_ProposalFillTally tally, Map<String, dynamic> form) {
-  final channel = proposalIntakeSkuDetails(form);
-  final existingBuilt = proposalIntakeExistingBuiltOverride(form) == true;
+  _tallySkuGroupFill(
+    tally,
+    proposalIntakeSkuDetails(form),
+    proposalIntakeExistingBuiltOverride(form) == true,
+  );
+  if (proposalIntakeHasChildProducts(form)) {
+    _tallySkuGroupFill(
+      tally,
+      proposalIntakeChildProducts(form),
+      proposalIntakeIsChildExistingBuilt(form),
+    );
+  }
+}
+
+void _tallySkuGroupFill(
+  _ProposalFillTally tally,
+  List<ProposalSkuDetailRow> channel,
+  bool existingBuilt,
+) {
   if (existingBuilt) {
     tally.slot(channel.isNotEmpty);
   }
@@ -2773,7 +2777,9 @@ void _tallySkuFill(_ProposalFillTally tally, Map<String, dynamic> form) {
     }
   }
   for (final sku in channel) {
-    if (!existingBuilt && !sku.isExistingBuilt && !proposalIntakeSkuStarted(sku)) {
+    if (!existingBuilt &&
+        !sku.isExistingBuilt &&
+        !proposalIntakeSkuStarted(sku)) {
       continue;
     }
     for (final settle in proposalIntakeSkuSettlements(sku)) {
@@ -2816,7 +2822,9 @@ void _tallyPurchaseSupplyFill(
     if (!rowExisting && !proposalIntakeSupplyStarted(product)) continue;
     tally.slot(product.syncSourceCode.isNotEmpty);
     if (rowExisting) {
-      tally.slot(product.assetProduct != null && product.assetProduct!.isNotEmpty);
+      tally.slot(
+        product.assetProduct != null && product.assetProduct!.isNotEmpty,
+      );
     } else {
       tally.slot(
         product.supplierCode.trim().isNotEmpty ||
@@ -2830,7 +2838,8 @@ void _tallyPurchaseSupplyFill(
       tally.slot(product.rebateMode.trim().isNotEmpty);
       tally.slot(
         product.oilCategory.trim().isNotEmpty ||
-            (product.oilCategoryRef != null && product.oilCategoryRef!.isNotEmpty),
+            (product.oilCategoryRef != null &&
+                product.oilCategoryRef!.isNotEmpty),
       );
       tally.slot(product.effectiveDate.trim().isNotEmpty);
       tally.slot(product.expireDate.trim().isNotEmpty);
@@ -3071,7 +3080,9 @@ String proposalIntakeExistingBuiltText(Object? raw) {
   if (raw is Map) {
     final labeled = _existingBuiltFlag(raw['existingBuilt']);
     if (labeled.isNotEmpty) return labeled;
-    return _existingBuiltFlag(raw['isExistingProduct'] ?? raw['isExistingBuilt']);
+    return _existingBuiltFlag(
+      raw['isExistingProduct'] ?? raw['isExistingBuilt'],
+    );
   }
   return _existingBuiltFlag(raw);
 }
@@ -3096,7 +3107,8 @@ ChannelProductHit? proposalIntakeAssetProductFromJson(
   CatalogRef? channelRef,
   CatalogRef? syncSourceRef,
 }) {
-  final direct = channelProductHitOrNull(raw['assetProduct']) ??
+  final direct =
+      channelProductHitOrNull(raw['assetProduct']) ??
       channelProductHitOrNull(raw['existingProduct']);
   if (direct != null) return direct;
   final name = productName.trim().isNotEmpty
@@ -3460,10 +3472,181 @@ class ProposalFinanceCostLine {
   }
 }
 
+const kProposalFinanceModuleOwnerMain = 'main';
+const kProposalFinanceModuleOwnerChildren = 'children';
+
+/// 销售提案的财务数据必须按产品归属保存，不能把主、子产品写进同一份整单汇总。
+///
+/// `main` 保存主产品合计，`children` 保存全部子产品合计。老单没有
+/// `productFinance` 时，主产品仍从顶层旧字段读取，因而可继续查看和编辑。
+const kProposalProductFinanceMain = 'main';
+const kProposalProductFinanceChildren = 'children';
+
+const _kProposalProductFinanceFields = <String>[
+  'salesScale',
+  'revenue',
+  'couponProcurementCost',
+  'profit',
+  'margin',
+  'turnoverCash',
+  'turnoverTimes',
+  'supplySettleMode',
+  'supplySettleCycle',
+  'supplyPayer',
+  'supplyPayAccount',
+  'channelSettleMode',
+  'channelSettleCycle',
+  'channelPayee',
+  'channelReceiveAccount',
+  'generalBusinessAccount',
+  'prepaidAccount',
+  'financeRemark',
+  'costItems',
+  'costItemCodes',
+  'costItemAmounts',
+  'costItemSettleTerms',
+  'projectCost',
+  'businessCostItems',
+  'businessCostItemCodes',
+  'businessCostItemAmounts',
+  'businessCostItemSettleTerms',
+  'businessCost',
+  'operatingCostItems',
+  'operatingCostItemCodes',
+  'operatingCostItemAmounts',
+  'operatingCost',
+  'taxCostItems',
+  'taxCostItemCodes',
+  'taxCostItemAmounts',
+  'taxCost',
+  'rollback',
+  'financeModules',
+];
+
+String proposalIntakeProductFinanceOwner(Object? raw) =>
+    '$raw'.trim() == kProposalProductFinanceChildren
+    ? kProposalProductFinanceChildren
+    : kProposalProductFinanceMain;
+
+/// Returns one product group's finance data.
+///
+/// The main group deliberately falls back to top-level fields for old records;
+/// a child group never does, preventing legacy whole-order totals being
+/// presented as a child-product total.
+Map<String, dynamic> proposalIntakeProductFinance(
+  Map<String, dynamic> form, {
+  required String owner,
+}) {
+  final resolvedOwner = proposalIntakeProductFinanceOwner(owner);
+  final raw = form['productFinance'];
+  if (raw is Map && raw[resolvedOwner] is Map) {
+    return Map<String, dynamic>.from(raw[resolvedOwner] as Map);
+  }
+  if (resolvedOwner == kProposalProductFinanceChildren) {
+    return <String, dynamic>{};
+  }
+  return {
+    for (final key in _kProposalProductFinanceFields)
+      if (form.containsKey(key)) key: form[key],
+  };
+}
+
+/// Writes only the chosen product group's financial payload.
+///
+/// Existing top-level main values are retained for API compatibility and old
+/// clients. New child values are exclusively nested in `productFinance`.
+Map<String, dynamic> proposalIntakeWriteProductFinance(
+  Map<String, dynamic> form, {
+  required String owner,
+  required Map<String, dynamic> finance,
+}) {
+  final resolvedOwner = proposalIntakeProductFinanceOwner(owner);
+  final groups = form['productFinance'] is Map
+      ? Map<String, dynamic>.from(form['productFinance'] as Map)
+      : <String, dynamic>{};
+  groups[resolvedOwner] = Map<String, dynamic>.from(finance);
+  final next = Map<String, dynamic>.from(form)..['productFinance'] = groups;
+  if (resolvedOwner == kProposalProductFinanceMain) {
+    for (final key in _kProposalProductFinanceFields) {
+      if (finance.containsKey(key)) next[key] = finance[key];
+    }
+  }
+  return next;
+}
+
+const _kProductFinanceScopeDerivedKeys = {
+  'salesScale',
+  'revenue',
+  'profit',
+  'margin',
+  'turnoverCash',
+  'couponProcurementCost',
+};
+
+/// Produces an isolated calculation input for one finance group.  Product
+/// settlements are filtered before any derived metric is evaluated, so a
+/// child-product amount can never inflate the main-product result.
+Map<String, dynamic> proposalIntakeProductFinanceScope(
+  Map<String, dynamic> form, {
+  required String owner,
+}) {
+  final resolvedOwner = proposalIntakeProductFinanceOwner(owner);
+  final finance = proposalIntakeProductFinance(form, owner: resolvedOwner);
+  final skus = resolvedOwner == kProposalProductFinanceMain
+      ? proposalIntakeSkuDetails(form)
+      : proposalIntakeChildProducts(form);
+  final skuIds = {for (final sku in skus) sku.id};
+  final next = <String, dynamic>{
+    ...form,
+    for (final entry in finance.entries)
+      if (!_kProductFinanceScopeDerivedKeys.contains(entry.key))
+        entry.key: entry.value,
+    'skuDetails': [for (final sku in skus) sku.toJson()],
+    'childProducts': const <Map<String, dynamic>>[],
+    'channelSkus': const <Map<String, dynamic>>[],
+    'products': const <Map<String, dynamic>>[],
+    'packs': const <Map<String, dynamic>>[],
+    'couponPacks': const <Map<String, dynamic>>[],
+    'productFinance': const <String, dynamic>{},
+    'sharedSettlements': [
+      for (final group in proposalIntakeSharedSettlements(form))
+        if (group.skuIds.any(skuIds.contains))
+          group
+              .copyWith(
+                skuIds: [
+                  for (final id in group.skuIds)
+                    if (skuIds.contains(id)) id,
+                ],
+              )
+              .toJson(),
+    ],
+  };
+  for (final key in _kProductFinanceScopeDerivedKeys) {
+    if (resolvedOwner == kProposalProductFinanceMain) {
+      if (form.containsKey(key)) {
+        next[key] = form[key];
+      } else if (finance.containsKey(key)) {
+        next[key] = finance[key];
+      }
+    } else if (finance.containsKey(key)) {
+      next[key] = finance[key];
+    } else {
+      next.remove(key);
+    }
+  }
+  if (resolvedOwner == kProposalProductFinanceChildren) {
+    for (final key in _kProposalProductFinanceFields) {
+      if (!finance.containsKey(key)) next.remove(key);
+    }
+  }
+  return next;
+}
+
 class ProposalFinanceModule {
   const ProposalFinanceModule({
     required this.id,
     this.title = '',
+    this.owner = kProposalFinanceModuleOwnerMain,
     this.naturalMonth = '',
     this.projectPeriodStart = '',
     this.projectPeriodEnd = '',
@@ -3474,6 +3657,9 @@ class ProposalFinanceModule {
 
   final String id;
   final String title;
+
+  /// 旧版上线模块归属。新界面按产品财务分组展示，旧数据空值当主产品。
+  final String owner;
 
   /// 是 / 否。否时必须填写项目周期。
   final String naturalMonth;
@@ -3505,7 +3691,7 @@ class ProposalFinanceModule {
     final period = usesProjectPeriod
         ? '$naturalMonth|$projectPeriodStart|$projectPeriodEnd'
         : naturalMonth;
-    return '${revenue.fingerprint}#${costs.join(';')}#$period';
+    return '${owner.isEmpty ? kProposalFinanceModuleOwnerMain : owner}#${revenue.fingerprint}#${costs.join(';')}#$period';
   }
 
   bool get hasIdentity => !revenue.isBlank;
@@ -3527,8 +3713,12 @@ class ProposalFinanceModule {
     return true;
   }
 
+  bool get isChildrenOwner =>
+      owner.trim() == kProposalFinanceModuleOwnerChildren;
+
   ProposalFinanceModule copyWith({
     String? title,
+    String? owner,
     String? naturalMonth,
     String? projectPeriodStart,
     String? projectPeriodEnd,
@@ -3538,6 +3728,7 @@ class ProposalFinanceModule {
   }) => ProposalFinanceModule(
     id: id,
     title: title ?? this.title,
+    owner: owner ?? this.owner,
     naturalMonth: naturalMonth ?? this.naturalMonth,
     projectPeriodStart: projectPeriodStart ?? this.projectPeriodStart,
     projectPeriodEnd: projectPeriodEnd ?? this.projectPeriodEnd,
@@ -3549,6 +3740,7 @@ class ProposalFinanceModule {
   Map<String, dynamic> toJson() => {
     'id': id,
     'title': title,
+    'owner': owner.isEmpty ? kProposalFinanceModuleOwnerMain : owner,
     'naturalMonth': naturalMonth,
     'projectPeriodStart': usesProjectPeriod ? projectPeriodStart : '',
     'projectPeriodEnd': usesProjectPeriod ? projectPeriodEnd : '',
@@ -3570,6 +3762,7 @@ class ProposalFinanceModule {
     return ProposalFinanceModule(
       id: '${raw['id'] ?? ''}'.trim(),
       title: '${raw['title'] ?? ''}'.trim(),
+      owner: _financeModuleOwner(raw['owner']),
       naturalMonth: _naturalMonthChoice(raw['naturalMonth']),
       projectPeriodStart: '${raw['projectPeriodStart'] ?? ''}'.trim(),
       projectPeriodEnd: '${raw['projectPeriodEnd'] ?? ''}'.trim(),
@@ -3671,6 +3864,25 @@ List<ProposalFinanceModule> proposalIntakeFinanceModules(
   ].where((item) => item.id.isNotEmpty).toList();
 }
 
+String _financeModuleOwner(Object? raw) {
+  final text = '$raw'.trim();
+  if (text == kProposalFinanceModuleOwnerChildren) {
+    return kProposalFinanceModuleOwnerChildren;
+  }
+  return kProposalFinanceModuleOwnerMain;
+}
+
+List<ProposalFinanceModule> proposalIntakeFinanceModulesOf(
+  Map<String, dynamic> form, {
+  required String owner,
+}) {
+  final want = _financeModuleOwner(owner);
+  return [
+    for (final item in proposalIntakeFinanceModules(form))
+      if (_financeModuleOwner(item.owner) == want) item,
+  ];
+}
+
 String proposalIntakeNewLaunchId() =>
     'lr-${DateTime.now().microsecondsSinceEpoch}';
 
@@ -3763,15 +3975,13 @@ List<ProposalSharedSettleRow> proposalIntakeSharedSettlements(
   if (raw is! List) return const [];
   return [
     for (final item in raw)
-      if (item is Map)
-        ProposalSharedSettleRow.fromJson(item),
+      if (item is Map) ProposalSharedSettleRow.fromJson(item),
   ].where((row) => row.id.isNotEmpty).toList();
 }
 
 Set<String> proposalIntakeSharedSettleSkuIds(Map<String, dynamic> form) {
   return {
-    for (final row in proposalIntakeSharedSettlements(form))
-      ...row.skuIds,
+    for (final row in proposalIntakeSharedSettlements(form)) ...row.skuIds,
   };
 }
 
@@ -3934,7 +4144,9 @@ List<ProposalFinanceSettleTerms> proposalIntakeProductSalesSettleTerms(
 ) {
   final shared = proposalIntakeSharedSettlements(form);
   final covered = proposalIntakeSharedSettleSkuIds(form);
-  final skus = {for (final sku in proposalIntakeSkuDetails(form)) sku.id: sku};
+  final skus = {
+    for (final sku in proposalIntakeAllSellableSkus(form)) sku.id: sku,
+  };
   return [
     for (final group in shared)
       for (final skuId in group.skuIds)
@@ -3945,24 +4157,28 @@ List<ProposalFinanceSettleTerms> proposalIntakeProductSalesSettleTerms(
                 scale: settle.terms.scale,
                 scalePeriod: settle.terms.scalePeriod,
               ),
-    for (final sku in proposalIntakeSkuDetails(form))
+    for (final sku in proposalIntakeAllSellableSkus(form))
       if (!covered.contains(sku.id))
-        for (final settle in proposalIntakeSkuSettlements(sku))
-          settle.terms,
+        for (final settle in proposalIntakeSkuSettlements(sku)) settle.terms,
   ];
 }
 
 bool proposalIntakeHasProductSalesScale(Map<String, dynamic> form) {
-  return proposalIntakeProductSalesSettleTerms(form).any(
-    (terms) => terms.scale.trim().isNotEmpty,
-  );
+  return proposalIntakeProductSalesSettleTerms(
+    form,
+  ).any((terms) => terms.scale.trim().isNotEmpty);
 }
 
-const _kDerivedFinanceMetricKeys = {'salesScale', 'revenue', 'profit', 'margin'};
+const _kDerivedFinanceMetricKeys = {
+  'salesScale',
+  'revenue',
+  'profit',
+  'margin',
+};
 
 List<String> proposalIntakeSkuSettleReviewKeys(Map<String, dynamic> form) {
   return [
-    for (final sku in proposalIntakeSkuDetails(form))
+    for (final sku in proposalIntakeAllSellableSkus(form))
       for (final settle in proposalIntakeSkuSettlements(sku))
         'skuSettle:${sku.id}:${settle.id}',
     if (kProposalSharedSettleEnabled)
@@ -3981,25 +4197,46 @@ List<String> proposalIntakeSkuSettleIssues(
   bool includeSettlements = true,
 }) {
   final issues = <String>[];
-  final channel = proposalIntakeSkuDetails(form);
-  final existingBuilt = proposalIntakeExistingBuiltOverride(form) == true;
-  if (existingBuilt && channel.isEmpty) {
-    issues.add('已勾选已建产品，请至少添加一条渠道产品并搜索选择已建产品');
-  }
-  for (var i = 0; i < channel.length; i++) {
-    final sku = channel[i];
-    if (existingBuilt || sku.isExistingBuilt) {
-      if (sku.syncSourceCode.isEmpty) {
-        issues.add('渠道产品第${i + 1}条请选择业务平台');
-      }
-      if (sku.assetProduct == null || sku.assetProduct!.isEmpty) {
-        issues.add('渠道产品第${i + 1}条请搜索并选择已建产品');
+  issues.addAll(
+    _proposalIntakeSkuGroupIssues(
+      rows: proposalIntakeSkuDetails(form),
+      existingBuilt: proposalIntakeExistingBuiltOverride(form) == true,
+      includeSettlements: includeSettlements,
+      emptyExistingLabel: '已勾选已建产品，请至少添加一条渠道产品并搜索选择已建产品',
+      rowLabel: (i, sku) => sku.productName.isEmpty
+          ? '渠道产品第${i + 1}条'
+          : '渠道产品「${sku.productName}」',
+      covered: proposalIntakeActiveSharedSettleSkuIds(form),
+    ),
+  );
+  final children = proposalIntakeChildProducts(form);
+  if (children.isNotEmpty) {
+    final mainIds = {for (final sku in proposalIntakeSkuDetails(form)) sku.id};
+    for (final child in children) {
+      if (child.parentSkuId.isEmpty) {
+        issues.add(
+          '子产品「${child.productName.isEmpty ? '未命名' : child.productName}」请选择关联主产品',
+        );
+      } else if (!mainIds.contains(child.parentSkuId)) {
+        issues.add(
+          '子产品「${child.productName.isEmpty ? '未命名' : child.productName}」关联的主产品不存在',
+        );
       }
     }
+    issues.addAll(
+      _proposalIntakeSkuGroupIssues(
+        rows: children,
+        existingBuilt: proposalIntakeIsChildExistingBuilt(form),
+        includeSettlements: includeSettlements,
+        emptyExistingLabel: '已勾选子产品已建产品，请至少添加一条子产品并搜索选择已建产品',
+        rowLabel: (i, sku) => sku.productName.isEmpty
+            ? '子产品第${i + 1}条'
+            : '子产品「${sku.productName}」',
+        covered: proposalIntakeActiveSharedSettleSkuIds(form),
+      ),
+    );
   }
-  if (!includeSettlements) return issues;
-  final covered = proposalIntakeActiveSharedSettleSkuIds(form);
-  if (kProposalSharedSettleEnabled) {
+  if (includeSettlements && kProposalSharedSettleEnabled) {
     for (final group in proposalIntakeSharedSettlements(form)) {
       if (group.isBlank) continue;
       if (group.skuIds.isEmpty) {
@@ -4010,19 +4247,47 @@ List<String> proposalIntakeSkuSettleIssues(
       }
     }
   }
-  for (var i = 0; i < channel.length; i++) {
-    final sku = channel[i];
-    if (!existingBuilt && !sku.isExistingBuilt && !proposalIntakeSkuStarted(sku)) {
+  return issues;
+}
+
+List<String> _proposalIntakeSkuGroupIssues({
+  required List<ProposalSkuDetailRow> rows,
+  required bool existingBuilt,
+  required bool includeSettlements,
+  required String emptyExistingLabel,
+  required String Function(int index, ProposalSkuDetailRow sku) rowLabel,
+  required Set<String> covered,
+}) {
+  final issues = <String>[];
+  if (existingBuilt && rows.isEmpty) {
+    issues.add(emptyExistingLabel);
+  }
+  for (var i = 0; i < rows.length; i++) {
+    final sku = rows[i];
+    final name = rowLabel(i, sku);
+    if (existingBuilt || sku.isExistingBuilt) {
+      if (sku.syncSourceCode.isEmpty) {
+        issues.add('$name请选择业务平台');
+      }
+      if (sku.assetProduct == null || sku.assetProduct!.isEmpty) {
+        issues.add('$name请搜索并选择已建产品');
+      }
+    }
+  }
+  if (!includeSettlements) return issues;
+  for (var i = 0; i < rows.length; i++) {
+    final sku = rows[i];
+    if (!existingBuilt &&
+        !sku.isExistingBuilt &&
+        !proposalIntakeSkuStarted(sku)) {
       continue;
     }
     if (covered.contains(sku.id)) continue;
-    final name = sku.productName.isEmpty ? '第${i + 1}条' : sku.productName;
+    final name = rowLabel(i, sku);
     final settlements = proposalIntakeSkuSettlements(sku);
     for (var j = 0; j < settlements.length; j++) {
       if (!settlements[j].terms.isSkuComplete) {
-        issues.add(
-          '渠道产品「$name」${proposalIntakeSettleLabel(j)}未填完结算方式对应金额、计算公式、税率',
-        );
+        issues.add('$name${proposalIntakeSettleLabel(j)}未填完结算方式对应金额、计算公式、税率');
       }
     }
   }
@@ -4050,6 +4315,7 @@ class ProposalSkuDetailRow {
     this.channelRef,
     this.existingBuilt = '',
     this.assetProduct,
+    this.parentSkuId = '',
     this.settlements = const [],
   });
 
@@ -4072,6 +4338,9 @@ class ProposalSkuDetailRow {
   final CatalogRef? channelRef;
   final String existingBuilt;
   final ChannelProductHit? assetProduct;
+
+  /// 子产品关联的主产品 id。主产品自身保持为空。
+  final String parentSkuId;
   final List<ProposalSkuSettleRow> settlements;
 
   String get syncSourceCode => (syncSourceRef?.code ?? '').trim();
@@ -4080,9 +4349,15 @@ class ProposalSkuDetailRow {
   String get channelCode => (channelRef?.code ?? '').trim();
   String get channelName => (channelRef?.name ?? '').trim();
   CatalogRef? get resolvedChannelCategoryL1 =>
-      proposalIntakeResolvedCategoryRef(channelCategoryL1Ref, channelCategoryL1);
+      proposalIntakeResolvedCategoryRef(
+        channelCategoryL1Ref,
+        channelCategoryL1,
+      );
   CatalogRef? get resolvedChannelCategoryL2 =>
-      proposalIntakeResolvedCategoryRef(channelCategoryL2Ref, channelCategoryL2);
+      proposalIntakeResolvedCategoryRef(
+        channelCategoryL2Ref,
+        channelCategoryL2,
+      );
   bool get isExistingBuilt => existingBuilt.trim() == '是';
 
   bool get isBlank =>
@@ -4103,7 +4378,8 @@ class ProposalSkuDetailRow {
       (institutionRef == null || institutionRef!.isEmpty) &&
       (channelRef == null || channelRef!.isEmpty) &&
       existingBuilt.isEmpty &&
-      (assetProduct == null || assetProduct!.isEmpty);
+      (assetProduct == null || assetProduct!.isEmpty) &&
+      parentSkuId.isEmpty;
 
   ProposalSkuDetailRow copyWith({
     String? productName,
@@ -4124,6 +4400,7 @@ class ProposalSkuDetailRow {
     Object? channelRef = _catalogUnset,
     String? existingBuilt,
     Object? assetProduct = _catalogUnset,
+    String? parentSkuId,
     List<ProposalSkuSettleRow>? settlements,
   }) => ProposalSkuDetailRow(
     id: id,
@@ -4157,6 +4434,7 @@ class ProposalSkuDetailRow {
     assetProduct: identical(assetProduct, _catalogUnset)
         ? this.assetProduct
         : assetProduct as ChannelProductHit?,
+    parentSkuId: parentSkuId ?? this.parentSkuId,
     settlements: settlements ?? this.settlements,
   );
 
@@ -4168,7 +4446,8 @@ class ProposalSkuDetailRow {
       assetProduct: hit,
       productName: hit?.productName ?? '',
       channelRef: hit?.channelRef,
-      settlements: settlements ??
+      settlements:
+          settlements ??
           (hit == null
               ? [ProposalSkuSettleRow(id: proposalIntakeNewSkuSettleId())]
               : [
@@ -4211,6 +4490,7 @@ class ProposalSkuDetailRow {
     'channelRef': catalogRefToJson(channelRef),
     'existingBuilt': existingBuilt,
     'assetProduct': assetProduct?.toJson(),
+    'parentSkuId': parentSkuId,
     'settlements': [
       for (final item in settlements)
         item
@@ -4234,8 +4514,7 @@ class ProposalSkuDetailRow {
         );
       }
     }
-    var productName =
-        '${raw['productName'] ?? raw['name'] ?? ''}'.trim();
+    var productName = '${raw['productName'] ?? raw['name'] ?? ''}'.trim();
     var channelRef = proposalIntakeChannelRefFromJson(raw);
     var asset = proposalIntakeAssetProductFromJson(
       raw,
@@ -4259,10 +4538,10 @@ class ProposalSkuDetailRow {
       faceValue: '${raw['faceValue'] ?? raw['skuFaceValue'] ?? ''}'.trim(),
       productCategoryL1: '${raw['productCategoryL1'] ?? ''}'.trim(),
       productCategoryL2: '${raw['productCategoryL2'] ?? ''}'.trim(),
-      channelCategoryL1:
-          (l1Ref?.name ?? '${raw['channelCategoryL1'] ?? ''}').trim(),
-      channelCategoryL2:
-          (l2Ref?.name ?? '${raw['channelCategoryL2'] ?? ''}').trim(),
+      channelCategoryL1: (l1Ref?.name ?? '${raw['channelCategoryL1'] ?? ''}')
+          .trim(),
+      channelCategoryL2: (l2Ref?.name ?? '${raw['channelCategoryL2'] ?? ''}')
+          .trim(),
       channelCategoryL1Ref: l1Ref,
       channelCategoryL2Ref: l2Ref,
       syncZhongyouHaoke: '${raw['syncZhongyouHaoke'] ?? ''}'.trim(),
@@ -4277,10 +4556,12 @@ class ProposalSkuDetailRow {
       channelRef: channelRef,
       existingBuilt: proposalIntakeExistingBuiltText(raw),
       assetProduct: asset,
+      parentSkuId: '${raw['parentSkuId'] ?? ''}'.trim(),
       settlements: [
-        for (final item in raw['settlements'] is List
-            ? raw['settlements'] as List
-            : const [])
+        for (final item
+            in raw['settlements'] is List
+                ? raw['settlements'] as List
+                : const [])
           if (item is Map) ProposalSkuSettleRow.fromJson(item),
       ].where((item) => item.id.isNotEmpty).toList(),
     );
@@ -4350,9 +4631,7 @@ bool proposalIntakeSkuHasManualDetails(ProposalSkuDetailRow sku) {
   final channelName = sku.channelName.trim();
   if (channelName.isEmpty) return false;
   final hit = sku.assetProduct;
-  if (hit != null &&
-      hit.isNotEmpty &&
-      channelName == hit.channelName.trim()) {
+  if (hit != null && hit.isNotEmpty && channelName == hit.channelName.trim()) {
     return false;
   }
   return true;
@@ -4375,8 +4654,116 @@ List<ProposalSkuDetailRow> proposalIntakeSkuDetails(Map<String, dynamic> form) {
   return legacy == null ? const [] : [legacy];
 }
 
+/// 子产品：显式关联后才有。旧单多条渠道产品仍走 [proposalIntakeSkuDetails]，不会自动升成子产品。
+List<ProposalSkuDetailRow> proposalIntakeChildProducts(
+  Map<String, dynamic> form,
+) => _parseSkuDetailRows(form['childProducts']);
+
+bool proposalIntakeHasChildProducts(Map<String, dynamic> form) =>
+    proposalIntakeChildProducts(form).isNotEmpty;
+
+/// 主产品渠道产品 + 子产品，用于规模加总和结算复核。
+List<ProposalSkuDetailRow> proposalIntakeAllSellableSkus(
+  Map<String, dynamic> form,
+) => [...proposalIntakeSkuDetails(form), ...proposalIntakeChildProducts(form)];
+
+bool proposalIntakeIsChildExistingBuilt(Map<String, dynamic> form) {
+  final raw = form['childIsExistingBuilt'];
+  if (raw is bool) return raw;
+  final text = '$raw'.trim().toLowerCase();
+  if (text == 'true' || text == '1' || text == '是' || text == 'yes') {
+    return true;
+  }
+  if (text == 'false' || text == '0' || text == '否' || text == 'no') {
+    return false;
+  }
+  return proposalIntakeChildProducts(form).any((item) => item.isExistingBuilt);
+}
+
+class ProposalBenefitProduct {
+  const ProposalBenefitProduct({
+    required this.id,
+    this.name = '',
+    this.skuQuantities = const {},
+  });
+
+  final String id;
+  final String name;
+  final Map<String, int> skuQuantities;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'skuQuantities': skuQuantities,
+  };
+
+  factory ProposalBenefitProduct.fromJson(Object? raw) {
+    if (raw is! Map) {
+      return const ProposalBenefitProduct(id: 'benefit-main');
+    }
+    final id = '${raw['id'] ?? ''}'.trim();
+    final quantities = <String, int>{};
+    final rawQuantities = raw['skuQuantities'];
+    if (rawQuantities is Map) {
+      for (final entry in rawQuantities.entries) {
+        final id = '${entry.key}'.trim();
+        final quantity = int.tryParse('${entry.value}'.trim()) ?? 0;
+        if (id.isNotEmpty && quantity > 0) quantities[id] = quantity;
+      }
+    }
+    return ProposalBenefitProduct(
+      id: id.isEmpty ? 'benefit-main' : id,
+      name: '${raw['name'] ?? ''}'.trim(),
+      skuQuantities: quantities,
+    );
+  }
+}
+
+ProposalBenefitProduct proposalIntakeBenefitProduct(Map<String, dynamic> form) {
+  final stored = ProposalBenefitProduct.fromJson(form['benefitProduct']);
+  if (stored.name.isNotEmpty) return stored;
+  final title = '${form['proposalName'] ?? ''}'.trim();
+  if (title.isEmpty) return stored;
+  return ProposalBenefitProduct(
+    id: stored.id,
+    name: title,
+    skuQuantities: stored.skuQuantities,
+  );
+}
+
+int proposalIntakeChildProductQuantity(
+  Map<String, dynamic> form,
+  String childId,
+) {
+  final quantity = proposalIntakeBenefitProduct(form).skuQuantities[childId];
+  return quantity == null || quantity < 1 ? 1 : quantity;
+}
+
+Map<String, dynamic> proposalIntakeChildTechnology(Map<String, dynamic> form) {
+  final raw = form['childTechnology'];
+  if (raw is! Map) return <String, dynamic>{};
+  return Map<String, dynamic>.from(
+    raw.map((key, value) => MapEntry('$key', value)),
+  );
+}
+
+const kProposalChildTechReviewPrefix = 'children:';
+
+List<String> proposalIntakeTechnologyReviewItemKeys(Map<String, dynamic> form) {
+  final keys = [...kProposalTechnologyReviewFields];
+  if (!proposalIntakeHasChildProducts(form)) return keys;
+  return [
+    ...keys,
+    for (final key in kProposalTechnologyReviewFields)
+      '$kProposalChildTechReviewPrefix$key',
+  ];
+}
+
 String proposalIntakeNewSkuId() =>
     'sku-${DateTime.now().microsecondsSinceEpoch}';
+
+String proposalIntakeNewChildSkuId() =>
+    'child-${DateTime.now().microsecondsSinceEpoch}';
 
 CatalogRef? proposalIntakeResolvedCategoryRef(CatalogRef? ref, String name) {
   if (ref != null && ref.isNotEmpty) return ref;
@@ -4398,8 +4785,7 @@ bool proposalIntakeChannelCategoryChildOf(CatalogRef child, CatalogRef parent) {
   if (pid != null && pid != 0 && parent.id != null && parent.id == pid) {
     return true;
   }
-  bool same(String a, String b) =>
-      a.trim().isNotEmpty && a.trim() == b.trim();
+  bool same(String a, String b) => a.trim().isNotEmpty && a.trim() == b.trim();
   if (same(child.parentCode, parent.code) ||
       same(child.parentCode, parent.name)) {
     return true;
@@ -4462,18 +4848,19 @@ List<String> proposalIntakeLaunchFinanceIssues(Map<String, dynamic> form) {
   final issues = <String>[];
   for (final module in proposalIntakeFinanceModules(form)) {
     final title = module.title.isEmpty ? module.id : module.title;
+    final prefix = module.isChildrenOwner ? '子产品' : '';
     if (!module.periodComplete) {
       issues.add(
         module.usesProjectPeriod
-            ? '财务模块「$title」非自然月请选择项目周期'
-            : '财务模块「$title」请选择是否自然月',
+            ? '$prefix财务模块「$title」非自然月请选择项目周期'
+            : '$prefix财务模块「$title」请选择是否自然月',
       );
     }
     if (!module.revenueComplete) {
-      issues.add('财务模块「$title」收入条款未填完');
+      issues.add('$prefix财务模块「$title」收入条款未填完');
     }
     if (!module.costsComplete) {
-      issues.add('财务模块「$title」成本项条款未填完');
+      issues.add('$prefix财务模块「$title」成本项条款未填完');
     }
   }
   return issues;
@@ -4604,7 +4991,8 @@ class ProposalSupplyProductRow {
           ? hit!.supplierCode.trim()
           : (hit?.supplierRef?.code ?? ''),
       productCode: hit?.productCode ?? '',
-      settlements: settlements ??
+      settlements:
+          settlements ??
           (hit == null
               ? proposalIntakeDefaultSupplySettlements()
               : this.settlements),
@@ -4642,8 +5030,8 @@ class ProposalSupplyProductRow {
       syncSourceRef: syncRef,
     );
     supplier ??= asset?.supplierRef;
-    var supplierCode =
-        '${raw['supplierCode'] ?? raw['productId'] ?? ''}'.trim();
+    var supplierCode = '${raw['supplierCode'] ?? raw['productId'] ?? ''}'
+        .trim();
     if (supplierCode.isEmpty) {
       supplierCode = (supplier?.code ?? asset?.supplierCode ?? '').trim();
     }
@@ -4672,9 +5060,10 @@ class ProposalSupplyProductRow {
       existingBuilt: proposalIntakeExistingBuiltText(raw),
       assetProduct: asset,
       settlements: [
-        for (final item in raw['settlements'] is List
-            ? raw['settlements'] as List
-            : const [])
+        for (final item
+            in raw['settlements'] is List
+                ? raw['settlements'] as List
+                : const [])
           if (item is Map) ProposalSkuSettleRow.fromJson(item),
       ].where((item) => item.id.isNotEmpty).toList(),
     );
@@ -4690,12 +5079,11 @@ List<ProposalSkuSettleRow> proposalIntakeDefaultSupplySettlements() => [
 
 ProposalSupplyProductRow proposalIntakeNewSupplyProduct({
   bool existing = false,
-}) =>
-    ProposalSupplyProductRow(
-      id: proposalIntakeNewSupplyProductId(),
-      existingBuilt: existing ? '是' : '否',
-      settlements: proposalIntakeDefaultSupplySettlements(),
-    );
+}) => ProposalSupplyProductRow(
+  id: proposalIntakeNewSupplyProductId(),
+  existingBuilt: existing ? '是' : '否',
+  settlements: proposalIntakeDefaultSupplySettlements(),
+);
 
 bool proposalIntakeIsExistingSupplyProduct(Map<String, dynamic> form) {
   return proposalIntakeExistingSupplyOverride(form) ??
@@ -4923,12 +5311,25 @@ List<String> proposalIntakeTechFillIssues(
   return issues;
 }
 
+List<String> proposalIntakeChildTechFillIssues(Map<String, dynamic> form) {
+  if (!proposalIntakeHasChildProducts(form)) return const [];
+  return [
+    for (final issue in proposalIntakeTechFillIssues(
+      proposalIntakeChildTechnology(form),
+      purchase: false,
+    ))
+      issue.startsWith('子产品') ? issue : '子产品$issue',
+  ];
+}
+
 bool proposalIntakePurchaseSettleComplete(ProposalFinanceSettleTerms terms) {
   return proposalIntakePurchaseSettleGaps(terms).isEmpty;
 }
 
 /// 采购供给结算还缺哪些项。按比例结算不要求单价；单价结算不要求比例。
-List<String> proposalIntakePurchaseSettleGaps(ProposalFinanceSettleTerms terms) {
+List<String> proposalIntakePurchaseSettleGaps(
+  ProposalFinanceSettleTerms terms,
+) {
   final gaps = <String>[];
   final billType =
       (terms.billTypeRef != null && terms.billTypeRef!.isNotEmpty) ||
@@ -5088,4 +5489,121 @@ List<String> proposalIntakePurchaseTechIssues(Map<String, dynamic> form) =>
 String? proposalIntakePurchaseHunIssue(Map<String, dynamic> form) {
   if (proposalIntakeFormHasText(form, 'hunId')) return null;
   return '请填写 HUN ID';
+}
+
+Map<String, dynamic> proposalIntakeEnsureChildFinanceModule(
+  Map<String, dynamic> form,
+) {
+  if (!proposalIntakeHasChildProducts(form)) return form;
+  final modules = proposalIntakeFinanceModules(form);
+  if (modules.any((item) => item.isChildrenOwner)) return form;
+  return {
+    ...form,
+    'financeModules': [
+      for (final item in modules) item.toJson(),
+      ProposalFinanceModule(
+        id: proposalIntakeNewFinanceModuleId(),
+        title: '子产品财务模块',
+        owner: kProposalFinanceModuleOwnerChildren,
+      ).toJson(),
+    ],
+  };
+}
+
+Map<String, dynamic> proposalIntakeSyncChildProductMeta(
+  Map<String, dynamic> form,
+) {
+  final children = proposalIntakeChildProducts(form);
+  final hasChildren = children.isNotEmpty;
+  final benefit = proposalIntakeBenefitProduct(form);
+  var next = Map<String, dynamic>.from(form)
+    ..['benefitProduct'] = {
+      ...benefit.toJson(),
+      'relatedSkuIds': [for (final child in children) child.id],
+      'skuQuantities': {
+        for (final child in children)
+          child.id: proposalIntakeChildProductQuantity(form, child.id),
+      },
+    }
+    ..['isCouponPack'] = hasChildren;
+  if (!hasChildren) {
+    next['couponPacks'] = <Map<String, dynamic>>[];
+    return next;
+  }
+  next['couponPacks'] = [proposalIntakeMainProductPackJson(next)];
+  // 旧版会在这里自动创建「子产品合并财务模块」。现在子产品财务
+  // 归属 `productFinance.children`，不再制造一个独立汇总模块。
+  return next;
+}
+
+Map<String, dynamic> proposalIntakeSkuOutboundJson(ProposalSkuDetailRow sku) {
+  return {
+    ...sku.toJson(),
+    'productCode': sku.assetProduct?.productCode ?? '',
+    'isExistingProduct': sku.isExistingBuilt,
+  };
+}
+
+Map<String, dynamic> proposalIntakeMainProductPackJson(
+  Map<String, dynamic> form,
+) {
+  final benefit = proposalIntakeBenefitProduct(form);
+  final children = proposalIntakeChildProducts(form);
+  final mainSkus = proposalIntakeSkuDetails(form);
+  final lead = mainSkus.isEmpty ? null : mainSkus.first;
+  final name = benefit.name.isNotEmpty
+      ? benefit.name
+      : (lead?.productName ?? '');
+  return {
+    'id': benefit.id,
+    'name': name,
+    'skuIds': [for (final child in children) child.id],
+    'skuQuantities': {
+      for (final child in children)
+        child.id: proposalIntakeChildProductQuantity(form, child.id),
+    },
+    'productCode': lead?.assetProduct?.productCode ?? '',
+    'syncSource': lead == null || lead.syncSourceRef == null
+        ? null
+        : {
+            'code': lead.syncSourceCode,
+            'name': (lead.syncSourceRef?.name ?? '').trim(),
+          },
+    'channel': lead?.channelName ?? '',
+    'channelCode': lead?.channelCode ?? '',
+    'isExistingProduct': proposalIntakeIsExistingBuilt(form),
+    'existingBuilt': proposalIntakeIsExistingBuilt(form) ? '是' : '否',
+    'settlements': [
+      for (final sku in mainSkus)
+        for (final settle in proposalIntakeSkuSettlements(sku))
+          {'id': settle.id, ...settle.terms.toJson()},
+    ],
+  };
+}
+
+/// 终审对外 JSON：有子产品时主产品进 packs、子产品进 products；无子产品时渠道产品仍进 products。
+Map<String, dynamic> proposalIntakeSalesOutboundJson({
+  required Map<String, dynamic> form,
+  required int id,
+  required String code,
+  required String title,
+}) {
+  final hasChildren = proposalIntakeHasChildProducts(form);
+  final products = hasChildren
+      ? proposalIntakeChildProducts(form)
+      : proposalIntakeSkuDetails(form);
+  return {
+    'kind': 'sales',
+    'id': id,
+    'code': code,
+    'title': title,
+    'isCouponPack': hasChildren,
+    'isExistingProduct': proposalIntakeIsExistingBuilt(form),
+    'products': [
+      for (final sku in products) proposalIntakeSkuOutboundJson(sku),
+    ],
+    'packs': hasChildren
+        ? [proposalIntakeMainProductPackJson(form)]
+        : <Map<String, dynamic>>[],
+  };
 }

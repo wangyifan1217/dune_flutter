@@ -10,6 +10,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   flutter_inappwebview_linux
   hotkey_manager_linux
   pasteboard
+  printing
   record_linux
   screen_retriever_linux
   tray_manager

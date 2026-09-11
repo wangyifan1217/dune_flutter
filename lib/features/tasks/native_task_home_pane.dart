@@ -21,6 +21,7 @@ class TaskShellChrome {
     this.trailing,
     this.onBack,
     this.backLabel,
+    this.lockPageSwipe = false,
   });
 
   final bool hideShellHeader;
@@ -29,6 +30,9 @@ class TaskShellChrome {
 
   /// 顶栏返回文案；空则用「工作台」。
   final String? backLabel;
+
+  /// 子页有横向列表时禁用工作台 PageView 抢手势。
+  final bool lockPageSwipe;
 }
 
 /// 任务模块：统计条 + 筛选 + 小名片网格（风格对齐产品/能力）。

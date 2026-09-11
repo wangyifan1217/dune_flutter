@@ -7,6 +7,17 @@ bool chatForegroundNeedsListRepair({
   return windowObscured || viewportCollapsed;
 }
 
+/// 贴在最新端时，Windows 缩小/还原会把 reverse 列表一次性拽去历史。
+/// 没有滚轮/拖动就不能当成用户上滑，否则会 ensureVisible 把会话往上拽。
+bool chatForegroundJumpedAwayFromLatest({
+  required bool userScrolling,
+  required bool wasAwayFromLatest,
+  required bool pixelsAwayFromLatest,
+}) {
+  if (userScrolling || wasAwayFromLatest) return false;
+  return pixelsAwayFromLatest;
+}
+
 /// 桌面端最小化/失焦/托盘与恢复前台时，通知当前聊天页。
 class ChatForegroundSync {
   ChatForegroundSync._();

@@ -16,6 +16,8 @@ import '../conversation/conversation_realtime_hub.dart';
 import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
 import '../desktop/windows_desktop_tray.dart';
+import '../task_assistant/recon_channel_confirm_card.dart';
+import '../task_assistant/recon_channel_confirm_preview.dart';
 import 'recon_gfm.dart';
 import 'recon_markdown_table.dart';
 import 'reconciliation_shucai_models.dart';
@@ -229,12 +231,13 @@ class _NativeReconciliationAssistantPageState
               latest: page.items,
             )
           : page.items;
-      final messagesChanged = !_sameMessageIds(_messages, next);
+      final displayed = withReconChannelPreview(next);
+      final messagesChanged = !_sameMessageIds(_messages, displayed);
       if (messagesChanged) {
         setState(() {
           _messages
             ..clear()
-            ..addAll(next);
+            ..addAll(displayed);
           if (!silent) _hasMore = page.hasMore;
           if (!silent) _error = null;
         });
@@ -1049,6 +1052,42 @@ class _NativeReconciliationAssistantPageState
   List<Widget> _buildExtraMessage(NativeChatMessage msg) {
     final kind = msg.kind.trim().toUpperCase();
     final timeLabel = _timeLabel(msg.createdAt);
+    final payload = msg.payload ?? const <String, dynamic>{};
+    if ((payload['type'] ?? '').toString() == 'reconChannelConfirm') {
+      final channels = (payload['channels'] as List? ?? const [])
+          .whereType<Map>()
+          .map(
+            (e) => ReconChannelSnapshot.fromJson(
+              Map<String, dynamic>.from(e),
+            ),
+          )
+          .toList(growable: false);
+      if (channels.isNotEmpty) {
+        return [
+          ChatMessageRow(
+            key: ValueKey<int>(msg.id),
+            message: msg,
+            mine: false,
+            showSenderMeta: true,
+            readLabel: null,
+            timeLabel: timeLabel,
+            avatar: const _ReconciliationAssistantAvatar(size: 45),
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ChatTextBubble(
+                  text: msg.bodyText,
+                  mine: false,
+                  enableSelection: false,
+                ),
+                ReconChannelConfirmPack(channels: channels),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ];
+      }
+    }
     if (kind == 'RECONCILIATION_REMIND') {
       return [
         ChatMessageRow(

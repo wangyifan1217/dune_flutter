@@ -28,4 +28,39 @@ void main() {
       isTrue,
     );
   });
+
+  test('window restore jump is not treated as user scrolling history', () {
+    expect(
+      chatForegroundJumpedAwayFromLatest(
+        userScrolling: false,
+        wasAwayFromLatest: false,
+        pixelsAwayFromLatest: true,
+      ),
+      isTrue,
+    );
+    expect(
+      chatForegroundJumpedAwayFromLatest(
+        userScrolling: true,
+        wasAwayFromLatest: false,
+        pixelsAwayFromLatest: true,
+      ),
+      isFalse,
+    );
+    expect(
+      chatForegroundJumpedAwayFromLatest(
+        userScrolling: false,
+        wasAwayFromLatest: true,
+        pixelsAwayFromLatest: true,
+      ),
+      isFalse,
+    );
+    expect(
+      chatForegroundJumpedAwayFromLatest(
+        userScrolling: false,
+        wasAwayFromLatest: false,
+        pixelsAwayFromLatest: false,
+      ),
+      isFalse,
+    );
+  });
 }

@@ -1,4 +1,4 @@
-import 'package:dunes_app/features/proposal_intake/proposal_intake_ui.dart';
+import 'package:dunes_app/features/proposal_intake/proposal_intake_select.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -31,7 +31,7 @@ Widget _harness({
 );
 
 void main() {
-  testWidgets('wide layout opens a searchable dialog and returns the pick', (
+  testWidgets('wide layout opens searchable overlay and returns the pick', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 800);
@@ -43,12 +43,11 @@ void main() {
       _harness(width: 320, onSelected: (value) => picked = value),
     );
 
-    await tester.tap(find.text('搜索姓名或岗位'));
+    await tester.tap(find.byType(TextField));
     await tester.pumpAndSettle();
-    expect(find.text('输入关键词搜索'), findsOneWidget);
     expect(find.text('孙宁'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextField).last, '科技');
+    await tester.enterText(find.byType(TextField), '科技');
     await tester.pumpAndSettle();
     expect(find.text('孙宁'), findsNothing);
     expect(find.text('李思'), findsOneWidget);
@@ -58,17 +57,17 @@ void main() {
     expect(picked, 2);
   });
 
-  testWidgets('narrow layout opens a bottom sheet picker', (tester) async {
+  testWidgets('narrow layout opens a searchable overlay', (tester) async {
     tester.view.physicalSize = const Size(400, 780);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(_harness(width: 340, onSelected: (_) {}));
 
-    await tester.tap(find.text('搜索姓名或岗位'));
+    await tester.tap(find.byType(TextField));
     await tester.pumpAndSettle();
 
-    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byKey(const ValueKey('proposal-select-menu')), findsOneWidget);
     expect(find.text('王奕凡'), findsOneWidget);
   });
 
@@ -86,9 +85,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('王奕凡'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('清除'));
+    await tester.tap(find.byIcon(Icons.close_rounded));
     await tester.pumpAndSettle();
 
     expect(cleared, isTrue);

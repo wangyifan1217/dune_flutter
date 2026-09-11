@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import 'flow_ctx.dart';
@@ -458,18 +459,28 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
       lines.add(_LineSpec(geo.from, geo.to, color));
       overlays.addAll(_edgeOverlays(edge, geo, status, lane.kind));
     }
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.only(bottom: 14),
-      child: SizedBox(
-        width: lane.width,
-        height: lane.height,
-        child: Stack(
-          children: [
-            Positioned.fill(child: CustomPaint(painter: _LanePainter(lines))),
-            for (final node in lane.nodes) _nodeCard(node, lane.kind),
-            ...overlays,
-          ],
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(
+        dragDevices: {
+          PointerDeviceKind.touch,
+          PointerDeviceKind.mouse,
+          PointerDeviceKind.trackpad,
+          PointerDeviceKind.stylus,
+        },
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.only(bottom: 14),
+        child: SizedBox(
+          width: lane.width,
+          height: lane.height,
+          child: Stack(
+            children: [
+              Positioned.fill(child: CustomPaint(painter: _LanePainter(lines))),
+              for (final node in lane.nodes) _nodeCard(node, lane.kind),
+              ...overlays,
+            ],
+          ),
         ),
       ),
     );
@@ -502,42 +513,42 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
               border: Border.all(color: style.color),
             ),
             child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              def?.role ?? pos.id,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 10, height: 1.2, color: style.ink),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              _nodeName(def),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 13,
-                height: 1.25,
-                fontWeight: FontWeight.w600,
-                color: _kInk,
-              ),
-            ),
-            if (meta.isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(
-                meta,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 10.5,
-                  height: 1.2,
-                  color: _kMuted,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  def?.role ?? pos.id,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 10, height: 1.2, color: style.ink),
                 ),
-              ),
-            ],
-          ],
-        ),
+                const SizedBox(height: 3),
+                Text(
+                  _nodeName(def),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.25,
+                    fontWeight: FontWeight.w600,
+                    color: _kInk,
+                  ),
+                ),
+                if (meta.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    meta,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      height: 1.2,
+                      color: _kMuted,
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),
@@ -559,8 +570,9 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
     final ownerText = role.isEmpty ? owner : '$role · $owner';
 
     final title = Column(
-      crossAxisAlignment:
-          geo.vertical ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      crossAxisAlignment: geo.vertical
+          ? CrossAxisAlignment.start
+          : CrossAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
@@ -582,11 +594,7 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
             textAlign: geo.vertical ? TextAlign.left : TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 10.5,
-              height: 1.2,
-              color: _kMuted,
-            ),
+            style: const TextStyle(fontSize: 10.5, height: 1.2, color: _kMuted),
           ),
         ],
       ],
@@ -594,8 +602,9 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
 
     final metaRow = Row(
       mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment:
-          geo.vertical ? MainAxisAlignment.start : MainAxisAlignment.center,
+      mainAxisAlignment: geo.vertical
+          ? MainAxisAlignment.start
+          : MainAxisAlignment.center,
       children: [
         Flexible(
           child: Text(

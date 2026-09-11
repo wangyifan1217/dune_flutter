@@ -64,6 +64,8 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
   bool _hasMore = false;
   bool _awayFromLatest = false;
   bool _userScrollActive = false;
+  int _latestJumpGen = 0;
+  DateTime? _userScrollHoldUntil;
   bool _showTasks = false;
   bool _clearing = false;
   TaskItem? _actionTask;
@@ -246,78 +248,123 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     widget.onConversationRead?.call(id);
   }
 
+  bool get _holdingUserScroll {
+    if (_userScrollActive) return true;
+    final until = _userScrollHoldUntil;
+    return until != null && DateTime.now().isBefore(until);
+  }
+
+  void _cancelPendingLatestJumps() {
+    _latestJumpGen++;
+  }
+
+  void _noteUserMovedScroll({bool towardOlder = false}) {
+    _userScrollActive = true;
+    _userScrollHoldUntil = DateTime.now().add(
+      const Duration(milliseconds: 800),
+    );
+    _cancelPendingLatestJumps();
+    if (!_scroll.hasClients) return;
+    // reverse 列表：pixels=0 是最新。刚离开底部就视为在看历史，禁止再贴底。
+    if (_scroll.position.pixels <= 24 && !towardOlder) return;
+    if (!_awayFromLatest && mounted) {
+      setState(() => _awayFromLatest = true);
+    } else {
+      _awayFromLatest = true;
+    }
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || event.scrollDelta.dy.abs() <= 0.5) {
+      return;
+    }
+    _userScrollActive = true;
+    _userScrollHoldUntil = DateTime.now().add(
+      const Duration(milliseconds: 800),
+    );
+    _cancelPendingLatestJumps();
+    // 滚轮先到信号、后改 offset；下一帧再按真实位置判定是否离开最新。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _syncAwayFromLatest(rebuild: true);
+    });
+  }
+
   void _onScroll() {
     if (!_scroll.hasClients) return;
     final pos = _scroll.position;
-    _syncAwayFromLatest(rebuild: !_userScrollActive);
+    _syncAwayFromLatest(rebuild: !_holdingUserScroll);
     if (assistantShouldLoadOlder(
       hasMore: _hasMore,
       loadingOlder: _loadingOlder,
       pos: pos,
+      reverse: true,
     )) {
       unawaited(_loadOlder());
     }
   }
 
   bool _onScrollNotification(ScrollNotification n) {
-    if (n.depth != 0) return false;
     final dragging =
         (n is ScrollStartNotification && n.dragDetails != null) ||
         (n is ScrollUpdateNotification && n.dragDetails != null);
     final userWheel =
         n is UserScrollNotification && n.direction != ScrollDirection.idle;
-    if (dragging || userWheel) {
-      _userScrollActive = true;
+    final towardOlder =
+        n is ScrollUpdateNotification && (n.scrollDelta ?? 0) > 0;
+    if (dragging || userWheel || towardOlder) {
+      _noteUserMovedScroll(towardOlder: towardOlder);
     } else if (n is ScrollEndNotification) {
       _userScrollActive = false;
-      _syncAwayFromLatest(rebuild: true);
+      if (n.depth == 0) _syncAwayFromLatest(rebuild: true);
     }
     return false;
   }
 
   void _syncAwayFromLatest({required bool rebuild}) {
     if (!_scroll.hasClients) return;
-    final away = assistantIsAwayFromLatest(_scroll.position);
+    final away = assistantIsAwayFromLatest(_scroll.position, reverse: true);
     if (away == _awayFromLatest) return;
     _awayFromLatest = away;
     if (rebuild && mounted) setState(() {});
   }
 
   void _scrollToLatestOnEnter() {
+    _awayFromLatest = false;
+    final gen = ++_latestJumpGen;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _userScrollActive) return;
+      if (!mounted || gen != _latestJumpGen || _holdingUserScroll) return;
       _jumpBottom();
-      Future<void>.delayed(const Duration(milliseconds: 80), () {
-        if (!mounted || _userScrollActive || _awayFromLatest) return;
-        _jumpBottom();
-      });
-      Future<void>.delayed(const Duration(milliseconds: 240), () {
-        if (!mounted || _userScrollActive || _awayFromLatest) return;
-        _jumpBottom();
-      });
     });
   }
 
   void _jumpBottomIfFollowingLatest() {
-    if (_awayFromLatest || _userScrollActive) return;
+    if (_awayFromLatest || _holdingUserScroll) return;
+    final gen = _latestJumpGen;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _awayFromLatest || _userScrollActive) return;
+      if (!mounted ||
+          gen != _latestJumpGen ||
+          _awayFromLatest ||
+          _holdingUserScroll) {
+        return;
+      }
       _jumpBottom();
     });
   }
 
   void _jumpBottom({bool animate = false}) {
     if (!_scroll.hasClients) return;
-    if (!animate && _userScrollActive) return;
-    final max = _scroll.position.maxScrollExtent;
+    if (!animate && _holdingUserScroll) return;
+    // reverse 列表：0 才是最新端。
+    const target = 0.0;
     if (animate) {
       _scroll.animateTo(
-        max,
+        target,
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOut,
       );
     } else {
-      _scroll.jumpTo(max);
+      _scroll.jumpTo(target);
     }
     if (_awayFromLatest && mounted) {
       setState(() => _awayFromLatest = false);
@@ -328,12 +375,12 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
 
   int? _findMessageChildIndex(Key key) {
     if (key is ValueKey<String> && key.value == 'ta-load-older') {
-      return _loadingOlder ? 0 : null;
+      return _loadingOlder ? _messages.length : null;
     }
     if (key is! ValueKey<int>) return null;
     final i = _messages.indexWhere((m) => m.id == key.value);
     if (i < 0) return null;
-    return _loadingOlder ? i + 1 : i;
+    return _messages.length - 1 - i;
   }
 
   Future<void> _loadOlder() async {
@@ -342,8 +389,6 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     if (convId <= 0) return;
     setState(() => _loadingOlder = true);
     final firstId = _messages.first.id;
-    final oldMax = _scroll.hasClients ? _scroll.position.maxScrollExtent : 0.0;
-    final oldPixels = _scroll.hasClients ? _scroll.position.pixels : 0.0;
     try {
       final page = await _service.fetchMessagePage(convId, before: firstId);
       if (!mounted) return;
@@ -357,16 +402,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
         _hasMore = page.hasMore;
         _loadingOlder = false;
       });
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_scroll.hasClients) return;
-        _scroll.jumpTo(
-          assistantOlderScrollRestore(
-            oldPixels: oldPixels,
-            oldMax: oldMax,
-            newMax: _scroll.position.maxScrollExtent,
-          ),
-        );
-      });
+      // reverse 列表插入更早消息不会挤走当前阅读位置，不必 jump 还原。
     } finally {
       if (mounted) setState(() => _loadingOlder = false);
     }
@@ -651,41 +687,45 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
       children: [
         NotificationListener<ScrollNotification>(
           onNotification: _onScrollNotification,
-          child: ScrollConfiguration(
-            behavior: ScrollConfiguration.of(context).copyWith(
-              dragDevices: const {
-                PointerDeviceKind.touch,
-                PointerDeviceKind.mouse,
-                PointerDeviceKind.trackpad,
-                PointerDeviceKind.stylus,
-              },
-            ),
-            child: ListView.builder(
-              controller: _scroll,
-              physics: const AlwaysScrollableScrollPhysics(),
-              cacheExtent: MediaQuery.sizeOf(context).height,
-              addAutomaticKeepAlives: false,
-              addRepaintBoundaries: true,
-              findChildIndexCallback: _findMessageChildIndex,
-              padding: const EdgeInsets.all(12),
-              itemCount: _messages.length + (_loadingOlder ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (_loadingOlder && index == 0) {
-                  return const Padding(
-                    key: ValueKey<String>('ta-load-older'),
-                    padding: EdgeInsets.only(bottom: 8),
-                    child: Center(
-                      child: SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+          child: Listener(
+            onPointerSignal: _onPointerSignal,
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(
+                dragDevices: const {
+                  PointerDeviceKind.touch,
+                  PointerDeviceKind.mouse,
+                  PointerDeviceKind.trackpad,
+                  PointerDeviceKind.stylus,
+                },
+              ),
+              child: ListView.builder(
+                controller: _scroll,
+                reverse: true,
+                physics: const AlwaysScrollableScrollPhysics(),
+                cacheExtent: MediaQuery.sizeOf(context).height,
+                addAutomaticKeepAlives: false,
+                addRepaintBoundaries: true,
+                findChildIndexCallback: _findMessageChildIndex,
+                padding: const EdgeInsets.fromLTRB(12, 28, 12, 18),
+                itemCount: _messages.length + (_loadingOlder ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (_loadingOlder && index == _messages.length) {
+                    return const Padding(
+                      key: ValueKey<String>('ta-load-older'),
+                      padding: EdgeInsets.only(top: 8),
+                      child: Center(
+                        child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
                       ),
-                    ),
-                  );
-                }
-                final m = _messages[_loadingOlder ? index - 1 : index];
-                return _buildNoticeRow(m);
-              },
+                    );
+                  }
+                  final m = _messages[_messages.length - 1 - index];
+                  return _buildNoticeRow(m);
+                },
+              ),
             ),
           ),
         ),

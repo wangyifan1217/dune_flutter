@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 /// 桌面端（Windows / macOS）：与手机 APP 分 channel；侧栏含通讯 / NOVA / 灯塔 / 我的。
 bool get isDesktopCommOnly =>
@@ -107,3 +108,10 @@ bool isDesktopAllowedCommScreen(String screenId) {
 /// 兼容旧命名。
 bool isWindowsAllowedCommScreen(String screenId) =>
     isDesktopAllowedCommScreen(screenId);
+
+/// PC 端按住 Ctrl / Command 点击时进入多选。
+bool desktopMultiSelectModifierHeld() {
+  if (!isDesktopCommOnly) return false;
+  return HardwareKeyboard.instance.isControlPressed ||
+      HardwareKeyboard.instance.isMetaPressed;
+}

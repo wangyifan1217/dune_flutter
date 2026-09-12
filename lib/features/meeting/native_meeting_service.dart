@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 
 import '../../core/http/session_http.dart';
+import '../../core/widgets/org_folder_bar.dart';
 import '../auth/auth_session.dart';
 import 'meeting_storage_multipart.dart';
 import 'native_meeting_models.dart';
@@ -38,6 +39,7 @@ class NativeMeetingService {
     int page = 0,
     int size = 20,
     String keyword = '',
+    String? folderId,
   }) async {
     final q = <String, String>{
       'owner': 'me',
@@ -47,6 +49,10 @@ class NativeMeetingService {
     final trimmedKeyword = keyword.trim();
     if (trimmedKeyword.isNotEmpty) {
       q['q'] = trimmedKeyword;
+    }
+    final trimmedFolder = folderId?.trim() ?? '';
+    if (trimmedFolder.isNotEmpty) {
+      q['folderId'] = trimmedFolder;
     }
     final resp = await _requestMeeting(
       'GET',
@@ -162,6 +168,60 @@ class NativeMeetingService {
     if (id is num) return id.toInt();
     if (id is String) return int.tryParse(id) ?? 0;
     return 0;
+  }
+
+  Future<List<OrgFolderItem>> listFolders() async {
+    final resp = await _requestMeeting('GET', '/folders');
+    _ensureSuccess(resp);
+    final data = _unwrapData(resp.body);
+    final content =
+        (data['content'] as List?) ?? (data['items'] as List?) ?? const [];
+    return content
+        .whereType<Map>()
+        .map((e) => OrgFolderItem.fromJson(Map<String, dynamic>.from(e)))
+        .where((e) => e.id > 0 && e.name.trim().isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Future<OrgFolderItem> createFolder(String name) async {
+    final resp = await _requestMeeting(
+      'POST',
+      '/folders',
+      body: jsonEncode({'name': name.trim()}),
+    );
+    _ensureSuccess(resp);
+    return OrgFolderItem.fromJson(_unwrapData(resp.body));
+  }
+
+  Future<OrgFolderItem> renameFolder(int folderId, String name) async {
+    final resp = await _requestMeeting(
+      'PATCH',
+      '/folders/$folderId',
+      body: jsonEncode({'name': name.trim()}),
+    );
+    _ensureSuccess(resp);
+    return OrgFolderItem.fromJson(_unwrapData(resp.body));
+  }
+
+  Future<void> deleteFolder(int folderId) async {
+    final resp = await _requestMeeting('DELETE', '/folders/$folderId');
+    if (resp.statusCode == 204) return;
+    _ensureSuccess(resp);
+  }
+
+  Future<void> moveMeetings({
+    required List<int> meetingIds,
+    int? folderId,
+  }) async {
+    final resp = await _requestMeeting(
+      'POST',
+      '/move',
+      body: jsonEncode({
+        'meetingIds': meetingIds,
+        'folderId': folderId,
+      }),
+    );
+    _ensureSuccess(resp);
   }
 
   Future<int> createByMeetingDoc({
@@ -963,6 +1023,8 @@ class NativeMeetingService {
           resp = await dunesHttpGet(session, path);
         case 'DELETE':
           resp = await dunesHttpDelete(session, path);
+        case 'PATCH':
+          resp = await dunesHttpPatch(session, path, body: body);
         default:
           resp = await dunesHttpPost(session, path, body: body);
       }

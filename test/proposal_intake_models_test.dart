@@ -2253,6 +2253,47 @@ void main() {
     expect(proposalIntakeHasMeaningfulContent(row), isFalse);
   });
 
+  test('completed or pending-president proposals skip auto-save on back', () {
+    ProposalIntakeRow row({
+      required String status,
+      String stage = '',
+      String title = '智能投放试点',
+    }) {
+      return ProposalIntakeRow.fromJson({
+        'id': 8,
+        'title': title,
+        'status': status,
+        'form': {'proposalName': title},
+        'review': {if (stage.isNotEmpty) 'stage': stage},
+      });
+    }
+
+    expect(proposalIntakeShouldAutoSaveOnBack(row(status: 'done')), isFalse);
+    expect(
+      proposalIntakeShouldAutoSaveOnBack(row(status: 'pending_president')),
+      isFalse,
+    );
+    expect(
+      proposalIntakeShouldAutoSaveOnBack(
+        row(status: 'done', stage: 'tech_revising'),
+      ),
+      isTrue,
+    );
+    expect(proposalIntakeShouldAutoSaveOnBack(row(status: 'draft')), isTrue);
+    expect(proposalIntakeShouldAutoSaveOnBack(row(status: 'filling')), isTrue);
+    expect(
+      proposalIntakeShouldAutoSaveOnBack(row(status: 'draft', title: '')),
+      isFalse,
+    );
+    expect(proposalIntakeShowDraftSavedToast(row(status: 'draft')), isTrue);
+    expect(proposalIntakeShowDraftSavedToast(row(status: 'filling')), isTrue);
+    expect(proposalIntakeShowDraftSavedToast(row(status: 'done')), isFalse);
+    expect(
+      proposalIntakeShowDraftSavedToast(row(status: 'pending_president')),
+      isFalse,
+    );
+  });
+
   test('filled proposal name or title can create a draft', () {
     expect(
       proposalIntakeHasMeaningfulContent(

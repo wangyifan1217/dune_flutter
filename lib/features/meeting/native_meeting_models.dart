@@ -13,6 +13,7 @@ class NativeMeetingSummary {
     this.organizerUserId,
     this.organizerDisplayName,
     this.organizerUsername,
+    this.folderId,
   });
 
   final int meetingId;
@@ -26,6 +27,7 @@ class NativeMeetingSummary {
   final int? organizerUserId;
   final String? organizerDisplayName;
   final String? organizerUsername;
+  final int? folderId;
 
   String get displayTime => NativeMeetingTime.formatDisplayBest(
         createdAt: createdAt,
@@ -67,6 +69,7 @@ class NativeMeetingSummary {
       organizerUsername:
           (json['organizerUsername'] ?? json['organizer_username'])
               ?.toString(),
+      folderId: _readOptionalInt(json['folderId'] ?? json['folder_id']),
     );
   }
 }
@@ -260,6 +263,15 @@ class NativeTranscriptSegment {
   final int endMs;
   final String speaker;
   final String text;
+}
+
+int? _readOptionalInt(dynamic raw) {
+  if (raw is num && raw.toInt() > 0) return raw.toInt();
+  if (raw is String) {
+    final parsed = int.tryParse(raw.trim());
+    if (parsed != null && parsed > 0) return parsed;
+  }
+  return null;
 }
 
 int _readMeetingId(Map<String, dynamic> json) {

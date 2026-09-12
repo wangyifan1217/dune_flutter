@@ -496,7 +496,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
 
   Future<void> _backToList() async {
     final editing = _editing;
-    if (editing != null && proposalIntakeHasMeaningfulContent(editing)) {
+    if (editing != null && proposalIntakeShouldAutoSaveOnBack(editing)) {
       try {
         final saved = editing.id <= 0
             ? await _service.create(
@@ -507,7 +507,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
               )
             : await _service.save(editing);
         _editing = saved;
-        if (mounted) _toast('已保存草稿');
+        if (mounted && proposalIntakeShowDraftSavedToast(saved)) {
+          _toast('已保存草稿');
+        }
       } catch (error) {
         _toast(friendlyErrorText(error, fallback: '保存草稿失败'), error: true);
         return;

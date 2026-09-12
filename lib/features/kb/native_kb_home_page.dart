@@ -9,6 +9,7 @@ import '../../core/navigation/navigation_controller.dart';
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/widgets/org_folder_bar.dart';
 import '../auth/auth_session.dart';
 import '../chat/chat_file_preview_page.dart';
 import '../chat/chat_pdf_preview.dart';
@@ -20,6 +21,7 @@ import '../drive/native_drive_service.dart';
 import '../shell/dunes_toast.dart';
 import 'kb_chat_share.dart';
 import 'kb_document_coordinator.dart';
+import 'kb_list_cache.dart';
 import 'kb_upload_coordinator.dart';
 import 'native_kb_models.dart';
 import 'native_kb_service.dart';
@@ -74,6 +76,10 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
   int _listTotal = 0;
   static const int _pageSize = 20;
   final ScrollController _scroll = ScrollController();
+  List<OrgFolderItem> _folders = const [];
+  OrgFolderFilter _folderFilter = const OrgFolderFilter.all();
+  bool _selecting = false;
+  final Set<String> _selectedDocIds = <String>{};
 
   bool get _uploading => KbUploadCoordinator.instance.isUploading;
   String? get _uploadProgress {
@@ -88,17 +94,69 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     _chatService = ConversationService(session: widget.session);
     KbUploadCoordinator.instance.addListener(_onKbUploadChanged);
     _scroll.addListener(_onScroll);
-    _load();
+    final cached = KbListCache.instance.peek(widget.session.userId);
+    if (cached != null) {
+      _folderFilter = cached.folderFilter;
+      _folders = cached.folders;
+      if (cached.keyword.isNotEmpty) {
+        _search.text = cached.keyword;
+      }
+      if (cached.summary != null) _summary = cached.summary;
+      if (cached.docs.isNotEmpty) {
+        _pageDocs
+          ..clear()
+          ..addAll(cached.docs);
+        _page = cached.page;
+        _hasMore = cached.hasMore;
+        _listTotal = cached.total > 0 ? cached.total : cached.docs.length;
+        _loading = false;
+        _scheduleScrollRestore();
+      }
+    }
+    unawaited(_load(silent: cached != null && cached.docs.isNotEmpty));
   }
 
   @override
   void dispose() {
+    _persistListSnapshot();
     KbUploadCoordinator.instance.removeListener(_onKbUploadChanged);
     _parsePollTimer?.cancel();
     _searchDebounce?.cancel();
     _search.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  void _persistListSnapshot() {
+    if (_scroll.hasClients) {
+      KbListCache.instance.saveScrollOffset(
+        userId: widget.session.userId,
+        offset: _scroll.offset,
+      );
+    }
+    KbListCache.instance.put(
+      userId: widget.session.userId,
+      docs: List<NativeKbDocument>.from(_pageDocs),
+      page: _page,
+      hasMore: _hasMore,
+      total: _listTotal,
+      keyword: _search.text,
+      folderFilter: _folderFilter,
+      folders: _folders,
+      summary: _summary,
+    );
+  }
+
+  void _scheduleScrollRestore() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      final target = KbListCache.instance.peekScrollOffset(
+        widget.session.userId,
+      );
+      if (target <= 0) return;
+      final max = _scroll.position.maxScrollExtent;
+      _scroll.jumpTo(target.clamp(0.0, max));
+    });
   }
 
   void _onKbUploadChanged() {
@@ -140,10 +198,14 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
         keyword: _search.text.trim(),
         page: 0,
         size: _pageSize,
+        folderId: _folderFilter.queryValue,
       );
     } catch (e) {
       listError = e;
     }
+    try {
+      _folders = await _service.listFolders();
+    } catch (_) {}
     if (listPage == null && summary != null) {
       listPage = _pageFromNovaDocs(
         summary.documents,
@@ -186,9 +248,16 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       unawaited(_healLocalMirror());
     }
     _scheduleLoadMoreIfShort();
+    _persistListSnapshot();
   }
 
   void _onScroll() {
+    if (_scroll.hasClients) {
+      KbListCache.instance.saveScrollOffset(
+        userId: widget.session.userId,
+        offset: _scroll.offset,
+      );
+    }
     if (!_scroll.hasClients ||
         _loading ||
         _searching ||
@@ -222,6 +291,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
         keyword: _search.text.trim(),
         page: nextPage,
         size: _pageSize,
+        folderId: _folderFilter.queryValue,
       );
     } catch (_) {
       final fallbackDocs = _summary?.documents ?? const <NativeKbDocument>[];
@@ -254,6 +324,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     _syncParsePoll(_pageDocs);
     unawaited(_refreshDriveSavedStatus(appended, replace: false));
     _scheduleLoadMoreIfShort();
+    _persistListSnapshot();
   }
 
   NativeKbDocumentPage _pageFromNovaDocs(
@@ -347,6 +418,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
         keyword: _search.text.trim(),
         page: 0,
         size: size < 1 ? _pageSize : size,
+        folderId: _folderFilter.queryValue,
       );
       if (!mounted) return;
       final byId = <String, NativeKbDocument>{
@@ -366,6 +438,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
             localDocId: fresh.localDocId.isNotEmpty
                 ? fresh.localDocId
                 : _pageDocs[i].localDocId,
+            folderId: fresh.folderId ?? _pageDocs[i].folderId,
           );
         }
         _listTotal = page.total;
@@ -485,6 +558,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       KbUploadCoordinator.instance.enqueue(
         session: widget.session,
         files: files,
+        folderId: _folderFilter.uploadFolderId,
       ),
     );
   }
@@ -657,7 +731,139 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
         name.endsWith('.ppt');
   }
 
+  Future<void> _toggleSelectAllDocs() async {
+    final current = _pageDocs.map((d) => d.id).toList(growable: false);
+    final allSelected =
+        current.isNotEmpty && current.every(_selectedDocIds.contains);
+    if (allSelected) {
+      setState(() => _selectedDocIds.clear());
+      return;
+    }
+    var guard = 0;
+    while (mounted && _hasMore && !_loadingMore && guard < 20) {
+      guard++;
+      await _loadMore();
+    }
+    if (!mounted) return;
+    setState(() {
+      _selecting = true;
+      _selectedDocIds
+        ..clear()
+        ..addAll(_pageDocs.map((d) => d.id));
+    });
+  }
+
+  void _toggleDocSelected(NativeKbDocument doc) {
+    setState(() {
+      if (_selectedDocIds.contains(doc.id)) {
+        _selectedDocIds.remove(doc.id);
+      } else {
+        _selectedDocIds.add(doc.id);
+      }
+      if (_selectedDocIds.isEmpty) _selecting = false;
+    });
+  }
+
+  Future<void> _createFolder() async {
+    final name = await showOrgFolderNameDialog(context, title: '新建文件夹');
+    if (name == null) return;
+    try {
+      final folder = await _service.createFolder(name);
+      if (!mounted) return;
+      setState(() => _folders = [..._folders, folder]);
+      _toast('已创建文件夹');
+    } catch (e) {
+      if (!mounted) return;
+      _toast(friendlyErrorText(e, fallback: '创建文件夹失败'), error: true);
+    }
+  }
+
+  Future<void> _renameFolder(OrgFolderItem folder) async {
+    final name = await showOrgFolderNameDialog(
+      context,
+      title: '重命名文件夹',
+      initial: folder.name,
+    );
+    if (name == null) return;
+    try {
+      final updated = await _service.renameFolder(folder.id, name);
+      if (!mounted) return;
+      setState(() {
+        _folders = _folders
+            .map((e) => e.id == folder.id ? updated : e)
+            .toList(growable: false);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      _toast(friendlyErrorText(e, fallback: '重命名失败'), error: true);
+    }
+  }
+
+  Future<void> _deleteFolder(OrgFolderItem folder) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除文件夹'),
+        content: Text('删除「${folder.name}」后，里面的文件会回到未分类，文件本身不会删除。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _service.deleteFolder(folder.id);
+      if (!mounted) return;
+      setState(() {
+        _folders = _folders.where((e) => e.id != folder.id).toList();
+        if (_folderFilter.folderId == folder.id) {
+          _folderFilter = const OrgFolderFilter.uncategorized();
+        }
+      });
+      await _load(silent: true);
+    } catch (e) {
+      if (!mounted) return;
+      _toast(friendlyErrorText(e, fallback: '删除文件夹失败'), error: true);
+    }
+  }
+
+  Future<void> _moveSelectedDocs() async {
+    final picked = await showOrgFolderPickDialog(context, folders: _folders);
+    if (picked == null) return;
+    final selected = _pageDocs
+        .where((d) => _selectedDocIds.contains(d.id))
+        .toList(growable: false);
+    try {
+      await _service.moveDocuments(
+        documentIds: selected.map((d) => d.dunesDocumentId).toList(),
+        ragflowDocIds: selected.map((d) => d.ragflowDocId).toList(),
+        folderId: picked.id > 0 ? picked.id : null,
+      );
+      if (!mounted) return;
+      setState(() {
+        _selecting = false;
+        _selectedDocIds.clear();
+      });
+      _toast('已移入${picked.id > 0 ? picked.name : '未分类'}');
+      await _load(silent: true);
+    } catch (e) {
+      if (!mounted) return;
+      _toast(friendlyErrorText(e, fallback: '移动失败'), error: true);
+    }
+  }
+
   Future<void> _openDoc(NativeKbDocument doc) async {
+    if (_selecting) {
+      _toggleDocSelected(doc);
+      return;
+    }
     final share = KbChatDocShare.fromDocument(doc);
     final openId = share.openDocId;
     if (openId.isEmpty) {
@@ -670,6 +876,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
 
     // Markdown 仍走知识库内预览页（可读性更好）。
     if (_isMarkdownDoc(doc, displayName)) {
+      _persistListSnapshot();
       widget.onOpenDoc(doc);
       return;
     }
@@ -855,7 +1062,10 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
+    return Column(
+      children: [
+        Expanded(
+          child: ColoredBox(
       color: DunesColors.bgApp,
       child: SafeArea(
         child: _loading
@@ -879,9 +1089,49 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                           const SizedBox(height: 8),
                           _buildUploadPanel(),
                           const SizedBox(height: 14),
-                          _sectionLabel('我的', '文档', count: '$_listTotal 篇'),
+                          _sectionLabel(
+                            '我的',
+                            '文档',
+                            count: '$_listTotal 篇',
+                            action: _pageDocs.isEmpty
+                                ? null
+                                : OrgFolderMultiSelectButton(
+                                    selecting: _selecting,
+                                    onPressed: () {
+                                      setState(() {
+                                        if (_selecting) {
+                                          _selecting = false;
+                                          _selectedDocIds.clear();
+                                        } else {
+                                          _selecting = true;
+                                        }
+                                      });
+                                    },
+                                  ),
+                          ),
                           const SizedBox(height: 8),
                           _buildDocumentSearch(),
+                          const SizedBox(height: 8),
+                          OrgFolderBar(
+                            folders: _folders,
+                            selected: _folderFilter,
+                            onSelected: (filter) {
+                              if (_folderFilter.cacheKey == filter.cacheKey) {
+                                return;
+                              }
+                              setState(() {
+                                _folderFilter = filter;
+                                _selecting = false;
+                                _selectedDocIds.clear();
+                              });
+                              unawaited(_load(silent: true));
+                            },
+                            onCreate: () => unawaited(_createFolder()),
+                            onRename: (folder) =>
+                                unawaited(_renameFolder(folder)),
+                            onDelete: (folder) =>
+                                unawaited(_deleteFolder(folder)),
+                          ),
                           const SizedBox(height: 8),
                           _buildDocList(),
                         ],
@@ -891,6 +1141,20 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                 ),
               ),
       ),
+          ),
+        ),
+        if (_selecting)
+          OrgFolderSelectBar(
+            count: _selectedDocIds.length,
+            total: _pageDocs.length,
+            onCancel: () => setState(() {
+              _selecting = false;
+              _selectedDocIds.clear();
+            }),
+            onMove: () => unawaited(_moveSelectedDocs()),
+            onToggleSelectAll: () => unawaited(_toggleSelectAllDocs()),
+          ),
+      ],
     );
   }
 
@@ -1087,7 +1351,12 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
     );
   }
 
-  Widget _sectionLabel(String accent, String title, {String? count}) {
+  Widget _sectionLabel(
+    String accent,
+    String title, {
+    String? count,
+    Widget? action,
+  }) {
     return Row(
       children: [
         Text(
@@ -1114,6 +1383,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
             count,
             style: const TextStyle(fontSize: 10, color: DunesColors.text3),
           ),
+        if (action != null) action,
       ],
     );
   }
@@ -1251,7 +1521,28 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
             borderRadius: BorderRadius.circular(10),
             child: InkWell(
               borderRadius: BorderRadius.circular(10),
-              onTap: () => unawaited(_openDoc(doc)),
+              onTap: () {
+                if (_selecting || desktopMultiSelectModifierHeld()) {
+                  if (!_selecting) {
+                    setState(() => _selecting = true);
+                  }
+                  _toggleDocSelected(doc);
+                  return;
+                }
+                unawaited(_openDoc(doc));
+              },
+              onSecondaryTap: () {
+                setState(() {
+                  _selecting = true;
+                  _selectedDocIds.add(doc.id);
+                });
+              },
+              onLongPress: () {
+                setState(() {
+                  _selecting = true;
+                  _selectedDocIds.add(doc.id);
+                });
+              },
               child: Container(
                 key: ValueKey(doc.id),
                 margin: const EdgeInsets.only(bottom: 8),
@@ -1265,6 +1556,18 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                 ),
                 child: Row(
                   children: [
+                    if (_selecting) ...[
+                      Icon(
+                        _selectedDocIds.contains(doc.id)
+                            ? Icons.check_circle
+                            : Icons.circle_outlined,
+                        color: _selectedDocIds.contains(doc.id)
+                            ? _kbAccent
+                            : DunesColors.text3,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     Container(
                       width: 36,
                       height: 36,
@@ -1321,6 +1624,15 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
                                 style: const TextStyle(
                                   fontSize: 10,
                                   color: DunesColors.text3,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: OrgFolderBadge(
+                                  label: orgFolderDisplayName(
+                                    doc.folderId,
+                                    _folders,
+                                  ),
                                 ),
                               ),
                             ],

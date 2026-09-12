@@ -40,6 +40,7 @@ class KbUploadCoordinator extends ChangeNotifier {
   Future<void> enqueue({
     required AuthSession session,
     required List<XFile> files,
+    int? folderId,
   }) async {
     if (_running || files.isEmpty) return;
     _running = true;
@@ -65,6 +66,7 @@ class KbUploadCoordinator extends ChangeNotifier {
           await service.uploadDocument(
             bytes: bytes,
             fileName: files[i].name,
+            folderId: folderId,
             onProgress: (sent, total) {
               if (total <= 0) return;
               final pct = ((sent / total) * 100).clamp(0, 100).round();

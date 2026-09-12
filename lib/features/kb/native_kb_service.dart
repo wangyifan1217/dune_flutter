@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import '../../core/config/nova_config.dart';
+import '../../core/widgets/org_folder_bar.dart';
 import '../auth/auth_session.dart';
 import '../meeting/meeting_minutes_export.dart';
 import '../meeting/native_meeting_models.dart';
@@ -128,15 +129,86 @@ class NativeKbService {
   }
 
   /// 分页列出当前用户知识库文档。keyword 为空时返回全部。
+  Future<List<OrgFolderItem>> listFolders() async {
+    final resp = await _client.get(
+      _dunesUri('/kb/folders'),
+      headers: _dunesHeaders,
+    );
+    final data = _asDataMap(_unwrap(resp));
+    final content =
+        (data['content'] as List?) ?? (data['items'] as List?) ?? const [];
+    return content
+        .whereType<Map>()
+        .map((e) => OrgFolderItem.fromJson(Map<String, dynamic>.from(e)))
+        .where((e) => e.id > 0 && e.name.trim().isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Future<OrgFolderItem> createFolder(String name) async {
+    final resp = await _client.post(
+      _dunesUri('/kb/folders'),
+      headers: {..._dunesHeaders, 'Content-Type': 'application/json'},
+      body: jsonEncode({'name': name.trim()}),
+    );
+    return OrgFolderItem.fromJson(_asDataMap(_unwrap(resp)));
+  }
+
+  Future<OrgFolderItem> renameFolder(int folderId, String name) async {
+    final resp = await _client.patch(
+      _dunesUri('/kb/folders/$folderId'),
+      headers: {..._dunesHeaders, 'Content-Type': 'application/json'},
+      body: jsonEncode({'name': name.trim()}),
+    );
+    return OrgFolderItem.fromJson(_asDataMap(_unwrap(resp)));
+  }
+
+  Future<void> deleteFolder(int folderId) async {
+    final resp = await _client.delete(
+      _dunesUri('/kb/folders/$folderId'),
+      headers: _dunesHeaders,
+    );
+    if (resp.statusCode == 204) return;
+    _unwrap(resp);
+  }
+
+  Future<void> moveDocuments({
+    required List<String> documentIds,
+    required List<String> ragflowDocIds,
+    int? folderId,
+  }) async {
+    final localIds = <int>[];
+    final ragIds = <String>[...ragflowDocIds.where((e) => e.trim().isNotEmpty)];
+    for (final raw in documentIds) {
+      final id = int.tryParse(raw.trim());
+      if (id != null && id > 0) {
+        localIds.add(id);
+      } else if (raw.trim().isNotEmpty && !ragIds.contains(raw.trim())) {
+        ragIds.add(raw.trim());
+      }
+    }
+    final resp = await _client.post(
+      _dunesUri('/kb/documents/move'),
+      headers: {..._dunesHeaders, 'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'documentIds': localIds,
+        'ragflowDocIds': ragIds,
+        'folderId': folderId,
+      }),
+    );
+    _unwrap(resp);
+  }
+
   Future<NativeKbDocumentPage> listDocuments({
     String keyword = '',
     int page = 0,
     int size = 20,
+    String? folderId,
   }) async {
     final query = <String, String>{
       'q': keyword.trim(),
       'page': page.toString(),
       'size': size.toString(),
+      if (folderId != null && folderId.trim().isNotEmpty) 'folderId': folderId,
     };
     final resp = await _client.get(
       _dunesUri('/kb/documents?${Uri(queryParameters: query).query}'),
@@ -351,6 +423,7 @@ class NativeKbService {
     required List<int> bytes,
     required String fileName,
     String? title,
+    int? folderId,
     void Function(int sent, int total)? onProgress,
   }) async {
     if (bytes.isEmpty) {
@@ -364,6 +437,7 @@ class NativeKbService {
         'title': (title ?? '').trim(),
         'fileSizeBytes': bytes.length,
         'contentType': _guessContentType(fileName),
+        if (folderId != null && folderId > 0) 'folderId': folderId,
       }),
     );
     final init = _asDataMap(_unwrap(initResp));

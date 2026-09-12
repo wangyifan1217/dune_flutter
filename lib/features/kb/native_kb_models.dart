@@ -12,6 +12,7 @@ class NativeKbDocument {
     this.localDocId = '',
     this.ragflowDocId = '',
     this.fileSizeBytes = 0,
+    this.folderId,
   });
 
   final String id;
@@ -26,6 +27,7 @@ class NativeKbDocument {
   final String localDocId;
   final String ragflowDocId;
   final int fileSizeBytes;
+  final int? folderId;
 
   /// kb-go 本地文档 ID（数字），用于 GET /api/v1/kb/documents/{id}。
   String get dunesDocumentId {
@@ -142,6 +144,9 @@ class NativeKbDocument {
               .toString(),
       ragflowDocId: ragflowDocId,
       fileSizeBytes: (json['fileSizeBytes'] as num?)?.toInt() ?? 0,
+      folderId: _readOptionalInt(
+        json['folderId'] ?? json['folder_id'] ?? json['orgFolderId'] ?? json['org_folder_id'],
+      ),
     );
   }
 
@@ -158,6 +163,7 @@ class NativeKbDocument {
     String? localDocId,
     String? ragflowDocId,
     int? fileSizeBytes,
+    int? folderId,
   }) {
     return NativeKbDocument(
       id: id ?? this.id,
@@ -172,6 +178,7 @@ class NativeKbDocument {
       localDocId: localDocId ?? this.localDocId,
       ragflowDocId: ragflowDocId ?? this.ragflowDocId,
       fileSizeBytes: fileSizeBytes ?? this.fileSizeBytes,
+      folderId: folderId ?? this.folderId,
     );
   }
 }
@@ -234,6 +241,16 @@ class NativeKbDocumentPage {
 int _jsonInt(dynamic value, int fallback) {
   if (value is num) return value.toInt();
   return int.tryParse('$value') ?? fallback;
+}
+
+int? _readOptionalInt(dynamic value) {
+  if (value is num) {
+    final n = value.toInt();
+    return n > 0 ? n : null;
+  }
+  final parsed = int.tryParse('$value');
+  if (parsed == null || parsed <= 0) return null;
+  return parsed;
 }
 
 class NativeKbSummary {

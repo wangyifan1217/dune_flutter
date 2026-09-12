@@ -1338,6 +1338,21 @@ bool proposalIntakeHasMeaningfulContent(ProposalIntakeRow row) {
   return _formHasUserInput(row.form);
 }
 
+/// 返回列表时是否自动保存。已完成 / 待最终确认只读，不能再 PATCH 草稿。
+bool proposalIntakeShouldAutoSaveOnBack(ProposalIntakeRow row) {
+  if (!proposalIntakeHasMeaningfulContent(row)) return false;
+  if (row.status == 'pending_president') return false;
+  if (row.status == 'done' && !row.techRevisionOpen) return false;
+  return true;
+}
+
+/// 自动保存成功后是否提示「已保存草稿」。
+bool proposalIntakeShowDraftSavedToast(ProposalIntakeRow row) {
+  return row.status == 'draft' ||
+      row.status == 'filling' ||
+      row.status.trim().isEmpty;
+}
+
 bool _formHasUserInput(Map<String, dynamic> form) {
   for (final entry in form.entries) {
     if (_proposalIntakeAutoFormKeys.contains(entry.key)) continue;

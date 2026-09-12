@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/widgets/org_folder_bar.dart';
 import '../auth/auth_session.dart';
 import 'meeting_list_cache.dart';
 import 'meeting_upload_coordinator.dart';
@@ -45,6 +46,10 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
   int _totalCount = 0;
   static const int _pageSize = 20;
   String? _error;
+  List<OrgFolderItem> _folders = const [];
+  OrgFolderFilter _folderFilter = const OrgFolderFilter.all();
+  bool _selecting = false;
+  final Set<int> _selectedMeetingIds = <int>{};
   Timer? _scrollRestoreRetry;
   Timer? _searchDebounce;
 
@@ -60,15 +65,25 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
     _scrollController.addListener(_onScroll);
     final cached = MeetingListCache.instance.peek(widget.session.userId);
     if (cached != null) {
-      _rows = cached.rows;
-      _page = cached.page;
-      _hasMore = cached.hasMore;
-      _totalCount = cached.totalCount > 0
-          ? cached.totalCount
-          : cached.rows.length;
-      _loading = false;
-      _scheduleScrollRestore();
-      _scheduleLoadMoreIfShort();
+      _folderFilter = cached.folderFilter;
+      _folders = cached.folders;
+      if (cached.keyword.isNotEmpty) {
+        _search.text = cached.keyword;
+      }
+      if (!MeetingListCache.instance.isStale && cached.rows.isNotEmpty) {
+        _rows = cached.rows;
+        _page = cached.page;
+        _hasMore = cached.hasMore;
+        _totalCount = cached.totalCount > 0
+            ? cached.totalCount
+            : cached.rows.length;
+        _loading = false;
+        _scheduleScrollRestore();
+        _scheduleLoadMoreIfShort();
+        unawaited(_refreshFolders());
+      } else {
+        unawaited(_load(reset: true));
+      }
     } else {
       unawaited(_load(reset: true));
     }
@@ -102,13 +117,15 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
   }
 
   void _persistListSnapshot() {
-    if (_rows.isEmpty || _search.text.trim().isNotEmpty) return;
     MeetingListCache.instance.put(
       userId: widget.session.userId,
       rows: _rows,
       page: _page,
       hasMore: _hasMore,
       totalCount: _totalCount,
+      keyword: _search.text,
+      folderFilter: _folderFilter,
+      folders: _folders,
     );
   }
 
@@ -185,6 +202,18 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
     });
   }
 
+  Future<void> _refreshFolders({bool updateState = true}) async {
+    try {
+      final folders = await _service.listFolders();
+      if (!mounted) return;
+      if (updateState) {
+        setState(() => _folders = folders);
+      } else {
+        _folders = folders;
+      }
+    } catch (_) {}
+  }
+
   void _onKeywordChanged(String _) {
     setState(() {});
     _searchDebounce?.cancel();
@@ -210,7 +239,9 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
         page: 0,
         size: _pageSize,
         keyword: keyword,
+        folderId: _folderFilter.queryValue,
       );
+      await _refreshFolders(updateState: false);
       if (!mounted) return;
       if (keyword != _search.text.trim()) return;
       final rows = result.items;
@@ -248,6 +279,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
         page: nextPage,
         size: _pageSize,
         keyword: _search.text.trim(),
+        folderId: _folderFilter.queryValue,
       );
       if (!mounted) return;
       final existing = _rows.map((e) => e.meetingId).toSet();
@@ -310,6 +342,142 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
         SnackBar(content: Text(friendlyErrorText(e, fallback: '删除失败，请稍后重试'))),
       );
     }
+  }
+
+  Future<void> _createFolder() async {
+    final name = await showOrgFolderNameDialog(context, title: '新建文件夹');
+    if (name == null) return;
+    try {
+      final folder = await _service.createFolder(name);
+      if (!mounted) return;
+      setState(() => _folders = [..._folders, folder]);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyErrorText(e, fallback: '创建文件夹失败'))),
+      );
+    }
+  }
+
+  Future<void> _renameFolder(OrgFolderItem folder) async {
+    final name = await showOrgFolderNameDialog(
+      context,
+      title: '重命名文件夹',
+      initial: folder.name,
+    );
+    if (name == null) return;
+    try {
+      final updated = await _service.renameFolder(folder.id, name);
+      if (!mounted) return;
+      setState(() {
+        _folders = _folders
+            .map((e) => e.id == folder.id ? updated : e)
+            .toList(growable: false);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyErrorText(e, fallback: '重命名失败'))),
+      );
+    }
+  }
+
+  Future<void> _deleteFolder(OrgFolderItem folder) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除文件夹'),
+        content: Text('删除「${folder.name}」后，里面的会议会回到未分类，会议本身不会删除。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _service.deleteFolder(folder.id);
+      if (!mounted) return;
+      setState(() {
+        _folders = _folders.where((e) => e.id != folder.id).toList();
+        if (_folderFilter.folderId == folder.id) {
+          _folderFilter = const OrgFolderFilter.uncategorized();
+        }
+      });
+      await _load(reset: true, silent: true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyErrorText(e, fallback: '删除文件夹失败'))),
+      );
+    }
+  }
+
+  Future<void> _moveSelectedMeetings() async {
+    final picked = await showOrgFolderPickDialog(context, folders: _folders);
+    if (picked == null) return;
+    try {
+      await _service.moveMeetings(
+        meetingIds: _selectedMeetingIds.toList(),
+        folderId: picked.id > 0 ? picked.id : null,
+      );
+      if (!mounted) return;
+      setState(() {
+        _selecting = false;
+        _selectedMeetingIds.clear();
+      });
+      await _load(reset: true, silent: true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyErrorText(e, fallback: '移动失败'))),
+      );
+    }
+  }
+
+  List<int> get _selectableMeetingIds => _visibleRows
+      .where((e) => e.meetingId > 0)
+      .map((e) => e.meetingId)
+      .toList(growable: false);
+
+  Future<void> _toggleSelectAllMeetings() async {
+    final current = _selectableMeetingIds;
+    final allSelected =
+        current.isNotEmpty && current.every(_selectedMeetingIds.contains);
+    if (allSelected) {
+      setState(() => _selectedMeetingIds.clear());
+      return;
+    }
+    var guard = 0;
+    while (mounted && _hasMore && !_loadingMore && guard < 20) {
+      guard++;
+      await _loadMore();
+    }
+    if (!mounted) return;
+    setState(() {
+      _selecting = true;
+      _selectedMeetingIds
+        ..clear()
+        ..addAll(_selectableMeetingIds);
+    });
+  }
+
+  void _toggleMeetingSelected(int meetingId) {
+    if (meetingId <= 0) return;
+    setState(() {
+      if (_selectedMeetingIds.contains(meetingId)) {
+        _selectedMeetingIds.remove(meetingId);
+      } else {
+        _selectedMeetingIds.add(meetingId);
+      }
+      if (_selectedMeetingIds.isEmpty) _selecting = false;
+    });
   }
 
   String _statusLabel(String status) {
@@ -407,6 +575,23 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
         leading: BackButton(onPressed: widget.onBack),
         title: const Text('会议纪要'),
         actions: [
+          if (_visibleRows.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: OrgFolderMultiSelectButton(
+                selecting: _selecting,
+                onPressed: () {
+                  setState(() {
+                    if (_selecting) {
+                      _selecting = false;
+                      _selectedMeetingIds.clear();
+                    } else {
+                      _selecting = true;
+                    }
+                  });
+                },
+              ),
+            ),
           if (canCreate)
             IconButton(
               onPressed: _onCreatePressed,
@@ -415,7 +600,7 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
             ),
         ],
       ),
-      floatingActionButton: canCreate
+      floatingActionButton: canCreate && !_selecting
           ? FloatingActionButton.large(
               onPressed: _onCreatePressed,
               backgroundColor: DunesColors.brandPurple,
@@ -425,6 +610,18 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                     ? Icons.upload_file_rounded
                     : Icons.mic_rounded,
               ),
+            )
+          : null,
+      bottomNavigationBar: _selecting
+          ? OrgFolderSelectBar(
+              count: _selectedMeetingIds.length,
+              total: _selectableMeetingIds.length,
+              onCancel: () => setState(() {
+                _selecting = false;
+                _selectedMeetingIds.clear();
+              }),
+              onMove: () => unawaited(_moveSelectedMeetings()),
+              onToggleSelectAll: () => unawaited(_toggleSelectAllMeetings()),
             )
           : null,
       body: RefreshIndicator(
@@ -448,6 +645,25 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
         _buildHeroCard(),
         const SizedBox(height: 16),
         _buildSearchField(),
+        const SizedBox(height: 10),
+        OrgFolderBar(
+          folders: _folders,
+          selected: _folderFilter,
+          onSelected: (filter) {
+            if (_folderFilter.cacheKey == filter.cacheKey) return;
+            setState(() {
+              _folderFilter = filter;
+              _selecting = false;
+              _selectedMeetingIds.clear();
+              _rows = const [];
+              _loading = true;
+            });
+            unawaited(_load(reset: true));
+          },
+          onCreate: () => unawaited(_createFolder()),
+          onRename: (folder) => unawaited(_renameFolder(folder)),
+          onDelete: (folder) => unawaited(_deleteFolder(folder)),
+        ),
         const SizedBox(height: 14),
         if (_loading && _rows.isEmpty)
           const Padding(
@@ -670,7 +886,30 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
-          onTap: enabled ? () => _openDetail(row.meetingId) : null,
+          onTap: enabled
+              ? () {
+                  if (_selecting || desktopMultiSelectModifierHeld()) {
+                    if (!_selecting) {
+                      setState(() => _selecting = true);
+                    }
+                    _toggleMeetingSelected(row.meetingId);
+                    return;
+                  }
+                  _openDetail(row.meetingId);
+                }
+              : null,
+          onSecondaryTap: enabled
+              ? () => setState(() {
+                  _selecting = true;
+                  _selectedMeetingIds.add(row.meetingId);
+                })
+              : null,
+          onLongPress: enabled
+              ? () => setState(() {
+                  _selecting = true;
+                  _selectedMeetingIds.add(row.meetingId);
+                })
+              : null,
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -679,6 +918,17 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
             ),
             child: Row(
               children: [
+                if (_selecting) ...[
+                  Icon(
+                    _selectedMeetingIds.contains(row.meetingId)
+                        ? Icons.check_circle
+                        : Icons.circle_outlined,
+                    color: _selectedMeetingIds.contains(row.meetingId)
+                        ? DunesColors.brandPurple
+                        : DunesColors.text3,
+                  ),
+                  const SizedBox(width: 10),
+                ],
                 Container(
                   width: 42,
                   height: 42,
@@ -712,6 +962,13 @@ class _NativeMeetingListPageState extends State<NativeMeetingListPage> {
                         style: DunesTypography.sans(
                           fontSize: 11,
                           color: DunesColors.text3,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OrgFolderBadge(
+                          label: orgFolderDisplayName(row.folderId, _folders),
                         ),
                       ),
                       if (showUploadProgressBar) ...[

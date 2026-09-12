@@ -2,7 +2,7 @@ name: dunes_app
 description: "æ²ä¸ Â· ç»ä¸å®¡æ¹ App â åºäº index.html åå 100% è¿åç Flutter å£³"
 publish_to: 'none'
 
-version: 1.6.4+164
+version: 1.6.5+165
 
 environment:
   sdk: ^3.11.0

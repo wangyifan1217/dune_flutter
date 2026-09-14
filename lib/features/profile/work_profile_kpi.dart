@@ -42,11 +42,21 @@ String formatKpiCoefficient(double v) {
   return v.toStringAsFixed(1);
 }
 
+String formatKpiNum(double? v) {
+  if (v == null) return '—';
+  if (v == v.roundToDouble()) return v.toInt().toString();
+  return v.toStringAsFixed(2);
+}
+
 class WorkProfileKpiMetric {
   const WorkProfileKpiMetric({
     required this.key,
     required this.label,
     required this.status,
+    this.kind = '',
+    this.base = 0,
+    this.maxPoints = 0,
+    this.weight = 0,
     this.points,
     this.momPct,
     this.current,
@@ -57,6 +67,10 @@ class WorkProfileKpiMetric {
   final String key;
   final String label;
   final String status;
+  final String kind;
+  final double base;
+  final double maxPoints;
+  final double weight;
   final double? points;
   final double? momPct;
   final double? current;
@@ -68,6 +82,10 @@ class WorkProfileKpiMetric {
       key: '${json['key'] ?? ''}',
       label: '${json['label'] ?? ''}',
       status: '${json['status'] ?? ''}',
+      kind: '${json['kind'] ?? ''}',
+      base: (json['base'] as num?)?.toDouble() ?? 0,
+      maxPoints: (json['maxPoints'] as num?)?.toDouble() ?? 0,
+      weight: (json['weight'] as num?)?.toDouble() ?? 0,
       points: (json['points'] as num?)?.toDouble(),
       momPct: (json['momPct'] as num?)?.toDouble(),
       current: (json['current'] as num?)?.toDouble(),
@@ -213,6 +231,8 @@ class WorkProfileKpiPerson {
   const WorkProfileKpiPerson({
     required this.userId,
     required this.userName,
+    this.departmentName = '',
+    this.position = '',
     required this.mainScore,
     required this.bonus,
     required this.telecomWeight,
@@ -227,6 +247,8 @@ class WorkProfileKpiPerson {
 
   final int userId;
   final String userName;
+  final String departmentName;
+  final String position;
   final double mainScore;
   final String grade;
   final String gradeLabel;
@@ -253,6 +275,8 @@ class WorkProfileKpiPerson {
     return WorkProfileKpiPerson(
       userId: (json['userId'] as num?)?.toInt() ?? 0,
       userName: '${json['userName'] ?? ''}',
+      departmentName: '${json['departmentName'] ?? ''}',
+      position: '${json['position'] ?? ''}',
       mainScore: (json['mainScore'] as num?)?.toDouble() ?? 0,
       grade: '${json['grade'] ?? ''}',
       gradeLabel: '${json['gradeLabel'] ?? ''}',
@@ -404,6 +428,12 @@ List<WorkProfileKpiPerson> kpiPeopleByScoreDesc(
     });
 }
 
+/// 列表、汇总、导出统一：人名前面带当前名单里的序号。
+String kpiIndexedPersonName(int index, String name) {
+  final n = name.trim();
+  return '${index + 1}. ${n.isEmpty ? '—' : n}';
+}
+
 /// 全员最终得分与等级的 Markdown，便于页面展示和转发 IM。
 String kpiScoreSummaryMarkdown(WorkProfileKpiScore score) {
   final people = kpiPeopleByScoreDesc(score.people);
@@ -414,12 +444,19 @@ String kpiScoreSummaryMarkdown(WorkProfileKpiScore score) {
     ..writeln()
     ..writeln('共 **${people.length}** 人')
     ..writeln()
-    ..writeln('| 姓名 | 最终得分 | 等级 |')
-    ..writeln('| --- | ---: | --- |');
-  for (final person in people) {
-    final name = person.userName.trim().replaceAll('|', '\\|');
+    ..writeln('| 部门 | 姓名 | 岗位 | 绩效得分 | 绩效等级 | 绩效系数 |')
+    ..writeln('| --- | --- | --- | ---: | --- | ---: |');
+  for (var i = 0; i < people.length; i++) {
+    final person = people[i];
+    String cell(String raw) {
+      final v = raw.trim().replaceAll('|', '\\|');
+      return v.isEmpty ? '—' : v;
+    }
+
+    final grade = person.resolvedGrade;
     buf.writeln(
-      '| $name | ${person.mainScore.toStringAsFixed(2)} | ${person.resolvedGrade.label} |',
+      '| ${cell(person.departmentName)} | ${cell(kpiIndexedPersonName(i, person.userName))} | ${cell(person.position)} '
+      '| ${person.mainScore.toStringAsFixed(2)} | ${grade.label} | ${grade.coefficient} |',
     );
   }
   return buf.toString().trimRight();

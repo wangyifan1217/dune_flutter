@@ -18,6 +18,35 @@ import 'native_workbench_kpi_detail.dart';
 import 'workbench_kpi_service.dart';
 
 const _accent = Color(0xFF3D7A8C);
+const _kpiPillPadding = EdgeInsets.symmetric(horizontal: 14, vertical: 10);
+
+ButtonStyle _kpiFilledPillStyle() {
+  return FilledButton.styleFrom(
+    backgroundColor: _accent,
+    foregroundColor: Colors.white,
+    disabledBackgroundColor: const Color(0xFF3D7A8C).withValues(alpha: 0.4),
+    elevation: 0,
+    shape: const StadiumBorder(),
+    padding: _kpiPillPadding,
+    minimumSize: const Size(0, 40),
+    visualDensity: VisualDensity.compact,
+    textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+  );
+}
+
+ButtonStyle _kpiOutlinedPillStyle() {
+  return OutlinedButton.styleFrom(
+    foregroundColor: DunesColors.text2,
+    backgroundColor: Colors.white,
+    disabledForegroundColor: DunesColors.text3,
+    shape: const StadiumBorder(),
+    side: const BorderSide(color: Color(0xFFD8DEE6)),
+    padding: _kpiPillPadding,
+    minimumSize: const Size(0, 40),
+    visualDensity: VisualDensity.compact,
+    textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+  );
+}
 
 class NativeWorkbenchKpiPage extends StatefulWidget {
   const NativeWorkbenchKpiPage({
@@ -52,6 +81,10 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
 
   bool _loading = true;
   bool _busy = false;
+  // 板块与部门筛选：一次只看一个板块，避免所有人所有规则一次性铺开。
+  String _sector = 'all';
+  String _dept = 'all';
+  final Set<int> _expanded = <int>{};
   String? _error;
   WorkProfileKpiScore? _score;
   late DateTime _month;
@@ -387,9 +420,44 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     final people = kpiPeopleByScoreDesc(_score?.people ?? const <WorkProfileKpiPerson>[]);
     return [
       for (final person in people)
-        if (needle.isEmpty || _personMatches(person, needle))
-          _PersonGroup(person: person),
+        if ((needle.isEmpty || _personMatches(person, needle)) &&
+            _personInSector(person) &&
+            _personInDept(person))
+          _PersonGroup(person: person, sector: _sector),
     ];
+  }
+
+  bool _personInSector(WorkProfileKpiPerson person) {
+    if (_sector == 'all') return true;
+    return person.categories.any((c) => c.category == _sector && c.tasks.isNotEmpty);
+  }
+
+  bool _personInDept(WorkProfileKpiPerson person) {
+    if (_dept == 'all') return true;
+    return _deptNameOf(person) == _dept;
+  }
+
+  String _deptNameOf(WorkProfileKpiPerson person) {
+    final name = person.departmentName.trim();
+    return name.isEmpty ? '未分配部门' : name;
+  }
+
+  List<String> get _deptOptions {
+    final seen = <String>{};
+    for (final person in _score?.people ?? const <WorkProfileKpiPerson>[]) {
+      if (!_personInSector(person)) continue;
+      seen.add(_deptNameOf(person));
+    }
+    final list = seen.toList()..sort();
+    return list;
+  }
+
+  void _setSector(String value) {
+    setState(() {
+      _sector = value;
+      if (_dept != 'all' && !_deptOptions.contains(_dept)) _dept = 'all';
+      _expanded.clear();
+    });
   }
 
   bool _personMatches(WorkProfileKpiPerson person, String needle) {
@@ -456,66 +524,26 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
             ),
           )
         else
-          for (final group in _groups) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Wrap(
-                      spacing: 10,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          '${group.person.userName}（${group.slices.length}条规则）',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: DunesColors.text2,
-                          ),
+          for (var i = 0; i < _groups.length; i++)
+            _PersonRow(
+              group: _groups[i],
+              index: i + 1,
+              deptName: _deptNameOf(_groups[i].person),
+              expanded: _expanded.contains(_groups[i].person.userId),
+              busy: _busy,
+              onToggle: () => setState(() {
+                final id = _groups[i].person.userId;
+                if (!_expanded.remove(id)) _expanded.add(id);
+              }),
+              onOpenDetail: _busy
+                  ? null
+                  : () => unawaited(
+                        _openDetail(
+                          _groups[i].person.userId,
+                          kpiIndexedPersonName(i, _groups[i].person.userName),
                         ),
-                        Text(
-                          group.person.mainScore.toStringAsFixed(2),
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            color: DunesColors.text,
-                          ),
-                        ),
-                        Text(
-                          group.person.resolvedGrade.label,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: _accent,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  TextButton(
-                    key: Key('kpi-detail-${group.person.userId}'),
-                    onPressed: _busy
-                        ? null
-                        : () => unawaited(
-                            _openDetail(group.person.userId, group.person.userName),
-                          ),
-                    child: const Text('查看明细'),
-                  ),
-                ],
-              ),
+                      ),
             ),
-            for (final task in group.slices)
-              _SliceCard(
-                task: task,
-                onOpen: _busy
-                    ? null
-                    : () => unawaited(
-                          _openDetail(group.person.userId, group.person.userName),
-                        ),
-              ),
-          ],
       ],
     );
   }
@@ -558,8 +586,9 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    TextButton.icon(
+                    OutlinedButton.icon(
                       onPressed: _busy ? null : _pickMonth,
+                      style: _kpiOutlinedPillStyle(),
                       icon: const Icon(Icons.calendar_month_outlined, size: 18),
                       label: Text(formatKpiMonthLabel(_month)),
                     ),
@@ -582,22 +611,68 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
                   ],
                 ),
                 if (_detailUserId <= 0) ...[
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
+                      for (final entry in const [
+                        MapEntry('all', '全部板块'),
+                        MapEntry('telecom', '通信'),
+                        MapEntry('energy', '能源'),
+                      ])
+                        _KpiPillButton(
+                          key: Key('kpi-sector-${entry.key}'),
+                          label: entry.value,
+                          filled: _sector == entry.key,
+                          onPressed: _busy ? null : () => _setSector(entry.key),
+                        ),
+                      if (_deptOptions.length > 1)
+                        Container(
+                          height: 40,
+                          padding: const EdgeInsets.only(left: 14, right: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: const Color(0xFFD8DEE6)),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              key: const Key('kpi-dept-filter'),
+                              value: _deptOptions.contains(_dept) ? _dept : 'all',
+                              isDense: true,
+                              borderRadius: BorderRadius.circular(12),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: DunesColors.text2,
+                              ),
+                              items: [
+                                const DropdownMenuItem(value: 'all', child: Text('全部部门')),
+                                for (final name in _deptOptions)
+                                  DropdownMenuItem(value: name, child: Text(name)),
+                              ],
+                              onChanged: _busy
+                                  ? null
+                                  : (value) => setState(() {
+                                        _dept = value ?? 'all';
+                                        _expanded.clear();
+                                      }),
+                            ),
+                          ),
+                        ),
                       FilledButton.icon(
                         key: const Key('kpi-rerun'),
                         onPressed: _busy ? null : () => unawaited(_rerun()),
-                        style: FilledButton.styleFrom(backgroundColor: _accent),
+                        style: _kpiFilledPillStyle(),
                         icon: const Icon(Icons.replay, size: 18),
                         label: const Text('重跑绩效'),
                       ),
                       OutlinedButton.icon(
                         key: const Key('kpi-export'),
                         onPressed: _busy ? null : () => unawaited(_export()),
+                        style: _kpiOutlinedPillStyle(),
                         icon: const Icon(Icons.download_outlined, size: 18),
                         label: const Text('导出'),
                       ),
@@ -630,11 +705,23 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
 }
 
 class _PersonGroup {
-  _PersonGroup({required this.person});
+  _PersonGroup({required this.person, this.sector = 'all'});
   final WorkProfileKpiPerson person;
+  final String sector;
+
+  /// 选中某个板块时只给该板块的切片；个人得分仍是跨板块按权重加权的主营得分。
+  double? get sectorScore {
+    if (sector == 'all') return null;
+    for (final cat in person.categories) {
+      if (cat.category == sector) return cat.score;
+    }
+    return null;
+  }
+
   List<WorkProfileKpiTask> get slices {
     final list = [
-      for (final cat in person.categories) ...cat.tasks,
+      for (final cat in person.categories)
+        if (sector == 'all' || cat.category == sector) ...cat.tasks,
     ];
     list.sort((a, b) {
       final byScore = b.taskTotal.compareTo(a.taskTotal);
@@ -1128,6 +1215,173 @@ class _KpiUserPickerDialogState extends State<_KpiUserPickerDialog> {
           child: const Text('取消'),
         ),
       ],
+    );
+  }
+}
+
+/// 人员行：默认收起，只显示 部门 / 姓名 / 岗位 / 得分 / 等级 / 系数，
+/// 点开才展开这个人的规则卡，避免下滑找人时所有人的明细一次性铺开。
+class _PersonRow extends StatelessWidget {
+  const _PersonRow({
+    required this.group,
+    required this.index,
+    required this.deptName,
+    required this.expanded,
+    required this.busy,
+    required this.onToggle,
+    this.onOpenDetail,
+  });
+
+  final _PersonGroup group;
+  final int index;
+  final String deptName;
+  final bool expanded;
+  final bool busy;
+  final VoidCallback onToggle;
+  final VoidCallback? onOpenDetail;
+
+  @override
+  Widget build(BuildContext context) {
+    final person = group.person;
+    final grade = person.resolvedGrade;
+    final post = person.position.trim();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFE8EAED)),
+        ),
+        child: Column(
+          children: [
+            InkWell(
+              key: Key('kpi-person-${person.userId}'),
+              borderRadius: BorderRadius.circular(10),
+              onTap: onToggle,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 10, 12, 10),
+                child: Row(
+                  children: [
+                    Icon(
+                      expanded ? Icons.keyboard_arrow_down : Icons.chevron_right,
+                      size: 18,
+                      color: DunesColors.text3,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${kpiIndexedPersonName(index - 1, person.userName)}（${group.slices.length}条规则）',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: DunesColors.text,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            post.isEmpty ? deptName : '$deptName · $post',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          person.mainScore.toStringAsFixed(2),
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: DunesColors.text,
+                          ),
+                        ),
+                        Text(
+                          '${grade.label} · 系数 ${grade.coefficient}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: _accent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (expanded) ...[
+              const Divider(height: 1, color: Color(0xFFE8EAED)),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+                child: Column(
+                  children: [
+                    if (group.sectorScore != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            '本板块得分 ${group.sectorScore!.toStringAsFixed(2)}（主营得分按两个板块的收入权重加权）',
+                            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                          ),
+                        ),
+                      ),
+                    for (final task in group.slices)
+                      _SliceCard(task: task, onOpen: onOpenDetail),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        key: Key('kpi-detail-${person.userId}'),
+                        onPressed: busy ? null : onOpenDetail,
+                        child: const Text('查看明细'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KpiPillButton extends StatelessWidget {
+  const _KpiPillButton({
+    super.key,
+    required this.label,
+    required this.filled,
+    this.onPressed,
+  });
+
+  final String label;
+  final bool filled;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    if (filled) {
+      return FilledButton(
+        onPressed: onPressed,
+        style: _kpiFilledPillStyle(),
+        child: Text(label),
+      );
+    }
+    return OutlinedButton(
+      onPressed: onPressed,
+      style: _kpiOutlinedPillStyle(),
+      child: Text(label),
     );
   }
 }

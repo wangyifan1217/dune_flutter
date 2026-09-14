@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../profile/native_work_profile_perf_page.dart';
 import '../profile/work_profile_kpi.dart';
+import 'kpi_metric_list.dart';
 import 'workbench_kpi_service.dart';
 
 const _accent = Color(0xFF3D7A8C);
@@ -201,12 +202,8 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            person.bonus == 0
-                ? '主营 ${person.mainScore.toStringAsFixed(2)}  · ${person.resolvedGrade.label}  · 通信 ${person.telecomScore.toStringAsFixed(1)}  · 能源 ${person.energyScore.toStringAsFixed(1)}'
-                : '主营 ${person.mainScore.toStringAsFixed(2)}  · ${person.resolvedGrade.label}  · 加减分 ${formatKpiAdj(person.bonus)}  · 通信 ${person.telecomScore.toStringAsFixed(1)}  · 能源 ${person.energyScore.toStringAsFixed(1)}',
-            style: const TextStyle(fontSize: 13, color: DunesColors.text2),
-          ),
+          const SizedBox(height: 8),
+          _ScoreHeader(person: person),
           const SizedBox(height: 12),
           for (final cat in person.categories) ...[
             _CategoryEditor(
@@ -258,11 +255,32 @@ class _CategoryEditor extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '${category.categoryLabel}（${category.tasks.length}）· 得分 ${category.score.toStringAsFixed(2)}',
-            style: const TextStyle(fontWeight: FontWeight.w700),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${category.categoryLabel}板块 · ${category.tasks.length} 条任务',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                ),
+              ),
+              Text(
+                category.score.toStringAsFixed(2),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: DunesColors.text,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 2),
+          Text(
+            category.tasks.length >= 2
+                ? '板块分 = 各任务分 × 当月营收占比，合计 ${category.score.toStringAsFixed(2)}'
+                : '本板块只有一条任务，板块分就是它的任务分',
+            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+          ),
+          const SizedBox(height: 10),
           if (canEdit && category.tasks.length >= 2)
             const Padding(
               padding: EdgeInsets.only(bottom: 8),
@@ -286,7 +304,10 @@ class _CategoryEditor extends StatelessWidget {
   }
 }
 
-class _TaskEditor extends StatelessWidget {
+/// 任务卡：得分怎么来的放在明面上（每个指标的本月/上月、环比、得分与满分），
+/// 权重 / 加减分 / 备注三个输入框默认收起，点「调整」才展开——9 条规则时这三个框
+/// 会把整页撑到滚不动。
+class _TaskEditor extends StatefulWidget {
   const _TaskEditor({
     required this.task,
     required this.canEdit,
@@ -304,113 +325,450 @@ class _TaskEditor extends StatelessWidget {
   final TextEditingController remarkCtrl;
 
   @override
+  State<_TaskEditor> createState() => _TaskEditorState();
+}
+
+class _TaskEditorState extends State<_TaskEditor> {
+  bool _editing = false;
+
+  @override
   Widget build(BuildContext context) {
+    final task = widget.task;
     final auto = task.autoWeightPct ?? task.weightPct;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+    final touched = task.weightOverridden || task.scoreAdjusted;
+    final share = (task.weightPct / 100).clamp(0.0, 1.0);
+    final contribution = task.taskTotal * task.weightPct / 100;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFBFCFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE8EAED)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      kpiLighthouseSliceTitle(task),
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            kpiLighthouseSliceTitle(task),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        if (touched) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF4E8D2),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              task.scoreAdjusted && !task.weightOverridden
+                                  ? '加减分'
+                                  : '手工',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFFB07A2B),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(
                       kpiLighthouseSliceSubtitle(task),
-                      style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: DunesColors.text3,
+                      ),
                     ),
                   ],
                 ),
               ),
-              if (task.weightOverridden || task.scoreAdjusted)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF4E8D2),
-                    borderRadius: BorderRadius.circular(10),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    task.taskTotal.toStringAsFixed(1),
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: DunesColors.text,
+                      height: 1.1,
+                    ),
                   ),
-                  child: Text(
-                    task.scoreAdjusted && !task.weightOverridden ? '加减分' : '手工',
-                    style: const TextStyle(fontSize: 11, color: Color(0xFFB07A2B)),
+                  const Text(
+                    '任务分',
+                    style: TextStyle(fontSize: 11, color: DunesColors.text3),
                   ),
-                ),
+                ],
+              ),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            task.scoreAdjusted
-                ? '自动权重 ${auto.toStringAsFixed(2)}% · 自动得分 ${(task.autoTaskTotal ?? task.taskTotal).toStringAsFixed(1)} · 现得分 ${task.taskTotal.toStringAsFixed(1)}（${formatKpiAdj(task.scoreAdj)}）'
-                : '自动权重 ${auto.toStringAsFixed(2)}% · 得分 ${task.taskTotal.toStringAsFixed(1)}',
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+          const SizedBox(height: 10),
+          // 权重：占比条 + 这条任务实际贡献给板块分多少
+          Row(
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: share,
+                    minHeight: 6,
+                    backgroundColor: const Color(0xFFEDEFF2),
+                    valueColor: const AlwaysStoppedAnimation<Color>(_accent),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                '权重 ${task.weightPct.toStringAsFixed(2)}% · 贡献 ${contribution.toStringAsFixed(1)} 分',
+                style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+              ),
+            ],
           ),
+          if (task.scoreAdjusted) ...[
+            const SizedBox(height: 4),
+            Text(
+              '自动得分 ${(task.autoTaskTotal ?? task.taskTotal).toStringAsFixed(1)} → 现得分 ${task.taskTotal.toStringAsFixed(1)}（${formatKpiAdj(task.scoreAdj)}）',
+              style: const TextStyle(fontSize: 12, color: Color(0xFFB07A2B)),
+            ),
+          ],
+          const SizedBox(height: 8),
           Text(
-            '本月收入 ${formatKpiNum(task.curRevenue)} · 上月 ${formatKpiNum(task.prevRevenue)}',
+            '本月营收 ${kpiMoney(task.curRevenue)} · 上月 ${kpiMoney(task.prevRevenue)}',
             style: const TextStyle(fontSize: 12, color: DunesColors.text2),
           ),
-          Text(
-            task.metrics.map((m) => m.line).join('；'),
-            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
-          ),
-          if (canEdit) ...[
-            const SizedBox(height: 8),
-            TextField(
-              key: Key('kpi-weight-${task.taskId}'),
-              controller: weightCtrl,
-              enabled: canEdit && !lockWeight,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-              ],
-              decoration: InputDecoration(
-                isDense: true,
-                labelText: lockWeight ? '任务权重 %（该板块仅一项，无法改比例）' : '任务权重 %',
-                border: const OutlineInputBorder(),
-              ),
+          const SizedBox(height: 8),
+          KpiMetricList(metrics: task.metrics),
+          if (widget.canEdit) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _editing
+                  ? FilledButton.icon(
+                      key: Key('kpi-edit-${task.taskId}'),
+                      onPressed: () => setState(() => _editing = false),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _accent,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: const StadiumBorder(),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        visualDensity: VisualDensity.compact,
+                        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      icon: const Icon(Icons.keyboard_arrow_up, size: 16),
+                      label: const Text('收起调整'),
+                    )
+                  : OutlinedButton.icon(
+                      key: Key('kpi-edit-${task.taskId}'),
+                      onPressed: () => setState(() => _editing = true),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _accent,
+                        backgroundColor: Colors.white,
+                        side: const BorderSide(color: Color(0xFFD5E3E7)),
+                        shape: const StadiumBorder(),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        visualDensity: VisualDensity.compact,
+                        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      icon: const Icon(Icons.tune, size: 16),
+                      label: const Text('调整权重 / 加减分'),
+                    ),
             ),
-            const SizedBox(height: 8),
-            TextField(
-              key: Key('kpi-adj-${task.taskId}'),
-              controller: adjCtrl,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-                signed: true,
+            if (_editing) ...[
+              const SizedBox(height: 10),
+              _KpiAdjustPanel(
+                taskId: task.taskId,
+                autoWeight: auto,
+                lockWeight: widget.lockWeight,
+                weightCtrl: widget.weightCtrl,
+                adjCtrl: widget.adjCtrl,
+                remarkCtrl: widget.remarkCtrl,
               ),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]')),
-              ],
-              decoration: const InputDecoration(
-                isDense: true,
-                labelText: '加减分',
-                hintText: '正数为加分，负数为减分',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              key: Key('kpi-remark-${task.taskId}'),
-              controller: remarkCtrl,
-              maxLines: 2,
-              decoration: const InputDecoration(
-                isDense: true,
-                labelText: '备注',
-                hintText: '说明为什么调整权重或分数',
-                border: OutlineInputBorder(),
-              ),
-            ),
+            ],
           ] else if (task.remark.isNotEmpty) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(
               '备注 ${task.remark}',
               style: const TextStyle(fontSize: 12, color: Color(0xFFB07A2B)),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+InputDecoration _kpiAdjustInputDecoration({
+  String? hint,
+  String? suffix,
+}) {
+  const radius = BorderRadius.all(Radius.circular(16));
+  const idle = BorderSide(color: Color(0xFFE2E8F0));
+  return InputDecoration(
+    isDense: true,
+    filled: true,
+    fillColor: Colors.white,
+    hintText: hint,
+    hintStyle: const TextStyle(fontSize: 13, color: DunesColors.text3),
+    suffixText: suffix,
+    suffixStyle: const TextStyle(fontSize: 12, color: DunesColors.text3),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    border: const OutlineInputBorder(borderRadius: radius, borderSide: idle),
+    enabledBorder: const OutlineInputBorder(borderRadius: radius, borderSide: idle),
+    disabledBorder: const OutlineInputBorder(
+      borderRadius: radius,
+      borderSide: BorderSide(color: Color(0xFFEEF1F4)),
+    ),
+    focusedBorder: const OutlineInputBorder(
+      borderRadius: radius,
+      borderSide: BorderSide(color: _accent, width: 1.4),
+    ),
+  );
+}
+
+class _KpiAdjustPanel extends StatelessWidget {
+  const _KpiAdjustPanel({
+    required this.taskId,
+    required this.autoWeight,
+    required this.lockWeight,
+    required this.weightCtrl,
+    required this.adjCtrl,
+    required this.remarkCtrl,
+  });
+
+  final int taskId;
+  final double autoWeight;
+  final bool lockWeight;
+  final TextEditingController weightCtrl;
+  final TextEditingController adjCtrl;
+  final TextEditingController remarkCtrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F8F9),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFDCE8EB)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _KpiAdjustField(
+                  label: '权重',
+                  hint: lockWeight ? '该板块仅一项，无法改比例' : '自动 ${autoWeight.toStringAsFixed(2)}%',
+                  suffix: '%',
+                  controller: weightCtrl,
+                  fieldKey: Key('kpi-weight-$taskId'),
+                  enabled: !lockWeight,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _KpiAdjustField(
+                  label: '加减分',
+                  hint: '正加负减',
+                  controller: adjCtrl,
+                  fieldKey: Key('kpi-adj-$taskId'),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                    signed: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]')),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _KpiAdjustField(
+            label: '备注',
+            hint: '说明调整原因',
+            controller: remarkCtrl,
+            fieldKey: Key('kpi-remark-$taskId'),
+            maxLines: 2,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KpiAdjustField extends StatelessWidget {
+  const _KpiAdjustField({
+    required this.label,
+    required this.controller,
+    required this.fieldKey,
+    this.hint,
+    this.suffix,
+    this.enabled = true,
+    this.maxLines = 1,
+    this.keyboardType,
+    this.inputFormatters,
+  });
+
+  final String label;
+  final String? hint;
+  final String? suffix;
+  final TextEditingController controller;
+  final Key fieldKey;
+  final bool enabled;
+  final int maxLines;
+  final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 6),
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: DunesColors.text2,
+            ),
+          ),
+        ),
+        TextField(
+          key: fieldKey,
+          controller: controller,
+          enabled: enabled,
+          maxLines: maxLines,
+          keyboardType: keyboardType,
+          inputFormatters: inputFormatters,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: enabled ? DunesColors.text : DunesColors.text3,
+          ),
+          decoration: _kpiAdjustInputDecoration(hint: hint, suffix: suffix),
+        ),
+      ],
+    );
+  }
+}
+
+/// 顶部：主营分、等级系数，以及通信/能源两个板块各占多少权重。
+/// 没有某个板块的任务时不再显示「通信 0.0」这种看着像出错的数。
+class _ScoreHeader extends StatelessWidget {
+  const _ScoreHeader({required this.person});
+
+  final WorkProfileKpiPerson person;
+
+  @override
+  Widget build(BuildContext context) {
+    final grade = person.resolvedGrade;
+    final hasTelecom = person.categories.any((c) => c.category == 'telecom');
+    final hasEnergy = person.categories.any((c) => c.category == 'energy');
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE8EAED)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                person.mainScore.toStringAsFixed(2),
+                style: const TextStyle(
+                  fontSize: 30,
+                  fontWeight: FontWeight.w800,
+                  color: DunesColors.text,
+                  height: 1.05,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '主营得分',
+                  style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                ),
+              ),
+              const Spacer(),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    grade.label,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: _accent,
+                    ),
+                  ),
+                  Text(
+                    '系数 ${grade.coefficient}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.text3,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          if (person.bonus != 0) ...[
+            const SizedBox(height: 4),
+            Text(
+              '含手工加减分 ${formatKpiAdj(person.bonus)}',
+              style: const TextStyle(fontSize: 12, color: Color(0xFFB07A2B)),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Text(
+            hasTelecom && hasEnergy
+                ? '主营分 = 通信 ${person.telecomScore.toStringAsFixed(1)} × ${(person.telecomWeight * 100).toStringAsFixed(0)}% + 能源 ${person.energyScore.toStringAsFixed(1)} × ${(person.energyWeight * 100).toStringAsFixed(0)}%（按两边当月营收占比）'
+                : hasEnergy
+                    ? '只有能源板块任务，主营分就是能源板块分'
+                    : '只有通信板块任务，主营分就是通信板块分',
+            style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+          ),
         ],
       ),
     );

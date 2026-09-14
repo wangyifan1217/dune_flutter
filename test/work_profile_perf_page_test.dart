@@ -102,10 +102,10 @@ void main() {
     final md = kpiScoreSummaryMarkdown(score);
     expect(md, contains('## 2026年8月 业务绩效汇总'));
     expect(md, contains('共 **2** 人'));
-    expect(md, contains('| 姓名 | 最终得分 | 等级 |'));
+    expect(md, contains('| 部门 | 姓名 | 岗位 | 绩效得分 | 绩效等级 | 绩效系数 |'));
     expect(md.indexOf('李四'), lessThan(md.indexOf('何佳伟')));
-    expect(md, contains('| 李四 | 88.00 | 良（达到预期） |'));
-    expect(md, contains('| 何佳伟 | 47.36 | 辅（专项改进） |'));
+    expect(md, contains('| — | 1. 李四 | — | 88.00 | 良（达到预期） | 1.0 |'));
+    expect(md, contains('| — | 2. 何佳伟 | — | 47.36 | 辅（专项改进） | 0.6 |'));
   });
 
   const session = AuthSession(

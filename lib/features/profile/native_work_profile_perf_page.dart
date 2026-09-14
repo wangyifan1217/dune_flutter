@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
+import '../kpi/kpi_metric_list.dart';
 import 'work_profile_kpi.dart';
 
 const _perfAccent = Color(0xFF8C5A91);
@@ -15,12 +16,6 @@ String formatKpiAdj(double v) {
   if (v > 0) return '+$body';
   if (v < 0) return '-$body';
   return '0';
-}
-
-String formatKpiNum(double? v) {
-  if (v == null) return '—';
-  if (v == v.roundToDouble()) return v.toInt().toString();
-  return v.toStringAsFixed(2);
 }
 
 String formatKpiMonth(DateTime d) =>
@@ -586,23 +581,22 @@ class _TaskRow extends StatelessWidget {
                 ),
               ),
             Text(
-              '上月收入 ${formatKpiNum(task.prevRevenue)} · 本月收入 ${formatKpiNum(task.curRevenue)}',
-              style: DunesTypography.sans(fontSize: 12, color: DunesColors.text2),
-            ),
-            Text(
-              '上月利润 ${formatKpiNum(task.prevProfit)} · 本月利润 ${formatKpiNum(task.curProfit)}',
-              style: DunesTypography.sans(fontSize: 12, color: DunesColors.text2),
-            ),
-            Text(
-              '上月用户 ${formatKpiNum(task.prevUsers)} · 本月用户 ${formatKpiNum(task.curUsers)}',
+              '本月营收 ${kpiMoney(task.curRevenue)} · 上月 ${kpiMoney(task.prevRevenue)}',
               style: DunesTypography.sans(fontSize: 12, color: DunesColors.text2),
             ),
             Text(
               task.scoreAdjusted && task.autoTaskTotal != null
-                  ? '得分 ${task.taskTotal.toStringAsFixed(1)}（自动 ${task.autoTaskTotal!.toStringAsFixed(1)}）· ${task.metrics.map((m) => m.line).join('；')}'
-                  : '得分 ${task.taskTotal.toStringAsFixed(1)} · ${task.metrics.map((m) => m.line).join('；')}',
-              style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+                  ? '任务分 ${task.taskTotal.toStringAsFixed(1)}（自动 ${task.autoTaskTotal!.toStringAsFixed(1)}）'
+                  : '任务分 ${task.taskTotal.toStringAsFixed(1)}',
+              style: DunesTypography.sans(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: DunesColors.text2,
+              ),
             ),
+            const SizedBox(height: 6),
+            // 收入/利润/用户的本月上月都在指标明细里，不再单独铺三行文字。
+            KpiMetricList(metrics: task.metrics),
           ],
         ),
       ),

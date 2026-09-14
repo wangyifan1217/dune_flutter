@@ -196,10 +196,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    // 列表默认收起，展开这个人才看得到规则卡。
+    expect(find.text('中石油'), findsNothing);
+    await tester.tap(find.byKey(const Key('kpi-person-9')));
+    await tester.pumpAndSettle();
     expect(find.text('中石油'), findsOneWidget);
     expect(find.text('广东 · 平安'), findsOneWidget);
     expect(find.text('多渠道'), findsOneWidget);
-    expect(find.textContaining('李四（2条规则）'), findsOneWidget);
+    expect(find.textContaining('1. 李四（2条规则）'), findsOneWidget);
     expect(find.textContaining('良（达到预期）'), findsAtLeastNWidgets(1));
     expect(find.text('产品=中石油；渠道L1=平安'), findsNothing);
     expect(find.text('渠道L1=多渠道'), findsNothing);
@@ -273,6 +277,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('kpi-person-9')));
+    await tester.pumpAndSettle();
     expect(find.text('中石油'), findsOneWidget);
     expect(find.byKey(const Key('kpi-rerun')), findsOneWidget);
     expect(find.byKey(const Key('kpi-summary')), findsOneWidget);
@@ -282,6 +288,11 @@ void main() {
   testWidgets('monthly detail save requires a second confirmation', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final service = _FakeKpiService();
     await tester.pumpWidget(
       MaterialApp(
@@ -296,11 +307,22 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(const Key('kpi-person-9')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('kpi-detail-9')));
     await tester.tap(find.byKey(const Key('kpi-detail-9')));
     await tester.pumpAndSettle();
     expect(service.fetchCount, 2);
-    expect(find.textContaining('李四 · 2026年8月'), findsOneWidget);
+    expect(find.textContaining('1. 李四 · 2026年8月'), findsOneWidget);
     expect(find.byKey(const Key('kpi-detail-save')), findsOneWidget);
+
+    // 权重/加减分/备注默认收起，点「调整」才展开。
+    expect(find.byKey(const Key('kpi-weight-1')), findsNothing);
+    await tester.ensureVisible(find.byKey(const Key('kpi-edit-1')));
+    await tester.tap(find.byKey(const Key('kpi-edit-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('权重'), findsOneWidget);
+    expect(find.text('加减分'), findsWidgets);
 
     await tester.enterText(find.byKey(const Key('kpi-weight-1')), '80');
     await tester.enterText(find.byKey(const Key('kpi-adj-1')), '5');
@@ -363,12 +385,17 @@ void main() {
     await tester.pump();
     expect(picked, 1);
     expect(sentId, 42);
-    expect(sentMd, contains('| 李四 | 88.00 | 良（达到预期） |'));
+    expect(sentMd, contains('| — | 1. 李四 | — | 88.00 | 良（达到预期） | 1.0 |'));
     expect(find.text('已转发到会话'), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
   });
 
   testWidgets('people list defaults to score high to low', (tester) async {
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final service = _RankedKpiService();
     await tester.pumpWidget(
       MaterialApp(
@@ -387,6 +414,52 @@ void main() {
     final he = tester.getTopLeft(find.textContaining('何佳伟（0条规则）'));
     expect(zhang.dy, lessThan(li.dy));
     expect(li.dy, lessThan(he.dy));
+  });
+
+  testWidgets('sector chips filter the people list', (tester) async {
+    final service = _FakeKpiService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NativeWorkbenchKpiPage(
+            session: _session,
+            service: service,
+            now: DateTime(2026, 9, 3),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(ChoiceChip), findsNothing);
+    expect(find.byKey(const Key('kpi-sector-telecom')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-sector-energy')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('kpi-sector-all')),
+        matching: find.byType(FilledButton),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('kpi-sector-energy')),
+        matching: find.byType(OutlinedButton),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester.widget<FilledButton>(find.byKey(const Key('kpi-rerun'))).style?.shape?.resolve({}),
+      const StadiumBorder(),
+    );
+
+    // 李四只有能源板块的任务，切到通信后不该出现在列表里。
+    await tester.tap(find.byKey(const Key('kpi-sector-telecom')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('李四（'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('kpi-sector-energy')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('李四（'), findsAtLeastNWidgets(1));
   });
 }
 

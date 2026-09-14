@@ -660,6 +660,7 @@ class _NativeKbHomePageState extends State<NativeKbHomePage> {
       await _service.deleteDocument(
         doc.novaDocumentId,
         folderId: _summary?.folderId,
+        doc: doc,
       );
       KbDocumentCoordinator.instance.notifyChanged();
       await _load(silent: true);

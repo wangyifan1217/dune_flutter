@@ -18,12 +18,15 @@ void main() {
     paymentInvoiceAccess: true,
   );
 
-  test('lists payment rows from proposals/all and enriches form fields', () async {
+  test('lists payment rows from payment-invoices using list formData only', () async {
+    var detailHits = 0;
+    String? kind;
     final service = PaymentInvoiceService(
       session: session,
       progressStore: MemoryPaymentInvoiceProgressStore(),
       client: MockClient((request) async {
-        if (request.url.path.endsWith('/xflow/proposals/all')) {
+        if (request.url.path.endsWith('/payment-invoices')) {
+          kind = request.url.queryParameters['kind'];
           return http.Response.bytes(
             utf8.encode(
               jsonEncode({
@@ -34,10 +37,16 @@ void main() {
                       'businessId': 11,
                       'businessType': 'FINANCE_ADMIN_PROCUREMENT',
                       'templateKey': 'finance-admin-procurement',
+                      'tagLabel': '付款审批',
                       'title': '行政采购审批',
                       'status': 'APPROVED',
                       'createdByName': '李四',
                       'createdAt': '2026-09-02T10:00:00Z',
+                      'formData': {
+                        'expensePurpose': '服务器托管费',
+                        'payeeAccount': '招商银行 1234',
+                        'payAccountType': '对公',
+                      },
                     },
                     {
                       'id': 99,
@@ -47,8 +56,6 @@ void main() {
                     },
                   ],
                   'total': 2,
-                  'page': 1,
-                  'pageSize': 50,
                 },
               }),
             ),
@@ -56,16 +63,53 @@ void main() {
             headers: const {'content-type': 'application/json; charset=utf-8'},
           );
         }
-        if (request.url.path.endsWith('/xflow/submissions/FINANCE_ADMIN_PROCUREMENT/11')) {
+        if (request.url.path.contains('/xflow/submissions/FINANCE_ADMIN_PROCUREMENT/')) {
+          detailHits += 1;
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    final result = await service.fetchLedger(
+      const PaymentInvoiceQuery(kind: PaymentInvoiceKind.payment),
+    );
+    expect(kind, 'payment');
+    expect(detailHits, 0);
+    expect(result.usedMineFallback, isFalse);
+    expect(result.rows, hasLength(1));
+    expect(result.rows.single.purpose, '服务器托管费');
+    expect(result.rows.single.payAccountType, '对公');
+    expect(result.rows.single.paymentCompleted, isTrue);
+  });
+
+  test('uses backend page payload without slicing extra rows', () async {
+    String? page;
+    String? pageSize;
+    final service = PaymentInvoiceService(
+      session: session,
+      progressStore: MemoryPaymentInvoiceProgressStore(),
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('/payment-invoices')) {
+          page = request.url.queryParameters['page'];
+          pageSize = request.url.queryParameters['pageSize'];
           return http.Response.bytes(
             utf8.encode(
               jsonEncode({
                 'data': {
-                  'formData': {
-                    'expensePurpose': '服务器托管费',
-                    'payeeAccount': '招商银行 1234',
-                    'payAccountType': '对公',
-                  },
+                  'items': [
+                    {
+                      'businessId': 11,
+                      'businessType': 'FINANCE_ADMIN_PROCUREMENT',
+                      'templateKey': 'finance-admin-procurement',
+                      'tagLabel': '付款审批',
+                      'title': '行政采购审批',
+                      'status': 'APPROVED',
+                      'formData': {'expensePurpose': '第一页'},
+                    },
+                  ],
+                  'total': 23,
+                  'page': 2,
+                  'pageSize': 10,
                 },
               }),
             ),
@@ -80,24 +124,79 @@ void main() {
     final result = await service.fetchLedger(
       const PaymentInvoiceQuery(
         kind: PaymentInvoiceKind.payment,
-        status: 'APPROVED',
+        page: 2,
+        pageSize: 10,
       ),
     );
-    expect(result.usedMineFallback, isFalse);
+    expect(page, '2');
+    expect(pageSize, '10');
+    expect(result.serverPaged, isTrue);
+    expect(result.total, 23);
     expect(result.rows, hasLength(1));
-    expect(result.rows.single.purpose, '服务器托管费');
-    expect(result.rows.single.payAccountType, '对公');
+    expect(result.rows.single.purpose, '第一页');
   });
 
-  test('falls back to mine when all-approvals is unavailable', () async {
+  test('slices locally when backend omits page metadata', () async {
     final service = PaymentInvoiceService(
       session: session,
       progressStore: MemoryPaymentInvoiceProgressStore(),
       client: MockClient((request) async {
-        if (request.url.path.contains('/xflow/proposals/all')) {
-          return http.Response('{"message":"forbidden"}', 403);
+        if (request.url.path.endsWith('/payment-invoices')) {
+          return http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'data': {
+                  'items': [
+                    for (var i = 1; i <= 12; i++)
+                      {
+                        'businessId': i,
+                        'businessType': 'FINANCE_ADMIN_PROCUREMENT',
+                        'templateKey': 'finance-admin-procurement',
+                        'tagLabel': '付款审批',
+                        'title': '行政采购$i',
+                        'status': 'APPROVED',
+                      },
+                  ],
+                  'total': 12,
+                },
+              }),
+            ),
+            200,
+            headers: const {'content-type': 'application/json; charset=utf-8'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    final result = await service.fetchLedger(
+      const PaymentInvoiceQuery(
+        kind: PaymentInvoiceKind.payment,
+        page: 2,
+        pageSize: 10,
+      ),
+    );
+    expect(result.serverPaged, isFalse);
+    expect(result.total, 12);
+    expect(result.rows, hasLength(2));
+    expect(result.rows.first.id, 11);
+  });
+
+  test('empty dedicated list does not fall back to mine', () async {
+    var mineHits = 0;
+    final service = PaymentInvoiceService(
+      session: session,
+      progressStore: MemoryPaymentInvoiceProgressStore(),
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('/payment-invoices')) {
+          return http.Response.bytes(
+            utf8.encode(jsonEncode({'data': {'items': <dynamic>[], 'total': 0}})),
+            200,
+            headers: const {'content-type': 'application/json; charset=utf-8'},
+          );
         }
         if (request.url.path.endsWith('/xflow/submissions/mine')) {
+          mineHits += 1;
           return http.Response.bytes(
             utf8.encode(
               jsonEncode({
@@ -105,6 +204,53 @@ void main() {
                   {
                     'businessId': 5,
                     'businessType': 'INVOICE',
+                    'tagLabel': '发票审批',
+                    'title': '发票申请',
+                    'status': 'APPROVED',
+                  },
+                ],
+              }),
+            ),
+            200,
+            headers: const {'content-type': 'application/json; charset=utf-8'},
+          );
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    final result = await service.fetchLedger(
+      const PaymentInvoiceQuery(kind: PaymentInvoiceKind.invoice),
+    );
+    expect(mineHits, 0);
+    expect(result.usedMineFallback, isFalse);
+    expect(result.rows, isEmpty);
+  });
+
+  test('falls back to mine when dedicated list is unavailable', () async {
+    final service = PaymentInvoiceService(
+      session: session,
+      progressStore: MemoryPaymentInvoiceProgressStore(),
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('/payment-invoices')) {
+          return http.Response('{"message":"not found"}', 404);
+        }
+        if (request.url.path.endsWith('/xflow/submissions') &&
+            !request.url.path.contains('/mine')) {
+          return http.Response('{"message":"not found"}', 404);
+        }
+        if (request.url.path.endsWith('/xflow/submissions/mine')) {
+          if (request.url.queryParameters['viewAll'] == '1') {
+            return http.Response('{"message":"not found"}', 404);
+          }
+          return http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'data': [
+                  {
+                    'businessId': 5,
+                    'businessType': 'INVOICE',
+                    'tagLabel': '发票审批',
                     'title': '发票申请',
                     'status': 'APPROVED',
                     'formData': {

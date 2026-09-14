@@ -431,7 +431,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
       }
       if (existing != null && shouldReplace) {
         try {
-          await _kbService.deleteDocument(existing.id);
+          await _kbService.deleteDocument(existing.id, doc: existing);
         } catch (e) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(

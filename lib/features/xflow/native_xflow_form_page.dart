@@ -942,7 +942,12 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                         child: ListView(
                           keyboardDismissBehavior:
                               ScrollViewKeyboardDismissBehavior.onDrag,
-                          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                          padding: EdgeInsets.fromLTRB(
+                            14,
+                            10,
+                            14,
+                            10 + MediaQuery.viewInsetsOf(context).bottom,
+                          ),
                           children: [
                             XflowFormCard(
                               title: _pageTitle,

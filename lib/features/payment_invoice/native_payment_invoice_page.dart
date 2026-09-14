@@ -53,12 +53,13 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
   String? _error;
   String _hint = '';
   List<PaymentInvoiceRow> _rows = const [];
-  String _status = 'APPROVED';
+  String _status = '';
   String _payType = '';
   String _completed = '';
   String _issueStatus = 'open';
   DateTime? _from;
   DateTime? _to;
+  int _totalCount = 0;
   int _savingId = 0;
   int _page = 1;
 
@@ -69,22 +70,17 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
       widget.staticPreview || widget.session.effectivePaymentInvoiceAccess;
 
   int get _totalPages =>
-      math.max(1, (_rows.length / _pageSize).ceil());
+      math.max(1, (_totalCount / _pageSize).ceil());
 
-  List<PaymentInvoiceRow> get _pagedRows {
-    if (_rows.isEmpty) return const [];
-    final start = (_page - 1) * _pageSize;
-    if (start >= _rows.length) return const [];
-    return _rows.sublist(start, math.min(start + _pageSize, _rows.length));
-  }
+  List<PaymentInvoiceRow> get _pagedRows => _rows;
 
   bool get _hasFilters =>
       _keywordCtrl.text.trim().isNotEmpty ||
       _payType.isNotEmpty ||
       _completed.isNotEmpty ||
+      _status.isNotEmpty ||
       _from != null ||
       _to != null ||
-      (_kind == PaymentInvoiceKind.payment && _status != 'APPROVED') ||
       (_kind == PaymentInvoiceKind.invoice && _issueStatus != 'open');
 
   @override
@@ -122,7 +118,7 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
     setState(() {
       _tab = index;
       if (_kind == PaymentInvoiceKind.payment) {
-        _status = 'APPROVED';
+        _status = '';
         _issueStatus = '';
         _payType = '';
         _completed = '';
@@ -141,37 +137,33 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
       status: _status,
       completed: _completed,
       issueStatus: _kind == PaymentInvoiceKind.invoice ? _issueStatus : '',
+      q: _keywordCtrl.text.trim(),
+      page: _page,
+      pageSize: _pageSize,
       from: _from,
       to: _to,
     );
   }
 
-  bool _matchesKeyword(PaymentInvoiceRow row) {
-    final q = _keywordCtrl.text.trim().toLowerCase();
-    if (q.isEmpty) return true;
-    return [
-      row.displayId,
-      '${row.id}',
-      row.title,
-      row.createdByName,
-      row.purpose,
-      row.payeeAccount,
-      row.counterparty,
-    ].any((value) => value.toLowerCase().contains(q));
-  }
-
-  Future<void> _load() async {
+  Future<void> _load({bool resetPage = true}) async {
     if (!_canAccess) return;
+    if (resetPage) _page = 1;
     if (widget.staticPreview) {
+      final all = paymentInvoicePreviewRows()
+          .where((row) => matchesPaymentInvoiceQuery(row, _query()))
+          .toList(growable: false);
+      final start = (_page - 1) * _pageSize;
       setState(() {
         _loading = false;
         _error = null;
         _hint = '';
-        _rows = paymentInvoicePreviewRows()
-            .where((row) => matchesPaymentInvoiceQuery(row, _query()))
-            .where(_matchesKeyword)
-            .toList(growable: false);
-        _page = 1;
+        _totalCount = all.length;
+        _rows = start >= all.length
+            ? const []
+            : all.sublist(
+                start,
+                math.min(start + _pageSize, all.length),
+              );
       });
       return;
     }
@@ -183,9 +175,9 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
       final result = await _service.fetchLedger(_query());
       if (!mounted) return;
       setState(() {
-        _rows = result.rows.where(_matchesKeyword).toList(growable: false);
+        _rows = result.rows;
+        _totalCount = result.total;
         _loading = false;
-        _page = 1;
         _hint = result.usedMineFallback ? '当前仅展示我发起的单据' : '';
       });
     } catch (error) {
@@ -194,6 +186,7 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
         _loading = false;
         _error = friendlyErrorText(error, fallback: '加载付款发票审批失败');
         _rows = const [];
+        _totalCount = 0;
       });
     }
   }
@@ -206,7 +199,7 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
       _from = null;
       _to = null;
       if (_kind == PaymentInvoiceKind.payment) {
-        _status = 'APPROVED';
+        _status = '';
         _issueStatus = '';
       } else {
         _status = '';
@@ -884,7 +877,7 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
       child: Row(
         children: [
           Text(
-            '共 ${_rows.length} 条 · 每页 $_pageSize 条',
+            '共 $_totalCount 条 · 每页 $_pageSize 条',
             style: const TextStyle(fontSize: 12, color: DunesColors.text3),
           ),
           const Spacer(),
@@ -913,8 +906,10 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
   }
 
   void _goPage(int page) {
+    if (page == _page) return;
     setState(() => _page = page);
     if (_vScroll.hasClients) _vScroll.jumpTo(0);
+    unawaited(_load(resetPage: false));
   }
 
   String _dateLabel(DateTime? value) {

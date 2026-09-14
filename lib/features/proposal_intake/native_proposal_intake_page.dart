@@ -6,6 +6,7 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/util/friendly_error.dart';
@@ -16,6 +17,7 @@ import '../xflow/approval_chat_share.dart';
 import '../xflow/proposal_import_template.dart';
 import '../xflow/xflow_detail_comments.dart';
 import '../contract_register/contract_kb_pdf_preview.dart';
+import '../contract_register/contract_register_service.dart';
 import '../xflow/xflow_file_open.dart';
 import '../xflow/xflow_models.dart';
 import '../xflow/xflow_service.dart';
@@ -496,7 +498,12 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
 
   Future<void> _backToList() async {
     final editing = _editing;
-    if (editing != null && proposalIntakeShouldAutoSaveOnBack(editing)) {
+    if (editing != null &&
+        proposalIntakeShouldAutoSaveOnBack(
+          editing,
+          userId: widget.session.userId,
+          viewAll: widget.session.proposalIntakeViewAll,
+        )) {
       try {
         final saved = editing.id <= 0
             ? await _service.create(
@@ -511,8 +518,11 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           _toast('已保存草稿');
         }
       } catch (error) {
-        _toast(friendlyErrorText(error, fallback: '保存草稿失败'), error: true);
-        return;
+        final text = friendlyErrorText(error, fallback: '保存草稿失败');
+        if (!proposalIntakeIsWriteDeniedMessage(text)) {
+          _toast(text, error: true);
+          return;
+        }
       }
     }
     if (!mounted) return;
@@ -1711,15 +1721,23 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _stage == 'reviewing' &&
       !_moduleReviewed('financeCompleted');
 
-  bool get _canSave =>
-      (_row.isTechRevising && _isTechFiller) ||
-      _canEditBusinessCost ||
-      _canEditHun ||
-      _canEditProposalSubtitle ||
-      _canEditFinanceModules ||
-      _canEditFinanceInterface ||
-      _canEditAsSubmitter ||
-      (!_isContentFrozen && !_row.techRevisionOpen && _isTechFiller);
+  bool get _canSave {
+    if (!proposalIntakeCanPatchDraft(
+      _row,
+      userId: _me,
+      viewAll: widget.session.proposalIntakeViewAll,
+    )) {
+      return false;
+    }
+    return (_row.isTechRevising && _isTechFiller) ||
+        _canEditBusinessCost ||
+        _canEditHun ||
+        _canEditProposalSubtitle ||
+        _canEditFinanceModules ||
+        _canEditFinanceInterface ||
+        _canEditAsSubmitter ||
+        (!_isContentFrozen && !_row.techRevisionOpen && _isTechFiller);
+  }
 
   bool get _canStartTechRevision =>
       _row.id > 0 &&
@@ -2090,6 +2108,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         form.addAll(
           proposalIntakeFilePatchFromContractDetail('purchase', detail),
         );
+        form.addAll(proposalIntakeSyncContractCollections(form, 'purchase'));
       } catch (_) {
         // 合同字段仍可带入；源文件缺失时不阻断。
       }
@@ -2946,17 +2965,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           );
     if (!mounted || _assetProductSyncSeq[rowId] != seq) return;
     _assetProductSyncing.remove(rowId);
-    final rows = proposalIntakeSettlementsFromChannelCatalog(
-      data,
-      fallbackChannel: hit.channelRef,
-      formulas: bundle.formulas,
-      billTypes: bundle.billTypes,
-    );
     _assetProductSyncHint[rowId] = data.items.isEmpty
         ? '该产品暂无结算行，请财务手工填写'
         : '已从资管同步 ${data.items.length} 条结算规则';
     _patchSellableSku(rowId, (current) {
       if (current.assetProduct?.id != hit.id) return current;
+      final rows = proposalIntakeSettlementsFromChannelCatalog(
+        data,
+        fallbackChannel: current.channelRef,
+        formulas: bundle.formulas,
+        billTypes: bundle.billTypes,
+      );
       return current.applyAssetProduct(hit, settlements: rows);
     });
   }
@@ -3435,7 +3454,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       final child = proposalIntakeChildTechnology(_form)['financeInterfaces'];
       collect(
         child is Map ? Map<String, dynamic>.from(child) : <String, dynamic>{},
-        '子产品',
+        kProposalChildProductLabel,
       );
     }
     return missing;
@@ -4709,7 +4728,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           (
             section: ProposalIntakeNavSection.market,
             no: '一',
-            desc: '选业务板块与标签、建主产品、挂采购与销售合同、写政策与风险',
+            desc: '选业务板块与标签、建$kProposalMainProductLabel、挂采购与销售合同、写政策与风险',
             flag: 'marketCompleted',
           ),
           (
@@ -5017,7 +5036,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   '新增供给',
                   required: true,
                   resetReview: 'marketCompleted',
-                  single: true,
                 ),
                 _personField(
                   '市场部负责人一（整板块复核）',
@@ -5052,6 +5070,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   '供货商政策',
                   'supplierPolicy',
                   maxLines: 3,
+                  minLines: 1,
                   required: true,
                   source: '合同抓取 · 可修改',
                   resetReview: 'marketCompleted',
@@ -5061,6 +5080,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     '渠道政策',
                     'channelPolicy',
                     maxLines: 3,
+                    minLines: 1,
                     required: true,
                     source: '合同抓取 · 可修改',
                     resetReview: 'marketCompleted',
@@ -5293,7 +5313,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  '主产品科技 · ${_productScopeNames(proposalIntakeSkuDetails(_form), fallback: '未命名主产品')}',
+                  '$kProposalMainProductLabel科技 · ${_productScopeNames(proposalIntakeSkuDetails(_form), fallback: '未命名$kProposalMainProductLabel')}',
                   style: const TextStyle(
                     color: ProposalPalette.purpleDeep,
                     fontWeight: FontWeight.w700,
@@ -5525,9 +5545,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }) {
     final names = [
       for (var i = 0; i < products.length; i++)
-        products[i].productName.trim().isEmpty
+        products[i].displayName.isEmpty
             ? '$fallback ${i + 1}'
-            : products[i].productName.trim(),
+            : products[i].displayName,
     ];
     return names.isEmpty ? fallback : names.join('、');
   }
@@ -5555,7 +5575,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           Align(
             alignment: Alignment.centerLeft,
             child: const Text(
-              '子产品科技',
+              '$kProposalChildProductLabel科技',
               style: const TextStyle(
                 color: ProposalPalette.green,
                 fontWeight: FontWeight.w700,
@@ -5567,7 +5587,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              '对应子产品：${_productScopeNames(proposalIntakeChildProducts(_form), fallback: '未命名子产品')}',
+              '对应$kProposalChildProductLabel：${_productScopeNames(proposalIntakeChildProducts(_form), fallback: '未命名$kProposalChildProductLabel')}',
               style: const TextStyle(
                 color: ProposalPalette.green,
                 fontSize: 11,
@@ -5578,7 +5598,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           const Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              '子产品合并共用这一套科技字段，不按子产品切换。',
+              '$kProposalChildProductLabel合并共用这一套科技字段，不按$kProposalChildProductLabel切换。',
               style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
             ),
           ),
@@ -5651,7 +5671,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '子产品财务技术接口',
+                              '$kProposalChildProductLabel财务技术接口',
                               style: TextStyle(
                                 color: ProposalPalette.text,
                                 fontWeight: FontWeight.w700,
@@ -5880,11 +5900,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _financeProductGroupTitle(
-            children ? '子产品合计' : '主产品合计',
+            children
+                ? '$kProposalChildProductLabel合计'
+                : '$kProposalMainProductLabel合计',
             children: children,
             description: children
-                ? '全部子产品的收入、成本、结算、账户、周转资金及复核均在本组内独立核算。'
-                : '全部主产品的收入、成本、结算、账户、周转资金及复核均在本组内独立核算。',
+                ? '全部$kProposalChildProductLabel的收入、成本、结算、账户、周转资金及复核均在本组内独立核算。'
+                : '全部$kProposalMainProductLabel的收入、成本、结算、账户、周转资金及复核均在本组内独立核算。',
           ),
           const SizedBox(height: 12),
           children ? _childSettlementsBlock(wide) : _skuSettlementsBlock(wide),
@@ -5896,7 +5918,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               children: [
                 Expanded(
                   child: Text(
-                    children ? '子产品财务复核' : '主产品财务复核',
+                    children
+                        ? '$kProposalChildProductLabel财务复核'
+                        : '$kProposalMainProductLabel财务复核',
                     style: const TextStyle(
                       color: ProposalPalette.text,
                       fontWeight: FontWeight.w700,
@@ -6067,7 +6091,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           children: [
             const Expanded(
               child: Text(
-                '主产品财务复核',
+                '$kProposalMainProductLabel财务复核',
                 style: TextStyle(
                   color: ProposalPalette.text,
                   fontWeight: FontWeight.w700,
@@ -6089,7 +6113,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         const Padding(
           padding: EdgeInsets.only(top: 6, bottom: 10),
           child: Text(
-            '销售规模、收入、采购、利润、毛利率、周转资金按主产品结算自动测算。',
+            '销售规模、收入、采购、利润、毛利率、周转资金按$kProposalMainProductLabel结算自动测算。',
             style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
           ),
         ),
@@ -6212,19 +6236,31 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final enabled =
         computed == null && _fillEnabled(null, resetReview: 'financeCompleted');
     final options = switch (key) {
-      'supplySettleMode' || 'channelSettleMode' => kProposalPreSettleModes,
-      'supplySettleCycle' || 'channelSettleCycle' => kProposalPreSettleCycles,
+      'supplySettleMode' ||
+      'channelSettleMode' => _settleFieldOptions(key, current),
+      'supplySettleCycle' ||
+      'channelSettleCycle' => _settleFieldOptions(key, current),
       'rollback' => widget.options.rollbackOptions,
       _ => const <String>[],
     };
+    final addLabel = _settleAddLabel(key);
     final Widget input;
     if (computed != null || _showSelectedAsText || !enabled) {
       input = _readonlySelectedText(current);
-    } else if (options.isNotEmpty) {
+    } else if (options.isNotEmpty || addLabel != null) {
       input = ProposalSelectField<String>(
         value: current.isEmpty ? null : current,
         title: field.$2,
-        hint: '请选择',
+        hint: options.isEmpty && addLabel == null ? '请先在管理端配置选项' : '请选择',
+        searchable: true,
+        addLabel: addLabel,
+        onAdd: addLabel == null || !enabled
+            ? null
+            : () async {
+                final added = await _promptAddedOption(addLabel);
+                if (added == null || added.isEmpty) return;
+                _writeProductFinanceValue(owner, key, added);
+              },
         options: [
           for (final value in options)
             ProposalSelectOption(value: value, label: value),
@@ -6737,7 +6773,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       title,
       usePurchaseProposal
           ? '选中已通过的采购提案后，合同编号、名称、主体、源文件等内容会自动带出'
-          : '已签自动抓取 · 未签上传后解析',
+          : '已签可多选，字段取第一份 · 未签可上传多份',
       Column(
         children: [
           if (!_isPurchase && prefix == 'purchase') ...[
@@ -6766,6 +6802,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               '合同编号',
               '${prefix}No',
               required: signed,
+              maxLines: 3,
+              minLines: 1,
               source: fromProposal
                   ? grabSource
                   : signed
@@ -6779,12 +6817,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ),
             if (unsigned)
               _contractSourceFileField(prefix, allowUpload: true)
-            else if (_hasContractSourceFile(prefix))
+            else if (signed &&
+                (_hasContractSourceFile(prefix) ||
+                    proposalIntakeSelectedContractIds(_form, prefix)
+                        .isNotEmpty))
               _contractSourceFileField(prefix, allowUpload: false),
             _textField(
               '合同名称',
               '${prefix}Name',
               required: true,
+              maxLines: 3,
+              minLines: 1,
               source: grabSource,
               resetReview: flag,
               reviewSection: 'contractItem:$prefix.Name',
@@ -6794,6 +6837,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               '签署时间',
               '${prefix}SignDate',
               required: true,
+              maxLines: 3,
+              minLines: 1,
               source: grabSource,
               resetReview: flag,
               reviewSection: 'contractItem:$prefix.SignDate',
@@ -6803,6 +6848,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               '我方签约主体',
               '${prefix}OurParty',
               required: true,
+              maxLines: 3,
+              minLines: 1,
               source: grabSource,
               resetReview: flag,
               reviewSection: 'contractItem:$prefix.OurParty',
@@ -6812,6 +6859,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               '对方签约主体',
               '${prefix}Counterparty',
               required: true,
+              maxLines: 3,
+              minLines: 1,
               source: grabSource,
               resetReview: flag,
               reviewSection: 'contractItem:$prefix.Counterparty',
@@ -6821,6 +6870,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               '有效期',
               '${prefix}ValidPeriod',
               required: true,
+              maxLines: 3,
+              minLines: 1,
               source: grabSource,
               resetReview: flag,
               reviewSection: 'contractItem:$prefix.ValidPeriod',
@@ -6852,6 +6903,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 hint: '抓不到也可手填，例如开票时点、开票方与收票方',
                 source: grabSource,
                 maxLines: 3,
+                minLines: 1,
                 resetReview: flag,
                 reviewSection: 'contractItem:sales.InvoiceFlow',
                 reviewLabel: _financeReviewLabel,
@@ -7000,63 +7052,119 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   Widget _contractSelector(String prefix) {
-    final currentId = int.tryParse(_text('${prefix}ContractId'));
-    final selectedNo = _text('${prefix}No');
-    final selectedName = _text('${prefix}Name');
+    final selectedIds = proposalIntakeSelectedContractIds(_form, prefix);
+    final refs = proposalIntakeSelectedContractRefs(_form, prefix);
+    final enabled = _canEditContractExtras(prefix);
+    final source = '可多选，编号、主体等配置取第一份合同';
+    final locked = _readValuesOnly(enabled);
+    final opening = _openingContractPrefix == prefix;
     return ProposalField(
       label: '选择合同',
       required: true,
-      source: '从合同归集带出编号',
-      tone: proposalFieldTone(
-        enabled: _canEditContractExtras(prefix),
-        source: '从合同归集带出编号',
-      ),
-      child: ProposalSelectField<int>(
-        key: ValueKey(
-          'contract-$prefix-${_text('${prefix}ContractId')}-$_fieldEpoch',
-        ),
-        value: currentId,
-        title: '选择合同归集中的合同',
-        hint: '输入合同编号、名称或对方主体搜索',
-        searchable: true,
-        requireKeyword: true,
-        remoteOptions: true,
-        allowClear: false,
-        onQueryChanged: _searchContracts,
-        options: [
-          if (currentId != null &&
-              (selectedNo.isNotEmpty || selectedName.isNotEmpty))
-            ProposalSelectOption(
-              value: currentId,
-              label: selectedName.isEmpty
-                  ? selectedNo
-                  : selectedNo.isEmpty
-                  ? selectedName
-                  : '$selectedNo · $selectedName',
-              meta: _text('${prefix}Counterparty'),
-            ),
-          for (final contract in _contractHits)
-            if (contract.id != currentId)
-              ProposalSelectOption(
-                value: contract.id,
-                label: contract.label,
-                meta: [
-                  contract.partyA,
-                  contract.partyB,
-                  contract.signDate,
-                ].where((item) => item.isNotEmpty).join(' · '),
+      source: source,
+      tone: proposalFieldTone(enabled: enabled, source: source),
+      trailing: refs.isEmpty
+          ? null
+          : TextButton.icon(
+              onPressed: opening
+                  ? null
+                  : () => unawaited(_previewSelectedContract(prefix)),
+              icon: Icon(
+                opening
+                    ? Icons.hourglass_top_rounded
+                    : Icons.visibility_outlined,
+                size: 16,
               ),
+              label: Text(opening ? '打开中…' : '查看合同'),
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                foregroundColor: ProposalPalette.purpleDeep,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+            ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (refs.isNotEmpty) ...[
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (var i = 0; i < refs.length; i++)
+                  InputChip(
+                    visualDensity: VisualDensity.compact,
+                    avatar: i == 0
+                        ? const Icon(Icons.flag_outlined, size: 14)
+                        : null,
+                    label: Text(
+                      [
+                        if (i == 0) '配置来源',
+                        proposalIntakeContractRefLabel(refs[i]),
+                      ].where((item) => item.isNotEmpty).join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onPressed: opening
+                        ? null
+                        : () => unawaited(
+                            _previewSelectedContract(prefix, refs[i]),
+                          ),
+                    onDeleted: locked
+                        ? null
+                        : () => unawaited(
+                            _removeSelectedContract(
+                              prefix,
+                              _proposalContractRefId(refs[i]),
+                            ),
+                          ),
+                  ),
+              ],
+            ),
+            if (!locked) const SizedBox(height: 8),
+          ],
+          if (locked && refs.isEmpty)
+            _readonlySelectedText('')
+          else if (!locked)
+            ProposalSelectField<int>(
+              key: ValueKey(
+                'contract-$prefix-${selectedIds.join('-')}-$_fieldEpoch',
+              ),
+              value: null,
+              title: '选择合同归集中的合同（可多选）',
+              hint: selectedIds.isEmpty ? '输入合同编号、名称或对方主体搜索' : '继续搜索添加合同',
+              searchable: true,
+              requireKeyword: true,
+              remoteOptions: true,
+              allowClear: false,
+              onQueryChanged: _searchContracts,
+              options: [
+                for (final contract in _contractHits)
+                  if (!selectedIds.contains(contract.id))
+                    ProposalSelectOption(
+                      value: contract.id,
+                      label: contract.label,
+                      meta: [
+                        contract.partyA,
+                        contract.partyB,
+                        contract.signDate,
+                      ].where((item) => item.isNotEmpty).join(' · '),
+                    ),
+              ],
+              onSelected: !enabled
+                  ? null
+                  : (id) {
+                      if (id != null) {
+                        unawaited(_applyContract(prefix, id));
+                      }
+                    },
+            ),
         ],
-        onSelected: !_canEditContractExtras(prefix)
-            ? null
-            : (id) {
-                if (id != null) {
-                  unawaited(_applyContract(prefix, id));
-                }
-              },
       ),
     );
   }
+
+  int _proposalContractRefId(Map<String, dynamic> ref) =>
+      (ref['id'] as num?)?.toInt() ?? int.tryParse('${ref['id'] ?? ''}') ?? 0;
 
   Future<void> _searchContracts(String keyword) async {
     final seq = ++_contractSearchSeq;
@@ -7078,12 +7186,119 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   Future<void> _applyContract(String prefix, int id) async {
     if (!_canEditContractExtras(prefix)) return;
+    final selectedIds = proposalIntakeSelectedContractIds(_form, prefix);
+    if (selectedIds.contains(id)) {
+      showProposalCenterToast(context, '该合同已选择');
+      return;
+    }
     try {
       final detail = await widget.service.fetchContractDetail(id);
+      final appending = selectedIds.isNotEmpty;
+      final form = appending
+          ? proposalIntakeAppendSelectedContract(
+              _form,
+              prefix: prefix,
+              detail: detail,
+            )
+          : (Map<String, dynamic>.from(_form)..addAll(
+              proposalIntakePatchFromContract(prefix: prefix, detail: detail),
+            ));
+      if (!mounted) return;
+      setState(() {
+        _dirty = true;
+        _fieldEpoch++;
+        _row = _row.copyWith(
+          form: appending
+              ? form
+              : proposalIntakeRememberContractSnapshot(
+                  form: form,
+                  prefix: prefix,
+                ),
+          review: appending
+              ? _review
+              : proposalIntakeClearContractReview(_review, prefix: prefix),
+          status: _statusAfterEdit,
+        );
+      });
+      widget.onChanged(_row);
+      showProposalCenterToast(
+        context,
+        appending ? '已添加合同，配置内容仍以第一份为准' : '已从合同归集带入可修改字段',
+      );
+    } catch (error) {
+      widget.onError(friendlyErrorText(error));
+    }
+  }
+
+  Future<void> _removeSelectedContract(String prefix, int id) async {
+    if (!_canEditContractExtras(prefix) || id <= 0) return;
+    final ids = proposalIntakeSelectedContractIds(_form, prefix);
+    if (!ids.contains(id)) return;
+    final refs = proposalIntakeSelectedContractRefs(_form, prefix);
+    final remainingIds = [
+      for (final item in ids)
+        if (item != id) item,
+    ];
+    final remainingRefs = [
+      for (final ref in refs)
+        if (_proposalContractRefId(ref) != id) ref,
+    ];
+    if (remainingIds.isEmpty) {
       final form = Map<String, dynamic>.from(_form)
+        ..addAll(proposalIntakeResetContractFields(prefix))
+        ..['${prefix}Mode'] = _text('${prefix}Mode');
+      setState(() {
+        _dirty = true;
+        _fieldEpoch++;
+        _row = _row.copyWith(
+          form: form,
+          review: proposalIntakeClearContractReview(_review, prefix: prefix),
+          status: _statusAfterEdit,
+        );
+      });
+      widget.onChanged(_row);
+      return;
+    }
+    final removingFirst = ids.first == id;
+    if (!removingFirst) {
+      final form = proposalIntakeSyncSelectedContractFiles(
+        proposalIntakeSetSelectedContracts(
+          _form,
+          prefix: prefix,
+          ids: remainingIds,
+          refs: remainingRefs,
+        ),
+        prefix: prefix,
+      );
+      setState(() {
+        _dirty = true;
+        _fieldEpoch++;
+        _row = _row.copyWith(form: form, status: _statusAfterEdit);
+      });
+      widget.onChanged(_row);
+      return;
+    }
+    try {
+      final detail = await widget.service.fetchContractDetail(
+        remainingIds.first,
+      );
+      var form = Map<String, dynamic>.from(_form)
         ..addAll(
           proposalIntakePatchFromContract(prefix: prefix, detail: detail),
         );
+      final firstRef = proposalIntakeContractRefFromDetail(detail);
+      final firstId = _proposalContractRefId(firstRef);
+      form = proposalIntakeSetSelectedContracts(
+        form,
+        prefix: prefix,
+        ids: remainingIds,
+        refs: [
+          firstRef,
+          for (final ref in remainingRefs)
+            if (_proposalContractRefId(ref) != firstId) ref,
+        ],
+      );
+      form = proposalIntakeSyncSelectedContractFiles(form, prefix: prefix);
       if (!mounted) return;
       setState(() {
         _dirty = true;
@@ -7098,7 +7313,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         );
       });
       widget.onChanged(_row);
-      showProposalCenterToast(context, '已从合同归集带入可修改字段');
+      showProposalCenterToast(context, '已改用下一份合同带出配置内容');
     } catch (error) {
       widget.onError(friendlyErrorText(error));
     }
@@ -7853,7 +8068,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ),
           const SizedBox(height: 6),
           const Text(
-            '勾选适用的主产品。这是销售收入比例，不是项目成本。',
+            '勾选适用的$kProposalMainProductLabel。这是销售收入比例，不是项目成本。',
             style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
           ),
           const SizedBox(height: 8),
@@ -7915,7 +8130,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           children: [
             const Expanded(
               child: Text(
-                '主产品',
+                kProposalMainProductLabel,
                 style: TextStyle(
                   color: ProposalPalette.text,
                   fontWeight: FontWeight.w700,
@@ -7927,19 +8142,19 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               TextButton.icon(
                 onPressed: _addSkuDetail,
                 icon: const Icon(Icons.add, size: 16),
-                label: const Text('新增主产品'),
+                label: const Text('新增$kProposalMainProductLabel'),
               ),
           ],
         ),
         const Text(
-          '先新增主产品。关联子产品后，每个子产品需选择对应主产品和关联数量。',
+          '先新增$kProposalMainProductLabel。新增$kProposalChildProductLabel后，每个$kProposalChildProductLabel需选择对应$kProposalMainProductLabel和关联数量。',
           style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
         ),
         if (rows.isEmpty)
           const Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text(
-              '尚未添加主产品',
+              '尚未添加$kProposalMainProductLabel',
               style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
             ),
           ),
@@ -7962,7 +8177,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             child: TextButton.icon(
               onPressed: _addSkuDetail,
               icon: const Icon(Icons.add, size: 16),
-              label: const Text('继续新增主产品'),
+              label: const Text('继续新增$kProposalMainProductLabel'),
             ),
           ),
         const SizedBox(height: 18),
@@ -7981,7 +8196,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           children: [
             const Expanded(
               child: Text(
-                '关联子产品',
+                kProposalChildProductLabel,
                 style: TextStyle(
                   color: ProposalPalette.text,
                   fontWeight: FontWeight.w700,
@@ -7993,19 +8208,19 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               TextButton.icon(
                 onPressed: _addChildProduct,
                 icon: const Icon(Icons.add, size: 16),
-                label: const Text('关联子产品'),
+                label: const Text('新增$kProposalChildProductLabel'),
               ),
           ],
         ),
         const Text(
-          '子产品与主产品分开。彼此共用一套科技和财务模块，明细和结算在下方切换、各归各的。',
+          '$kProposalChildProductLabel与$kProposalMainProductLabel分开。彼此共用一套科技和财务模块，明细和结算在下方切换、各归各的。',
           style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
         ),
         if (rows.isEmpty)
           const Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text(
-              '尚未关联子产品',
+              '尚未添加$kProposalChildProductLabel',
               style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
             ),
           )
@@ -8018,7 +8233,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           const SizedBox(height: 10),
           _childProductSwitcher(rows),
           const SizedBox(height: 14),
-          _skuGroupLabel('子产品明细', '只显示当前选中的子产品'),
+          _skuGroupLabel(
+            '$kProposalChildProductLabel明细',
+            '只显示当前选中的$kProposalChildProductLabel',
+          ),
           if (active != null) ...[
             const SizedBox(height: 10),
             _anchor(
@@ -8037,7 +8255,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               child: TextButton.icon(
                 onPressed: _addChildProduct,
                 icon: const Icon(Icons.add, size: 16),
-                label: const Text('继续关联子产品'),
+                label: const Text('继续新增$kProposalChildProductLabel'),
               ),
             ),
         ],
@@ -8064,7 +8282,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   String _childSwitcherLabel(ProposalSkuDetailRow sku, int index) {
     final name = (sku.assetProduct?.label ?? sku.productName).trim();
-    final title = name.isEmpty ? '子产品 $index' : name;
+    final title = name.isEmpty ? '$kProposalChildProductLabel $index' : name;
     final settlements = proposalIntakeSkuSettlements(sku);
     if (settlements.isEmpty) return title;
     return '$title · 结算 ${_childSettleReviewedCount(sku)}/${settlements.length}';
@@ -8101,7 +8319,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               ),
               const SizedBox(width: 6),
               Text(
-                child ? '子产品是否已经建产品' : '是否已经建产品',
+                child ? '$kProposalChildProductLabel是否已经建产品' : '是否已经建产品',
                 style: TextStyle(
                   color: ProposalPalette.text,
                   fontWeight: FontWeight.w700,
@@ -8193,7 +8411,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           children: [
             Expanded(
               child: Text(
-                child ? '子产品渠道设置' : '渠道设置',
+                child ? '$kProposalChildProductLabel渠道设置' : '渠道设置',
                 style: const TextStyle(
                   color: ProposalPalette.text2,
                   fontSize: 11.5,
@@ -8422,9 +8640,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
     final showManual =
         !existing || (locked && proposalIntakeSkuHasManualDetails(row));
-    final titleName = (row.assetProduct?.label ?? '').trim().isNotEmpty
-        ? row.assetProduct!.label
-        : row.productName.trim();
+    final titleName = row.displayName;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -8445,8 +8661,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               Expanded(
                 child: Text(
                   titleName.isEmpty
-                      ? '${child ? '子产品' : '主产品'} $index'
-                      : '${child ? '子产品' : '主产品'} $index · $titleName',
+                      ? '${proposalIntakeProductKindLabel(child: child)} $index'
+                      : '${proposalIntakeProductKindLabel(child: child)} $index · $titleName',
                   style: const TextStyle(
                     color: ProposalPalette.text,
                     fontWeight: FontWeight.w700,
@@ -8481,7 +8697,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             const SizedBox(height: 10),
             _skuTextCell(
               rowId: row.id,
-              label: '子产品数量',
+              label: '$kProposalChildProductLabel数量',
               value: '${proposalIntakeChildProductQuantity(_form, row.id)}',
               fieldKey: 'association-quantity',
               hint: '至少为 1',
@@ -8499,7 +8715,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 syncSource: row.syncSourceCode,
                 locked: locked,
                 label: '已建产品',
-                fallbackLabel: row.productName,
+                fallbackLabel: row.displayName,
                 onSelected: (value) {
                   patch(row.id, (current) => current.applyAssetProduct(value));
                   unawaited(
@@ -8593,27 +8809,31 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }) {
     final mainProducts = proposalIntakeSkuDetails(_form);
     return ProposalField(
-      label: '关联主产品',
+      label: '关联$kProposalMainProductLabel',
       required: true,
       child: locked
           ? _readonlySelectedText(
               mainProducts
                       .where((item) => item.id == child.parentSkuId)
-                      .map((item) => item.productName)
+                      .map((item) => item.displayName)
                       .firstOrNull ??
                   '',
             )
           : ProposalSelectField<String>(
               value: child.parentSkuId.isEmpty ? null : child.parentSkuId,
-              hint: mainProducts.isEmpty ? '请先新增主产品' : '请选择关联主产品',
-              emptyText: mainProducts.isEmpty ? '请先在上方新增主产品' : null,
+              hint: mainProducts.isEmpty
+                  ? '请先新增$kProposalMainProductLabel'
+                  : '请选择关联$kProposalMainProductLabel',
+              emptyText: mainProducts.isEmpty
+                  ? '请先在上方新增$kProposalMainProductLabel'
+                  : null,
               options: [
                 for (var i = 0; i < mainProducts.length; i++)
                   ProposalSelectOption(
                     value: mainProducts[i].id,
-                    label: mainProducts[i].productName.isEmpty
-                        ? '主产品 ${i + 1}'
-                        : mainProducts[i].productName,
+                    label: mainProducts[i].displayName.isEmpty
+                        ? '$kProposalMainProductLabel ${i + 1}'
+                        : mainProducts[i].displayName,
                   ),
               ],
               onSelected: (value) => _setChildProductParent(child.id, value),
@@ -8639,11 +8859,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final displayLabel = (current?.label ?? '').trim().isNotEmpty
         ? current!.label
         : fallbackLabel.trim();
+    final resolved =
+        (current != null && current.isNotEmpty)
+        ? current
+        : (displayLabel.isEmpty
+              ? null
+              : ChannelProductHit(productName: displayLabel));
     final values = [
-      if (current != null &&
-          current.isNotEmpty &&
-          !hits.any((item) => item == current))
-        current,
+      if (resolved != null && !hits.any((item) => item == resolved)) resolved,
       ...hits,
     ];
     return ProposalField(
@@ -8661,7 +8884,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       child: locked
           ? _readonlySelectedText(displayLabel)
           : ProposalSelectField<ChannelProductHit>(
-              value: current == null || current.isEmpty ? null : current,
+              value: resolved,
               title: label,
               hint: noPlatform ? '请先选择业务平台' : '输入产品名称关键字搜索',
               searchable: true,
@@ -8777,13 +9000,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String? emptyText,
     bool required = false,
   }) {
-    final selected = _selectedCatalog(current, options);
+    final selected =
+        _selectedCatalog(current, options) ??
+        ((current != null && current.isNotEmpty) ? current : null);
     final values = _withCurrent(options, selected);
+    final display = (selected?.label ?? current?.label ?? '').trim();
     return ProposalField(
       label: label,
       required: required,
       child: locked || _showSelectedAsText
-          ? _readonlySelectedText(selected?.label ?? '')
+          ? _readonlySelectedText(display)
           : ProposalSelectField<CatalogRef>(
               value: selected == null || selected.isEmpty ? null : selected,
               title: label,
@@ -9000,7 +9226,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ProposalFinanceModule(
           id: proposalIntakeNewFinanceModuleId(),
           title: children
-              ? '子产品财务模块${modules.where((item) => item.isChildrenOwner).length + 1}'
+              ? '$kProposalChildProductLabel财务模块${modules.where((item) => item.isChildrenOwner).length + 1}'
               : '财务模块${modules.where((item) => !item.isChildrenOwner).length + 1}',
           owner: owner,
         ),
@@ -9049,7 +9275,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '子产品结算',
+            '$kProposalChildProductLabel结算',
             style: TextStyle(
               color: ProposalPalette.text,
               fontWeight: FontWeight.w700,
@@ -9058,14 +9284,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ),
           const SizedBox(height: 4),
           const Text(
-            '每个子产品自己的结算。用切换条查看，不和主产品混在一起。',
+            '每个$kProposalChildProductLabel自己的结算。用切换条查看，不和$kProposalMainProductLabel混在一起。',
             style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
           ),
           if (rows.isEmpty)
             const Padding(
               padding: EdgeInsets.only(top: 8),
               child: Text(
-                '请先在市场部关联子产品。',
+                '请先在市场部新增$kProposalChildProductLabel。',
                 style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
               ),
             )
@@ -9082,7 +9308,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   if (sku.faceValue.trim().isNotEmpty)
                     '面值 ${sku.faceValue.trim()}',
                 ].join(' · '),
-                emptyTitle: '未填写子产品名称',
+                emptyTitle: '未填写$kProposalChildProductLabel名称',
                 reviewPrefix: 'skuSettle',
                 settlements: proposalIntakeSkuSettlements(sku),
                 wide: wide,
@@ -9117,7 +9343,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            proposalIntakeHasChildProducts(_form) ? '主产品结算' : '产品结算',
+            proposalIntakeHasChildProducts(_form)
+                ? '$kProposalMainProductLabel结算'
+                : '产品结算',
             style: const TextStyle(
               color: ProposalPalette.text,
               fontWeight: FontWeight.w700,
@@ -9128,14 +9356,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           Text(
             kProposalSharedSettleEnabled
                 ? '比例一样：点「新增共用结算」勾产品，下面各产品只填规模。比例不一样：不勾共用，直接在各产品卡上填结算。'
-                : '按主产品填写结算。一个产品对应一套结算，可再新增明细。',
+                : '按$kProposalMainProductLabel填写结算。一个产品对应一套结算，可再新增明细。',
             style: const TextStyle(color: ProposalPalette.text3, fontSize: 11),
           ),
           if (channelRows.isEmpty)
             const Padding(
               padding: EdgeInsets.only(top: 8),
               child: Text(
-                '请先在市场部添加主产品。',
+                '请先在市场部添加$kProposalMainProductLabel。',
                 style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
               ),
             ),
@@ -9473,7 +9701,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '适用的主产品：不勾则该条比例按全部产品规模计算采购成本。',
+            '适用的$kProposalMainProductLabel：不勾则该条比例按全部产品规模计算采购成本。',
             style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
           ),
           const SizedBox(height: 6),
@@ -9589,9 +9817,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             Expanded(
               child: Text(
                 children
-                    ? '子产品合并财务模块'
+                    ? '$kProposalChildProductLabel合并财务模块'
                     : proposalIntakeHasChildProducts(_form)
-                    ? '主产品财务模块'
+                    ? '$kProposalMainProductLabel财务模块'
                     : '财务模块',
                 style: const TextStyle(
                   color: ProposalPalette.text,
@@ -9604,13 +9832,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               TextButton.icon(
                 onPressed: () => _addFinanceModule(owner: owner),
                 icon: const Icon(Icons.add, size: 16),
-                label: Text(children ? '新增子产品财务模块' : '新增财务模块'),
+                label: Text(
+                  children ? '新增$kProposalChildProductLabel财务模块' : '新增财务模块',
+                ),
               ),
           ],
         ),
         Text(
           children
-              ? '所有子产品只共用这一份财务：共同收入、项目成本和业务成本在这里填写一次。每个子产品自己的规模、比例和税率，请在上方「子产品结算」里填写。'
+              ? '所有$kProposalChildProductLabel只共用这一份财务：共同收入、项目成本和业务成本在这里填写一次。每个$kProposalChildProductLabel自己的规模、比例和税率，请在上方「$kProposalChildProductLabel结算」里填写。'
               : '收入和每条成本按结算单填写：账单类型、结算方式、结算比例/单价、计算公式、发票类型、税率、生效/失效时间，以及对方/我方主体。非自然月需选择项目周期。',
           style: const TextStyle(color: ProposalPalette.text3, fontSize: 11),
         ),
@@ -9618,7 +9848,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
-              children ? '尚未添加子产品财务模块' : '尚未添加财务模块',
+              children ? '尚未添加$kProposalChildProductLabel财务模块' : '尚未添加财务模块',
               style: const TextStyle(
                 color: ProposalPalette.text3,
                 fontSize: 12,
@@ -9945,6 +10175,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       String value,
       ProposalFinanceSettleTerms Function(String) write, {
       String? hint,
+      List<TextInputFormatter>? inputFormatters,
+      TextInputType? keyboardType,
     }) {
       return ProposalField(
         label: label,
@@ -9953,6 +10185,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             : TextFormField(
                 key: ValueKey('settle-$keyPrefix-$label-$_fieldEpoch'),
                 initialValue: value,
+                keyboardType: keyboardType,
+                inputFormatters: inputFormatters,
                 onTapOutside: (_) =>
                     FocusManager.instance.primaryFocus?.unfocus(),
                 onChanged: (next) => onChanged(write(next.trim())),
@@ -10104,7 +10338,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final ratioField = field(
       '结算比例',
       terms.displayRatio,
-      (value) => terms.copyWith(settleRatio: value),
+      (value) => terms.copyWith(
+        settleRatio: proposalIntakeNormalizeSettleRatio(value),
+      ),
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: const [ProposalSettleRatioFormatter()],
     );
     final priceField = field(
       '结算单价',
@@ -10230,7 +10468,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      '关联主产品',
+                      '关联$kProposalMainProductLabel',
                       style: TextStyle(
                         color: ProposalPalette.text2,
                         fontWeight: FontWeight.w600,
@@ -10612,6 +10850,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   static const _unsignedFileExts = <String>['pdf', 'doc', 'docx'];
   static const _maxUnsignedFileBytes = 20 * 1024 * 1024;
+  static const _maxUnsignedFiles = 10;
 
   bool _allowedUnsignedFile(String name) {
     final dot = name.lastIndexOf('.');
@@ -10622,10 +10861,22 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   bool _isPdfContractFile(String name) =>
       name.trim().toLowerCase().endsWith('.pdf');
 
+  List<Map<String, dynamic>> _contractFiles(String prefix) =>
+      proposalIntakeContractFiles(_form, prefix);
+
   bool _hasContractSourceFile(String prefix) =>
-      _text('${prefix}FileName').isNotEmpty ||
-      _text('${prefix}ObjectKey').isNotEmpty ||
-      _text('${prefix}FileUrl').isNotEmpty;
+      _contractFiles(prefix).isNotEmpty;
+
+  String _contractLabelForFile(String prefix, Map<String, dynamic> file) {
+    final id = (file['contractId'] as num?)?.toInt() ?? 0;
+    if (id <= 0) return '';
+    for (final ref in proposalIntakeSelectedContractRefs(_form, prefix)) {
+      if (_proposalContractRefId(ref) == id) {
+        return proposalIntakeContractRefLabel(ref);
+      }
+    }
+    return '';
+  }
 
   String _unsignedFileMime(String name) {
     final ext = name.split('.').last.toLowerCase();
@@ -10639,19 +10890,25 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   Future<void> _pickUnsignedFile(String prefix) async {
-    if (!_canEditContractExtras(prefix) || _uploadingContractPrefix != null)
+    if (!_canEditContractExtras(prefix) || _uploadingContractPrefix != null) {
       return;
+    }
+    final room = _maxUnsignedFiles - _contractFiles(prefix).length;
+    if (room <= 0) {
+      widget.onError('最多上传 $_maxUnsignedFiles 个合同文件');
+      return;
+    }
     setState(() => _uploadingContractPrefix = prefix);
     try {
       final group = XTypeGroup(label: '合同文件', extensions: _unsignedFileExts);
-      XFile? picked;
+      List<XFile> picked = const [];
       try {
-        picked = await openFile(acceptedTypeGroups: [group]);
+        picked = await openFiles(acceptedTypeGroups: [group]);
       } catch (_) {
-        picked = await openFile();
+        picked = await openFiles();
       }
-      if (picked == null) return;
-      await _ingestUnsignedFile(prefix, picked);
+      if (picked.isEmpty) return;
+      await _ingestUnsignedFiles(prefix, picked, room: room);
     } catch (error) {
       widget.onError(friendlyErrorText(error, fallback: '上传失败'));
     } finally {
@@ -10663,8 +10920,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     String prefix,
     DropDoneDetails detail,
   ) async {
-    if (!_canEditContractExtras(prefix) || _uploadingContractPrefix != null)
+    if (!_canEditContractExtras(prefix) || _uploadingContractPrefix != null) {
       return;
+    }
+    final room = _maxUnsignedFiles - _contractFiles(prefix).length;
+    if (room <= 0) {
+      widget.onError('最多上传 $_maxUnsignedFiles 个合同文件');
+      return;
+    }
     setState(() {
       _uploadingContractPrefix = prefix;
       _draggingUnsignedPrefix = null;
@@ -10675,7 +10938,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         widget.onError('请拖入文件（不支持文件夹）');
         return;
       }
-      await _ingestUnsignedFile(prefix, picked.first);
+      await _ingestUnsignedFiles(prefix, picked, room: room);
     } catch (error) {
       widget.onError(friendlyErrorText(error, fallback: '拖拽上传失败'));
     } finally {
@@ -10683,32 +10946,51 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     }
   }
 
-  Future<void> _ingestUnsignedFile(String prefix, XFile picked) async {
-    final name = picked.name.isEmpty ? 'contract.pdf' : picked.name;
-    if (!_allowedUnsignedFile(name)) {
-      widget.onError('请上传 PDF 或 Word 文件');
-      return;
+  Future<void> _ingestUnsignedFiles(
+    String prefix,
+    List<XFile> picked, {
+    required int room,
+  }) async {
+    final current = _contractFiles(prefix);
+    final next = [...current];
+    final names = <String>[];
+    for (final file in picked.take(room)) {
+      final name = file.name.isEmpty ? 'contract.pdf' : file.name;
+      if (!_allowedUnsignedFile(name)) {
+        widget.onError('请上传 PDF 或 Word 文件：$name');
+        continue;
+      }
+      final bytes = await file.readAsBytes();
+      if (bytes.length > _maxUnsignedFileBytes) {
+        widget.onError('$name 超过 20MB 限制');
+        continue;
+      }
+      final uploaded = await widget.service.uploadFile(
+        bytes: bytes,
+        fileName: name,
+        mimeType: _unsignedFileMime(name),
+      );
+      if (uploaded.objectKey.isEmpty && uploaded.url.isEmpty) {
+        throw Exception('未返回文件地址');
+      }
+      next.add({
+        'fileName': uploaded.fileName,
+        'objectKey': uploaded.objectKey,
+        'url': uploaded.url,
+        'fileUrl': uploaded.url,
+        'sizeBytes': uploaded.sizeBytes,
+      });
+      names.add(uploaded.fileName);
     }
-    final bytes = await picked.readAsBytes();
-    if (bytes.length > _maxUnsignedFileBytes) {
-      widget.onError('$name 超过 20MB 限制');
-      return;
-    }
-    final uploaded = await widget.service.uploadFile(
-      bytes: bytes,
-      fileName: name,
-      mimeType: _unsignedFileMime(name),
+    if (!mounted || names.isEmpty) return;
+    var form = proposalIntakeSetContractFiles(
+      _form,
+      prefix: prefix,
+      files: next,
     );
-    if (uploaded.objectKey.isEmpty && uploaded.url.isEmpty) {
-      throw Exception('未返回文件地址');
+    if (_text('${prefix}No').isEmpty && names.isNotEmpty) {
+      form['${prefix}No'] = names.first;
     }
-    if (!mounted) return;
-    final form = Map<String, dynamic>.from(_form)
-      ..['${prefix}FileName'] = uploaded.fileName
-      ..['${prefix}ObjectKey'] = uploaded.objectKey
-      ..['${prefix}FileUrl'] = uploaded.url
-      ..['${prefix}FileSize'] = uploaded.sizeBytes
-      ..['${prefix}No'] = uploaded.fileName;
     final review = proposalIntakeClearContractReview(_review, prefix: prefix);
     setState(() {
       _dirty = true;
@@ -10720,17 +11002,33 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       );
     });
     widget.onChanged(_row);
-    showProposalCenterToast(context, '已上传「${uploaded.fileName}」');
+    showProposalCenterToast(
+      context,
+      names.length == 1 ? '已上传「${names.first}」' : '已上传 ${names.length} 个合同文件',
+    );
   }
 
-  void _clearUnsignedFile(String prefix) {
+  void _clearUnsignedFile(String prefix, [int? index]) {
     if (!_canEditContractExtras(prefix)) return;
-    final form = Map<String, dynamic>.from(_form)
-      ..['${prefix}FileName'] = ''
-      ..['${prefix}ObjectKey'] = ''
-      ..['${prefix}FileUrl'] = ''
-      ..['${prefix}FileSize'] = null
-      ..['${prefix}No'] = '';
+    final current = _contractFiles(prefix);
+    if (current.isEmpty) return;
+    final next = [...current];
+    final removeAt = index ?? 0;
+    if (removeAt < 0 || removeAt >= next.length) return;
+    final removed = next.removeAt(removeAt);
+    var form = proposalIntakeSetContractFiles(
+      _form,
+      prefix: prefix,
+      files: next,
+    );
+    final removedName = '${removed['fileName'] ?? ''}'.trim();
+    if (next.isEmpty && _text('${prefix}No') == removedName) {
+      form['${prefix}No'] = '';
+    } else if (next.isNotEmpty &&
+        removeAt == 0 &&
+        _text('${prefix}No') == removedName) {
+      form['${prefix}No'] = '${next.first['fileName'] ?? ''}'.trim();
+    }
     final review = proposalIntakeClearContractReview(_review, prefix: prefix);
     setState(() {
       _dirty = true;
@@ -10744,10 +11042,158 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     widget.onChanged(_row);
   }
 
-  Future<void> _openContractSourceFile(String prefix) async {
-    final name = _text('${prefix}FileName').trim();
-    final objectKey = _text('${prefix}ObjectKey').trim();
-    final url = _text('${prefix}FileUrl').trim();
+  Map<String, dynamic>? _firstPreviewableContractFile(
+    List<Map<String, dynamic>> files,
+  ) {
+    for (final file in files) {
+      if (_isPdfContractFile('${file['fileName'] ?? ''}')) return file;
+    }
+    return files.firstOrNull;
+  }
+
+  List<Map<String, dynamic>> _filesForContractRef(
+    String prefix,
+    Map<String, dynamic> ref,
+  ) {
+    final owned = proposalIntakeFilesOfContractRef(ref);
+    if (owned.isNotEmpty) return owned;
+    final id = _proposalContractRefId(ref);
+    final all = _contractFiles(prefix);
+    if (id > 0) {
+      final matched = [
+        for (final file in all)
+          if (id > 0 &&
+              ((file['contractId'] as num?)?.toInt() ??
+                      int.tryParse('${file['contractId'] ?? ''}') ??
+                      0) ==
+                  id)
+            file,
+      ];
+      if (matched.isNotEmpty) return matched;
+    }
+    return all;
+  }
+
+  String get _contractPreviewWatermark {
+    final viewer = (widget.session.displayName ?? '').trim();
+    return [
+      if (viewer.isNotEmpty) viewer,
+      if (_row.code.trim().isNotEmpty) _row.code.trim(),
+      '仅供内部查阅',
+    ].join(' · ');
+  }
+
+  Future<void> _showContractPdf({
+    required Uint8List bytes,
+    required String fileName,
+  }) {
+    return showContractKbPdfPreview(
+      context: context,
+      fileName: fileName.isEmpty ? '合同文件.pdf' : fileName,
+      bytes: bytes,
+      watermark: _contractPreviewWatermark,
+    );
+  }
+
+  /// 复核人也可预览：与合同归集「查看」相同，先拉知识库 PDF，没有再回退附件。
+  Future<void> _previewSelectedContract(
+    String prefix, [
+    Map<String, dynamic>? ref,
+  ]) async {
+    final refs = proposalIntakeSelectedContractRefs(_form, prefix);
+    final target = ref ?? refs.firstOrNull;
+    final id = target == null ? 0 : _proposalContractRefId(target);
+    if (_openingContractPrefix != null) return;
+    setState(() => _openingContractPrefix = prefix);
+    try {
+      Object? kbError;
+      if (id > 0) {
+        try {
+          final bytes = await ContractRegisterService(
+            session: widget.session,
+          ).previewKbFile(id);
+          if (!mounted) return;
+          final kbName = target == null
+              ? ''
+              : '${target['contractNo'] ?? ''}'.trim();
+          await _showContractPdf(
+            bytes: Uint8List.fromList(bytes),
+            fileName: kbName.isEmpty ? '合同文件.pdf' : '$kbName.pdf',
+          );
+          return;
+        } catch (error) {
+          kbError = error;
+        }
+      }
+      var files = target == null
+          ? _contractFiles(prefix)
+          : _filesForContractRef(prefix, target);
+      if (files.isEmpty && id > 0) {
+        final detail = await widget.service.fetchContractDetail(id);
+        files = proposalIntakeFilesFromContractDetail(detail);
+        if (files.isEmpty) {
+          final fallback = proposalIntakeContractFileMap({
+            'fileName': detail['fileName'],
+            'objectKey': detail['objectKey'],
+            'url': detail['fileUrl'] ?? detail['url'],
+          });
+          if (!proposalIntakeContractFileIsEmpty(fallback)) {
+            files = [fallback];
+          }
+        }
+      }
+      if (files.isEmpty) {
+        widget.onError(
+          friendlyErrorText(kbError, fallback: '该合同还没有可预览的源文件'),
+        );
+        return;
+      }
+      final file = _firstPreviewableContractFile(files);
+      final name = '${file?['fileName'] ?? ''}'.trim();
+      final objectKey = '${file?['objectKey'] ?? ''}'.trim();
+      final url = '${file?['url'] ?? file?['fileUrl'] ?? ''}'.trim();
+      if (name.isNotEmpty && !_isPdfContractFile(name)) {
+        widget.onError('内部预览仅支持 PDF。当前是 $name，已保存但无法在页面内打开。');
+        return;
+      }
+      if (objectKey.isEmpty && url.isEmpty) {
+        widget.onError('该合同还没有可预览的源文件');
+        return;
+      }
+      final bytes = await fetchXflowAttachmentBytes(
+        service: XflowService(session: widget.session),
+        item: {
+          'fileName': name.isEmpty ? '合同文件.pdf' : name,
+          'objectKey': objectKey,
+          'url': url,
+          'mimeType': _unsignedFileMime(name),
+        },
+      );
+      if (!mounted) return;
+      await _showContractPdf(
+        bytes: bytes,
+        fileName: name.isEmpty ? '合同文件.pdf' : name,
+      );
+    } catch (error) {
+      widget.onError(friendlyErrorText(error, fallback: '无法预览合同文件'));
+    } finally {
+      if (mounted && _openingContractPrefix == prefix) {
+        setState(() => _openingContractPrefix = null);
+      }
+    }
+  }
+
+  Future<void> _openContractSourceFile(
+    String prefix, [
+    Map<String, dynamic>? file,
+  ]) async {
+    final target = file ?? _contractFiles(prefix).firstOrNull;
+    final name = '${target?['fileName'] ?? _text('${prefix}FileName')}'.trim();
+    final objectKey = '${target?['objectKey'] ?? _text('${prefix}ObjectKey')}'
+        .trim();
+    final url =
+        '${target?['url'] ?? target?['fileUrl'] ?? _text('${prefix}FileUrl')}'
+            .trim();
     if (name.isEmpty && objectKey.isEmpty && url.isEmpty) {
       widget.onError('还没有合同源文件');
       return;
@@ -10769,17 +11215,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         },
       );
       if (!mounted) return;
-      final viewer = (widget.session.displayName ?? '').trim();
-      final watermark = [
-        if (viewer.isNotEmpty) viewer,
-        if (_row.code.trim().isNotEmpty) _row.code.trim(),
-        '仅供内部查阅',
-      ].join(' · ');
-      await showContractKbPdfPreview(
-        context: context,
-        fileName: name.isEmpty ? '合同文件.pdf' : name,
+      await _showContractPdf(
         bytes: bytes,
-        watermark: watermark,
+        fileName: name.isEmpty ? '合同文件.pdf' : name,
       );
     } catch (error) {
       widget.onError(friendlyErrorText(error, fallback: '无法预览合同文件'));
@@ -10793,18 +11231,107 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final uploading = _uploadingContractPrefix == prefix;
     final opening = _openingContractPrefix == prefix;
     final dragging = _draggingUnsignedPrefix == prefix;
-    final name = _text('${prefix}FileName');
-    final canOpen = name.isNotEmpty || _hasContractSourceFile(prefix);
-    final canPreview = name.isEmpty || _isPdfContractFile(name);
+    final files = _contractFiles(prefix);
+    final canOpen = files.isNotEmpty;
+    final canFetchSigned =
+        !allowUpload &&
+        proposalIntakeSelectedContractIds(_form, prefix).isNotEmpty;
+    Map<String, dynamic>? firstPreviewable;
+    for (final file in files) {
+      if (_isPdfContractFile('${file['fileName'] ?? ''}')) {
+        firstPreviewable = file;
+        break;
+      }
+    }
+    firstPreviewable ??= files.isEmpty ? null : files.first;
+    final canPreview =
+        firstPreviewable != null &&
+        _isPdfContractFile('${firstPreviewable['fileName'] ?? ''}');
     final signed = !allowUpload;
     final source = !canOpen
-        ? '未签合同 · 可上传 PDF / Word'
+        ? (canFetchSigned
+              ? '已签合同 · 点「查看合同」预览源文件'
+              : '未签合同 · 可上传多份 PDF / Word')
         : canPreview
         ? (signed ? '已签合同 · 仅内部 PDF 预览' : '未签合同 · 仅内部 PDF 预览')
         : (signed
               ? '已签合同 · Word 已保存 · 内部仅预览 PDF'
               : '未签合同 · Word 已保存 · 内部仅预览 PDF');
-    final picker = name.isEmpty && allowUpload
+    Widget fileRow(Map<String, dynamic> file, int index) {
+      final fileName = '${file['fileName'] ?? ''}'.trim();
+      final contractLabel = _contractLabelForFile(prefix, file);
+      final previewable = fileName.isEmpty || _isPdfContractFile(fileName);
+      final objectKey = '${file['objectKey'] ?? ''}'.trim();
+      final url = '${file['url'] ?? file['fileUrl'] ?? ''}'.trim();
+      final canPreviewThis = objectKey.isNotEmpty || url.isNotEmpty;
+      return InkWell(
+        onTap: opening || !canPreviewThis
+            ? null
+            : () => unawaited(_openContractSourceFile(prefix, file)),
+        borderRadius: BorderRadius.circular(8),
+        child: InputDecorator(
+          decoration: proposalInputDecoration(readOnly: true),
+          child: Row(
+            children: [
+              Icon(
+                previewable
+                    ? Icons.picture_as_pdf_outlined
+                    : Icons.description_outlined,
+                size: 16,
+                color: ProposalPalette.purple,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      fileName.isEmpty ? '合同源文件' : fileName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: canPreviewThis
+                            ? ProposalPalette.purpleDeep
+                            : ProposalPalette.text,
+                        fontWeight: FontWeight.w600,
+                        decoration: canPreviewThis
+                            ? TextDecoration.underline
+                            : TextDecoration.none,
+                      ),
+                    ),
+                    if (contractLabel.isNotEmpty)
+                      Text(
+                        contractLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: ProposalPalette.text3,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (enabled)
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                  onPressed: () => _clearUnsignedFile(prefix, index),
+                  icon: const Icon(Icons.close_rounded, size: 16),
+                  color: ProposalPalette.text3,
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final picker = files.isEmpty && allowUpload
         ? InkWell(
             onTap: enabled && !uploading
                 ? () => unawaited(_pickUnsignedFile(prefix))
@@ -10840,63 +11367,64 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               ),
             ),
           )
-        : InkWell(
-            onTap: opening || !canOpen
-                ? null
-                : () => unawaited(_openContractSourceFile(prefix)),
-            borderRadius: BorderRadius.circular(8),
-            child: InputDecorator(
-              decoration: proposalInputDecoration(readOnly: true),
-              child: Row(
-                children: [
-                  Icon(
-                    canPreview
-                        ? Icons.picture_as_pdf_outlined
-                        : Icons.description_outlined,
-                    size: 16,
-                    color: ProposalPalette.purple,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      name.isEmpty ? '合同源文件' : name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: ProposalPalette.purpleDeep,
-                        fontWeight: FontWeight.w600,
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                  ),
-                  if (enabled)
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 28,
-                        minHeight: 28,
-                      ),
-                      onPressed: () => _clearUnsignedFile(prefix),
-                      icon: const Icon(Icons.close_rounded, size: 16),
-                      color: ProposalPalette.text3,
-                    ),
-                ],
+        : files.isEmpty
+        ? InputDecorator(
+            decoration: proposalInputDecoration(readOnly: true),
+            child: Text(
+              canFetchSigned ? '点击「查看合同」预览合同归集中的源文件' : '还没有合同源文件',
+              style: const TextStyle(
+                fontSize: 13,
+                color: ProposalPalette.text3,
+                fontWeight: FontWeight.w500,
               ),
             ),
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < files.length; i++) ...[
+                if (i > 0) const SizedBox(height: 6),
+                fileRow(files[i], i),
+              ],
+              if (enabled) ...[
+                const SizedBox(height: 6),
+                OutlinedButton.icon(
+                  onPressed: uploading
+                      ? null
+                      : () => unawaited(_pickUnsignedFile(prefix)),
+                  icon: Icon(
+                    uploading
+                        ? Icons.hourglass_top_rounded
+                        : Icons.upload_file_outlined,
+                    size: 16,
+                  ),
+                  label: Text(uploading ? '上传中…' : '继续上传合同'),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    foregroundColor: ProposalPalette.purpleDeep,
+                  ),
+                ),
+              ],
+            ],
           );
     return _FullWidthField(
       child: ProposalField(
         label: allowUpload ? '上传合同文件' : '合同源文件',
         required: allowUpload,
         source: source,
-        tone: proposalFieldTone(enabled: enabled || canOpen, source: source),
-        trailing: canOpen && canPreview
+        tone: proposalFieldTone(
+          enabled: enabled || canOpen || canFetchSigned,
+          source: source,
+        ),
+        trailing: (canOpen && canPreview) || canFetchSigned
             ? TextButton.icon(
                 onPressed: opening
                     ? null
-                    : () => unawaited(_openContractSourceFile(prefix)),
+                    : () => unawaited(
+                        canOpen
+                            ? _openContractSourceFile(prefix, firstPreviewable)
+                            : _previewSelectedContract(prefix),
+                      ),
                 icon: Icon(
                   opening
                       ? Icons.hourglass_top_rounded
@@ -10912,7 +11440,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               )
             : null,
         child: _dropTarget(
-          enabled: enabled && !uploading && name.isEmpty,
+          enabled: enabled && !uploading,
           dragging: dragging,
           onHover: (hover) =>
               setState(() => _draggingUnsignedPrefix = hover ? prefix : null),
@@ -11173,7 +11701,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ('− 电子券采购成本', '各供给规则：关联产品年化规模 × 该条比例', false),
       ('− 项目成本', '成本明细各项之和', false),
       ('= 利润', '收入 − 采购 − 项目', true),
-      ('毛利率', '利润 ÷ 收入', false),
+      ('毛利率', kProposalMarginFormula, false),
       ('预计周转资金', kProposalTurnoverCashFormula, false),
     ];
     return Container(
@@ -11250,7 +11778,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 border: Border.all(color: ProposalPalette.purpleLine),
               ),
               child: const Text(
-                '去市场部添加主产品 →',
+                '去市场部添加$kProposalMainProductLabel →',
                 style: TextStyle(
                   color: ProposalPalette.purpleDeep,
                   fontSize: 12.5,
@@ -11382,7 +11910,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         );
       case 'margin':
         final rollup = proposalProductScaleRollup(form);
-        if (rollup == null || rollup.revenue == 0) {
+        if (rollup == null || rollup.salesScale == 0) {
           return (
             display: rollup == null ? '' : '0',
             formula: kProposalMarginFormula,
@@ -11398,7 +11926,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         );
         return (
           display: proposalFormatWan(
-            proposalRoundWan(profit / rollup.revenue * 100),
+            proposalEstimatedMarginAmount(
+              form,
+              salesScale: rollup.salesScale,
+              profit: profit,
+            ),
           ),
           formula: kProposalMarginFormula,
         );
@@ -11439,8 +11971,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         child: _dropdownField(
           field.$2,
           key,
-          kProposalPreSettleModes,
+          widget.options.resolvedSettleModes,
           required: true,
+          addLabel: '新增结算模式',
           resetReview: 'financeCompleted',
           reviewSection: 'financeItem:$key',
           reviewLabel: _financeReviewLabel,
@@ -11456,8 +11989,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         child: _dropdownField(
           field.$2,
           key,
-          kProposalPreSettleCycles,
+          widget.options.resolvedSettleCycles,
           required: true,
+          addLabel: '新增结算周期',
           resetReview: 'financeCompleted',
           reviewSection: 'financeItem:$key',
           reviewLabel: _financeReviewLabel,
@@ -11871,7 +12405,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ? math.min(minLines ?? 3, compact ? 3 : (minLines ?? 3))
         : 1;
     final Widget input = (_showSelectedAsText || !enabled)
-        ? _readonlySelectedText(_text(key), maxLines: multiline ? null : 1)
+        ? _readonlySelectedText(_text(key))
         : TextFormField(
             key: ValueKey('$key-${_row.id}-$_fieldEpoch'),
             initialValue: _text(key),
@@ -12017,7 +12551,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ) &&
         enabled;
     final tone = proposalFieldTone(enabled: canEdit);
-    final selected = _selectedCatalog(current, options);
+    final selected =
+        _selectedCatalog(current, options) ??
+        ((current != null && current.isNotEmpty) ? current : null);
     final values = _withCurrent(options, selected);
     if (_readValuesOnly(canEdit)) {
       return ProposalField(
@@ -12025,7 +12561,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         required: required,
         tone: tone,
         trailing: _rowReviewToggle(reviewSection, reviewLabel),
-        child: _readonlySelectedText(selected?.label ?? ''),
+        child: _readonlySelectedText(selected?.label ?? current?.label ?? ''),
       );
     }
     return ProposalField(
@@ -12055,6 +12591,26 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ),
     );
   }
+
+  List<String> _settleFieldOptions(String key, String current) {
+    final base = switch (key) {
+      'supplySettleMode' ||
+      'channelSettleMode' => widget.options.resolvedSettleModes,
+      'supplySettleCycle' ||
+      'channelSettleCycle' => widget.options.resolvedSettleCycles,
+      _ => const <String>[],
+    };
+    if (current.isNotEmpty && !base.contains(current)) {
+      return [current, ...base];
+    }
+    return base;
+  }
+
+  String? _settleAddLabel(String key) => switch (key) {
+    'supplySettleMode' || 'channelSettleMode' => '新增结算模式',
+    'supplySettleCycle' || 'channelSettleCycle' => '新增结算周期',
+    _ => null,
+  };
 
   Widget _dropdownField(
     String label,
@@ -12865,7 +13421,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               widget.options.supplies,
               '新增供给',
               resetReview: 'marketCompleted',
-              single: true,
               required: true,
             ),
             _dropdownField(

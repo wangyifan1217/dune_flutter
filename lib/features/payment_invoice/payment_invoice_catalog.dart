@@ -105,6 +105,9 @@ class PaymentInvoiceQuery {
     this.completed = '',
     this.issueStatus = '',
     this.counterparty = '',
+    this.q = '',
+    this.page = 1,
+    this.pageSize = 10,
     this.from,
     this.to,
   });
@@ -119,6 +122,9 @@ class PaymentInvoiceQuery {
   final String completed;
   final String issueStatus;
   final String counterparty;
+  final String q;
+  final int page;
+  final int pageSize;
   final DateTime? from;
   final DateTime? to;
 }
@@ -189,18 +195,27 @@ PaymentInvoiceKind classifyPaymentInvoice({
   String title = '',
   String documentKind = '',
   String proposalType = '',
+  String tagLabel = '',
 }) {
   final template = normalizePaymentInvoiceToken(templateKey);
   final kind = normalizePaymentInvoiceToken(documentKind);
   final type = normalizePaymentInvoiceToken(proposalType);
   final bt = businessType.trim().toUpperCase();
-  final blob = '$title $documentKind $proposalType';
+  final tag = tagLabel.trim();
+  final blob = '$title $documentKind $proposalType $tag';
 
   if (_excludeTemplateKeys.contains(template) ||
       blob.contains('电子报销') ||
       blob.contains('招待费') ||
       blob.contains('差旅')) {
     return PaymentInvoiceKind.other;
+  }
+
+  if (tag.contains('发票') || tag.contains('回款')) {
+    return PaymentInvoiceKind.invoice;
+  }
+  if (tag.contains('付款')) {
+    return PaymentInvoiceKind.payment;
   }
 
   final looksInvoice =
@@ -239,12 +254,14 @@ PaymentInvoiceRow paymentInvoiceRowFromListJson(Map<String, dynamic> json) {
   final documentKind = (json['documentKind'] ?? '').toString();
   final proposalType = (json['proposalType'] ?? json['documentType'] ?? '')
       .toString();
+  final tagLabel = (json['tagLabel'] ?? json['tag_label'] ?? '').toString();
   final kind = classifyPaymentInvoice(
     businessType: businessType,
     templateKey: templateKey,
     title: title,
     documentKind: documentKind,
     proposalType: proposalType,
+    tagLabel: tagLabel,
   );
   final code = (json['code'] ?? '').toString().trim();
   final form = _asMap(json['formData'] ?? json['formValues'] ?? json['form']);
@@ -487,6 +504,12 @@ bool isPaymentCompleted(
   String status = '',
   String subStatus = '',
 }) {
+  final normalized = status.trim().toUpperCase();
+  if (normalized == 'APPROVED' ||
+      normalized == 'COMPLETED' ||
+      normalized == 'DONE') {
+    return true;
+  }
   final blob = '${pickPaymentInvoiceText(form, const [
         'completed',
         'settled',
@@ -517,6 +540,19 @@ bool matchesPaymentInvoiceQuery(PaymentInvoiceRow row, PaymentInvoiceQuery query
   if (!_contains(row.createdByName, query.initiator)) return false;
   if (!_contains(row.payeeAccount, query.account)) return false;
   if (!_contains(row.counterparty, query.counterparty)) return false;
+  if (query.q.trim().isNotEmpty) {
+    final needle = query.q.trim();
+    final hit = [
+      row.displayId,
+      '${row.id}',
+      row.title,
+      row.createdByName,
+      row.purpose,
+      row.payeeAccount,
+      row.counterparty,
+    ].any((value) => _contains(value, needle));
+    if (!hit) return false;
+  }
   if (query.payAccountType.trim().isNotEmpty &&
       row.payAccountType != query.payAccountType.trim()) {
     return false;

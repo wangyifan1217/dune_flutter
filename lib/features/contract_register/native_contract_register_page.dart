@@ -1095,6 +1095,12 @@ class _NativeContractRegisterPageState
         context: context,
         fileName: fileName,
         bytes: Uint8List.fromList(bytes),
+        watermark: [
+          if ((widget.session.displayName ?? '').trim().isNotEmpty)
+            (widget.session.displayName ?? '').trim(),
+          if (row.contractNo.trim().isNotEmpty) row.contractNo.trim(),
+          '仅供内部查阅',
+        ].join(' · '),
       );
     } catch (e) {
       if (!mounted) return;

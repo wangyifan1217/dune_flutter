@@ -1,4 +1,5 @@
-import 'package:dunes_app/features/xflow/xflow_detail_widgets.dart';
+import 'package:dunes_app/features/xflow/task_todo_fields.dart';
+import 'package:dunes_app/features/xflow/xflow_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -22,5 +23,43 @@ void main() {
     });
     expect(files, hasLength(1));
     expect(files.first['fileName'], '发票.pdf');
+  });
+
+  test('payment voucher arrays are files, not toString text', () {
+    final form = {
+      'actualPayAmount': '1180',
+      'paymentVoucher': [
+        {
+          'fileName': '凭证.jpg',
+          'objectKey': 'xflow-proposals/v.jpg',
+          'mimeType': 'image/jpeg',
+        },
+      ],
+    };
+    expect(taskTodoCompletionTexts(form), [('实付金额', '1180')]);
+    final groups = taskTodoCompletionFileGroups(form);
+    expect(groups, hasLength(1));
+    expect(groups.first.$1, '支付凭证');
+    expect(groups.first.$2.first['fileName'], '凭证.jpg');
+  });
+
+  test('legacy payment voucher string still shows as text', () {
+    final texts = taskTodoCompletionTexts({
+      'paymentVoucher': 'PZ-2026-001',
+    });
+    expect(texts, [('支付凭证', 'PZ-2026-001')]);
+    expect(taskTodoCompletionFileGroups({'paymentVoucher': 'PZ-2026-001'}), isEmpty);
+  });
+
+  test('requiredFieldDefs mark payment voucher as upload', () {
+    const defs = [
+      XflowTodoFieldDef(key: 'paymentVoucher', label: '支付凭证', type: 'upload'),
+    ];
+    expect(taskTodoFieldIsUpload('paymentVoucher', defs: defs), isTrue);
+    expect(taskTodoFieldIsUpload('actualPayAmount', defs: defs), isFalse);
+    expect(
+      taskTodoFieldLabel('paymentVoucher', defs: defs),
+      '支付凭证',
+    );
   });
 }

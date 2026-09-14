@@ -12,28 +12,33 @@ import '../../core/util/friendly_error.dart';
 import '../shell/dunes_toast.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
+import 'task_todo_fields.dart';
 
 const kTaskTodoMaxInvoiceFiles = 6;
 const kTaskTodoMaxInvoiceBytes = 20 * 1024 * 1024;
 
-String _taskFieldLabel(String key, {bool loanWan = false}) {
-  const labels = <String, String>{
-    'bankAccountName': '户名',
-    'bankName': '开户行',
-    'bankAccountNo': '账号',
-    'merchantPlatform': '开户平台',
-    'merchantNo': '商户号',
-    'merchantName': '商户名称',
-    'actualPayAmount': '实付金额',
-    'paymentVoucher': '支付凭证',
-    'repayAmount': '还款金额',
-    'returnedInvoice': '回传发票',
-    'expressTrackingNo': '快递单号',
-    'fileDestination': '文件去向',
-    'writeOffReason': '无法收回原因',
-    'receiptVoucher': '回款凭证',
-  };
-  final label = labels[key] ?? key;
+String _taskFieldLabel(
+  String key, {
+  bool loanWan = false,
+  List<XflowTodoFieldDef> defs = const [],
+}) {
+  final label = taskTodoFieldLabel(key, defs: defs);
+  if (label == key) {
+    const labels = <String, String>{
+      'bankAccountName': '户名',
+      'bankName': '开户行',
+      'bankAccountNo': '账号',
+      'merchantPlatform': '开户平台',
+      'merchantNo': '商户号',
+      'merchantName': '商户名称',
+      'writeOffReason': '无法收回原因',
+    };
+    final mapped = labels[key] ?? key;
+    if (loanWan && (key == 'actualPayAmount' || key == 'repayAmount')) {
+      return '$mapped（万）';
+    }
+    return mapped;
+  }
   if (loanWan && (key == 'actualPayAmount' || key == 'repayAmount')) {
     return '$label（万）';
   }
@@ -162,6 +167,7 @@ Future<bool> confirmAndCompleteTaskTodo({
     builder: (ctx) => _TaskTodoCompleteDialog(
       copy: copy,
       keys: keys,
+      fieldDefs: item.requiredFieldDefs,
       needsInvoiceFiles: taskTodoNeedsInvoiceFiles(action),
       loanWan: _isLoanRequestItem(item),
       service: service,
@@ -226,11 +232,13 @@ class _TaskTodoCompleteDialog extends StatefulWidget {
     required this.keys,
     required this.needsInvoiceFiles,
     required this.service,
+    this.fieldDefs = const [],
     this.loanWan = false,
   });
 
   final TaskTodoConfirmCopy copy;
   final List<String> keys;
+  final List<XflowTodoFieldDef> fieldDefs;
   final bool needsInvoiceFiles;
   final XflowService service;
   final bool loanWan;
@@ -243,9 +251,16 @@ class _TaskTodoCompleteDialog extends StatefulWidget {
 class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
   final _commentCtrl = TextEditingController();
   final _fieldValues = <String, String>{};
-  final _files = <_InvoiceFileItem>[];
+  final _filesByKey = <String, List<_InvoiceFileItem>>{};
+  String _pickingKey = 'invoiceFiles';
   bool _picking = false;
   bool _dragging = false;
+
+  List<_InvoiceFileItem> _filesOf(String key) =>
+      _filesByKey.putIfAbsent(key, () => <_InvoiceFileItem>[]);
+
+  bool _isUploadKey(String key) =>
+      taskTodoFieldIsUpload(key, defs: widget.fieldDefs);
 
   bool get _supportsDesktopDrop {
     if (kIsWeb) return true;
@@ -258,30 +273,42 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
     super.dispose();
   }
 
-  Future<void> _pickFiles() async {
+  Future<void> _pickFiles(String key) async {
     if (_picking) return;
-    final remain = kTaskTodoMaxInvoiceFiles - _files.length;
+    final remain = kTaskTodoMaxInvoiceFiles - _filesOf(key).length;
     if (remain <= 0) {
       showDunesToast(context, '最多上传 $kTaskTodoMaxInvoiceFiles 个文件');
       return;
     }
-    setState(() => _picking = true);
+    setState(() {
+      _picking = true;
+      _pickingKey = key;
+    });
     List<XFile> picked = const [];
     try {
-      picked = await openFiles();
+      picked = await openFiles(
+        acceptedTypeGroups: const [
+          XTypeGroup(
+            label: 'images',
+            extensions: ['jpg', 'jpeg', 'png', 'heic', 'heif', 'webp', 'gif'],
+          ),
+          XTypeGroup(label: 'files', extensions: ['pdf', 'doc', 'docx']),
+        ],
+      );
     } catch (_) {
       picked = const [];
     } finally {
       if (mounted) setState(() => _picking = false);
     }
     if (picked.isEmpty || !mounted) return;
-    await _addFiles(picked);
+    await _addFiles(key, picked);
   }
 
-  Future<void> _onDesktopDrop(DropDoneDetails detail) async {
+  Future<void> _onDesktopDrop(String key, DropDoneDetails detail) async {
     if (_picking) return;
     setState(() {
       _picking = true;
+      _pickingKey = key;
       _dragging = false;
     });
     final accessed = <Uint8List>[];
@@ -303,7 +330,7 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
         if (mounted) showDunesToast(context, '请拖入文件（不支持文件夹）');
         return;
       }
-      await _addFiles(files);
+      await _addFiles(key, files);
     } catch (e) {
       if (mounted) {
         showDunesToast(
@@ -324,8 +351,8 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
     }
   }
 
-  Future<void> _addFiles(List<XFile> files) async {
-    final remain = kTaskTodoMaxInvoiceFiles - _files.length;
+  Future<void> _addFiles(String key, List<XFile> files) async {
+    final remain = kTaskTodoMaxInvoiceFiles - _filesOf(key).length;
     if (remain <= 0) {
       showDunesToast(context, '最多上传 $kTaskTodoMaxInvoiceFiles 个文件');
       return;
@@ -350,12 +377,12 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
         continue;
       }
       if (!mounted) return;
-      await _uploadBytes(file.name, bytes);
+      await _uploadBytes(key, file.name, bytes);
     }
   }
 
-  Future<void> _uploadBytes(String rawName, Uint8List bytes) async {
-    final name = rawName.trim().isEmpty ? '发票文件' : rawName.trim();
+  Future<void> _uploadBytes(String key, String rawName, Uint8List bytes) async {
+    final name = rawName.trim().isEmpty ? '凭证文件' : rawName.trim();
     if (bytes.length > kTaskTodoMaxInvoiceBytes) {
       showDunesToast(context, '「$name」超过 20MB，未添加', kind: DunesToastKind.error);
       return;
@@ -365,7 +392,7 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
       size: bytes.length,
       mimeType: lookupMimeType(name) ?? '',
     );
-    setState(() => _files.add(pending));
+    setState(() => _filesOf(key).add(pending));
     try {
       final data = await widget.service.uploadProposalFile(
         bytes: bytes,
@@ -395,44 +422,61 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
     }
   }
 
+  List<Map<String, dynamic>> _filePayload(String key) {
+    return [
+      for (final item in _filesOf(key))
+        if (item.status == _InvoiceFileStatus.done && item.objectKey.isNotEmpty)
+          <String, dynamic>{
+            'fileName': item.name,
+            'objectKey': item.objectKey,
+            if (item.url.isNotEmpty) 'url': item.url,
+            if (item.mimeType.isNotEmpty) 'mimeType': item.mimeType,
+            if (item.size > 0) 'size': item.size,
+            'bucket': 'xflow-proposals',
+          },
+    ];
+  }
+
+  bool _validateFiles(String key, String label) {
+    final files = _filesOf(key);
+    if (files.any((item) => item.status == _InvoiceFileStatus.uploading)) {
+      showDunesToast(context, '$label还在上传，请稍候');
+      return false;
+    }
+    if (files.any((item) => item.status == _InvoiceFileStatus.error)) {
+      showDunesToast(context, '有文件上传失败，请移除后重试', kind: DunesToastKind.error);
+      return false;
+    }
+    if (files.where((item) => item.status == _InvoiceFileStatus.done).isEmpty) {
+      showDunesToast(context, '请上传$label', kind: DunesToastKind.error);
+      return false;
+    }
+    return true;
+  }
+
   void _submit() {
     if (widget.copy.needComment && _commentCtrl.text.trim().isEmpty) {
       showDunesToast(context, '请填写原因', kind: DunesToastKind.error);
       return;
     }
-    if (widget.needsInvoiceFiles) {
-      if (_files.any((item) => item.status == _InvoiceFileStatus.uploading)) {
-        showDunesToast(context, '发票文件还在上传，请稍候');
-        return;
-      }
-      if (_files.any((item) => item.status == _InvoiceFileStatus.error)) {
-        showDunesToast(context, '有文件上传失败，请移除后重试', kind: DunesToastKind.error);
-        return;
-      }
-      if (_files
-          .where((item) => item.status == _InvoiceFileStatus.done)
-          .isEmpty) {
-        showDunesToast(context, '请上传发票文件', kind: DunesToastKind.error);
+    if (widget.needsInvoiceFiles && !_validateFiles('invoiceFiles', '发票文件')) {
+      return;
+    }
+    for (final key in widget.keys) {
+      if (!_isUploadKey(key)) continue;
+      if (!_validateFiles(key, _taskFieldLabel(key, defs: widget.fieldDefs))) {
         return;
       }
     }
     final payload = <String, dynamic>{
-      for (final key in widget.keys) key: _fieldValues[key] ?? '',
+      for (final key in widget.keys)
+        if (_isUploadKey(key))
+          key: _filePayload(key)
+        else
+          key: _fieldValues[key] ?? '',
     };
     if (widget.needsInvoiceFiles) {
-      payload['invoiceFiles'] = [
-        for (final item in _files)
-          if (item.status == _InvoiceFileStatus.done &&
-              item.objectKey.isNotEmpty)
-            <String, dynamic>{
-              'fileName': item.name,
-              'objectKey': item.objectKey,
-              if (item.url.isNotEmpty) 'url': item.url,
-              if (item.mimeType.isNotEmpty) 'mimeType': item.mimeType,
-              if (item.size > 0) 'size': item.size,
-              'bucket': 'xflow-proposals',
-            },
-      ];
+      payload['invoiceFiles'] = _filePayload('invoiceFiles');
     }
     Navigator.pop(
       context,
@@ -453,16 +497,7 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
         Text(copy.body),
         if (widget.needsInvoiceFiles) ...[
           const SizedBox(height: 12),
-          Text(
-            '发票文件',
-            style: DunesTypography.sans(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: DunesColors.text2,
-            ),
-          ),
-          const SizedBox(height: 6),
-          _invoiceDropZone(),
+          _fileDropZone('invoiceFiles', '发票文件'),
         ],
         const SizedBox(height: 12),
         TextField(
@@ -480,13 +515,21 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
           for (final key in widget.keys)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: key == 'merchantPlatform'
+              child: _isUploadKey(key)
+                  ? _fileDropZone(
+                      key,
+                      _taskFieldLabel(key, defs: widget.fieldDefs),
+                    )
+                  : key == 'merchantPlatform'
                   ? DropdownButtonFormField<String>(
                       value: (_fieldValues[key] ?? '').isEmpty
                           ? null
                           : _fieldValues[key],
                       decoration: InputDecoration(
-                        labelText: _taskFieldLabel(key),
+                        labelText: _taskFieldLabel(
+                          key,
+                          defs: widget.fieldDefs,
+                        ),
                       ),
                       items: const [
                         DropdownMenuItem(value: '壹钱包', child: Text('壹钱包')),
@@ -504,6 +547,7 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
                         labelText: _taskFieldLabel(
                           key,
                           loanWan: widget.loanWan,
+                          defs: widget.fieldDefs,
                         ),
                       ),
                       keyboardType:
@@ -518,7 +562,7 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
         ],
       ],
     );
-    if (widget.needsInvoiceFiles) {
+    if (widget.needsInvoiceFiles || widget.keys.any(_isUploadKey)) {
       body = SizedBox(width: 460, child: SingleChildScrollView(child: body));
     }
     return AlertDialog(
@@ -540,13 +584,16 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
     );
   }
 
-  Widget _invoiceDropZone() {
-    final full = _files.length >= kTaskTodoMaxInvoiceFiles;
+  Widget _fileDropZone(String key, String label) {
+    final files = _filesOf(key);
+    final full = files.length >= kTaskTodoMaxInvoiceFiles;
     final zone = Material(
-      color: _dragging ? const Color(0xFFFFF1DC) : const Color(0xFFFFF6E8),
+      color: _dragging && _pickingKey == key
+          ? const Color(0xFFFFF1DC)
+          : const Color(0xFFFFF6E8),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
-        onTap: full || _picking ? null : _pickFiles,
+        onTap: full || _picking ? null : () => _pickFiles(key),
         borderRadius: BorderRadius.circular(12),
         child: Container(
           width: double.infinity,
@@ -554,24 +601,24 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: _dragging
+              color: _dragging && _pickingKey == key
                   ? const Color(0xFFD59A4A)
                   : const Color(0xFFE5BD85),
-              width: _dragging ? 1.6 : 1,
+              width: _dragging && _pickingKey == key ? 1.6 : 1,
             ),
           ),
           child: Column(
             children: [
               Icon(
-                Icons.upload_file_outlined,
+                Icons.add_photo_alternate_outlined,
                 size: 22,
                 color: DunesColors.text2,
               ),
               const SizedBox(height: 6),
               Text(
-                _dragging
+                _dragging && _pickingKey == key
                     ? '松开即可上传'
-                    : (_supportsDesktopDrop ? '点击选择或拖拽发票文件' : '点击选择发票文件'),
+                    : (_supportsDesktopDrop ? '点击选择或拖拽$label' : '点击选择$label'),
                 style: DunesTypography.sans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -580,15 +627,15 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
               ),
               const SizedBox(height: 2),
               Text(
-                '图片 / PDF / DOCX · 最多 $kTaskTodoMaxInvoiceFiles 个，单个不超过 20MB',
+                '图片 / PDF · 最多 $kTaskTodoMaxInvoiceFiles 个，单个不超过 20MB',
                 style: DunesTypography.sans(
                   fontSize: 11,
                   color: DunesColors.text3,
                 ),
               ),
-              if (_files.isNotEmpty) ...[
+              if (files.isNotEmpty) ...[
                 const SizedBox(height: 10),
-                for (final item in _files) _fileRow(item),
+                for (final item in files) _fileRow(key, item),
               ],
             ],
           ),
@@ -597,14 +644,17 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
     );
     if (!_supportsDesktopDrop) return zone;
     return DropTarget(
-      onDragEntered: (_) => setState(() => _dragging = true),
+      onDragEntered: (_) => setState(() {
+        _dragging = true;
+        _pickingKey = key;
+      }),
       onDragExited: (_) => setState(() => _dragging = false),
-      onDragDone: _onDesktopDrop,
+      onDragDone: (detail) => _onDesktopDrop(key, detail),
       child: zone,
     );
   }
 
-  Widget _fileRow(_InvoiceFileItem item) {
+  Widget _fileRow(String key, _InvoiceFileItem item) {
     final meta = switch (item.status) {
       _InvoiceFileStatus.uploading => '上传中',
       _InvoiceFileStatus.error => item.error.isEmpty ? '上传失败' : item.error,
@@ -641,7 +691,7 @@ class _TaskTodoCompleteDialogState extends State<_TaskTodoCompleteDialog> {
           ),
           IconButton(
             visualDensity: VisualDensity.compact,
-            onPressed: () => setState(() => _files.remove(item)),
+            onPressed: () => setState(() => _filesOf(key).remove(item)),
             icon: const Icon(Icons.close, size: 16),
           ),
         ],

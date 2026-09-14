@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'proposal_intake_models.dart';
 
@@ -1765,6 +1766,40 @@ class _ProposalProgressDot extends StatelessWidget {
         size: 13,
         color: pending ? color : Colors.white,
       ),
+    );
+  }
+}
+
+/// 结算比例不允许输入 `%`；粘贴 `1%` 时自动换成 `0.01`。
+class ProposalSettleRatioFormatter extends TextInputFormatter {
+  const ProposalSettleRatioFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    var text = newValue.text.replaceAll('％', '%');
+    if (text.contains('%')) {
+      text = proposalIntakeNormalizeSettleRatio(text);
+    } else {
+      final buffer = StringBuffer();
+      var hasDot = false;
+      for (final rune in text.runes) {
+        final ch = String.fromCharCode(rune);
+        if (ch == '.' && !hasDot) {
+          hasDot = true;
+          buffer.write(ch);
+        } else if (ch.compareTo('0') >= 0 && ch.compareTo('9') <= 0) {
+          buffer.write(ch);
+        }
+      }
+      text = buffer.toString();
+    }
+    if (text == newValue.text) return newValue;
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
     );
   }
 }

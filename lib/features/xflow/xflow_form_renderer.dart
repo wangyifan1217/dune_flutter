@@ -1434,23 +1434,14 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     }
 
     final input = colField.type == 'select'
-        ? DropdownButtonFormField<String>(
-            value: value.isEmpty ? null : value,
-            isExpanded: true,
-            decoration: decoration,
-            style: xfDynInputTextStyle(),
-            dropdownColor: Colors.white,
-            items: [
-              for (final o in _colOptions(col))
-                DropdownMenuItem(
-                  value: o.value,
-                  child: Text(
-                    o.label,
-                    style: xfDynInputTextStyle().copyWith(fontSize: 11),
-                  ),
-                ),
-            ],
-            onChanged: (v) => setVal(v ?? ''),
+        ? _XflowSelectPicker(
+            options: _colOptions(col),
+            value: value,
+            placeholder: col['placeholder']?.toString().isNotEmpty == true
+                ? col['placeholder'].toString()
+                : '请选择',
+            readonly: colField.readonly,
+            onChanged: setVal,
           )
         : TextFormField(
             key: ValueKey('dyn_${fieldKey}_${ri}_$colKey'),
@@ -1831,14 +1822,18 @@ class _XflowSelectPicker extends StatefulWidget {
 
 class _XflowSelectPickerState extends State<_XflowSelectPicker> {
   final TextEditingController _controller = TextEditingController();
+  final FocusNode _focus = FocusNode();
   List<XflowFieldOption> _filtered = const [];
   bool _touched = false;
   bool _expanded = false;
+  String _committedLabel = '';
 
   @override
   void initState() {
     super.initState();
-    _controller.text = _labelForValue(widget.value);
+    _committedLabel = _labelForValue(widget.value);
+    _controller.text = _committedLabel;
+    _focus.addListener(_onFocusChange);
   }
 
   @override
@@ -1847,7 +1842,8 @@ class _XflowSelectPickerState extends State<_XflowSelectPicker> {
     if (oldWidget.value != widget.value ||
         oldWidget.options != widget.options) {
       final next = _labelForValue(widget.value);
-      if (_controller.text != next) {
+      _committedLabel = next;
+      if (!_focus.hasFocus && _controller.text != next) {
         _controller.text = next;
       }
     }
@@ -1855,8 +1851,18 @@ class _XflowSelectPickerState extends State<_XflowSelectPicker> {
 
   @override
   void dispose() {
+    _focus.removeListener(_onFocusChange);
+    _focus.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (_focus.hasFocus) return;
+    // 软键盘收起只失焦，不关名单；点输入框外再收。
+    if (!_expanded && _controller.text.trim() != _committedLabel) {
+      _controller.text = _committedLabel;
+    }
   }
 
   String _labelForValue(String value) {
@@ -1885,27 +1891,31 @@ class _XflowSelectPickerState extends State<_XflowSelectPicker> {
   }
 
   void _select(XflowFieldOption option) {
+    final label = option.label.trim().isNotEmpty ? option.label : option.value;
     widget.onChanged(option.value);
+    _committedLabel = label;
     setState(() {
-      _controller.text = option.label;
+      _controller.text = label;
       _filtered = const [];
       _touched = false;
       _expanded = false;
     });
+    _focus.unfocus(disposition: UnfocusDisposition.previouslyFocusedChild);
   }
 
-  void _scheduleCollapse() {
-    // 点选项时 TapRegion 会先判 outside；延迟收起，避免名单被拆掉导致选不中。
-    Future<void>.delayed(const Duration(milliseconds: 80), () {
-      if (!mounted || !_expanded) return;
-      setState(() => _expanded = false);
-    });
+  void _openMenu({String? query}) {
+    final q = query ?? _controller.text;
+    final selected = _committedLabel.trim();
+    final filterQuery = (selected.isNotEmpty && q.trim() == selected) ? '' : q;
+    setState(() => _expanded = true);
+    _applyFilter(filterQuery, markTouched: false);
   }
 
   void _clear() {
     widget.onChanged('');
     setState(() {
       _controller.clear();
+      _committedLabel = '';
       _filtered = widget.options;
       _touched = false;
       _expanded = true;
@@ -1916,119 +1926,101 @@ class _XflowSelectPickerState extends State<_XflowSelectPicker> {
   Widget build(BuildContext context) {
     final hasText = _controller.text.trim().isNotEmpty;
     final showMenu = !widget.readonly && _expanded && _filtered.isNotEmpty;
+    final selectedIndex = _filtered.indexWhere((o) => o.value == widget.value);
     return TapRegion(
-      onTapOutside: (_) => _scheduleCollapse(),
+      onTapOutside: (_) {
+        if (_expanded) setState(() => _expanded = false);
+        if (_controller.text.trim() != _committedLabel) {
+          _controller.text = _committedLabel;
+        }
+        _focus.unfocus(disposition: UnfocusDisposition.previouslyFocusedChild);
+      },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          xfFixedHeightControl(
-            child: TextField(
-              controller: _controller,
-              onTap: widget.readonly
-                  ? null
-                  : () {
-                      if (!_expanded) {
-                        setState(() => _expanded = true);
-                        _applyFilter('', markTouched: false);
-                      }
-                    },
-              readOnly: true,
-              enableInteractiveSelection: false,
-              style: xfInputTextStyle(),
-              decoration:
-                  xfInputDecoration(
-                    hint: widget.placeholder,
-                    readonly: widget.readonly,
-                  ).copyWith(
-                    isDense: true,
-                    contentPadding: const EdgeInsets.fromLTRB(11, 9, 4, 9),
-                    suffixIconConstraints: BoxConstraints(
-                      minWidth: hasText && !widget.readonly ? 56 : 32,
-                      minHeight: 32,
-                    ),
-                    suffixIcon: widget.readonly
-                        ? const Padding(
-                            padding: EdgeInsets.only(right: 8),
-                            child: Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              size: 18,
-                              color: DunesColors.text3,
-                            ),
-                          )
-                        : Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (hasText)
-                                IconButton(
-                                  tooltip: '清除',
-                                  padding: EdgeInsets.zero,
-                                  visualDensity: VisualDensity.compact,
-                                  constraints: xfCompactSuffixConstraints,
-                                  icon: const Icon(
-                                    Icons.close_rounded,
-                                    size: 18,
-                                    color: DunesColors.text3,
-                                  ),
-                                  onPressed: _clear,
-                                ),
+          TextField(
+            controller: _controller,
+            focusNode: _focus,
+            readOnly: widget.readonly,
+            minLines: 1,
+            maxLines: _expanded ? 1 : 4,
+            enableInteractiveSelection: !widget.readonly,
+            style: xfInputTextStyle(),
+            onTap: widget.readonly ? null : () => _openMenu(),
+            onChanged: widget.readonly
+                ? null
+                : (q) {
+                    _openMenu(query: q);
+                  },
+            decoration:
+                xfInputDecoration(
+                  hint: widget.placeholder,
+                  readonly: widget.readonly,
+                ).copyWith(
+                  isDense: true,
+                  contentPadding: const EdgeInsets.fromLTRB(11, 9, 4, 9),
+                  suffixIconConstraints: BoxConstraints(
+                    minWidth: hasText && !widget.readonly ? 56 : 32,
+                    minHeight: 32,
+                  ),
+                  suffixIcon: widget.readonly
+                      ? const Padding(
+                          padding: EdgeInsets.only(right: 8),
+                          child: Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 18,
+                            color: DunesColors.text3,
+                          ),
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (hasText)
                               IconButton(
-                                tooltip: _expanded ? '收起' : '展开',
+                                tooltip: '清除',
                                 padding: EdgeInsets.zero,
                                 visualDensity: VisualDensity.compact,
                                 constraints: xfCompactSuffixConstraints,
-                                icon: Icon(
-                                  _expanded
-                                      ? Icons.keyboard_arrow_up_rounded
-                                      : Icons.keyboard_arrow_down_rounded,
+                                icon: const Icon(
+                                  Icons.close_rounded,
                                   size: 18,
                                   color: DunesColors.text3,
                                 ),
-                                onPressed: () {
-                                  if (_expanded) {
-                                    setState(() => _expanded = false);
-                                  } else {
-                                    setState(() => _expanded = true);
-                                    _applyFilter('', markTouched: false);
-                                  }
-                                },
+                                onPressed: _clear,
                               ),
-                            ],
-                          ),
-                  ),
-            ),
+                            IconButton(
+                              tooltip: _expanded ? '收起' : '展开',
+                              padding: EdgeInsets.zero,
+                              visualDensity: VisualDensity.compact,
+                              constraints: xfCompactSuffixConstraints,
+                              icon: Icon(
+                                _expanded
+                                    ? Icons.keyboard_arrow_up_rounded
+                                    : Icons.keyboard_arrow_down_rounded,
+                                size: 18,
+                                color: DunesColors.text3,
+                              ),
+                              onPressed: () {
+                                if (_expanded) {
+                                  setState(() => _expanded = false);
+                                } else {
+                                  _openMenu(query: '');
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                ),
           ),
           if (showMenu) ...[
             const SizedBox(height: 6),
-            Container(
-              constraints: const BoxConstraints(maxHeight: 220),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: DunesColors.border),
-              ),
-              child: ListView.separated(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                itemCount: _filtered.length.clamp(0, 8),
-                separatorBuilder: (_, _) =>
-                    Divider(height: 1, color: DunesColors.borderSoft),
-                itemBuilder: (context, index) {
-                  final option = _filtered[index];
-                  return ListTile(
-                    dense: true,
-                    title: Text(
-                      option.label,
-                      style: DunesTypography.sans(fontSize: 12),
-                    ),
-                    trailing: const Icon(
-                      Icons.keyboard_arrow_right_rounded,
-                      size: 16,
-                      color: DunesColors.text3,
-                    ),
-                    onTap: () => _select(option),
-                  );
-                },
-              ),
+            XfPickerSuggestionList(
+              itemCount: _filtered.length,
+              selectedIndex: selectedIndex < 0 ? null : selectedIndex,
+              labelOf: (i) => _filtered[i].label.isNotEmpty
+                  ? _filtered[i].label
+                  : _filtered[i].value,
+              onSelect: (i) => _select(_filtered[i]),
             ),
           ] else if (!widget.readonly &&
               _touched &&
@@ -2065,14 +2057,7 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
   }
 
   void _onFocusChange() {
-    if (!_focus.hasFocus) {
-      // 等 ListTile.onTap 先跑完，避免点结果时先失焦把名单拆掉。
-      Future<void>.delayed(const Duration(milliseconds: 80), () {
-        if (!mounted || _focus.hasFocus) return;
-        _dismissSuggestions();
-      });
-      return;
-    }
+    if (!_focus.hasFocus) return;
     if (widget.readonly) return;
     final role = widget.roleCode?.trim() ?? '';
     if (role.isEmpty) return;
@@ -2118,7 +2103,10 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
 
   String _displayName(dynamic val) {
     if (val is Map) {
-      return (val['name'] ?? val['displayName'] ?? '').toString();
+      final name = (val['name'] ?? val['displayName'] ?? '').toString().trim();
+      final dept = (val['dept'] ?? val['departmentName'] ?? '').toString().trim();
+      final title = (val['title'] ?? '').toString().trim();
+      return [name, dept, title].where((e) => e.isNotEmpty).join(' · ');
     }
     return val?.toString() ?? '';
   }
@@ -2138,9 +2126,14 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
     final name = (u['displayName'] ?? u['name'] ?? '').toString().trim();
     if (name.isEmpty) return;
     _debounce?.cancel();
+    final display = [
+      name,
+      (u['departmentName'] ?? u['dept'] ?? '').toString().trim(),
+      (u['title'] ?? '').toString().trim(),
+    ].where((e) => e.isNotEmpty).join(' · ');
     _controller.value = TextEditingValue(
-      text: name,
-      selection: TextSelection.collapsed(offset: name.length),
+      text: display,
+      selection: TextSelection.collapsed(offset: display.length),
     );
     widget.onChanged({
       'userId': u['userId'] ?? u['id'],
@@ -2175,7 +2168,7 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
         query,
         roleCode: widget.roleCode,
       );
-      if (!mounted || !_focus.hasFocus || _controller.text.trim() != query) {
+      if (!mounted || _controller.text.trim() != query) {
         return;
       }
       setState(() {
@@ -2184,7 +2177,7 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
         _loading = false;
       });
     } catch (_) {
-      if (!mounted || !_focus.hasFocus) return;
+      if (!mounted) return;
       setState(() {
         _loading = false;
         _searched = true;
@@ -2205,7 +2198,12 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
   @override
   Widget build(BuildContext context) {
     final hasText = _controller.text.trim().isNotEmpty;
-    return Column(
+    return TapRegion(
+      onTapOutside: (_) {
+        _dismissSuggestions();
+        _releaseFocus();
+      },
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         TextField(
@@ -2230,52 +2228,32 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
                     onClear: _clearSelection,
                   ),
           ),
+          minLines: 1,
+          maxLines: _results.isEmpty ? 4 : 1,
           style: xfInputTextStyle(),
           onTap: widget.readonly
               ? null
               : () {
                   if (!_focus.hasFocus) _focus.requestFocus();
                 },
-          onTapOutside: (_) => _releaseFocus(),
           onChanged: widget.readonly ? null : _onQueryChanged,
         ),
         if (_results.isNotEmpty) ...[
           const SizedBox(height: 6),
-          TextFieldTapRegion(
-            child: Container(
-              constraints: const BoxConstraints(maxHeight: 220),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: DunesColors.border),
-              ),
-              child: ListView.separated(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                itemCount: _results.length.clamp(0, 8),
-                separatorBuilder: (_, _) =>
-                    Divider(height: 1, color: DunesColors.borderSoft),
-                itemBuilder: (context, index) {
-                  final u = _results[index];
-                  final name = (u['displayName'] ?? u['name'] ?? '').toString();
-                  final dept = (u['departmentName'] ?? u['dept'] ?? '')
-                      .toString();
-                  return ListTile(
-                    dense: true,
-                    title: Text(
-                      dept.isEmpty ? name : '$name · $dept',
-                      style: DunesTypography.sans(fontSize: 12),
-                    ),
-                    trailing: const Icon(
-                      Icons.person_add_alt_1_outlined,
-                      size: 16,
-                      color: DunesColors.text3,
-                    ),
-                    onTap: () => _selectUser(u),
-                  );
-                },
-              ),
-            ),
+          XfPickerSuggestionList(
+            itemCount: _results.length,
+            labelOf: (i) {
+              final u = _results[i];
+              final name = (u['displayName'] ?? u['name'] ?? '')
+                  .toString()
+                  .trim();
+              final dept = (u['departmentName'] ?? u['dept'] ?? '')
+                  .toString()
+                  .trim();
+              final title = (u['title'] ?? '').toString().trim();
+              return [name, dept, title].where((e) => e.isNotEmpty).join(' · ');
+            },
+            onSelect: (i) => _selectUser(_results[i]),
           ),
         ] else if (_searched && !_loading && hasText) ...[
           const SizedBox(height: 6),
@@ -2285,6 +2263,7 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
           ),
         ],
       ],
+    ),
     );
   }
 }
@@ -2406,14 +2385,7 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
   }
 
   void _onFocusChange() {
-    if (!_focus.hasFocus) {
-      // 等 ListTile.onTap 先跑完，避免点结果时先失焦把名单拆掉。
-      Future<void>.delayed(const Duration(milliseconds: 80), () {
-        if (!mounted || _focus.hasFocus) return;
-        _dismissSuggestions();
-      });
-      return;
-    }
+    if (!_focus.hasFocus) return;
     if (widget.readonly) return;
     if (_controller.text.trim().isNotEmpty) return;
     if (_results.isNotEmpty || _loading) return;
@@ -2589,7 +2561,7 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
               meta: widget.meta,
             )
           : await widget.service!.searchCompletedProposalIntakes(q);
-      if (!mounted || !_focus.hasFocus || _controller.text.trim() != q.trim()) {
+      if (!mounted || _controller.text.trim() != q.trim()) {
         return;
       }
       setState(() {
@@ -2598,7 +2570,7 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
         _loading = false;
       });
     } catch (_) {
-      if (!mounted || !_focus.hasFocus) return;
+      if (!mounted) return;
       setState(() {
         _loading = false;
         _searched = true;
@@ -2619,7 +2591,12 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
   @override
   Widget build(BuildContext context) {
     final hasText = _controller.text.trim().isNotEmpty;
-    return Column(
+    return TapRegion(
+      onTapOutside: (_) {
+        _dismissSuggestions();
+        _releaseFocus();
+      },
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         TextField(
@@ -2635,49 +2612,30 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
               onClear: _clearSelection,
             ),
           ),
+          minLines: 1,
+          maxLines: _results.isEmpty ? 4 : 1,
           style: xfInputTextStyle(),
           onTap: widget.readonly
               ? null
               : () {
                   if (!_focus.hasFocus) _focus.requestFocus();
                 },
-          onTapOutside: (_) => _releaseFocus(),
           onChanged: widget.readonly ? null : _onQueryChanged,
         ),
         if (_results.isNotEmpty) ...[
           const SizedBox(height: 6),
-          TextFieldTapRegion(
-            child: Container(
-              constraints: const BoxConstraints(maxHeight: 220),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: DunesColors.border),
-              ),
-              child: ListView.separated(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                itemCount: _results.length.clamp(0, 8),
-                separatorBuilder: (_, _) =>
-                    Divider(height: 1, color: DunesColors.borderSoft),
-                itemBuilder: (context, index) {
-                  final row = _results[index];
-                  final code = (row['code'] ?? '').toString();
-                  final title = (row['title'] ?? row['name'] ?? '').toString();
-                  final label = code.isNotEmpty && title.isNotEmpty
-                      ? '$code · $title'
-                      : (code.isNotEmpty ? code : title);
-                  return ListTile(
-                    dense: true,
-                    title: Text(
-                      label,
-                      style: DunesTypography.sans(fontSize: 12),
-                    ),
-                    onTap: () => _selectProposal(row),
-                  );
-                },
-              ),
-            ),
+          XfPickerSuggestionList(
+            itemCount: _results.length,
+            labelOf: (i) {
+              final row = _results[i];
+              final code = (row['code'] ?? '').toString().trim();
+              final title = (row['title'] ?? row['name'] ?? '')
+                  .toString()
+                  .trim();
+              if (code.isNotEmpty && title.isNotEmpty) return '$code · $title';
+              return code.isNotEmpty ? code : title;
+            },
+            onSelect: (i) => _selectProposal(_results[i]),
           ),
         ] else if (_searched && !_loading && hasText) ...[
           const SizedBox(height: 6),
@@ -2687,6 +2645,7 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
           ),
         ],
       ],
+    ),
     );
   }
 }
@@ -2730,6 +2689,7 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
   bool _searched = false;
   Timer? _debounce;
   bool _fromFill = false;
+  String _selectedFullLabel = '';
 
   XflowRemoteSearchConfig get _cfg => widget.config;
 
@@ -2741,22 +2701,22 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
     super.initState();
     _fromFill =
         _useFillDisplay && _cfg.fillDisplayOf(widget.scopeValues).isNotEmpty;
-    _controller.text = _resolvedDisplay();
-    _focus.addListener(_onFocusChange);
+    _selectedFullLabel = _resolvedDisplay();
+    _controller.text = _selectedFullLabel;
   }
 
   @override
   void didUpdateWidget(covariant _XflowRemoteSearchPicker oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (_useFillDisplay) {
-      final next = _resolvedDisplay();
+      final next = _keepSelectedDisplay(_resolvedDisplay());
       if (!_focus.hasFocus && _controller.text != next) {
         _controller.text = next;
       }
       return;
     }
     if (oldWidget.value != widget.value) {
-      final next = _displayText(widget.value);
+      final next = _keepSelectedDisplay(_displayText(widget.value));
       // 仅在外部写入（回填/导入）且输入框未聚焦时同步，避免打断手输。
       if (!_focus.hasFocus && _controller.text != next) {
         _controller.text = next;
@@ -2764,22 +2724,27 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
     }
   }
 
+  String _keepSelectedDisplay(String incoming) {
+    final selected = _selectedFullLabel.trim();
+    final next = incoming.trim();
+    if (selected.isEmpty) return incoming;
+    if (next.isEmpty) {
+      _selectedFullLabel = '';
+      return incoming;
+    }
+    if (selected == next || selected.contains(next) || next.contains(selected)) {
+      return selected;
+    }
+    _selectedFullLabel = incoming;
+    return incoming;
+  }
+
   @override
   void dispose() {
     _debounce?.cancel();
-    _focus.removeListener(_onFocusChange);
     _focus.dispose();
     _controller.dispose();
     super.dispose();
-  }
-
-  void _onFocusChange() {
-    if (_focus.hasFocus) return;
-    // 等 ListTile.onTap 先跑完，避免点结果时页面 GestureDetector 先失焦把名单拆掉。
-    Future<void>.delayed(const Duration(milliseconds: 80), () {
-      if (!mounted || _focus.hasFocus) return;
-      _dismissSuggestions();
-    });
   }
 
   void _dismissSuggestions() {
@@ -2849,6 +2814,7 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
       _searched = false;
       _loading = false;
       _fromFill = false;
+      _selectedFullLabel = '';
     });
     if (widget.onPatch != null) {
       final patch = <String, dynamic>{widget.fieldKey: ''};
@@ -2885,7 +2851,7 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
     }
     patch.addAll(_cfg.fillPatches(row));
     _fromFill = _useFillDisplay;
-    final display = _fromFill
+    final fallback = _fromFill
         ? _cfg.fillDisplayOf(<String, dynamic>{
             ...?widget.scopeValues,
             ...patch,
@@ -2895,6 +2861,11 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
               : (patch.containsKey(widget.fieldKey)
                     ? '${patch[widget.fieldKey]}'
                     : _controller.text));
+    final display = _cfg.selectedDisplayOf(row, fallback: fallback);
+    _selectedFullLabel = display;
+    if (_cfg.storeObject && patch[widget.fieldKey] is Map) {
+      (patch[widget.fieldKey] as Map)['label'] = display;
+    }
     _debounce?.cancel();
     _setControllerText(display);
     _writeMany(patch);
@@ -2925,7 +2896,7 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
         queryParam: _cfg.queryParam,
         query: query,
       );
-      if (!mounted || !_focus.hasFocus || _controller.text.trim() != query) {
+      if (!mounted || _controller.text.trim() != query) {
         return;
       }
       setState(() {
@@ -2934,7 +2905,7 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
         _loading = false;
       });
     } catch (e) {
-      if (!mounted || !_focus.hasFocus) return;
+      if (!mounted) return;
       setState(() {
         _loading = false;
         _searched = true;
@@ -2945,6 +2916,7 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
   }
 
   void _onQueryChanged(String q) {
+    _selectedFullLabel = '';
     _fromFill = false;
     if (!widget.readonly && _cfg.allowManual) {
       if (widget.onPatch != null) {
@@ -2964,7 +2936,12 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
   @override
   Widget build(BuildContext context) {
     final hasText = _controller.text.trim().isNotEmpty;
-    return Column(
+    return TapRegion(
+      onTapOutside: (_) {
+        _dismissSuggestions();
+        _releaseFocus();
+      },
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         TextField(
@@ -2986,45 +2963,22 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
               onClear: _clearSelection,
             ),
           ),
+          minLines: 1,
+          maxLines: _results.isEmpty ? 4 : 1,
           style: xfInputTextStyle(),
           onTap: widget.readonly
               ? null
               : () {
                   if (!_focus.hasFocus) _focus.requestFocus();
                 },
-          onTapOutside: (_) => _releaseFocus(),
           onChanged: widget.readonly ? null : _onQueryChanged,
         ),
         if (_results.isNotEmpty) ...[
           const SizedBox(height: 6),
-          TextFieldTapRegion(
-            child: Container(
-              constraints: const BoxConstraints(maxHeight: 220),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: DunesColors.border),
-              ),
-              child: ListView.separated(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                itemCount: _results.length.clamp(0, 12),
-                separatorBuilder: (_, _) =>
-                    Divider(height: 1, color: DunesColors.borderSoft),
-                itemBuilder: (context, index) {
-                  final row = _results[index];
-                  final label = _cfg.labelOf(row);
-                  return ListTile(
-                    dense: true,
-                    title: Text(
-                      label.isEmpty ? '（无标题）' : label,
-                      style: DunesTypography.sans(fontSize: 12),
-                    ),
-                    onTap: () => _selectRow(row),
-                  );
-                },
-              ),
-            ),
+          XfPickerSuggestionList(
+            itemCount: _results.length,
+            labelOf: (i) => _cfg.labelOf(_results[i]),
+            onSelect: (i) => _selectRow(_results[i]),
           ),
         ] else if (_searched && !_loading && hasText) ...[
           const SizedBox(height: 6),
@@ -3034,6 +2988,7 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
           ),
         ],
       ],
+    ),
     );
   }
 }

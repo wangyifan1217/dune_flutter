@@ -25,6 +25,13 @@ String proposalIntakeUntitledTitle(String kind) =>
 String proposalIntakeKindEyebrow(String kind) =>
     proposalIntakeIsPurchase(kind) ? '采购业务提案' : '销售业务提案';
 
+/// 市场部产品类型展示名。
+const kProposalMainProductLabel = '主产品';
+const kProposalChildProductLabel = '子产品';
+
+String proposalIntakeProductKindLabel({required bool child}) =>
+    child ? kProposalChildProductLabel : kProposalMainProductLabel;
+
 class ProposalIntakeAccess {
   const ProposalIntakeAccess({
     required this.view,
@@ -209,14 +216,12 @@ Map<String, dynamic> proposalIntakePatchFromApprovedPurchase(
   _putField(patch, 'purchaseObjectKey', hit.purchaseObjectKey);
   _putField(patch, 'purchaseFileUrl', hit.purchaseFileUrl);
   _putField(patch, 'supplierPolicy', hit.supplierPolicy);
-  _putField(patch, 'supplySettleMode', hit.supplySettleMode);
-  _putField(patch, 'supplySettleCycle', hit.supplySettleCycle);
   _putField(patch, 'supplyPayer', hit.supplyPayer);
   _putField(patch, 'supplyPayAccount', hit.supplyPayAccount);
   if (hit.purchaseProducts.isNotEmpty) {
     patch['purchaseProducts'] = hit.purchaseProducts;
   }
-  return patch;
+  return proposalIntakeSyncContractCollections(patch, 'purchase');
 }
 
 class ProposalContractChoice {
@@ -845,6 +850,8 @@ class ProposalIntakeOptions {
     this.operatingCostRules = '',
     this.costItemSource = '',
     required this.rollbackOptions,
+    this.settleModes = const [],
+    this.settleCycles = const [],
     required this.ratingS,
     required this.ratingA,
     required this.ratingB,
@@ -875,6 +882,8 @@ class ProposalIntakeOptions {
   final String operatingCostRules;
   final String costItemSource;
   final List<String> rollbackOptions;
+  final List<String> settleModes;
+  final List<String> settleCycles;
   final double ratingS;
   final double ratingA;
   final double ratingB;
@@ -942,6 +951,8 @@ class ProposalIntakeOptions {
       ),
       costItemSource: '${finance['costItemSource'] ?? ''}'.trim(),
       rollbackOptions: _strings(finance['rollbackOptions']),
+      settleModes: _strings(finance['settleModes']),
+      settleCycles: _strings(finance['settleCycles']),
       // 金额口径为万元。
       ratingS: _number(rules['ratingS'], 5000),
       ratingA: _number(rules['ratingA'], 2000),
@@ -959,6 +970,12 @@ class ProposalIntakeOptions {
     if (scale >= ratingB) return 'B';
     return 'C';
   }
+
+  List<String> get resolvedSettleModes =>
+      settleModes.isNotEmpty ? settleModes : kProposalPreSettleModes;
+
+  List<String> get resolvedSettleCycles =>
+      settleCycles.isNotEmpty ? settleCycles : kProposalPreSettleCycles;
 
   bool isConfiguredPresident(int userId) =>
       userId > 0 && presidentUserIds.contains(userId);
@@ -1086,18 +1103,10 @@ List<String> proposalIntakeContractFillKeys(String prefix) {
     '${prefix}CoreTerms',
   ];
   if (prefix == 'purchase') {
-    keys.addAll(const [
-      'supplierPolicy',
-      'supplySettleMode',
-      'supplySettleCycle',
-      'supplyPayer',
-      'supplyPayAccount',
-    ]);
+    keys.addAll(const ['supplierPolicy', 'supplyPayer', 'supplyPayAccount']);
   } else {
     keys.addAll(const [
       'channelPolicy',
-      'channelSettleMode',
-      'channelSettleCycle',
       'channelPayee',
       'channelReceiveAccount',
       'salesInvoiceType',
@@ -1111,40 +1120,368 @@ List<String> proposalIntakeContractFillKeys(String prefix) {
 Map<String, dynamic> proposalIntakeResetContractFields(String prefix) {
   return <String, dynamic>{
     '${prefix}ContractId': null,
+    '${prefix}ContractIds': const <int>[],
+    '${prefix}Contracts': const <Map<String, dynamic>>[],
     '${prefix}FileName': '',
     '${prefix}ObjectKey': '',
     '${prefix}FileUrl': '',
     '${prefix}FileSize': null,
+    '${prefix}Files': const <Map<String, dynamic>>[],
     for (final key in proposalIntakeContractFillKeys(prefix)) key: '',
   };
 }
 
-/// 从合同归集详情取出第一个源文件，写入提案表单，供内部 PDF 预览。
+int _proposalIntakePositiveId(Object? raw) {
+  if (raw is num) {
+    final id = raw.toInt();
+    return id > 0 ? id : 0;
+  }
+  return int.tryParse('$raw'.trim()) ?? 0;
+}
+
+String proposalIntakeContractRefLabel(Map<String, dynamic> ref) {
+  final no = '${ref['contractNo'] ?? ''}'.trim();
+  final name = '${ref['contractName'] ?? ''}'.trim();
+  if (name.isEmpty) return no;
+  if (no.isEmpty) return name;
+  return '$no · $name';
+}
+
+List<int> proposalIntakeSelectedContractIds(
+  Map<String, dynamic> form,
+  String prefix,
+) {
+  final ids = <int>[];
+  final raw = form['${prefix}ContractIds'];
+  if (raw is List) {
+    for (final item in raw) {
+      final id = _proposalIntakePositiveId(item);
+      if (id > 0 && !ids.contains(id)) ids.add(id);
+    }
+  }
+  if (ids.isEmpty) {
+    final single = _proposalIntakePositiveId(form['${prefix}ContractId']);
+    if (single > 0) ids.add(single);
+  }
+  return ids;
+}
+
+List<Map<String, dynamic>> proposalIntakeSelectedContractRefs(
+  Map<String, dynamic> form,
+  String prefix,
+) {
+  final ids = proposalIntakeSelectedContractIds(form, prefix);
+  final byId = <int, Map<String, dynamic>>{};
+  final raw = form['${prefix}Contracts'];
+  if (raw is List) {
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final map = Map<String, dynamic>.from(item);
+      final id = _proposalIntakePositiveId(map['id']);
+      if (id > 0) byId[id] = map;
+    }
+  }
+  if (ids.isEmpty) return const [];
+  return [
+    for (final id in ids)
+      byId[id] ??
+          <String, dynamic>{
+            'id': id,
+            'contractNo':
+                id == _proposalIntakePositiveId(form['${prefix}ContractId'])
+                ? '${form['${prefix}No'] ?? ''}'.trim()
+                : '',
+            'contractName':
+                id == _proposalIntakePositiveId(form['${prefix}ContractId'])
+                ? '${form['${prefix}Name'] ?? ''}'.trim()
+                : '',
+            'partyB':
+                id == _proposalIntakePositiveId(form['${prefix}ContractId'])
+                ? '${form['${prefix}Counterparty'] ?? ''}'.trim()
+                : '',
+          },
+  ];
+}
+
+Map<String, dynamic> proposalIntakeContractFileMap(Map<dynamic, dynamic> raw) {
+  final name = '${raw['fileName'] ?? ''}'.trim();
+  final objectKey = '${raw['objectKey'] ?? ''}'.trim();
+  final url = '${raw['url'] ?? raw['fileUrl'] ?? ''}'.trim();
+  return <String, dynamic>{
+    'fileName': name,
+    'objectKey': objectKey,
+    'url': url,
+    'fileUrl': url,
+    'sizeBytes': raw['sizeBytes'] ?? raw['fileSize'] ?? raw['size'],
+    if (_proposalIntakePositiveId(raw['contractId']) > 0)
+      'contractId': _proposalIntakePositiveId(raw['contractId']),
+  };
+}
+
+bool proposalIntakeContractFileIsEmpty(Map<String, dynamic> file) =>
+    '${file['fileName'] ?? ''}'.trim().isEmpty &&
+    '${file['objectKey'] ?? ''}'.trim().isEmpty &&
+    '${file['url'] ?? file['fileUrl'] ?? ''}'.trim().isEmpty;
+
+List<Map<String, dynamic>> proposalIntakeContractFiles(
+  Map<String, dynamic> form,
+  String prefix,
+) {
+  final raw = form['${prefix}Files'];
+  if (raw is List) {
+    final files = [
+      for (final item in raw)
+        if (item is Map) proposalIntakeContractFileMap(item),
+    ].where((file) => !proposalIntakeContractFileIsEmpty(file)).toList();
+    if (files.isNotEmpty) return files;
+  }
+  final fromRefs = proposalIntakeFilesFromSelectedContractRefs(
+    proposalIntakeSelectedContractRefs(form, prefix),
+  );
+  if (fromRefs.isNotEmpty) return fromRefs;
+  final fallback = proposalIntakeContractFileMap({
+    'fileName': form['${prefix}FileName'],
+    'objectKey': form['${prefix}ObjectKey'],
+    'url': form['${prefix}FileUrl'],
+    'sizeBytes': form['${prefix}FileSize'],
+  });
+  if (proposalIntakeContractFileIsEmpty(fallback)) return const [];
+  return [fallback];
+}
+
+List<Map<String, dynamic>> proposalIntakeFilesFromContractDetail(
+  Map<String, dynamic> detail,
+) {
+  final files = detail['files'];
+  if (files is! List || files.isEmpty) return const [];
+  final contractId = _proposalIntakePositiveId(detail['id']);
+  return [
+    for (final item in files)
+      if (item is Map)
+        proposalIntakeContractFileMap({
+          ...item,
+          if (contractId > 0) 'contractId': contractId,
+        }),
+  ].where((file) => !proposalIntakeContractFileIsEmpty(file)).toList();
+}
+
+Map<String, dynamic> proposalIntakeContractRefFromDetail(
+  Map<String, dynamic> detail,
+) {
+  final related = detail['proposalRelated'] is Map
+      ? Map<String, dynamic>.from(detail['proposalRelated'] as Map)
+      : const <String, dynamic>{};
+  String pick(List<String> keys) {
+    final fromRelated = _contractText(related, keys);
+    if (fromRelated.isNotEmpty) return fromRelated;
+    return _contractText(detail, keys);
+  }
+
+  return <String, dynamic>{
+    'id': _proposalIntakePositiveId(detail['id']),
+    'contractNo': _contractText(detail, ['contractNo']),
+    'contractName': pick(['contractName', 'purchaseName', 'salesName']),
+    'partyA': pick(['partyA', 'purchaseOurParty', 'salesOurParty']),
+    'partyB': pick(['partyB', 'purchaseCounterparty', 'salesCounterparty']),
+    'signDate': pick(['signDate', 'purchaseSignDate', 'salesSignDate']),
+    'files': proposalIntakeFilesFromContractDetail(detail),
+  };
+}
+
+Map<String, dynamic> proposalIntakeSyncContractCollections(
+  Map<String, dynamic> form,
+  String prefix,
+) {
+  final next = Map<String, dynamic>.from(form);
+  final ids = proposalIntakeSelectedContractIds(next, prefix);
+  next['${prefix}ContractIds'] = ids;
+  next['${prefix}ContractId'] = ids.isEmpty ? null : ids.first;
+  next['${prefix}Contracts'] = proposalIntakeSelectedContractRefs(next, prefix);
+  final files = proposalIntakeContractFiles(next, prefix);
+  next['${prefix}Files'] = files;
+  if (files.isEmpty) {
+    next['${prefix}FileName'] = '';
+    next['${prefix}ObjectKey'] = '';
+    next['${prefix}FileUrl'] = '';
+    next['${prefix}FileSize'] = null;
+  } else {
+    final first = files.first;
+    next['${prefix}FileName'] = '${first['fileName'] ?? ''}'.trim();
+    next['${prefix}ObjectKey'] = '${first['objectKey'] ?? ''}'.trim();
+    next['${prefix}FileUrl'] = '${first['url'] ?? first['fileUrl'] ?? ''}'
+        .trim();
+    next['${prefix}FileSize'] = first['sizeBytes'];
+  }
+  return next;
+}
+
+Map<String, dynamic> proposalIntakeSetSelectedContracts(
+  Map<String, dynamic> form, {
+  required String prefix,
+  required List<int> ids,
+  List<Map<String, dynamic>> refs = const [],
+}) {
+  final next = Map<String, dynamic>.from(form);
+  final unique = <int>[];
+  for (final id in ids) {
+    if (id > 0 && !unique.contains(id)) unique.add(id);
+  }
+  next['${prefix}ContractIds'] = unique;
+  next['${prefix}ContractId'] = unique.isEmpty ? null : unique.first;
+  final byId = <int, Map<String, dynamic>>{
+    for (final ref in refs)
+      if (_proposalIntakePositiveId(ref['id']) > 0)
+        _proposalIntakePositiveId(ref['id']): Map<String, dynamic>.from(ref),
+  };
+  next['${prefix}Contracts'] = [
+    for (final id in unique) byId[id] ?? <String, dynamic>{'id': id},
+  ];
+  return next;
+}
+
+Map<String, dynamic> proposalIntakeSetContractFiles(
+  Map<String, dynamic> form, {
+  required String prefix,
+  required List<Map<String, dynamic>> files,
+}) {
+  final next = Map<String, dynamic>.from(form);
+  next['${prefix}Files'] = [
+    for (final file in files)
+      if (!proposalIntakeContractFileIsEmpty(file))
+        proposalIntakeContractFileMap(file),
+  ];
+  return proposalIntakeSyncContractCollections(next, prefix);
+}
+
+List<Map<String, dynamic>> proposalIntakeFilesOfContractRef(
+  Map<String, dynamic> ref,
+) {
+  final id = _proposalIntakePositiveId(ref['id']);
+  final raw = ref['files'];
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is Map)
+        proposalIntakeContractFileMap({...item, if (id > 0) 'contractId': id}),
+  ].where((file) => !proposalIntakeContractFileIsEmpty(file)).toList();
+}
+
+List<Map<String, dynamic>> proposalIntakeFilesFromSelectedContractRefs(
+  List<Map<String, dynamic>> refs,
+) {
+  return [for (final ref in refs) ...proposalIntakeFilesOfContractRef(ref)];
+}
+
+List<Map<String, dynamic>> _proposalIntakeWithRefFiles({
+  required Map<String, dynamic> form,
+  required String prefix,
+  required List<Map<String, dynamic>> refs,
+}) {
+  if (refs.isEmpty) return refs;
+  final currentFiles = proposalIntakeContractFiles(form, prefix);
+  final next = <Map<String, dynamic>>[];
+  for (final ref in refs) {
+    final copy = Map<String, dynamic>.from(ref);
+    final existing = proposalIntakeFilesOfContractRef(copy);
+    if (existing.isNotEmpty) {
+      copy['files'] = existing;
+      next.add(copy);
+      continue;
+    }
+    final id = _proposalIntakePositiveId(copy['id']);
+    final owned = [
+      for (final file in currentFiles)
+        if (id > 0 && _proposalIntakePositiveId(file['contractId']) == id) file,
+    ];
+    if (owned.isEmpty && next.isEmpty) {
+      copy['files'] = [
+        for (final file in currentFiles)
+          if (_proposalIntakePositiveId(file['contractId']) == 0) file,
+      ];
+    } else if (owned.isNotEmpty) {
+      copy['files'] = owned;
+    }
+    next.add(copy);
+  }
+  return next;
+}
+
+Map<String, dynamic> proposalIntakeSyncSelectedContractFiles(
+  Map<String, dynamic> form, {
+  required String prefix,
+}) {
+  final refs = proposalIntakeSelectedContractRefs(form, prefix);
+  final fromRefs = proposalIntakeFilesFromSelectedContractRefs(refs);
+  if (fromRefs.isNotEmpty) {
+    return proposalIntakeSetContractFiles(
+      form,
+      prefix: prefix,
+      files: fromRefs,
+    );
+  }
+  final remainingIds = proposalIntakeSelectedContractIds(form, prefix);
+  final kept = [
+    for (final file in proposalIntakeContractFiles(form, prefix))
+      if (remainingIds.isEmpty ||
+          _proposalIntakePositiveId(file['contractId']) == 0 ||
+          remainingIds.contains(_proposalIntakePositiveId(file['contractId'])))
+        file,
+  ];
+  return proposalIntakeSetContractFiles(form, prefix: prefix, files: kept);
+}
+
+Map<String, dynamic> proposalIntakeAppendSelectedContract(
+  Map<String, dynamic> form, {
+  required String prefix,
+  required Map<String, dynamic> detail,
+}) {
+  final id = _proposalIntakePositiveId(detail['id']);
+  if (id <= 0) return Map<String, dynamic>.from(form);
+  final ids = proposalIntakeSelectedContractIds(form, prefix);
+  if (ids.contains(id)) return Map<String, dynamic>.from(form);
+  if (ids.isEmpty) {
+    return Map<String, dynamic>.from(form)
+      ..addAll(proposalIntakePatchFromContract(prefix: prefix, detail: detail));
+  }
+  final refs = _proposalIntakeWithRefFiles(
+    form: form,
+    prefix: prefix,
+    refs: [
+      ...proposalIntakeSelectedContractRefs(form, prefix),
+      proposalIntakeContractRefFromDetail(detail),
+    ],
+  );
+  final next = proposalIntakeSetSelectedContracts(
+    form,
+    prefix: prefix,
+    ids: [...ids, id],
+    refs: refs,
+  );
+  return proposalIntakeSyncSelectedContractFiles(next, prefix: prefix);
+}
+
+/// 从合同归集详情取出源文件，写入提案表单，供内部 PDF 预览。配置内容只取第一份。
 Map<String, dynamic> proposalIntakeFilePatchFromContractDetail(
   String prefix,
   Map<String, dynamic> detail,
 ) {
-  final files = detail['files'];
-  if (files is! List || files.isEmpty) return <String, dynamic>{};
-  Map<String, dynamic>? first;
-  for (final item in files) {
-    if (item is Map) {
-      first = Map<String, dynamic>.from(item);
-      break;
-    }
+  final files = proposalIntakeFilesFromContractDetail(detail);
+  if (files.isEmpty) {
+    return <String, dynamic>{
+      '${prefix}FileName': '',
+      '${prefix}ObjectKey': '',
+      '${prefix}FileUrl': '',
+      '${prefix}FileSize': null,
+      '${prefix}Files': const <Map<String, dynamic>>[],
+    };
   }
-  if (first == null) return <String, dynamic>{};
-  final name = '${first['fileName'] ?? ''}'.trim();
-  final objectKey = '${first['objectKey'] ?? ''}'.trim();
-  final url = '${first['url'] ?? ''}'.trim();
-  if (name.isEmpty && objectKey.isEmpty && url.isEmpty) {
-    return <String, dynamic>{};
-  }
+  final first = files.first;
   return <String, dynamic>{
-    '${prefix}FileName': name,
-    '${prefix}ObjectKey': objectKey,
-    '${prefix}FileUrl': url,
+    '${prefix}FileName': '${first['fileName'] ?? ''}'.trim(),
+    '${prefix}ObjectKey': '${first['objectKey'] ?? ''}'.trim(),
+    '${prefix}FileUrl': '${first['url'] ?? first['fileUrl'] ?? ''}'.trim(),
     '${prefix}FileSize': first['sizeBytes'],
+    '${prefix}Files': files,
   };
 }
 
@@ -1163,7 +1500,14 @@ Map<String, dynamic> proposalIntakePatchFromContract({
     return _contractText(detail, keys);
   }
 
-  final patch = <String, dynamic>{'${prefix}ContractId': detail['id']};
+  final contractId = _proposalIntakePositiveId(detail['id']);
+  final patch = <String, dynamic>{
+    '${prefix}ContractId': contractId > 0 ? contractId : detail['id'],
+    '${prefix}ContractIds': contractId > 0 ? <int>[contractId] : const <int>[],
+    '${prefix}Contracts': contractId > 0
+        ? <Map<String, dynamic>>[proposalIntakeContractRefFromDetail(detail)]
+        : const <Map<String, dynamic>>[],
+  };
   for (final key in proposalIntakeContractFillKeys(prefix)) {
     patch[key] = '';
   }
@@ -1195,14 +1539,10 @@ Map<String, dynamic> proposalIntakePatchFromContract({
 
   if (prefix == 'purchase') {
     _putField(patch, 'supplierPolicy', pick(['supplierPolicy']));
-    _putField(patch, 'supplySettleMode', pick(['supplySettleMode']));
-    _putField(patch, 'supplySettleCycle', pick(['supplySettleCycle']));
     _putField(patch, 'supplyPayer', pick(['supplyPayer']));
     _putField(patch, 'supplyPayAccount', pick(['supplyPayAccount']));
   } else {
     _putField(patch, 'channelPolicy', pick(['channelPolicy']));
-    _putField(patch, 'channelSettleMode', pick(['channelSettleMode']));
-    _putField(patch, 'channelSettleCycle', pick(['channelSettleCycle']));
     _putField(patch, 'channelPayee', pick(['channelPayee']));
     _putField(patch, 'channelReceiveAccount', pick(['channelReceiveAccount']));
     _putField(
@@ -1220,8 +1560,9 @@ Map<String, dynamic> proposalIntakePatchFromContract({
   patch['${prefix}ObjectKey'] = '';
   patch['${prefix}FileUrl'] = '';
   patch['${prefix}FileSize'] = null;
+  patch['${prefix}Files'] = const <Map<String, dynamic>>[];
   patch.addAll(proposalIntakeFilePatchFromContractDetail(prefix, detail));
-  return patch;
+  return proposalIntakeSyncContractCollections(patch, prefix);
 }
 
 const kProposalContractSnapshotKey = 'contractFieldSnapshots';
@@ -1338,12 +1679,52 @@ bool proposalIntakeHasMeaningfulContent(ProposalIntakeRow row) {
   return _formHasUserInput(row.form);
 }
 
+int proposalIntakeOwnerUserId(Map<String, dynamic> form, String prefix) {
+  return int.tryParse('${form['${prefix}UserId'] ?? ''}'.trim()) ?? 0;
+}
+
+/// 当前账号是否允许 PATCH 草稿。与后端 UpdateProposalIntake 口径对齐：
+/// 填写中为发起人 / 科技填写人 / 财务二 / 查看全部；复核中另含市场一；
+/// 科技修订仅科技填写人或财务二。旁观打开别人的单不能保存。
+bool proposalIntakeCanPatchDraft(
+  ProposalIntakeRow row, {
+  required int userId,
+  bool viewAll = false,
+}) {
+  if (userId <= 0) return false;
+  bool isOwner(String prefix) {
+    final id = proposalIntakeOwnerUserId(row.form, prefix);
+    return id > 0 && id == userId;
+  }
+
+  if (row.techRevisionOpen) {
+    return isOwner('technologyOwner') || isOwner('financeOwner2');
+  }
+  if (row.createdBy == userId) return true;
+  if (isOwner('technologyOwner') || isOwner('financeOwner2')) return true;
+  if (viewAll) return true;
+  return isOwner('marketOwner1') && row.status == 'reviewing';
+}
+
 /// 返回列表时是否自动保存。已完成 / 待最终确认只读，不能再 PATCH 草稿。
-bool proposalIntakeShouldAutoSaveOnBack(ProposalIntakeRow row) {
+/// 非填写人打开他人提案时也不保存，否则后端会拒绝并把人留在详情页。
+bool proposalIntakeShouldAutoSaveOnBack(
+  ProposalIntakeRow row, {
+  required int userId,
+  bool viewAll = false,
+}) {
   if (!proposalIntakeHasMeaningfulContent(row)) return false;
   if (row.status == 'pending_president') return false;
   if (row.status == 'done' && !row.techRevisionOpen) return false;
-  return true;
+  return proposalIntakeCanPatchDraft(row, userId: userId, viewAll: viewAll);
+}
+
+bool proposalIntakeIsWriteDeniedMessage(String text) {
+  final msg = text.trim();
+  if (msg.isEmpty) return false;
+  return msg.contains('不是该提案填写人') ||
+      msg.contains('无权查看该提案') ||
+      msg.contains('无权修改');
 }
 
 /// 自动保存成功后是否提示「已保存草稿」。
@@ -1576,7 +1957,7 @@ List<String> proposalIntakeTechnologyReviewGaps(
   String labelOf(String key) {
     if (key.startsWith(kProposalChildTechReviewPrefix)) {
       final field = key.substring(kProposalChildTechReviewPrefix.length);
-      return '子产品${kProposalTechnologyReviewLabels[field] ?? field}';
+      return '$kProposalChildProductLabel${kProposalTechnologyReviewLabels[field] ?? field}';
     }
     return kProposalTechnologyReviewLabels[key] ?? key;
   }
@@ -3183,6 +3564,28 @@ bool proposalIntakeSettleIsTier(ProposalFinanceSettleTerms terms) {
   return terms.settleMode.contains('阶梯');
 }
 
+/// 结算比例只存小数。旧数据带 `%` 的按百分数除以 100，例如 `1%` → `0.01`。
+String proposalIntakeNormalizeSettleRatio(Object? raw) {
+  var text = '$raw'.trim().replaceAll('％', '%');
+  if (text.isEmpty || text == 'null') return '';
+  if (!text.contains('%')) return text;
+  final cleaned = text.replaceAll('%', '').trim();
+  if (cleaned.isEmpty) return '';
+  final n = double.tryParse(cleaned);
+  if (n == null) return cleaned;
+  return _proposalIntakeFormatDecimalRatio(n / 100);
+}
+
+String _proposalIntakeFormatDecimalRatio(double n) {
+  if (n == 0) return '0';
+  var text = n.toStringAsFixed(10);
+  if (text.contains('.')) {
+    text = text.replaceFirst(RegExp(r'0+$'), '');
+    text = text.replaceFirst(RegExp(r'\.$'), '');
+  }
+  return text;
+}
+
 /// 结算条款：收入或单条成本共用，字段对齐结算单「结算一」。
 class ProposalFinanceSettleTerms {
   const ProposalFinanceSettleTerms({
@@ -3240,10 +3643,12 @@ class ProposalFinanceSettleTerms {
   final String ourParty;
 
   String get displayRatio {
-    if (settleRatio.isNotEmpty) return settleRatio;
+    if (settleRatio.isNotEmpty) {
+      return proposalIntakeNormalizeSettleRatio(settleRatio);
+    }
     if (settleUnitPrice.isEmpty &&
         (proposalIntakeSettleUsesRatio(this) || settlePrice.contains('%'))) {
-      return settlePrice;
+      return proposalIntakeNormalizeSettleRatio(settlePrice);
     }
     return '';
   }
@@ -3378,7 +3783,9 @@ class ProposalFinanceSettleTerms {
     settleModeRef: identical(settleModeRef, _catalogUnset)
         ? this.settleModeRef
         : settleModeRef as CatalogRef?,
-    settleRatio: settleRatio ?? this.settleRatio,
+    settleRatio: settleRatio == null
+        ? this.settleRatio
+        : proposalIntakeNormalizeSettleRatio(settleRatio),
     settleUnitPrice: settleUnitPrice ?? this.settleUnitPrice,
     scale: scale ?? this.scale,
     scalePeriod: scalePeriod ?? this.scalePeriod,
@@ -3415,7 +3822,7 @@ class ProposalFinanceSettleTerms {
     'channelRef': catalogRefToJson(channelRef),
     'settleMode': settleModeRef?.name ?? settleMode,
     'settleModeRef': catalogRefToJson(settleModeRef),
-    'settleRatio': settleRatio,
+    'settleRatio': proposalIntakeNormalizeSettleRatio(settleRatio),
     'settleUnitPrice': settleUnitPrice,
     'scale': scale,
     'scalePeriod': scalePeriod,
@@ -3441,7 +3848,7 @@ class ProposalFinanceSettleTerms {
       channelRef: catalogRefOrNull(raw['channelRef']),
       settleMode: read('settleMode'),
       settleModeRef: catalogRefOrNull(raw['settleModeRef']),
-      settleRatio: read('settleRatio'),
+      settleRatio: proposalIntakeNormalizeSettleRatio(read('settleRatio')),
       settleUnitPrice: read('settleUnitPrice'),
       scale: read('scale').isNotEmpty ? read('scale') : read('salesScale'),
       scalePeriod: read('scalePeriod'),
@@ -4092,7 +4499,9 @@ ProposalFinanceSettleTerms proposalIntakeTermsFromChannelSettlementItem(
       ? item.invoiceTypeCode
       : item.invoiceTypeName;
   final tax = item.taxRateCode.isNotEmpty ? item.taxRateCode : item.taxRateName;
-  final ratio = catalogScalarText(item.settlementRatio, percent: true);
+  final ratio = proposalIntakeNormalizeSettleRatio(
+    catalogScalarText(item.settlementRatio, percent: true),
+  );
   final unitPrice = catalogScalarText(item.unitPrice);
   return ProposalFinanceSettleTerms(
     billType: billTypeRef?.name ?? '',
@@ -4121,7 +4530,7 @@ List<ProposalSkuSettleRow> proposalIntakeSettlementsFromChannelCatalog(
   List<CatalogRef> formulas = const [],
   List<CatalogRef> billTypes = const [],
 }) {
-  final channel = data.channelRef ?? fallbackChannel;
+  final channel = fallbackChannel ?? data.channelRef;
   if (data.items.isEmpty) {
     return [
       ProposalSkuSettleRow(
@@ -4238,11 +4647,11 @@ List<String> proposalIntakeSkuSettleIssues(
     for (final child in children) {
       if (child.parentSkuId.isEmpty) {
         issues.add(
-          '子产品「${child.productName.isEmpty ? '未命名' : child.productName}」请选择关联主产品',
+          '$kProposalChildProductLabel「${child.productName.isEmpty ? '未命名' : child.productName}」请选择关联$kProposalMainProductLabel',
         );
       } else if (!mainIds.contains(child.parentSkuId)) {
         issues.add(
-          '子产品「${child.productName.isEmpty ? '未命名' : child.productName}」关联的主产品不存在',
+          '$kProposalChildProductLabel「${child.productName.isEmpty ? '未命名' : child.productName}」关联的$kProposalMainProductLabel不存在',
         );
       }
     }
@@ -4251,10 +4660,11 @@ List<String> proposalIntakeSkuSettleIssues(
         rows: children,
         existingBuilt: proposalIntakeIsChildExistingBuilt(form),
         includeSettlements: includeSettlements,
-        emptyExistingLabel: '已勾选子产品已建产品，请至少添加一条子产品并搜索选择已建产品',
+        emptyExistingLabel:
+            '已勾选$kProposalChildProductLabel已建产品，请至少添加一条$kProposalChildProductLabel并搜索选择已建产品',
         rowLabel: (i, sku) => sku.productName.isEmpty
-            ? '子产品第${i + 1}条'
-            : '子产品「${sku.productName}」',
+            ? '$kProposalChildProductLabel第${i + 1}条'
+            : '$kProposalChildProductLabel「${sku.productName}」',
         covered: proposalIntakeActiveSharedSettleSkuIds(form),
       ),
     );
@@ -4383,6 +4793,12 @@ class ProposalSkuDetailRow {
       );
   bool get isExistingBuilt => existingBuilt.trim() == '是';
 
+  String get displayName {
+    final fromHit = (assetProduct?.label ?? '').trim();
+    if (fromHit.isNotEmpty) return fromHit;
+    return productName.trim();
+  }
+
   bool get isBlank =>
       productName.isEmpty &&
       faceValue.isEmpty &&
@@ -4465,26 +4881,45 @@ class ProposalSkuDetailRow {
     ChannelProductHit? hit, {
     List<ProposalSkuSettleRow>? settlements,
   }) {
+    if (hit == null || hit.isEmpty) {
+      return copyWith(
+        assetProduct: null,
+        productName: '',
+        settlements:
+            settlements ??
+            [ProposalSkuSettleRow(id: proposalIntakeNewSkuSettleId())],
+      );
+    }
+    final name = hit.label.isNotEmpty ? hit.label : productName;
+    var nextSync = syncSourceRef;
+    if ((nextSync == null || nextSync.isEmpty) &&
+        hit.syncSource.trim().isNotEmpty) {
+      nextSync = CatalogRef(
+        code: hit.syncSource.trim(),
+        name: hit.syncSource.trim(),
+      );
+    }
+    // 已建产品只回补名称和结算，不覆盖用户选的渠道。
     return copyWith(
       assetProduct: hit,
-      productName: hit?.productName ?? '',
-      channelRef: hit?.channelRef,
-      settlements:
-          settlements ??
-          (hit == null
-              ? [ProposalSkuSettleRow(id: proposalIntakeNewSkuSettleId())]
-              : [
-                  for (final item in this.settlements)
-                    item.copyWith(
-                      terms: item.terms.copyWith(channelRef: hit.channelRef),
-                    ),
-                ]),
+      productName: name,
+      syncSourceRef: nextSync,
+      settlements: settlements == null
+          ? this.settlements
+          : [
+              for (final item in settlements)
+                item.copyWith(
+                  terms: item.terms.copyWith(channelRef: channelRef),
+                ),
+            ],
     );
   }
 
   Map<String, dynamic> toJson() => {
     'id': id,
-    'productName': productName,
+    'productName': productName.trim().isNotEmpty
+        ? productName.trim()
+        : (assetProduct?.label ?? ''),
     'faceValue': faceValue,
     'productCategoryL1': productCategoryL1,
     'productCategoryL2': productCategoryL2,
@@ -4871,7 +5306,7 @@ List<String> proposalIntakeLaunchFinanceIssues(Map<String, dynamic> form) {
   final issues = <String>[];
   for (final module in proposalIntakeFinanceModules(form)) {
     final title = module.title.isEmpty ? module.id : module.title;
-    final prefix = module.isChildrenOwner ? '子产品' : '';
+    final prefix = module.isChildrenOwner ? kProposalChildProductLabel : '';
     if (!module.periodComplete) {
       issues.add(
         module.usesProjectPeriod
@@ -5226,8 +5661,7 @@ List<String> proposalIntakeContractFillIssues(
   if (mode.isEmpty) {
     issues.add('请选择$label合同状态');
   } else if (mode == '未签署合同') {
-    if (!proposalIntakeFormHasText(form, '${prefix}FileName') &&
-        !proposalIntakeFormHasText(form, '${prefix}ObjectKey')) {
+    if (proposalIntakeContractFiles(form, prefix).isEmpty) {
       issues.add('请上传未签署的$label合同文件');
     }
   } else if (!proposalIntakeFormHasText(form, '${prefix}No')) {
@@ -5341,7 +5775,9 @@ List<String> proposalIntakeChildTechFillIssues(Map<String, dynamic> form) {
       proposalIntakeChildTechnology(form),
       purchase: false,
     ))
-      issue.startsWith('子产品') ? issue : '子产品$issue',
+      issue.startsWith(kProposalChildProductLabel)
+          ? issue
+          : '$kProposalChildProductLabel$issue',
   ];
 }
 
@@ -5489,8 +5925,7 @@ List<String> proposalIntakePurchaseMarketIssues(Map<String, dynamic> form) {
   if (mode.isEmpty) {
     issues.add('请选择采购合同状态');
   } else if (mode == '未签署合同') {
-    if (!proposalIntakeFormHasText(form, 'purchaseFileName') &&
-        !proposalIntakeFormHasText(form, 'purchaseObjectKey')) {
+    if (proposalIntakeContractFiles(form, 'purchase').isEmpty) {
       issues.add('请上传未签署的采购合同文件');
     }
   } else if (!proposalIntakeFormHasText(form, 'purchaseNo')) {
@@ -5526,7 +5961,7 @@ Map<String, dynamic> proposalIntakeEnsureChildFinanceModule(
       for (final item in modules) item.toJson(),
       ProposalFinanceModule(
         id: proposalIntakeNewFinanceModuleId(),
-        title: '子产品财务模块',
+        title: '$kProposalChildProductLabel财务模块',
         owner: kProposalFinanceModuleOwnerChildren,
       ).toJson(),
     ],

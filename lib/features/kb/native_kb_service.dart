@@ -673,10 +673,71 @@ class NativeKbService {
     return objectKey.contains(backendFile);
   }
 
-  Future<void> deleteDocument(String documentId, {String? folderId}) async {
+  Future<void> deleteDocument(
+    String documentId, {
+    String? folderId,
+    NativeKbDocument? doc,
+  }) async {
+    final localId = (doc?.dunesDocumentId ?? '').trim().isNotEmpty
+        ? doc!.dunesDocumentId.trim()
+        : (int.tryParse(documentId.trim()) != null ? documentId.trim() : '');
+    Object? lastError;
+    if (localId.isNotEmpty) {
+      try {
+        await _deleteKbGoPath('/kb/documents/$localId');
+        return;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    final ragId = () {
+      final fromDoc = (doc?.ragflowDocId ?? '').trim();
+      if (fromDoc.isNotEmpty) return fromDoc;
+      final nova = (doc?.novaDocumentId ?? '').trim();
+      if (nova.isNotEmpty && int.tryParse(nova) == null) return nova;
+      final raw = documentId.trim();
+      if (raw.isNotEmpty && int.tryParse(raw) == null) return raw;
+      return '';
+    }();
+    if (ragId.isNotEmpty) {
+      try {
+        await _deleteKbGoPath(
+          '/kb/documents/by-ragflow/${Uri.encodeComponent(ragId)}',
+        );
+        return;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    try {
+      await _deleteNovaDocument(
+        ragId.isNotEmpty ? ragId : documentId.trim(),
+        folderId: kbNovaFolderIdForDelete(folderId),
+      );
+    } catch (e) {
+      throw lastError ?? e;
+    }
+  }
+
+  Future<void> _deleteKbGoPath(String path) async {
+    final resp = await _client.delete(_dunesUri(path), headers: _dunesHeaders);
+    if (resp.statusCode == 204 ||
+        (resp.statusCode >= 200 && resp.statusCode < 300)) {
+      return;
+    }
+    final body = _decode(resp.body);
+    throw Exception(
+      (body['message'] ?? body['error']?['message'] ?? '删除失败').toString(),
+    );
+  }
+
+  Future<void> _deleteNovaDocument(String documentId, {String? folderId}) async {
+    final id = documentId.trim();
+    if (id.isEmpty) {
+      throw Exception('删除失败');
+    }
     await ensureNovaReady();
-    var url =
-        '$_novaBase/v1/app/kb/documents/${Uri.encodeComponent(documentId)}';
+    var url = '$_novaBase/v1/app/kb/documents/${Uri.encodeComponent(id)}';
     if (folderId != null && folderId.isNotEmpty) {
       url += '?folderId=${Uri.encodeComponent(folderId)}';
     }

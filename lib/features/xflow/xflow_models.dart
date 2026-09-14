@@ -50,6 +50,16 @@ class XflowFieldOption {
   }
 }
 
+/// 下拉选中后优先展示完整拼接文案，避免只剩简称时选项看起来都一样。
+String xflowPreferredPickerDisplay({
+  required String composedLabel,
+  required String storedValue,
+}) {
+  final label = composedLabel.trim();
+  if (label.isNotEmpty) return label;
+  return storedValue.trim();
+}
+
 /// 模板字段通用远程搜索配置（`field.remoteSearch`）。
 /// path / fill / label 均由后台配置，客户端不做业务分支。
 class XflowRemoteSearchConfig {
@@ -103,6 +113,14 @@ class XflowRemoteSearchConfig {
       if (text.isNotEmpty) parts.add(text);
     }
     return parts.join(labelSeparator);
+  }
+
+  /// 选中后给用户看的完整文案；提交值仍走 [valueOf] / fill，不改接口。
+  String selectedDisplayOf(Map<String, dynamic> row, {String fallback = ''}) {
+    return xflowPreferredPickerDisplay(
+      composedLabel: labelOf(row),
+      storedValue: fallback,
+    );
   }
 
   String? valueOf(Map<String, dynamic> row) {
@@ -453,6 +471,7 @@ class XflowProposalItem {
     this.primaryAction,
     this.actionTitle,
     this.requiredFields = const <String>[],
+    this.requiredFieldDefs = const <XflowTodoFieldDef>[],
   });
 
   final int id;
@@ -475,6 +494,7 @@ class XflowProposalItem {
   final String? primaryAction;
   final String? actionTitle;
   final List<String> requiredFields;
+  final List<XflowTodoFieldDef> requiredFieldDefs;
 
   bool get isPending =>
       status.toUpperCase() == 'OPEN' || status.toUpperCase() == 'PENDING';
@@ -498,6 +518,7 @@ class XflowProposalItem {
     String? primaryAction,
     String? actionTitle,
     List<String>? requiredFields,
+    List<XflowTodoFieldDef>? requiredFieldDefs,
   }) {
     return XflowProposalItem(
       id: id,
@@ -520,8 +541,36 @@ class XflowProposalItem {
       primaryAction: primaryAction ?? this.primaryAction,
       actionTitle: actionTitle ?? this.actionTitle,
       requiredFields: requiredFields ?? this.requiredFields,
+      requiredFieldDefs: requiredFieldDefs ?? this.requiredFieldDefs,
     );
   }
+}
+
+class XflowTodoFieldDef {
+  const XflowTodoFieldDef({
+    required this.key,
+    this.label = '',
+    this.type = '',
+  });
+
+  final String key;
+  final String label;
+  final String type;
+
+  bool get isUpload => type.trim().toLowerCase() == 'upload';
+}
+
+List<XflowTodoFieldDef> parseXflowTodoFieldDefs(Object? raw) {
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is Map)
+        XflowTodoFieldDef(
+          key: '${item['key'] ?? ''}'.trim(),
+          label: '${item['label'] ?? ''}'.trim(),
+          type: '${item['type'] ?? ''}'.trim(),
+        ),
+  ].where((item) => item.key.isNotEmpty).toList(growable: false);
 }
 
 class XflowSubmissionDetail {
@@ -891,7 +940,45 @@ class ApprovalStakeholderPerson {
   final String role;
 }
 
-/// 复制审批时去掉身份/流程字段，避免覆盖原单。
+/// 申请单上的上传字段。复制新草稿时不带原附件，避免沿用旧文件。
+const kApprovalUploadFormKeys = {
+  'files',
+  'attachments',
+  'planFiles',
+  'productFiles',
+  'contractFiles',
+  'contractAttachment',
+  'invoiceAttachment',
+  'invoiceOrReceipt',
+  'paymentScreenshot',
+};
+
+/// 审批通过后待办回写到原单的字段。复制新草稿时不能带上。
+const kApprovalTaskTodoFormKeys = {
+  'actualPayAmount',
+  'repayAmount',
+  'paymentVoucher',
+  'paymentVoucherFiles',
+  'invoiceFiles',
+  'verifyResult',
+  'passed',
+  'fileDestination',
+  'expressTrackingNo',
+  'expressSentAt',
+  'signedAt',
+  'openAccountFilledAt',
+  'returnedInvoice',
+  'writeOffReason',
+  'receiptVoucher',
+  'bankAccountName',
+  'bankName',
+  'bankAccountNo',
+  'merchantPlatform',
+  'merchantNo',
+  'merchantName',
+};
+
+/// 复制审批时去掉身份/流程字段、待办办理结果和申请附件。
 Map<String, dynamic> copyableApprovalFormValues(Map<String, dynamic> source) {
   const strip = {
     'id',
@@ -914,11 +1001,55 @@ Map<String, dynamic> copyableApprovalFormValues(Map<String, dynamic> source) {
     'serialNo',
     'flowNo',
     'docNo',
+    ...kApprovalTaskTodoFormKeys,
+    ...kApprovalUploadFormKeys,
   };
   final out = <String, dynamic>{};
   source.forEach((key, value) {
-    if (strip.contains(key)) return;
-    out[key] = value;
+    if (strip.contains(key) || _isApprovalUploadValue(value)) return;
+    out[key] = _stripNestedApprovalUploads(value);
   });
   return out;
+}
+
+bool _isApprovalUploadItem(Object? value) {
+  if (value is! Map) return false;
+  final map = value.map((key, item) => MapEntry('$key', item));
+  if ('${map['objectKey'] ?? ''}'.trim().isNotEmpty) return true;
+  if ('${map['url'] ?? ''}'.trim().isNotEmpty) return true;
+  final name = '${map['fileName'] ?? map['name'] ?? ''}'.trim();
+  return name.isNotEmpty &&
+      (map.containsKey('objectKey') ||
+          map.containsKey('status') ||
+          map.containsKey('size') ||
+          map.containsKey('mimeType'));
+}
+
+bool _isApprovalUploadValue(Object? value) {
+  if (value is! List || value.isEmpty) return false;
+  var uploads = 0;
+  for (final item in value) {
+    if (_isApprovalUploadItem(item)) uploads++;
+  }
+  return uploads > 0 && uploads == value.length;
+}
+
+Object? _stripNestedApprovalUploads(Object? value) {
+  if (value is Map) {
+    final out = <String, dynamic>{};
+    value.forEach((key, item) {
+      final name = '$key';
+      if (kApprovalUploadFormKeys.contains(name) ||
+          kApprovalTaskTodoFormKeys.contains(name) ||
+          _isApprovalUploadValue(item)) {
+        return;
+      }
+      out[name] = _stripNestedApprovalUploads(item);
+    });
+    return out;
+  }
+  if (value is List) {
+    return [for (final item in value) _stripNestedApprovalUploads(item)];
+  }
+  return value;
 }

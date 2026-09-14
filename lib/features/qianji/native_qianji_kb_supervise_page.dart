@@ -8,6 +8,7 @@ import '../../core/widgets/horizontal_drag_scroll_view.dart';
 import '../auth/auth_session.dart';
 import 'kb_supervise_models.dart';
 import 'kb_supervise_service.dart';
+import 'supervise_sort_menu.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
 
@@ -57,6 +58,7 @@ class _NativeQianjiKbSupervisePageState
   DateTime? _customFrom;
   DateTime? _customTo;
   _KbSourceFilter _sourceFilter = _KbSourceFilter.all;
+  String _sort = kKbSuperviseSortOptions.first.id;
 
   @override
   void initState() {
@@ -144,6 +146,7 @@ class _NativeQianjiKbSupervisePageState
         from: bounds.$1,
         to: bounds.$2,
         source: _sourceQuery,
+        sort: _sort,
       );
       final statsFuture = _service.fetchDeptStats(
         from: bounds.$1,
@@ -198,6 +201,7 @@ class _NativeQianjiKbSupervisePageState
         from: bounds.$1,
         to: bounds.$2,
         source: _sourceQuery,
+        sort: _sort,
       );
       if (!mounted) return;
       setState(() {
@@ -270,6 +274,12 @@ class _NativeQianjiKbSupervisePageState
     }
     if (_rangePreset == preset) return;
     setState(() => _rangePreset = preset);
+    unawaited(_load(reset: true));
+  }
+
+  void _setSort(String sort) {
+    if (_sort == sort) return;
+    setState(() => _sort = sort);
     unawaited(_load(reset: true));
   }
 
@@ -371,39 +381,51 @@ class _NativeQianjiKbSupervisePageState
   Widget _buildKeywordSearch() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      child: TextField(
-        controller: _keywordCtrl,
-        textInputAction: TextInputAction.search,
-        onSubmitted: (_) => unawaited(_load(reset: true)),
-        decoration: InputDecoration(
-          hintText: '搜索人名',
-          prefixIcon: const Icon(Icons.search_rounded, size: 20),
-          suffixIcon: _keywordCtrl.text.isNotEmpty
-              ? IconButton(
-                  onPressed: _clearKeyword,
-                  icon: const Icon(Icons.close_rounded, size: 18),
-                  tooltip: '清除',
-                )
-              : null,
-          filled: true,
-          fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 10,
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _keywordCtrl,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => unawaited(_load(reset: true)),
+              decoration: InputDecoration(
+                hintText: '搜索人名',
+                prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                suffixIcon: _keywordCtrl.text.isNotEmpty
+                    ? IconButton(
+                        onPressed: _clearKeyword,
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                        tooltip: '清除',
+                      )
+                    : null,
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: _themePurple),
+                ),
+              ),
+            ),
           ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+          const SizedBox(width: 8),
+          SuperviseSortMenu(
+            selectedId: _sort,
+            options: kKbSuperviseSortOptions,
+            onSelected: _setSort,
           ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFFE8EAED)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _themePurple),
-          ),
-        ),
+        ],
       ),
     );
   }

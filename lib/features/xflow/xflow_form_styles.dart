@@ -421,6 +421,113 @@ InputDecoration xfSearchPickerDecoration({
   );
 }
 
+/// 软键盘弹出时把建议列表压矮，避免选项沉到键盘后面。
+double xfPickerSuggestionMaxHeight(BuildContext context) {
+  final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+  if (keyboard <= 0) return 320;
+  final screen = MediaQuery.sizeOf(context).height;
+  return (screen - keyboard - 200).clamp(128.0, 220.0);
+}
+
+/// 审批下拉建议列表：整行可点、长文案换行，按下即选中以免失焦收起。
+class XfPickerSuggestionList extends StatefulWidget {
+  const XfPickerSuggestionList({
+    super.key,
+    required this.itemCount,
+    required this.labelOf,
+    required this.onSelect,
+    this.selectedIndex,
+    this.maxHeight,
+  });
+
+  final int itemCount;
+  final String Function(int index) labelOf;
+  final ValueChanged<int> onSelect;
+  final int? selectedIndex;
+  final double? maxHeight;
+
+  @override
+  State<XfPickerSuggestionList> createState() => _XfPickerSuggestionListState();
+}
+
+class _XfPickerSuggestionListState extends State<XfPickerSuggestionList> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 180),
+        alignment: 0.05,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final maxHeight = widget.maxHeight ?? xfPickerSuggestionMaxHeight(context);
+    return TextFieldTapRegion(
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: DunesColors.border),
+          ),
+          child: ListView.separated(
+            padding: EdgeInsets.zero,
+            shrinkWrap: true,
+            itemCount: widget.itemCount,
+            separatorBuilder: (_, _) =>
+                const Divider(height: 1, color: DunesColors.borderSoft),
+            itemBuilder: (context, index) {
+              final selected = widget.selectedIndex == index;
+              final label = widget.labelOf(index).trim();
+              return Material(
+                color: selected
+                    ? const Color(0xFFF3EEFA)
+                    : Colors.transparent,
+                child: InkWell(
+                  onTap: () => widget.onSelect(index),
+                  child: Listener(
+                    behavior: HitTestBehavior.opaque,
+                    onPointerDown: (_) => widget.onSelect(index),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            label.isEmpty ? '（无标题）' : label,
+                            softWrap: true,
+                            style: DunesTypography.sans(
+                              fontSize: 13,
+                              height: 1.4,
+                              fontWeight: selected
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                              color: DunesColors.text,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 与 `.fld-in` 单行输入对齐的统一控件高度。
 const double xfControlHeight = 40;
 

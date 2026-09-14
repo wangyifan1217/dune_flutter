@@ -363,6 +363,19 @@ void main() {
     expect(rows.single.channelRef?.name, '银联商务');
   });
 
+  test('ChannelProductHit.fromJson reads title aliases', () {
+    final hit = ChannelProductHit.fromJson({
+      'id': 11,
+      'code': 'SKU-11',
+      'title': '中石化加油券',
+      'channel': '江苏中石化',
+    });
+    expect(hit.productName, '中石化加油券');
+    expect(hit.productCode, 'SKU-11');
+    expect(hit.channelName, '江苏中石化');
+    expect(hit.label, '中石化加油券');
+  });
+
   test('fetchChannelProductSettlement maps settlement rows', () async {
     Uri? seen;
     final client = MockClient((request) async {

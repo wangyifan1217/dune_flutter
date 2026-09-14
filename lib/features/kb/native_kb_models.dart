@@ -36,7 +36,7 @@ class NativeKbDocument {
     return '';
   }
 
-  /// Nova / RAGFlow 文档 ID，删除走 Nova 时必须用这个而不是本地数字 ID。
+  /// Nova / RAGFlow 文档 ID。列表删除优先走 kb-go 本地 ID，这个只作 Nova 回退。
   String get novaDocumentId {
     final rag = ragflowDocId.trim();
     if (rag.isNotEmpty) return rag;
@@ -283,6 +283,22 @@ String _extensionFromFileName(String fileName) {
 bool _isNumericId(String raw) {
   final s = raw.trim();
   return s.isNotEmpty && int.tryParse(s) != null;
+}
+
+/// Nova 删除接口的 folderId 必须是 RAGFlow dataset id。
+/// 个人库占位（mine）、未分类、组织文件夹数字 ID 都不能传，否则后端会报 folder not found。
+String? kbNovaFolderIdForDelete(String? folderId) {
+  final id = folderId?.trim() ?? '';
+  if (id.isEmpty) return null;
+  switch (id.toLowerCase()) {
+    case 'mine':
+    case 'uncategorized':
+    case 'all':
+    case 'default':
+      return null;
+  }
+  if (int.tryParse(id) != null) return null;
+  return id;
 }
 
 bool nativeKbHasPendingParse(List<NativeKbDocument> docs) {

@@ -33,6 +33,18 @@ void main() {
       classifyPaymentInvoice(title: '招待费报销'),
       PaymentInvoiceKind.other,
     );
+    expect(
+      classifyPaymentInvoice(tagLabel: '发票审批', title: '申请单'),
+      PaymentInvoiceKind.invoice,
+    );
+    expect(
+      classifyPaymentInvoice(tagLabel: '回款审批', title: '申请单'),
+      PaymentInvoiceKind.invoice,
+    );
+    expect(
+      classifyPaymentInvoice(tagLabel: '付款审批', title: '申请单'),
+      PaymentInvoiceKind.payment,
+    );
   });
 
   test('extracts purpose, corporate account and unissued amount', () {
@@ -59,7 +71,59 @@ void main() {
     expect(row.payAccountType, '对公');
     expect(row.appliedAmount, 1200);
     expect(row.unissuedAmount, 1000);
-    expect(row.paymentCompleted, isFalse);
+    expect(row.paymentCompleted, isTrue);
+  });
+
+  test('approved payment counts as completed', () {
+    final approved = paymentInvoiceRowFromListJson({
+      'id': 2,
+      'businessType': 'FINANCE_ADMIN_PROCUREMENT',
+      'templateKey': 'finance-admin-procurement',
+      'tagLabel': '付款审批',
+      'title': '行政采购审批',
+      'status': 'APPROVED',
+      'formData': {'completed': false, 'payStatus': '待支付'},
+    });
+    final pending = paymentInvoiceRowFromListJson({
+      'id': 3,
+      'businessType': 'FINANCE_ADMIN_PROCUREMENT',
+      'templateKey': 'finance-admin-procurement',
+      'tagLabel': '付款审批',
+      'title': '行政采购审批',
+      'status': 'PENDING',
+    });
+    expect(approved.paymentCompleted, isTrue);
+    expect(pending.paymentCompleted, isFalse);
+    expect(
+      matchesPaymentInvoiceQuery(
+        approved,
+        const PaymentInvoiceQuery(
+          kind: PaymentInvoiceKind.payment,
+          completed: 'yes',
+        ),
+      ),
+      isTrue,
+    );
+    expect(
+      matchesPaymentInvoiceQuery(
+        pending,
+        const PaymentInvoiceQuery(
+          kind: PaymentInvoiceKind.payment,
+          completed: 'no',
+        ),
+      ),
+      isTrue,
+    );
+    expect(
+      matchesPaymentInvoiceQuery(
+        pending,
+        const PaymentInvoiceQuery(
+          kind: PaymentInvoiceKind.payment,
+          completed: 'yes',
+        ),
+      ),
+      isFalse,
+    );
   });
 
   test('invoice progress derives partial / completed / unissued', () {

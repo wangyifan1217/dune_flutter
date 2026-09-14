@@ -325,7 +325,8 @@ class XflowService {
           tag1: _trimmedOrNull(subStatus),
           primaryAction: _trimmedOrNull(row['primaryAction'] ?? row['action']),
           actionTitle: _trimmedOrNull(actionTitle),
-          requiredFields: _stringList(row['requiredFields']),
+          requiredFields: _taskRequiredFields(row),
+          requiredFieldDefs: parseXflowTodoFieldDefs(row['requiredFieldDefs']),
           todoHint: XflowTodoHint(
             id: todoId,
             sourceStepId: _intNullable(row['sourceStepId']),
@@ -2572,6 +2573,15 @@ class XflowService {
           .toList();
     }
     return const <String>[];
+  }
+
+  List<String> _taskRequiredFields(Map<String, dynamic> row) {
+    final fields = _stringList(row['requiredFields']);
+    if (fields.isNotEmpty) return fields;
+    return [
+      for (final def in parseXflowTodoFieldDefs(row['requiredFieldDefs']))
+        def.key,
+    ];
   }
 
   /// 解析接口时间并转为本地时区（兼容 `+00` / 无时区按 UTC）。

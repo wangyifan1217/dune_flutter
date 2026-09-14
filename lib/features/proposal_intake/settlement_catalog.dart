@@ -206,6 +206,14 @@ int? catalogInt(Object? value) {
   return int.tryParse('${value ?? ''}'.trim());
 }
 
+String _firstCatalogText(Iterable<Object?> values) {
+  for (final value in values) {
+    final text = '$value'.trim();
+    if (text.isNotEmpty && text != 'null') return text;
+  }
+  return '';
+}
+
 Object? _jsonId(String text, int? id) {
   final raw = text.trim();
   if (raw.isEmpty) {
@@ -349,9 +357,15 @@ class ChannelProductHit {
     return ChannelProductHit(
       id: catalogInt(map['id']),
       productCode: '${map['productCode'] ?? map['code'] ?? ''}'.trim(),
-      productName: '${map['productName'] ?? map['name'] ?? ''}'.trim(),
+      productName: _firstCatalogText([
+        map['productName'],
+        map['name'],
+        map['title'],
+        map['skuName'],
+        map['channelProductName'],
+      ]),
       channelId: catalogInt(map['channelId']),
-      channelName: '${map['channelName'] ?? ''}'.trim(),
+      channelName: '${map['channelName'] ?? map['channel'] ?? ''}'.trim(),
       supplierId: catalogInt(map['supplierId']),
       supplierCode: '${map['supplierCode'] ?? ''}'.trim(),
       supplierName: '${map['supplierName'] ?? ''}'.trim(),
@@ -907,8 +921,10 @@ const kProposalTaxRates = <String>[
   '13%',
 ];
 
+/// 财务板块默认结算模式；后台「提案录入选项」未配置时使用。
 const kProposalPreSettleModes = <String>['预付款', '分期', '按月对账'];
 
+/// 财务板块默认结算周期；后台「提案录入选项」未配置时使用。
 const kProposalPreSettleCycles = <String>[
   '现金 D+2',
   '补贴 D+1',

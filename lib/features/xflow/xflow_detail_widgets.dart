@@ -18,6 +18,7 @@ import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
 import 'xflow_upload_field.dart';
+import 'task_todo_fields.dart';
 
 /// WebView `.xf-det-card` 容器
 class XfDetCard extends StatelessWidget {
@@ -443,36 +444,6 @@ class XfDetTaskTodoBanner extends StatelessWidget {
   }
 }
 
-const kTaskTodoCompletionLabels = <String, String>{
-  'actualPayAmount': '实付金额',
-  'repayAmount': '还款金额',
-  'paymentVoucher': '支付凭证号',
-  'verifyResult': '核验结果',
-  'fileDestination': '文件去向',
-  'expressTrackingNo': '快递单号',
-  'expressSentAt': '寄出时间',
-  'signedAt': '签收时间',
-};
-
-List<(String, String)> taskTodoCompletionTexts(Map<String, dynamic> form) {
-  final out = <(String, String)>[];
-  for (final entry in kTaskTodoCompletionLabels.entries) {
-    final text = '${form[entry.key] ?? ''}'.trim();
-    if (text.isEmpty) continue;
-    out.add((entry.value, text));
-  }
-  return out;
-}
-
-List<Map<String, dynamic>> taskTodoCompletionFiles(Map<String, dynamic> form) {
-  final raw = form['invoiceFiles'] ?? form['files'] ?? form['paymentVoucherFiles'];
-  return normalizeUploadItems(raw).where((item) {
-    final key = '${item['objectKey'] ?? item['url'] ?? item['fileName'] ?? ''}'
-        .trim();
-    return key.isNotEmpty && item['status'] != 'error';
-  }).toList(growable: false);
-}
-
 /// 审批详情里展示待办办理时填写的字段和上传文件。
 class XfDetTaskCompletionCard extends StatelessWidget {
   const XfDetTaskCompletionCard({
@@ -487,8 +458,8 @@ class XfDetTaskCompletionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final texts = taskTodoCompletionTexts(form);
-    final files = taskTodoCompletionFiles(form);
-    if (texts.isEmpty && files.isEmpty) return const SizedBox.shrink();
+    final groups = taskTodoCompletionFileGroups(form);
+    if (texts.isEmpty && groups.isEmpty) return const SizedBox.shrink();
     return XfDetCard(
       title: '待办办理信息',
       marginBottom: 10,
@@ -514,16 +485,17 @@ class XfDetTaskCompletionCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
           ],
-          if (files.isNotEmpty) ...[
+          for (final group in groups) ...[
             Text(
-              '上传文件',
+              group.$1,
               style: DunesTypography.sans(
                 fontSize: 11,
                 color: DunesColors.text3,
               ),
             ),
             const SizedBox(height: 6),
-            XfDetFileList(items: files, service: service),
+            XfDetFileList(items: group.$2, service: service),
+            const SizedBox(height: 8),
           ],
         ],
       ),
@@ -1665,7 +1637,7 @@ class _FileItemState extends State<_FileItem> {
       ),
       child: Row(
         children: [
-          ChatFileTypeIcon(fileName: name, size: 40),
+          _XflowFileThumb(item: item, service: service, fileName: name),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -1720,6 +1692,67 @@ class _FileItemState extends State<_FileItem> {
         ],
       ),
     );
+  }
+}
+
+class _XflowFileThumb extends StatefulWidget {
+  const _XflowFileThumb({
+    required this.item,
+    required this.service,
+    required this.fileName,
+  });
+
+  final Map<String, dynamic> item;
+  final XflowService service;
+  final String fileName;
+
+  @override
+  State<_XflowFileThumb> createState() => _XflowFileThumbState();
+}
+
+class _XflowFileThumbState extends State<_XflowFileThumb> {
+  String? _url;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  @override
+  void didUpdateWidget(covariant _XflowFileThumb oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (xflowAttachmentCacheKey(oldWidget.item) !=
+        xflowAttachmentCacheKey(widget.item)) {
+      unawaited(_load());
+    }
+  }
+
+  Future<void> _load() async {
+    if (!xflowItemIsImage(widget.item, widget.fileName)) return;
+    try {
+      final url = await widget.service.resolveFileUrl(widget.item);
+      if (!mounted || url.isEmpty) return;
+      setState(() => _url = url);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_url != null && _url!.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.network(
+          _url!,
+          width: 44,
+          height: 44,
+          fit: BoxFit.cover,
+          errorBuilder: (_, error, stack) =>
+              ChatFileTypeIcon(fileName: widget.fileName, size: 40),
+        ),
+      );
+    }
+    return ChatFileTypeIcon(fileName: widget.fileName, size: 40);
   }
 }
 

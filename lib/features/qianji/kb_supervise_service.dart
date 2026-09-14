@@ -28,6 +28,7 @@ class KbSuperviseService {
     DateTime? from,
     DateTime? to,
     String source = '',
+    String sort = 'docs_desc',
   }) async {
     final q = <String, String>{
       'page': page.toString(),
@@ -46,6 +47,8 @@ class KbSuperviseService {
     }
     final sourceKind = source.trim();
     if (sourceKind.isNotEmpty) q['source'] = sourceKind;
+    final sortKey = sort.trim();
+    if (sortKey.isNotEmpty) q['sort'] = sortKey;
     final resp = await http.get(_uri('supervise', q), headers: _headers);
     final map = _asMap(_unwrap(resp));
     final content =

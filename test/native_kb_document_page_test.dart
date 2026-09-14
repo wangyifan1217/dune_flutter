@@ -55,4 +55,11 @@ void main() {
     expect(doc.ragflowDocId, 'rag-only-1');
     expect(doc.indexed, isTrue);
   });
+
+  test('kbNovaFolderIdForDelete ignores summary placeholders', () {
+    expect(kbNovaFolderIdForDelete('mine'), isNull);
+    expect(kbNovaFolderIdForDelete('uncategorized'), isNull);
+    expect(kbNovaFolderIdForDelete('3'), isNull);
+    expect(kbNovaFolderIdForDelete('dataset-uuid'), 'dataset-uuid');
+  });
 }

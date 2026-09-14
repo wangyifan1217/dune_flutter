@@ -23,7 +23,7 @@ const kProposalRevenueFormula = '各产品：年化规模 × 结算比例 加总
 const kProposalSalesScaleFormula = '各产品年化规模加总';
 const kProposalProcurementFormula = '各供给规则：关联产品年化规模 × 该条比例，加总';
 const kProposalProfitFormula = '收入 − 采购 − 项目';
-const kProposalMarginFormula = '利润 ÷ 收入';
+const kProposalMarginFormula = '利润 ÷ 规模';
 const kProposalTurnoverCashFormula = '年化规模 ÷ 12 ÷ 月周转次数';
 
 const _kEstimatedFinanceOutputKeys = {
@@ -215,8 +215,12 @@ bool proposalIsFinanceEstimateInputKey(String key) =>
     key == kProposalTurnoverTimesKey;
 
 double proposalParseSettleRatio(Object? raw) {
-  final text = '$raw'.trim();
+  final text = '$raw'.trim().replaceAll('％', '%');
   if (text.isEmpty) return 1;
+  if (text.contains('%')) {
+    final cleaned = text.replaceAll('%', '').trim();
+    return (double.tryParse(cleaned) ?? 0) / 100;
+  }
   return proposalParseTaxRate(text);
 }
 
@@ -264,13 +268,13 @@ double proposalEstimatedProfitAmount(
 
 double proposalEstimatedMarginAmount(
   Map<String, dynamic> form, {
-  double? revenue,
+  double? salesScale,
   double? profit,
 }) {
-  final r = revenue ?? proposalEffectiveRevenue(form);
-  if (r == 0) return 0;
-  final p = profit ?? proposalEstimatedProfitAmount(form, revenue: r);
-  return proposalRoundWan(p / r * 100);
+  final scale = salesScale ?? proposalEffectiveSalesScale(form);
+  if (scale == 0) return 0;
+  final p = profit ?? proposalEstimatedProfitAmount(form);
+  return proposalRoundWan(p / scale * 100);
 }
 
 Map<String, dynamic> proposalApplyProductScaleRollup(
@@ -295,7 +299,7 @@ Map<String, dynamic> proposalWriteDerivedProfit(Map<String, dynamic> form) {
   next['profit'] = profit;
   next['margin'] = proposalEstimatedMarginAmount(
     next,
-    revenue: revenue,
+    salesScale: proposalEffectiveSalesScale(next),
     profit: profit,
   );
   return next;

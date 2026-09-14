@@ -27,6 +27,7 @@ class SessionSuperviseService {
     int? departmentId,
     DateTime? from,
     DateTime? to,
+    String sort = 'turns_desc',
   }) async {
     final q = <String, String>{
       'page': page.toString(),
@@ -43,6 +44,8 @@ class SessionSuperviseService {
     if (to != null) {
       q['to'] = to.toUtc().millisecondsSinceEpoch.toString();
     }
+    final sortKey = sort.trim();
+    if (sortKey.isNotEmpty) q['sort'] = sortKey;
     final resp = await http.get(_uri('supervise', q), headers: _headers);
     final map = _asMap(_unwrap(resp));
     final content =

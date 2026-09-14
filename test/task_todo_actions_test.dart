@@ -1,4 +1,5 @@
 import 'package:dunes_app/features/xflow/task_todo_actions.dart';
+import 'package:dunes_app/features/xflow/task_todo_fields.dart';
 import 'package:dunes_app/features/xflow/xflow_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -47,5 +48,34 @@ void main() {
     expect(taskTodoCompleteKeys(item), ['actualPayAmount']);
     expect(taskTodoConfirmCopy(item).body, contains('实付金额'));
     expect(taskTodoConfirmCopy(item).body, isNot(contains('支付凭证')));
+  });
+
+  test('requiredFieldDefs treat payment voucher as upload on complete', () {
+    final item = XflowProposalItem(
+      id: 1,
+      businessType: 'FINANCE_CONTRACT_PAYMENT',
+      code: 'S-1',
+      title: '合同付款',
+      status: 'OPEN',
+      createdByName: '出纳',
+      createdAt: DateTime(2026, 9, 14),
+      primaryAction: 'MARK_PAID',
+      requiredFields: const ['actualPayAmount', 'paymentVoucher'],
+      requiredFieldDefs: const [
+        XflowTodoFieldDef(
+          key: 'paymentVoucher',
+          label: '支付凭证',
+          type: 'upload',
+        ),
+      ],
+    );
+    expect(taskTodoCompleteKeys(item), ['actualPayAmount', 'paymentVoucher']);
+    expect(
+      taskTodoFieldIsUpload(
+        'paymentVoucher',
+        defs: item.requiredFieldDefs,
+      ),
+      isTrue,
+    );
   });
 }

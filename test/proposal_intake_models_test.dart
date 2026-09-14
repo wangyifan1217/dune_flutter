@@ -461,7 +461,7 @@ void main() {
     );
     expect(synced, hasLength(1));
     expect(synced.single.terms.settleModeRef?.code, '1');
-    expect(synced.single.terms.settleRatio, '98.5%');
+    expect(synced.single.terms.settleRatio, '0.985');
     expect(synced.single.terms.taxRate, '13%');
     expect(synced.single.terms.invoiceType, '专票');
     expect(synced.single.terms.ourParty, '荷叶');
@@ -501,6 +501,54 @@ void main() {
       settlements: synced,
     );
     expect(applied.productName, '中石油100');
+    expect(applied.settlements.single.terms.taxRate, '13%');
+  });
+
+  test('applyAssetProduct keeps platform and names from catalog hit', () {
+    final applied =
+        const ProposalSkuDetailRow(
+          id: 'sku-1',
+          syncSourceRef: CatalogRef(code: 'POINTS', name: '能源积分'),
+          channelRef: CatalogRef(name: '江苏中石油'),
+        ).applyAssetProduct(
+          const ChannelProductHit(
+            id: 10,
+            productCode: 'SKU-10001',
+            channelName: '客诉赔付',
+            syncSource: 'POINTS',
+          ),
+        );
+    expect(applied.productName, 'SKU-10001');
+    expect(applied.displayName, 'SKU-10001');
+    expect(applied.syncSourceCode, 'POINTS');
+    expect(applied.channelName, '江苏中石油');
+    expect(applied.assetProduct?.productCode, 'SKU-10001');
+    expect(applied.toJson()['productName'], 'SKU-10001');
+  });
+
+  test('applyAssetProduct does not copy catalog channel onto the sku', () {
+    final applied =
+        const ProposalSkuDetailRow(
+          id: 'sku-1',
+          channelRef: CatalogRef(name: '江苏中石油'),
+        ).applyAssetProduct(
+          const ChannelProductHit(
+            id: 10,
+            productName: '贵州中石油200元电子券',
+            channelName: '客诉赔付',
+          ),
+          settlements: [
+            ProposalSkuSettleRow(
+              id: 'st-1',
+              terms: ProposalFinanceSettleTerms(
+                channelRef: CatalogRef(name: '客诉赔付'),
+                taxRate: '13%',
+              ),
+            ),
+          ],
+        );
+    expect(applied.channelName, '江苏中石油');
+    expect(applied.settlements.single.terms.channelRef?.name, '江苏中石油');
     expect(applied.settlements.single.terms.taxRate, '13%');
   });
 
@@ -863,7 +911,7 @@ void main() {
       expect(form['salesScale'], 300);
       expect(form['revenue'], 272.6);
       expect(form['profit'], 187.6);
-      expect(form['margin'], 68.82);
+      expect(form['margin'], 62.53);
       expect(form['taxCostItemAmounts']['印花税'], 0.18);
       expect(form['taxCostItemAmounts']['增值税及附加（能源）'], 12.61);
 
@@ -1201,16 +1249,16 @@ void main() {
 
   test('vat tax chips are exclusive and last tap wins', () {
     expect(
-      proposalToggleTaxCostItem(
-        ['增值税及附加（运营商+公共出行）', '印花税', '所得税'],
-        '增值税及附加（能源）',
-      ),
+      proposalToggleTaxCostItem([
+        '增值税及附加（运营商+公共出行）',
+        '印花税',
+        '所得税',
+      ], '增值税及附加（能源）'),
       ['印花税', '所得税', '增值税及附加（能源）'],
     );
-    expect(
-      proposalToggleTaxCostItem(['增值税及附加（能源）', '印花税'], '增值税及附加（能源）'),
-      ['印花税'],
-    );
+    expect(proposalToggleTaxCostItem(['增值税及附加（能源）', '印花税'], '增值税及附加（能源）'), [
+      '印花税',
+    ]);
 
     final form = proposalApplyEstimatedFinanceCosts({
       'taxCostItems': ['增值税及附加（运营商+公共出行）', '印花税', '增值税及附加（能源）'],
@@ -1957,18 +2005,40 @@ void main() {
     );
 
     expect(patch['purchaseContractId'], 91);
+    expect(patch['purchaseContractIds'], [91]);
     expect(patch['purchaseName'], '现金券采购合同');
     expect(patch['purchaseNo'], 'CG-2026-0001');
     expect(patch['purchaseOurParty'], '沙丘科技');
     expect(patch['supplierPolicy'], '预付后供货');
-    expect(patch['supplySettleMode'], '预付 + 月结');
+    expect(patch.containsKey('supplySettleMode'), isFalse);
+    expect(patch.containsKey('supplySettleCycle'), isFalse);
     expect(patch['supplyPayer'], '广州宇天供应链科技有限公司');
-    expect(patch['supplySettleCycle'], '');
-    expect(patch['supplyPayAccount'], '');
     expect(patch.containsKey('channelPolicy'), isFalse);
     expect(patch['purchaseFileName'], '');
     expect(patch['purchaseObjectKey'], '');
   });
+
+  test(
+    'settle mode and cycle options use admin config with hardcoded fallback',
+    () {
+      expect(
+        ProposalIntakeOptions.fromJson(const {}).resolvedSettleModes,
+        kProposalPreSettleModes,
+      );
+      expect(
+        ProposalIntakeOptions.fromJson(const {}).resolvedSettleCycles,
+        kProposalPreSettleCycles,
+      );
+      final configured = ProposalIntakeOptions.fromJson(const {
+        'finance': {
+          'settleModes': ['预付款', '到货结算'],
+          'settleCycles': ['T+7'],
+        },
+      });
+      expect(configured.resolvedSettleModes, ['预付款', '到货结算']);
+      expect(configured.resolvedSettleCycles, ['T+7']);
+    },
+  );
 
   test('selecting a signed contract copies the register source file', () {
     final patch = proposalIntakePatchFromContract(
@@ -1991,6 +2061,7 @@ void main() {
     expect(patch['salesFileName'], '已签销售合同.pdf');
     expect(patch['salesObjectKey'], 'contracts/sales.pdf');
     expect(patch['salesFileUrl'], 'https://files/sales.pdf');
+    expect(patch['salesFiles'], isNotEmpty);
   });
 
   test(
@@ -2056,6 +2127,81 @@ void main() {
     expect(form['purchaseCoreTerms'], '');
     expect(form['supplierPolicy'], '');
     expect(form['supplyPayer'], '');
+  });
+
+  test('adding a second signed contract keeps the first contract fields', () {
+    final first = proposalIntakePatchFromContract(
+      prefix: 'purchase',
+      detail: {
+        'id': 91,
+        'contractNo': 'CG-2026-0001',
+        'contractName': '框架采购合同',
+        'partyA': '沙丘科技',
+        'partyB': '供应商甲',
+        'proposalRelated': {'purchaseName': '现金券采购合同'},
+        'files': [
+          {'fileName': '框架采购合同.pdf', 'objectKey': 'contracts/a.pdf'},
+        ],
+      },
+    );
+    final form = proposalIntakeAppendSelectedContract(
+      {'purchaseMode': '已签署合同', ...first},
+      prefix: 'purchase',
+      detail: {
+        'id': 92,
+        'contractNo': 'CG-2026-0002',
+        'contractName': '另一份采购合同',
+        'partyA': '新甲方',
+        'partyB': '新乙方',
+        'files': [
+          {'fileName': '补充协议.pdf', 'objectKey': 'contracts/b.pdf'},
+        ],
+      },
+    );
+
+    expect(form['purchaseContractId'], 91);
+    expect(form['purchaseContractIds'], [91, 92]);
+    expect(form['purchaseNo'], 'CG-2026-0001');
+    expect(form['purchaseName'], '现金券采购合同');
+    expect(form['purchaseOurParty'], '沙丘科技');
+    expect(form['purchaseFileName'], '框架采购合同.pdf');
+    expect(
+      proposalIntakeContractFiles(
+        form,
+        'purchase',
+      ).map((item) => item['fileName']),
+      ['框架采购合同.pdf', '补充协议.pdf'],
+    );
+    expect(
+      proposalIntakeSelectedContractRefs(
+        form,
+        'purchase',
+      ).map((item) => item['id']),
+      [91, 92],
+    );
+  });
+
+  test('legacy single contract file still counts as uploaded', () {
+    expect(
+      proposalIntakeContractFiles({
+        'salesFileName': '销售合同.pdf',
+        'salesObjectKey': 'proposals/sales.pdf',
+      }, 'sales'),
+      isNotEmpty,
+    );
+    expect(
+      proposalIntakeContractFillIssues(
+        {
+          'purchaseMode': '未签署合同',
+          'purchaseFiles': [
+            {'fileName': 'a.pdf', 'objectKey': 'k'},
+          ],
+        },
+        prefix: 'purchase',
+        label: '采购',
+      ),
+      isNot(contains('请上传未签署的采购合同文件')),
+    );
   });
 
   test('confirmed contract edits keep original vs current for reviewers', () {
@@ -2145,11 +2291,14 @@ void main() {
       ...filled,
       'purchaseMode': '已签署合同',
       'purchaseFileName': 'old.pdf',
+      'supplySettleMode': '预付款',
+      'supplySettleCycle': '现金 D+2',
     }..addAll(proposalIntakeResetContractFields('purchase'));
     form['purchaseMode'] = '未签署合同';
 
     expect(form['purchaseMode'], '未签署合同');
     expect(form['purchaseContractId'], isNull);
+    expect(form['purchaseContractIds'], isEmpty);
     expect(form['purchaseName'], '');
     expect(form['purchaseOurParty'], '');
     expect(form['purchaseCounterparty'], '');
@@ -2157,6 +2306,8 @@ void main() {
     expect(form['purchaseValidPeriod'], '');
     expect(form['supplierPolicy'], '');
     expect(form['purchaseFileName'], '');
+    expect(form['supplySettleMode'], '预付款');
+    expect(form['supplySettleCycle'], '现金 D+2');
   });
 
   test('next proposal skips the current item and does not wrap', () {
@@ -2279,33 +2430,84 @@ void main() {
       required String status,
       String stage = '',
       String title = '智能投放试点',
+      int createdBy = 11,
+      Map<String, dynamic>? form,
     }) {
       return ProposalIntakeRow.fromJson({
         'id': 8,
         'title': title,
         'status': status,
-        'form': {'proposalName': title},
+        'createdBy': createdBy,
+        'form': {'proposalName': title, ...?form},
         'review': {if (stage.isNotEmpty) 'stage': stage},
       });
     }
 
-    expect(proposalIntakeShouldAutoSaveOnBack(row(status: 'done')), isFalse);
+    bool shouldSave(
+      ProposalIntakeRow item, {
+      int userId = 11,
+      bool viewAll = false,
+    }) {
+      return proposalIntakeShouldAutoSaveOnBack(
+        item,
+        userId: userId,
+        viewAll: viewAll,
+      );
+    }
+
+    expect(shouldSave(row(status: 'done')), isFalse);
+    expect(shouldSave(row(status: 'pending_president')), isFalse);
     expect(
-      proposalIntakeShouldAutoSaveOnBack(row(status: 'pending_president')),
-      isFalse,
-    );
-    expect(
-      proposalIntakeShouldAutoSaveOnBack(
-        row(status: 'done', stage: 'tech_revising'),
+      shouldSave(
+        row(
+          status: 'done',
+          stage: 'tech_revising',
+          form: {'technologyOwnerUserId': 12},
+        ),
+        userId: 12,
       ),
       isTrue,
     );
-    expect(proposalIntakeShouldAutoSaveOnBack(row(status: 'draft')), isTrue);
-    expect(proposalIntakeShouldAutoSaveOnBack(row(status: 'filling')), isTrue);
     expect(
-      proposalIntakeShouldAutoSaveOnBack(row(status: 'draft', title: '')),
+      shouldSave(
+        row(
+          status: 'done',
+          stage: 'tech_revising',
+          form: {'technologyOwnerUserId': 12},
+        ),
+      ),
       isFalse,
     );
+    expect(shouldSave(row(status: 'draft')), isTrue);
+    expect(shouldSave(row(status: 'filling')), isTrue);
+    expect(shouldSave(row(status: 'filling'), userId: 99), isFalse);
+    expect(
+      shouldSave(row(status: 'filling'), userId: 99, viewAll: true),
+      isTrue,
+    );
+    expect(
+      shouldSave(
+        row(status: 'filling', form: {'financeOwner2UserId': 7}),
+        userId: 7,
+      ),
+      isTrue,
+    );
+    expect(
+      shouldSave(
+        row(status: 'reviewing', form: {'marketOwner1UserId': 8}),
+        userId: 8,
+      ),
+      isTrue,
+    );
+    expect(
+      shouldSave(
+        row(status: 'filling', form: {'marketOwner1UserId': 8}),
+        userId: 8,
+      ),
+      isFalse,
+    );
+    expect(shouldSave(row(status: 'draft', title: '')), isFalse);
+    expect(proposalIntakeIsWriteDeniedMessage('当前用户不是该提案填写人'), isTrue);
     expect(proposalIntakeShowDraftSavedToast(row(status: 'draft')), isTrue);
     expect(proposalIntakeShowDraftSavedToast(row(status: 'filling')), isTrue);
     expect(proposalIntakeShowDraftSavedToast(row(status: 'done')), isFalse);
@@ -2467,6 +2669,29 @@ void main() {
     expect(associated.rows.single.financeModuleId, created.modules.single.id);
   });
 
+  test('settle ratio with percent is converted to decimal', () {
+    expect(proposalIntakeNormalizeSettleRatio('1%'), '0.01');
+    expect(proposalIntakeNormalizeSettleRatio('1％'), '0.01');
+    expect(proposalIntakeNormalizeSettleRatio('8%'), '0.08');
+    expect(proposalIntakeNormalizeSettleRatio('90%'), '0.9');
+    expect(proposalIntakeNormalizeSettleRatio('1.2%'), '0.012');
+    expect(proposalIntakeNormalizeSettleRatio('98.5%'), '0.985');
+    expect(proposalIntakeNormalizeSettleRatio('0.926'), '0.926');
+    expect(proposalIntakeNormalizeSettleRatio('1'), '1');
+    expect(proposalIntakeNormalizeSettleRatio(''), '');
+    expect(
+      ProposalFinanceSettleTerms.fromJson({'settleRatio': '1%'}).settleRatio,
+      '0.01',
+    );
+    expect(
+      ProposalFinanceSettleTerms.fromJson({'settlePrice': '1.2%'}).displayRatio,
+      '0.012',
+    );
+    expect(proposalParseSettleRatio('1%'), 0.01);
+    expect(proposalParseSettleRatio('90%'), 0.9);
+    expect(proposalParseSettleRatio('0.926'), 0.926);
+  });
+
   test('settlement terms map bill-type fields and keep legacy price/rule', () {
     final legacy = ProposalFinanceSettleTerms.fromJson({
       'settlePrice': '1.2%',
@@ -2475,7 +2700,7 @@ void main() {
       'ourParty': '沙丘',
       'taxRate': '6%',
     });
-    expect(legacy.displayRatio, '1.2%');
+    expect(legacy.displayRatio, '0.012');
     expect(legacy.displayFormula, '核销结算');
     expect(legacy.isComplete, isTrue);
 
@@ -2491,8 +2716,9 @@ void main() {
       'counterparty': '中石化',
       'ourParty': '沙丘',
     });
-    expect(next.resolvedPrice, '8%');
-    expect(next.toJson()['settlePrice'], '8%');
+    expect(next.resolvedPrice, '0.08');
+    expect(next.toJson()['settlePrice'], '0.08');
+    expect(next.toJson()['settleRatio'], '0.08');
     expect(next.toJson()['settleRule'], '销售额*比例');
     expect(next.toJson()['billType'], '电子券销售款');
   });
@@ -3531,7 +3757,7 @@ void main() {
       );
       expect(
         proposalIntakeTechnologyReviewGaps(const {}, form: form),
-        contains('子产品τ-标签一'),
+        contains('${kProposalChildProductLabel}τ-标签一'),
       );
       final synced = proposalIntakeSyncChildProductMeta(form);
       expect(synced['isCouponPack'], isTrue);
@@ -3590,7 +3816,9 @@ void main() {
     };
     expect(
       proposalIntakeSkuSettleIssues(form, includeSettlements: false),
-      contains('子产品「加油券」请选择关联主产品'),
+      contains(
+        '$kProposalChildProductLabel「加油券」请选择关联$kProposalMainProductLabel',
+      ),
     );
     final child = ProposalSkuDetailRow.fromJson({
       'id': 'child-1',
@@ -3697,105 +3925,117 @@ void main() {
     expect(proposalEstimatedProfitAmount(children, revenue: 40), 36);
   });
 
-  test('child finance metrics ignore main-product costs and use the same formulas', () {
-    final form = {
-      'skuDetails': [
-        {
-          'id': 'main-1',
-          'settlements': [
-            {'id': 's-main', 'scale': '1000', 'settleRatio': '1'},
-          ],
+  test(
+    'child finance metrics ignore main-product costs and use the same formulas',
+    () {
+      final form = {
+        'skuDetails': [
+          {
+            'id': 'main-1',
+            'settlements': [
+              {'id': 's-main', 'scale': '1000', 'settleRatio': '1'},
+            ],
+          },
+        ],
+        'childProducts': [
+          {
+            'id': 'child-1',
+            'settlements': [
+              {'id': 's-child', 'scale': '200', 'settleRatio': '1'},
+            ],
+          },
+        ],
+        'projectCost': 1000,
+        'couponProcurementCost': 80,
+        'turnoverTimes': 2,
+        'productFinance': {
+          'main': {
+            'projectCost': 1000,
+            'couponProcurementCost': 80,
+            'turnoverTimes': 2,
+          },
         },
-      ],
-      'childProducts': [
-        {
-          'id': 'child-1',
-          'settlements': [
-            {'id': 's-child', 'scale': '200', 'settleRatio': '1'},
-          ],
+      };
+      final childScope = proposalIntakeProductFinanceScope(
+        form,
+        owner: kProposalProductFinanceChildren,
+      );
+      expect(childScope['projectCost'], isNull);
+      expect(childScope['couponProcurementCost'], isNull);
+      expect(childScope['turnoverTimes'], isNull);
+      expect(proposalProductScaleRollup(childScope)?.salesScale, 200);
+      expect(proposalProductScaleRollup(childScope)?.revenue, 200);
+      expect(proposalEstimatedProfitAmount(childScope, revenue: 200), 200);
+      expect(proposalTurnoverCashAmount(childScope), isNull);
+
+      final estimated = proposalApplyEstimatedFinanceCosts({
+        ...form,
+        'productFinance': {
+          'main': (form['productFinance'] as Map)['main'],
+          'children': {'turnoverTimes': 2},
         },
-      ],
-      'projectCost': 1000,
-      'couponProcurementCost': 80,
-      'turnoverTimes': 2,
-      'productFinance': {
-        'main': {
-          'projectCost': 1000,
-          'couponProcurementCost': 80,
-          'turnoverTimes': 2,
-        },
-      },
-    };
-    final childScope = proposalIntakeProductFinanceScope(
-      form,
-      owner: kProposalProductFinanceChildren,
-    );
-    expect(childScope['projectCost'], isNull);
-    expect(childScope['couponProcurementCost'], isNull);
-    expect(childScope['turnoverTimes'], isNull);
-    expect(proposalProductScaleRollup(childScope)?.salesScale, 200);
-    expect(proposalProductScaleRollup(childScope)?.revenue, 200);
-    expect(proposalEstimatedProfitAmount(childScope, revenue: 200), 200);
-    expect(proposalTurnoverCashAmount(childScope), isNull);
+      });
+      expect(estimated['salesScale'], 1000);
+      expect(estimated['turnoverCash'], 41.67);
+      final childFinance = proposalIntakeProductFinance(
+        estimated,
+        owner: kProposalProductFinanceChildren,
+      );
+      expect(childFinance['salesScale'], 200);
+      expect(childFinance['revenue'], 200);
+      expect(childFinance['turnoverCash'], 8.33);
+      expect(childFinance['profit'], isNot(-880));
+    },
+  );
 
-    final estimated = proposalApplyEstimatedFinanceCosts({
-      ...form,
-      'productFinance': {
-        'main': (form['productFinance'] as Map)['main'],
-        'children': {'turnoverTimes': 2},
-      },
-    });
-    expect(estimated['salesScale'], 1000);
-    expect(estimated['turnoverCash'], 41.67);
-    final childFinance = proposalIntakeProductFinance(
-      estimated,
-      owner: kProposalProductFinanceChildren,
-    );
-    expect(childFinance['salesScale'], 200);
-    expect(childFinance['revenue'], 200);
-    expect(childFinance['turnoverCash'], 8.33);
-    expect(childFinance['profit'], isNot(-880));
-  });
+  test(
+    're-estimating keeps a second project cost chip after the first write',
+    () {
+      var form = proposalApplyEstimatedFinanceCosts({
+        'costItems': ['补贴款分润'],
+      });
+      expect(form['costItems'], ['补贴款分润']);
+      expect(
+        proposalIntakeProductFinance(
+          form,
+          owner: kProposalProductFinanceMain,
+        )['costItems'],
+        ['补贴款分润'],
+      );
 
-  test('re-estimating keeps a second project cost chip after the first write', () {
-    var form = proposalApplyEstimatedFinanceCosts({
-      'costItems': ['补贴款分润'],
-    });
-    expect(form['costItems'], ['补贴款分润']);
-    expect(
-      proposalIntakeProductFinance(form, owner: kProposalProductFinanceMain)['costItems'],
-      ['补贴款分润'],
-    );
+      form = proposalSyncCostSelection(
+        form: form,
+        names: ['补贴款分润', '机构返佣'],
+        catalog: const [],
+        namesKey: 'costItems',
+        codesKey: 'costItemCodes',
+        amountsKey: 'costItemAmounts',
+        totalKey: 'projectCost',
+      );
+      form = proposalApplyEstimatedFinanceCosts(form);
+      expect(form['costItems'], ['补贴款分润', '机构返佣']);
+      expect(
+        proposalIntakeProductFinance(
+          form,
+          owner: kProposalProductFinanceMain,
+        )['costItems'],
+        ['补贴款分润', '机构返佣'],
+      );
 
-    form = proposalSyncCostSelection(
-      form: form,
-      names: ['补贴款分润', '机构返佣'],
-      catalog: const [],
-      namesKey: 'costItems',
-      codesKey: 'costItemCodes',
-      amountsKey: 'costItemAmounts',
-      totalKey: 'projectCost',
-    );
-    form = proposalApplyEstimatedFinanceCosts(form);
-    expect(form['costItems'], ['补贴款分润', '机构返佣']);
-    expect(
-      proposalIntakeProductFinance(form, owner: kProposalProductFinanceMain)['costItems'],
-      ['补贴款分润', '机构返佣'],
-    );
-
-    form = proposalSyncCostSelection(
-      form: form,
-      names: ['差旅成本'],
-      catalog: const [],
-      namesKey: 'operatingCostItems',
-      codesKey: 'operatingCostItemCodes',
-      amountsKey: 'operatingCostItemAmounts',
-      totalKey: 'operatingCost',
-    );
-    form = proposalApplyEstimatedFinanceCosts(form);
-    expect(form['operatingCostItems'], ['差旅成本']);
-    expect(form['costItems'], ['补贴款分润', '机构返佣']);
-  });
+      form = proposalSyncCostSelection(
+        form: form,
+        names: ['差旅成本'],
+        catalog: const [],
+        namesKey: 'operatingCostItems',
+        codesKey: 'operatingCostItemCodes',
+        amountsKey: 'operatingCostItemAmounts',
+        totalKey: 'operatingCost',
+      );
+      form = proposalApplyEstimatedFinanceCosts(form);
+      expect(form['operatingCostItems'], ['差旅成本']);
+      expect(form['costItems'], ['补贴款分润', '机构返佣']);
+    },
+  );
 
   test('rating and top-level scale follow main products, not children', () {
     final form = proposalApplyEstimatedFinanceCosts({

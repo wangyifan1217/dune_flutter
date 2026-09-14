@@ -11,12 +11,20 @@ class PaymentInvoiceListResult {
   const PaymentInvoiceListResult({
     required this.rows,
     required this.scanned,
+    this.total = 0,
+    this.page = 1,
+    this.pageSize = 10,
     this.usedMineFallback = false,
+    this.serverPaged = false,
   });
 
   final List<PaymentInvoiceRow> rows;
   final int scanned;
+  final int total;
+  final int page;
+  final int pageSize;
   final bool usedMineFallback;
+  final bool serverPaged;
 }
 
 abstract class PaymentInvoiceProgressStore {
@@ -102,23 +110,51 @@ class PaymentInvoiceService {
   final http.Client? _client;
   final PaymentInvoiceProgressStore _progressStore;
 
-  static const _scanPageSize = 50;
-  static const _maxScanPages = 6;
-  static const _enrichCap = 80;
-
   Future<PaymentInvoiceListResult> fetchLedger(PaymentInvoiceQuery query) async {
-    final fetched = await _fetchCandidates();
-    final matched = fetched.rows
-        .where((row) => row.kind == query.kind)
-        .toList(growable: true);
+    final page = query.page < 1 ? 1 : query.page;
+    final pageSize = query.pageSize < 1 ? 10 : query.pageSize;
+    final fetched = await _fetchCandidates(
+      PaymentInvoiceQuery(
+        kind: query.kind,
+        id: query.id,
+        title: query.title,
+        initiator: query.initiator,
+        account: query.account,
+        payAccountType: query.payAccountType,
+        status: query.status,
+        completed: query.completed,
+        issueStatus: query.issueStatus,
+        counterparty: query.counterparty,
+        q: query.q,
+        page: page,
+        pageSize: pageSize,
+        from: query.from,
+        to: query.to,
+      ),
+    );
     final local = await _progressStore.load();
-    final enriched = await _enrich(matched, local);
-    final filtered = enriched
+    final prepared = fetched.rows
+        .where((row) => row.kind == query.kind)
+        .map((row) => _applyLocal(row, local))
         .where((row) => matchesPaymentInvoiceQuery(row, query))
         .toList(growable: false);
+    if (fetched.serverPaged) {
+      return PaymentInvoiceListResult(
+        rows: prepared,
+        scanned: fetched.scanned,
+        total: fetched.total,
+        page: fetched.page,
+        pageSize: fetched.pageSize,
+        usedMineFallback: fetched.usedMineFallback,
+        serverPaged: true,
+      );
+    }
     return PaymentInvoiceListResult(
-      rows: filtered,
+      rows: _pageOf(prepared, page, pageSize),
       scanned: fetched.scanned,
+      total: prepared.length,
+      page: page,
+      pageSize: pageSize,
       usedMineFallback: fetched.usedMineFallback,
     );
   }
@@ -174,10 +210,25 @@ class PaymentInvoiceService {
     return next;
   }
 
-  Future<PaymentInvoiceListResult> _fetchCandidates() async {
+  Future<PaymentInvoiceListResult> _fetchCandidates(
+    PaymentInvoiceQuery query,
+  ) async {
+    final filters = _listQuery(query);
     try {
-      final all = await _fetchAllProposals();
-      if (all.rows.isNotEmpty || all.scanned > 0) return all;
+      return await _fetchDedicated('/payment-invoices', query: filters);
+    } catch (_) {}
+    try {
+      return await _fetchDedicated('/xflow/submissions', query: filters);
+    } catch (_) {}
+    try {
+      final scoped = await _fetchMine(
+        query: {
+          'viewAll': '1',
+          'scope': 'payment-invoice',
+          ...filters,
+        },
+      );
+      return PaymentInvoiceListResult(rows: scoped, scanned: scoped.length);
     } catch (_) {}
     final mine = await _fetchMine();
     return PaymentInvoiceListResult(
@@ -187,47 +238,52 @@ class PaymentInvoiceService {
     );
   }
 
-  Future<PaymentInvoiceListResult> _fetchAllProposals() async {
-    final rows = <PaymentInvoiceRow>[];
-    var scanned = 0;
-    for (var page = 1; page <= _maxScanPages; page++) {
-      final path =
-          '/xflow/proposals/all?page=$page&pageSize=$_scanPageSize';
-      final response = await dunesHttpGet(session, path, client: _client);
-      if (response.statusCode == 401) {
-        _unwrap(response);
-      }
-      if (response.statusCode == 403 ||
-          response.statusCode == 404 ||
-          response.statusCode == 501) {
-        break;
-      }
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        _unwrap(response);
-      }
-      final data = _unwrap(response);
-      final items = _itemsOf(data);
-      if (items.isEmpty) break;
-      scanned += items.length;
-      for (final item in items.whereType<Map>()) {
-        final row = paymentInvoiceRowFromListJson(
-          Map<String, dynamic>.from(item),
-        );
-        if (row.id > 0 && row.kind != PaymentInvoiceKind.other) {
-          rows.add(row);
-        }
-      }
-      final total = data is Map ? _asInt(data['total']) : 0;
-      if (items.length < _scanPageSize) break;
-      if (total > 0 && scanned >= total) break;
-    }
-    return PaymentInvoiceListResult(rows: rows, scanned: scanned);
-  }
-
-  Future<List<PaymentInvoiceRow>> _fetchMine() async {
+  Future<PaymentInvoiceListResult> _fetchDedicated(
+    String path, {
+    Map<String, String> query = const {},
+  }) async {
     final response = await dunesHttpGet(
       session,
-      '/xflow/submissions/mine',
+      _withQuery(path, query),
+      client: _client,
+    );
+    if (response.statusCode == 401) {
+      _unwrap(response);
+    }
+    if (response.statusCode == 403 ||
+        response.statusCode == 404 ||
+        response.statusCode == 405 ||
+        response.statusCode == 501) {
+      throw Exception('HTTP ${response.statusCode}');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _unwrap(response);
+    }
+    final data = _unwrap(response);
+    final items = _itemsOf(data);
+    final rows = [
+      for (final item in items.whereType<Map>())
+        paymentInvoiceRowFromListJson(Map<String, dynamic>.from(item)),
+    ].where((row) => row.id > 0 && row.kind != PaymentInvoiceKind.other).toList();
+    final total = data is Map ? _asInt(data['total']) : rows.length;
+    final page = data is Map ? _asInt(data['page']) : 0;
+    final pageSize = data is Map ? _asInt(data['pageSize']) : 0;
+    return PaymentInvoiceListResult(
+      rows: rows,
+      scanned: items.length,
+      total: total > 0 ? total : rows.length,
+      page: page < 1 ? 1 : page,
+      pageSize: pageSize,
+      serverPaged: data is Map && data.containsKey('page'),
+    );
+  }
+
+  Future<List<PaymentInvoiceRow>> _fetchMine({
+    Map<String, String>? query,
+  }) async {
+    final response = await dunesHttpGet(
+      session,
+      _withQuery('/xflow/submissions/mine', query ?? const {}),
       client: _client,
     );
     final data = _unwrap(response);
@@ -238,56 +294,58 @@ class PaymentInvoiceService {
     ].where((row) => row.id > 0 && row.kind != PaymentInvoiceKind.other).toList();
   }
 
-  Future<List<PaymentInvoiceRow>> _enrich(
-    List<PaymentInvoiceRow> rows,
-    Map<String, PaymentInvoiceProgress> local,
-  ) async {
-    final take = rows.take(_enrichCap).toList(growable: false);
-    final enriched = <PaymentInvoiceRow>[];
-    const batch = 8;
-    for (var i = 0; i < take.length; i += batch) {
-      final slice = take.sublist(i, i + batch > take.length ? take.length : i + batch);
-      final next = await Future.wait(slice.map((row) => _enrichOne(row, local)));
-      enriched.addAll(next);
+  Map<String, String> _listQuery(PaymentInvoiceQuery query) {
+    final out = <String, String>{
+      'kind': query.kind == PaymentInvoiceKind.invoice ? 'invoice' : 'payment',
+      'page': '${query.page < 1 ? 1 : query.page}',
+      'pageSize': '${query.pageSize < 1 ? 10 : query.pageSize}',
+    };
+    final q = query.q.trim();
+    if (q.isNotEmpty) out['q'] = q;
+    if (query.payAccountType.trim() == '对公') out['party'] = 'public';
+    if (query.payAccountType.trim() == '对私') out['party'] = 'private';
+    if (query.completed.trim() == 'yes') out['status'] = 'done';
+    if (query.completed.trim() == 'no') out['status'] = 'open';
+    if (query.kind == PaymentInvoiceKind.invoice &&
+        query.issueStatus.trim().isNotEmpty) {
+      out['issueStatus'] = query.issueStatus.trim();
     }
-    if (rows.length > take.length) {
-      enriched.addAll(
-        rows.skip(take.length).map((row) => _applyLocal(row, local)),
-      );
+    if (query.from != null) {
+      out['from'] = query.from!.toIso8601String().split('T').first;
     }
-    return enriched;
+    if (query.to != null) {
+      out['to'] = query.to!.toIso8601String().split('T').first;
+    }
+    return out;
   }
 
-  Future<PaymentInvoiceRow> _enrichOne(
-    PaymentInvoiceRow row,
-    Map<String, PaymentInvoiceProgress> local,
-  ) async {
-    var next = row;
-    if (row.formValues.isEmpty ||
-        row.purpose.isEmpty ||
-        row.payeeAccount.isEmpty ||
-        (row.kind == PaymentInvoiceKind.invoice && row.appliedAmount == null)) {
-      try {
-        final response = await dunesHttpGet(
-          session,
-          '/xflow/submissions/${Uri.encodeComponent(row.businessType)}/${row.id}',
-          client: _client,
-        );
-        if (response.statusCode >= 200 && response.statusCode < 300) {
-          final data = _unwrap(response);
-          if (data is Map) {
-            final map = Map<String, dynamic>.from(data);
-            final form = map['formData'] ?? map['formValues'] ?? map['form'];
-            next = applyPaymentInvoiceForm(
-              next,
-              form is Map ? Map<String, dynamic>.from(form) : const {},
-              subStatus: '${map['subStatus'] ?? next.subStatus}',
-            );
-          }
-        }
-      } catch (_) {}
-    }
-    return _applyLocal(next, local);
+  String _withQuery(String path, Map<String, String> query) {
+    if (query.isEmpty) return path;
+    final encoded = query.entries
+        .map(
+          (e) =>
+              '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}',
+        )
+        .join('&');
+    return '$path?$encoded';
+  }
+
+  List<PaymentInvoiceRow> _pageOf(
+    List<PaymentInvoiceRow> rows,
+    int page,
+    int pageSize,
+  ) {
+    if (rows.isEmpty) return const [];
+    final start = (page - 1) * pageSize;
+    if (start >= rows.length) return const [];
+    final end = start + pageSize > rows.length ? rows.length : start + pageSize;
+    return rows.sublist(start, end);
+  }
+
+  int _asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse('$value') ?? 0;
   }
 
   PaymentInvoiceRow _applyLocal(
@@ -325,12 +383,6 @@ class PaymentInvoiceService {
       if (items is List) return items;
     }
     return const [];
-  }
-
-  int _asInt(dynamic value) {
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    return int.tryParse('$value') ?? 0;
   }
 }
 

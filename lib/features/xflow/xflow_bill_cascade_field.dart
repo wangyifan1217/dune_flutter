@@ -664,101 +664,75 @@ class _BillInlineSelectState extends State<_BillInlineSelect> {
   Widget build(BuildContext context) {
     final hasText = _label.isNotEmpty;
     final showMenu = widget.enabled && _expanded && widget.items.isNotEmpty;
+    final selectedIndex = widget.items.indexWhere(
+      (item) => item.value == widget.value,
+    );
     return TapRegion(
       onTapOutside: (_) {
-        Future<void>.delayed(const Duration(milliseconds: 80), () {
-          if (!mounted || !_expanded) return;
-          setState(() => _expanded = false);
-        });
+        if (!mounted || !_expanded) return;
+        setState(() => _expanded = false);
       },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          xfFixedHeightControl(
-            child: TextField(
-              controller: _controller,
-              onTap: !widget.enabled
-                  ? null
-                  : () => setState(() => _expanded = !_expanded),
-              readOnly: true,
-              enableInteractiveSelection: false,
-              style: xfInputTextStyle(),
-              decoration: xfInputDecoration(
-                hint: widget.hint,
-                readonly: !widget.enabled,
-              ).copyWith(
-                suffixIconConstraints: const BoxConstraints(minWidth: 72),
-                suffixIcon: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (hasText && widget.enabled)
-                      IconButton(
-                        tooltip: '清除',
-                        icon: const Icon(
-                          Icons.close_rounded,
-                          size: 18,
-                          color: DunesColors.text3,
-                        ),
-                        onPressed: () {
-                          widget.onChanged(null);
-                          setState(() => _expanded = true);
-                        },
-                      ),
+          TextField(
+            controller: _controller,
+            onTap: !widget.enabled
+                ? null
+                : () => setState(() => _expanded = !_expanded),
+            readOnly: true,
+            minLines: 1,
+            maxLines: 4,
+            enableInteractiveSelection: false,
+            style: xfInputTextStyle(),
+            decoration: xfInputDecoration(
+              hint: widget.hint,
+              readonly: !widget.enabled,
+            ).copyWith(
+              suffixIconConstraints: const BoxConstraints(minWidth: 72),
+              suffixIcon: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (hasText && widget.enabled)
                     IconButton(
-                      tooltip: _expanded ? '收起' : '展开',
-                      icon: Icon(
-                        _expanded
-                            ? Icons.keyboard_arrow_up_rounded
-                            : Icons.keyboard_arrow_down_rounded,
+                      tooltip: '清除',
+                      icon: const Icon(
+                        Icons.close_rounded,
                         size: 18,
                         color: DunesColors.text3,
                       ),
-                      onPressed: !widget.enabled
-                          ? null
-                          : () => setState(() => _expanded = !_expanded),
+                      onPressed: () {
+                        widget.onChanged(null);
+                        setState(() => _expanded = true);
+                      },
                     ),
-                  ],
-                ),
+                  IconButton(
+                    tooltip: _expanded ? '收起' : '展开',
+                    icon: Icon(
+                      _expanded
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      size: 18,
+                      color: DunesColors.text3,
+                    ),
+                    onPressed: !widget.enabled
+                        ? null
+                        : () => setState(() => _expanded = !_expanded),
+                  ),
+                ],
               ),
             ),
           ),
           if (showMenu) ...[
             const SizedBox(height: 6),
-            Container(
-              constraints: const BoxConstraints(maxHeight: 220),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: DunesColors.border),
-              ),
-              child: ListView.separated(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                itemCount: widget.items.length.clamp(0, 8),
-                separatorBuilder: (_, _) =>
-                    Divider(height: 1, color: DunesColors.borderSoft),
-                itemBuilder: (context, index) {
-                  final item = widget.items[index];
-                  final selected = item.value == widget.value;
-                  return ListTile(
-                    dense: true,
-                    title: Text(
-                      item.label,
-                      style: xfInputTextStyle().copyWith(
-                        fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.w500,
-                        color: selected
-                            ? DunesColors.accentDeep
-                            : DunesColors.text,
-                      ),
-                    ),
-                    onTap: () {
-                      widget.onChanged(item.value);
-                      setState(() => _expanded = false);
-                    },
-                  );
-                },
-              ),
+            XfPickerSuggestionList(
+              itemCount: widget.items.length,
+              selectedIndex: selectedIndex < 0 ? null : selectedIndex,
+              labelOf: (i) => widget.items[i].label,
+              onSelect: (i) {
+                widget.onChanged(widget.items[i].value);
+                setState(() => _expanded = false);
+              },
             ),
           ],
         ],

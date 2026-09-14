@@ -49,6 +49,8 @@ ProposalIntakeOptions _options() => ProposalIntakeOptions.fromJson({
     'businessCostRules': '员工提成按已定规则累计，提案不填发生额。',
     'operatingCostRules': '差旅、小额营销按项目收入的 2% 为阈值。',
     'rollbackOptions': ['不回滚', '按季度回滚', '按年度回滚'],
+    'settleModes': ['预付款', '分期', '按月对账'],
+    'settleCycles': ['现金 D+2', '补贴 D+1', '核销后 D+1'],
   },
   'rules': {'minimumScale': 500, 'minimumMargin': 4.5},
 });
@@ -470,7 +472,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('supply tag two is single select', (tester) async {
+  testWidgets('supply tag two supports multi select', (tester) async {
     tester.view.physicalSize = const Size(1440, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -483,7 +485,7 @@ void main() {
       of: _fieldOf('供给（标签二）'),
       matching: find.byType(ProposalPills),
     );
-    expect(tester.widget<ProposalPills>(pillsFinder).single, isTrue);
+    expect(tester.widget<ProposalPills>(pillsFinder).single, isFalse);
     expect(tester.widget<ProposalPills>(pillsFinder).selected, isEmpty);
 
     await tester.tap(find.text('头部媒体供给'));
@@ -492,7 +494,10 @@ void main() {
 
     await tester.tap(find.text('中长尾流量供给'));
     await tester.pump();
-    expect(tester.widget<ProposalPills>(pillsFinder).selected, {'中长尾流量供给'});
+    expect(tester.widget<ProposalPills>(pillsFinder).selected, {
+      '头部媒体供给',
+      '中长尾流量供给',
+    });
   });
 
   testWidgets('completed proposal detail text is selectable', (tester) async {
@@ -1065,10 +1070,7 @@ void main() {
     await tester.pumpWidget(
       _harness(
         1440,
-        session: AuthSession.fromJson(const {
-          'userId': 5,
-          'displayName': '胡珏',
-        }),
+        session: AuthSession.fromJson(const {'userId': 5, 'displayName': '胡珏'}),
         row: ProposalIntakeRow.fromJson({
           'id': 1,
           'code': 'TA-2026-0001',
@@ -1130,7 +1132,7 @@ void main() {
     expect(find.text('市场部负责人二复核'), findsWidgets);
     await scrollUntil('产品结算还没填规模，这一段暂时算不出数');
     expect(find.text('产品结算还没填规模，这一段暂时算不出数'), findsOneWidget);
-    expect(find.text('去市场部添加主产品 →'), findsOneWidget);
+    expect(find.text('去市场部添加$kProposalMainProductLabel →'), findsOneWidget);
     expect(find.text('销售规模目标（年·万元）'), findsNothing);
     expect(find.text('收入（万元）'), findsNothing);
     expect(find.text('利润（万元）'), findsNothing);
@@ -1957,14 +1959,14 @@ void main() {
 
     await tester.pumpWidget(_harness(1440));
     await tester.pump();
-    await _scrollUntil(tester, '主产品');
+    await _scrollUntil(tester, kProposalMainProductLabel);
     expect(find.text('产品明细'), findsNothing);
-    expect(find.text('新增主产品'), findsOneWidget);
-    expect(find.text('尚未添加主产品'), findsOneWidget);
-    expect(find.text('关联子产品'), findsWidgets);
-    expect(find.text('尚未关联子产品'), findsOneWidget);
-    expect(find.text('子产品科技'), findsNothing);
-    expect(find.text('子产品财务模块'), findsNothing);
+    expect(find.text('新增$kProposalMainProductLabel'), findsOneWidget);
+    expect(find.text('尚未添加$kProposalMainProductLabel'), findsOneWidget);
+    expect(find.text(kProposalChildProductLabel), findsWidgets);
+    expect(find.text('尚未添加$kProposalChildProductLabel'), findsOneWidget);
+    expect(find.text('$kProposalChildProductLabel科技'), findsNothing);
+    expect(find.text('$kProposalChildProductLabel财务模块'), findsNothing);
     expect(find.text('是否已经建产品'), findsNothing);
     expect(find.text('是否为券包'), findsNothing);
     expect(find.text('新增券包'), findsNothing);
@@ -2001,21 +2003,21 @@ void main() {
       ),
     );
     await tester.pump();
-    await _scrollUntil(tester, '关联子产品');
-    expect(find.text('子产品明细'), findsOneWidget);
+    await _scrollUntil(tester, kProposalChildProductLabel);
+    expect(find.text('$kProposalChildProductLabel明细'), findsOneWidget);
     expect(find.textContaining('加油100元'), findsWidgets);
-    expect(find.text('子产品科技'), findsOneWidget);
-    expect(find.text('子产品财务技术接口'), findsOneWidget);
-    expect(find.text('子产品结算'), findsOneWidget);
-    expect(find.text('主产品结算'), findsOneWidget);
-    expect(find.text('主产品合计'), findsOneWidget);
-    expect(find.text('子产品合计'), findsOneWidget);
+    expect(find.text('$kProposalChildProductLabel科技'), findsOneWidget);
+    expect(find.text('$kProposalChildProductLabel财务技术接口'), findsOneWidget);
+    expect(find.text('$kProposalChildProductLabel结算'), findsOneWidget);
+    expect(find.text('$kProposalMainProductLabel结算'), findsOneWidget);
+    expect(find.text('$kProposalMainProductLabel合计'), findsOneWidget);
+    expect(find.text('$kProposalChildProductLabel合计'), findsOneWidget);
     expect(find.text('项目成本'), findsNWidgets(2));
     expect(find.text('经营成本'), findsNWidgets(2));
     expect(find.text('税务成本'), findsNWidgets(2));
     expect(find.text('是否回滚'), findsNWidgets(2));
-    expect(find.text('子产品合并财务模块'), findsNothing);
-    expect(find.text('主产品财务模块'), findsOneWidget);
+    expect(find.text('$kProposalChildProductLabel合并财务模块'), findsNothing);
+    expect(find.text('$kProposalMainProductLabel财务模块'), findsOneWidget);
   });
 
   testWidgets('existing child finance module remains visible', (tester) async {
@@ -2051,8 +2053,8 @@ void main() {
       ),
     );
     await tester.pump();
-    await _scrollUntil(tester, '子产品合并财务模块');
-    expect(find.text('子产品合并财务模块'), findsOneWidget);
+    await _scrollUntil(tester, '$kProposalChildProductLabel合并财务模块');
+    expect(find.text('$kProposalChildProductLabel合并财务模块'), findsOneWidget);
     expect(find.text('历史子产品财务'), findsOneWidget);
   });
 
@@ -2085,7 +2087,7 @@ void main() {
       ),
     );
     await tester.pump();
-    await _scrollUntil(tester, '主产品');
+    await _scrollUntil(tester, kProposalMainProductLabel);
     expect(find.text('是否已经建产品'), findsOneWidget);
     expect(find.text('业务平台'), findsWidgets);
     expect(find.text('已建产品'), findsOneWidget);
@@ -2131,11 +2133,14 @@ void main() {
       ),
     );
     await tester.pump();
-    await _scrollUntil(tester, '主产品');
+    await _scrollUntil(tester, kProposalMainProductLabel);
     expect(find.text('中石油 100 元现金券'), findsWidgets);
     expect(find.text('能源积分'), findsWidgets);
     expect(find.text('中石化加油券'), findsWidgets);
-    expect(find.text('主产品 1 · 中石油 100 元现金券'), findsOneWidget);
+    expect(
+      find.text('$kProposalMainProductLabel 1 · 中石油 100 元现金券'),
+      findsOneWidget,
+    );
     expect(find.text('已建产品'), findsWidgets);
     expect(find.text('产品名称'), findsNothing);
     expect(find.text('面值'), findsNothing);
@@ -2147,6 +2152,55 @@ void main() {
     expect(find.text('产品失效日期'), findsNothing);
   });
 
+  testWidgets('reviewing existing built products still show selected identity', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'reviewing',
+          'createdBy': 11,
+          'form': {
+            'isExistingBuilt': true,
+            'skuDetails': [
+              {
+                'id': 'sku-1',
+                'existingBuilt': '是',
+                'productName': '中石油 100 元现金券',
+                'syncSource': {'code': 'POINTS_REBATE', 'name': '能源积分'},
+                'channelRef': {'name': '江苏中石油'},
+                'assetProduct': {
+                  'id': 10,
+                  'productName': '中石油 100 元现金券',
+                  'productCode': 'SKU-10001',
+                },
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, kProposalMainProductLabel);
+    expect(
+      find.text('$kProposalMainProductLabel 1 · 中石油 100 元现金券'),
+      findsOneWidget,
+    );
+    expect(find.text('能源积分'), findsWidgets);
+    expect(find.text('江苏中石油'), findsWidgets);
+    expect(find.text('中石油 100 元现金券'), findsWidgets);
+    expect(find.text('请先选择业务平台'), findsNothing);
+    expect(find.text('产品名称'), findsNothing);
+  });
+
   testWidgets('checking existing built product reveals required pickers', (
     tester,
   ) async {
@@ -2156,17 +2210,17 @@ void main() {
 
     await tester.pumpWidget(_harness(1440));
     await tester.pump();
-    await _scrollUntil(tester, '主产品');
-    expect(find.text('尚未添加主产品'), findsOneWidget);
+    await _scrollUntil(tester, kProposalMainProductLabel);
+    expect(find.text('尚未添加$kProposalMainProductLabel'), findsOneWidget);
     expect(find.text('已建产品'), findsNothing);
 
-    await tester.tap(find.text('新增主产品'));
+    await tester.tap(find.text('新增$kProposalMainProductLabel'));
     await tester.pump();
     expect(find.text('是否已经建产品'), findsOneWidget);
     await tester.tap(find.text('是否已经建产品'));
     await tester.pump();
-    expect(find.text('尚未添加主产品'), findsNothing);
-    expect(find.text('主产品 1'), findsOneWidget);
+    expect(find.text('尚未添加$kProposalMainProductLabel'), findsNothing);
+    expect(find.text('$kProposalMainProductLabel 1'), findsOneWidget);
     expect(find.text('业务平台'), findsWidgets);
     expect(find.text('已建产品'), findsOneWidget);
     expect(
@@ -2294,6 +2348,146 @@ void main() {
     expect(find.text('点击选择未签合同 PDF / Word'), findsNothing);
   });
 
+  testWidgets('contract reviewer can preview selected signed contract', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'reviewing',
+          'createdBy': 22,
+          'form': {
+            'financeOwner2UserId': 11,
+            'salesMode': '已签署合同',
+            'salesNo': '2024-17-YW-00036',
+            'salesName': '框架合同',
+            'salesContractId': 36,
+            'salesContractIds': [36],
+            'salesContracts': [
+              {
+                'id': 36,
+                'contractNo': '2024-17-YW-00036',
+                'contractName': '框架合同',
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '选择合同');
+    expect(find.textContaining('配置来源'), findsOneWidget);
+    expect(find.text('查看合同'), findsWidgets);
+    expect(find.text('合同源文件'), findsOneWidget);
+    expect(find.text('点击「查看合同」预览合同归集中的源文件'), findsOneWidget);
+  });
+
+  testWidgets('signed contracts show multi-select chips and first as source', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'filling',
+          'createdBy': 11,
+          'form': {
+            'salesMode': '已签署合同',
+            'salesContractId': 22,
+            'salesContractIds': [22, 33],
+            'salesContracts': [
+              {
+                'id': 22,
+                'contractNo': 'XS-1',
+                'contractName': '销售框架合同',
+                'files': [
+                  {
+                    'fileName': '销售框架合同.pdf',
+                    'objectKey': 'contracts/sales-1.pdf',
+                  },
+                ],
+              },
+              {
+                'id': 33,
+                'contractNo': 'XS-2',
+                'contractName': '补充协议',
+                'files': [
+                  {
+                    'fileName': '补充协议.pdf',
+                    'objectKey': 'contracts/sales-2.pdf',
+                  },
+                ],
+              },
+            ],
+            'salesNo': 'XS-1',
+            'salesName': '销售框架合同',
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '选择合同');
+    expect(find.textContaining('配置来源'), findsOneWidget);
+    expect(find.textContaining('销售框架合同'), findsWidgets);
+    expect(find.textContaining('补充协议'), findsWidgets);
+    expect(find.text('继续搜索添加合同'), findsOneWidget);
+    await _scrollUntil(tester, '合同源文件');
+    expect(find.text('销售框架合同.pdf'), findsOneWidget);
+    expect(find.text('补充协议.pdf'), findsOneWidget);
+    expect(find.text('查看合同'), findsWidgets);
+  });
+
+  testWidgets('unsigned contracts show multiple uploaded files', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'filling',
+          'createdBy': 11,
+          'form': {
+            'salesMode': '未签署合同',
+            'salesFiles': [
+              {'fileName': '销售合同.pdf', 'objectKey': 'proposals/sales-1.pdf'},
+              {'fileName': '补充协议.pdf', 'objectKey': 'proposals/sales-2.pdf'},
+            ],
+            'salesFileName': '销售合同.pdf',
+            'salesObjectKey': 'proposals/sales-1.pdf',
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '上传合同文件');
+    expect(find.text('销售合同.pdf'), findsOneWidget);
+    expect(find.text('补充协议.pdf'), findsOneWidget);
+    expect(find.text('继续上传合同'), findsOneWidget);
+    expect(find.text('查看合同'), findsOneWidget);
+  });
+
   testWidgets('finance settlements follow each product and can add details', (
     tester,
   ) async {
@@ -2327,7 +2521,10 @@ void main() {
     expect(find.byTooltip('中石油100元'), findsNothing);
     expect(find.text('结算一'), findsOneWidget);
     expect(find.text('新增共用结算'), findsNothing);
-    expect(find.textContaining('按主产品填写结算'), findsOneWidget);
+    expect(
+      find.textContaining('按$kProposalMainProductLabel填写结算'),
+      findsOneWidget,
+    );
     expect(find.text('规模口径'), findsWidgets);
     expect(
       find.descendant(of: _fieldOf('规模口径').first, matching: find.text('年')),
@@ -2712,6 +2909,127 @@ void main() {
           .first,
     );
     expect(box.height, greaterThan(200));
+  });
+
+  testWidgets('grabbed contract fields show full text like core terms', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    const longName = '同人才派遣合同同人才派遣合同同人才派遣合同同人才派遣合同';
+    const longParty = '广西天珺能源科技有限公司广西天珺能源科技有限公司';
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'reviewing',
+          'createdBy': 22,
+          'form': {
+            'financeOwner2UserId': 11,
+            'purchaseMode': '已签署合同',
+            'purchaseName': longName,
+            'purchaseOurParty': longParty,
+            'purchaseCounterparty': '中智湖北经济技术合作有限公司',
+            'purchaseValidPeriod': '2026-03-11 至 2028-03-10 且含自动续约说明',
+            'purchaseCoreTerms': '【服务内容】【80】【6】%；第四十四条 本合同所称服务费',
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '合同名称');
+
+    SelectableText textOf(String label) => tester.widget<SelectableText>(
+      find
+          .descendant(
+            of: _fieldOf(label).first,
+            matching: find.byType(SelectableText),
+          )
+          .first,
+    );
+
+    final name = textOf('合同名称');
+    expect(name.data, longName);
+    expect(name.maxLines, isNull);
+    final party = textOf('我方签约主体');
+    expect(party.data, longParty);
+    expect(party.maxLines, isNull);
+    expect(textOf('对方签约主体').maxLines, isNull);
+    expect(textOf('有效期').maxLines, isNull);
+  });
+
+  testWidgets('reviewer can read the full proposal text fields', (tester) async {
+    tester.view.physicalSize = const Size(1440, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    const longName = '这是一条很长的产品提案名称用于确认复核时也能看完整不要被截断';
+    const longPolicy = '供货商政策包含账期、铺货、退货及考核条款，内容需要完整展示给复核人阅读。';
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'reviewing',
+          'createdBy': 22,
+          'form': {
+            'financeOwner2UserId': 11,
+            'proposalName': longName,
+            'supplierPolicy': longPolicy,
+            'channelPolicy': '渠道政策同样需要完整展示',
+            'executionPlan': '先试点后铺开，按季度复盘。',
+            'riskPoints': '政策变动与库存积压。',
+            'salesMode': '已签署合同',
+            'salesName': '同人才派遣合同同人才派遣合同同人才派遣合同',
+            'isExistingBuilt': true,
+            'skuDetails': [
+              {
+                'id': 'sku-1',
+                'existingBuilt': '是',
+                'productName': '小套加油会员-天津移动',
+                'syncSource': {'code': 'POINTS_REBATE', 'name': '能源积分'},
+                'channelRef': {'code': 'C001', 'name': '银联商务'},
+                'assetProduct': {
+                  'id': 88,
+                  'productName': '小套加油会员-天津移动',
+                },
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+
+    SelectableText textOf(String label) => tester.widget<SelectableText>(
+      find
+          .descendant(
+            of: _fieldOf(label).first,
+            matching: find.byType(SelectableText),
+          )
+          .first,
+    );
+
+    await _scrollUntil(tester, '产品提案名称');
+    expect(textOf('产品提案名称').data, longName);
+    expect(textOf('产品提案名称').maxLines, isNull);
+
+    await _scrollUntil(tester, kProposalMainProductLabel);
+    expect(find.text('小套加油会员-天津移动'), findsWidgets);
+    expect(find.text('能源积分'), findsWidgets);
+    expect(find.text('银联商务'), findsWidgets);
+
+    await _scrollUntil(tester, '供货商政策');
+    expect(textOf('供货商政策').data, longPolicy);
+    expect(textOf('供货商政策').maxLines, isNull);
+    expect(textOf('渠道政策').data, '渠道政策同样需要完整展示');
   });
 
   testWidgets('selected product pill uses green fill', (tester) async {
@@ -3223,7 +3541,10 @@ void main() {
         findsNothing,
       );
       expect(
-        find.descendant(of: _fieldOf('项目成本'), matching: find.text('关联主产品')),
+        find.descendant(
+          of: _fieldOf('项目成本'),
+          matching: find.text('关联$kProposalMainProductLabel'),
+        ),
         findsNothing,
       );
       expect(find.text('再加一条'), findsNothing);
@@ -3447,7 +3768,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.descendant(of: _fieldOf('毛利率（%）'), matching: find.text('68.82')),
+        find.descendant(of: _fieldOf('毛利率（%）'), matching: find.text('62.53')),
         findsOneWidget,
       );
     },
@@ -4027,7 +4348,7 @@ void main() {
       ),
     );
     await tester.pump();
-    await _scrollUntil(tester, '子产品财务复核');
+    await _scrollUntil(tester, '$kProposalChildProductLabel财务复核');
 
     expect(find.textContaining('已加密上锁'), findsNWidgets(2));
     expect(find.text('子产品保密成本'), findsNothing);
@@ -4287,7 +4608,7 @@ void main() {
         matching: find.byType(ProposalPills),
       ),
     );
-    expect(supplyPills.single, isTrue);
+    expect(supplyPills.single, isFalse);
 
     await _scrollUntil(tester, '是否已有供给产品');
     expect(find.text('是否已有供给产品'), findsWidgets);

@@ -1418,7 +1418,12 @@ class _ProposalUploadPageState extends State<ProposalUploadPage>
   Widget _buildScrollContent() {
     final parsed = _parsed;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(14, 16, 14, 8),
+      padding: EdgeInsets.fromLTRB(
+        14,
+        16,
+        14,
+        8 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
       children: [
         _buildImportTemplateSection(),
         const SizedBox(height: 16),

@@ -1199,6 +1199,27 @@ void main() {
     },
   );
 
+  test('vat tax chips are exclusive and last tap wins', () {
+    expect(
+      proposalToggleTaxCostItem(
+        ['增值税及附加（运营商+公共出行）', '印花税', '所得税'],
+        '增值税及附加（能源）',
+      ),
+      ['印花税', '所得税', '增值税及附加（能源）'],
+    );
+    expect(
+      proposalToggleTaxCostItem(['增值税及附加（能源）', '印花税'], '增值税及附加（能源）'),
+      ['印花税'],
+    );
+
+    final form = proposalApplyEstimatedFinanceCosts({
+      'taxCostItems': ['增值税及附加（运营商+公共出行）', '印花税', '增值税及附加（能源）'],
+    });
+    expect(form['taxCostItems'], contains('增值税及附加（能源）'));
+    expect(form['taxCostItems'], contains('印花税'));
+    expect(form['taxCostItems'], isNot(contains('增值税及附加（运营商+公共出行）')));
+  });
+
   test('vat item defaults to the operator kind for operator sectors', () {
     final form = proposalApplyEstimatedFinanceCosts({
       'sector': '运营商',
@@ -3734,6 +3755,46 @@ void main() {
     expect(childFinance['revenue'], 200);
     expect(childFinance['turnoverCash'], 8.33);
     expect(childFinance['profit'], isNot(-880));
+  });
+
+  test('re-estimating keeps a second project cost chip after the first write', () {
+    var form = proposalApplyEstimatedFinanceCosts({
+      'costItems': ['补贴款分润'],
+    });
+    expect(form['costItems'], ['补贴款分润']);
+    expect(
+      proposalIntakeProductFinance(form, owner: kProposalProductFinanceMain)['costItems'],
+      ['补贴款分润'],
+    );
+
+    form = proposalSyncCostSelection(
+      form: form,
+      names: ['补贴款分润', '机构返佣'],
+      catalog: const [],
+      namesKey: 'costItems',
+      codesKey: 'costItemCodes',
+      amountsKey: 'costItemAmounts',
+      totalKey: 'projectCost',
+    );
+    form = proposalApplyEstimatedFinanceCosts(form);
+    expect(form['costItems'], ['补贴款分润', '机构返佣']);
+    expect(
+      proposalIntakeProductFinance(form, owner: kProposalProductFinanceMain)['costItems'],
+      ['补贴款分润', '机构返佣'],
+    );
+
+    form = proposalSyncCostSelection(
+      form: form,
+      names: ['差旅成本'],
+      catalog: const [],
+      namesKey: 'operatingCostItems',
+      codesKey: 'operatingCostItemCodes',
+      amountsKey: 'operatingCostItemAmounts',
+      totalKey: 'operatingCost',
+    );
+    form = proposalApplyEstimatedFinanceCosts(form);
+    expect(form['operatingCostItems'], ['差旅成本']);
+    expect(form['costItems'], ['补贴款分润', '机构返佣']);
   });
 
   test('rating and top-level scale follow main products, not children', () {

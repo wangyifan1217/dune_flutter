@@ -2574,6 +2574,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       );
       return;
     }
+    if (key == 'taxCostItems') {
+      _setCostSelection(
+        namesKey: 'taxCostItems',
+        codesKey: 'taxCostItemCodes',
+        amountsKey: 'taxCostItemAmounts',
+        totalKey: 'taxCost',
+        names: proposalToggleTaxCostItem(values, value),
+        catalog: const [],
+        resetReview: resetReview,
+      );
+      return;
+    }
     values.contains(value) ? values.remove(value) : values.add(value);
     final next = values.toList();
     if (key == 'businessCostItems') {
@@ -2596,18 +2608,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         codesKey: 'operatingCostItemCodes',
         amountsKey: 'operatingCostItemAmounts',
         totalKey: 'operatingCost',
-        names: next,
-        catalog: const [],
-        resetReview: resetReview,
-      );
-      return;
-    }
-    if (key == 'taxCostItems') {
-      _setCostSelection(
-        namesKey: 'taxCostItems',
-        codesKey: 'taxCostItemCodes',
-        amountsKey: 'taxCostItemAmounts',
-        totalKey: 'taxCost',
         names: next,
         catalog: const [],
         resetReview: resetReview,
@@ -6361,12 +6361,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               selected: names.toSet(),
               enabled: enabled,
               onToggle: (name) {
-                final nextNames = [...names];
-                nextNames.contains(name)
-                    ? nextNames.remove(name)
-                    : nextNames.add(name);
-                final nextAmounts = Map<String, double>.from(amounts);
-                if (!nextNames.contains(name)) nextAmounts.remove(name);
+                final nextNames = namesKey == 'taxCostItems'
+                    ? proposalToggleTaxCostItem(names, name)
+                    : ([...names]..remove(name));
+                if (namesKey != 'taxCostItems' && !names.contains(name)) {
+                  nextNames.add(name);
+                }
+                final nextAmounts = Map<String, double>.from(amounts)
+                  ..removeWhere((id, _) => !nextNames.contains(id));
                 write(nextNames, nextAmounts);
               },
             ),
@@ -12620,6 +12622,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 padding: EdgeInsets.only(top: 8),
                 child: Text(
                   '按应付账单第三级匹配成本类型。金额 = $kProposalProjectCostFormula，可改。',
+                  style: TextStyle(
+                    color: ProposalPalette.text3,
+                    fontSize: 11,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            if (namesKey == 'taxCostItems')
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  '增值税及附加两种口径只选一种，后点的生效；印花税、所得税可另选。',
                   style: TextStyle(
                     color: ProposalPalette.text3,
                     fontSize: 11,

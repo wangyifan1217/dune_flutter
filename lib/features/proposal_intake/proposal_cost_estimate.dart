@@ -622,6 +622,47 @@ String proposalDefaultVatItemName(Map<String, dynamic> form) {
   return kProposalVatEnergyName;
 }
 
+bool proposalIsVatTaxItem(String name) {
+  final text = name.trim();
+  return text == kProposalVatEnergyName || text == kProposalVatOperatorName;
+}
+
+/// 增值税两种口径只保留一种。后点的优先，避免选了运营商就再也勾不上能源。
+List<String> proposalExclusiveVatTaxNames(
+  Iterable<String> names, {
+  String? prefer,
+}) {
+  final list = [
+    for (final name in names)
+      if (name.trim().isNotEmpty) name.trim(),
+  ];
+  final vat = [for (final name in list) if (proposalIsVatTaxItem(name)) name];
+  if (vat.isEmpty) return list;
+  final keep = prefer != null && proposalIsVatTaxItem(prefer)
+      ? prefer
+      : vat.last;
+  return [
+    for (final name in list)
+      if (!proposalIsVatTaxItem(name) || name == keep) name,
+  ];
+}
+
+List<String> proposalToggleTaxCostItem(Iterable<String> current, String value) {
+  final selected = [
+    for (final name in current)
+      if (name.trim().isNotEmpty) name.trim(),
+  ];
+  final item = value.trim();
+  final has = selected.contains(item);
+  if (proposalIsVatTaxItem(item)) {
+    selected.removeWhere(proposalIsVatTaxItem);
+    if (!has) selected.add(item);
+    return selected;
+  }
+  has ? selected.remove(item) : selected.add(item);
+  return selected;
+}
+
 /// 所有带比例的供给结算条款。
 List<ProposalFinanceSettleTerms> proposalPurchaseSettleTerms(
   Map<String, dynamic> form,
@@ -1012,10 +1053,7 @@ List<String> proposalEnsureAutoTaxItemNames(Map<String, dynamic> form) {
   if (hasVatBase && !hasOperator && !hasEnergy) {
     names.add(proposalDefaultVatItemName(form));
   }
-  if (hasOperator && hasEnergy) {
-    names.remove(kProposalVatEnergyName);
-  }
-  return names;
+  return proposalExclusiveVatTaxNames(names);
 }
 
 Map<String, dynamic> proposalEnsureAutoTaxItems(Map<String, dynamic> form) {

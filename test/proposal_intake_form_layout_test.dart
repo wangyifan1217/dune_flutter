@@ -3836,6 +3836,122 @@ void main() {
     expect(find.text('新增成本项'), findsNothing);
   });
 
+  testWidgets('project cost chips stay multi-select after the first tap', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 3200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_harness(1440));
+    await tester.pump();
+
+    Finder chip(String field, String label) => find.descendant(
+      of: find.descendant(
+        of: _fieldOf(field),
+        matching: find.byType(ProposalPills),
+      ),
+      matching: find.text(label),
+    );
+
+    Future<void> tapChip(String field, String label) async {
+      final target = chip(field, label);
+      await tester.scrollUntilVisible(
+        target,
+        420,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pump();
+      await tester.tap(target);
+      await tester.pump();
+    }
+
+    await tapChip('项目成本', '补贴款分润');
+    await tapChip('项目成本', '机构返佣');
+    await tapChip('经营成本', '差旅成本');
+    await tapChip('税务成本', '印花税');
+
+    expect(
+      tester
+          .widget<ProposalPills>(
+            find.descendant(
+              of: _fieldOf('项目成本'),
+              matching: find.byType(ProposalPills),
+            ),
+          )
+          .selected,
+      {'补贴款分润', '机构返佣'},
+    );
+    expect(
+      tester
+          .widget<ProposalPills>(
+            find.descendant(
+              of: _fieldOf('经营成本'),
+              matching: find.byType(ProposalPills),
+            ),
+          )
+          .selected,
+      {'差旅成本'},
+    );
+    expect(
+      tester
+          .widget<ProposalPills>(
+            find.descendant(
+              of: _fieldOf('税务成本'),
+              matching: find.byType(ProposalPills),
+            ),
+          )
+          .selected,
+      {'印花税'},
+    );
+  });
+
+  testWidgets('tax vat chips switch instead of stacking', (tester) async {
+    tester.view.physicalSize = const Size(1440, 3200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_harness(1440));
+    await tester.pump();
+
+    Finder chip(String label) => find.descendant(
+      of: find.descendant(
+        of: _fieldOf('税务成本'),
+        matching: find.byType(ProposalPills),
+      ),
+      matching: find.text(label),
+    );
+
+    Future<void> tapChip(String label) async {
+      final target = chip(label);
+      await tester.scrollUntilVisible(
+        target,
+        420,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pump();
+      await tester.tap(target);
+      await tester.pump();
+    }
+
+    await tapChip('增值税及附加（运营商+公共出行）');
+    await tapChip('增值税及附加（能源）');
+    await tapChip('印花税');
+
+    expect(
+      tester
+          .widget<ProposalPills>(
+            find.descendant(
+              of: _fieldOf('税务成本'),
+              matching: find.byType(ProposalPills),
+            ),
+          )
+          .selected,
+      {'增值税及附加（能源）', '印花税'},
+    );
+    expect(find.text('增值税及附加两种口径只选一种，后点的生效；印花税、所得税可另选。'), findsOneWidget);
+  });
+
   testWidgets('business cost stays locked for every owner 2', (tester) async {
     tester.view.physicalSize = const Size(1440, 2200);
     tester.view.devicePixelRatio = 1;

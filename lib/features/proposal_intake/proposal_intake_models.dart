@@ -3649,6 +3649,14 @@ Map<String, dynamic> proposalIntakeProductFinanceScope(
       next.remove(key);
     }
   }
+  // 主产品顶层字段是提交后的最新值。`productFinance.main` 只在估算回写后
+  // 才同步，若这里再盖一层旧的成本多选，第二次勾选会被吃掉。
+  if (resolvedOwner == kProposalProductFinanceMain) {
+    for (final key in _kProposalProductFinanceFields) {
+      if (_kProductFinanceScopeDerivedKeys.contains(key)) continue;
+      if (form.containsKey(key)) next[key] = form[key];
+    }
+  }
   if (resolvedOwner == kProposalProductFinanceChildren) {
     for (final key in _kProposalProductFinanceFields) {
       if (!finance.containsKey(key)) next.remove(key);

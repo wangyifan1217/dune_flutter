@@ -42,6 +42,7 @@ import '../kb/kb_document_coordinator.dart';
 import '../kb/native_kb_service.dart';
 import '../meeting/meeting_minutes_chat_share.dart';
 import '../meeting/native_meeting_detail_page.dart';
+import '../kpi/kpi_score_summary_card.dart';
 import '../robots/robot_markdown.dart';
 import '../shell/dunes_toast.dart';
 import '../weekly_summary/native_weekly_summary_page.dart';
@@ -7907,6 +7908,8 @@ class _NativeChatViewState extends State<NativeChatView>
       );
     }
     if (_isRobotMarkdownPayload(m.payload)) {
+      // 工作台转发的月度绩效汇总：渲染成汇总卡，不再把六列表格硬塞进气泡。
+      final kpiSummary = KpiScoreSummaryData.fromMessage(m.payload, m.bodyText);
       final wide = isWideChatLayout(context);
       final screenW = MediaQuery.sizeOf(context).width;
       return LayoutBuilder(
@@ -7927,6 +7930,17 @@ class _NativeChatViewState extends State<NativeChatView>
             maxW = available.isFinite && available > 0
                 ? (available < preferredMax ? available : preferredMax)
                 : preferredMax;
+          }
+          if (kpiSummary != null) {
+            return Align(
+              alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+              child: SizedBox(
+                width: maxW.clamp(0.0, 400.0),
+                child: RepaintBoundary(
+                  child: ChatKpiScoreSummaryCard(data: kpiSummary),
+                ),
+              ),
+            );
           }
           return Align(
             alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
@@ -8095,6 +8109,12 @@ class _NativeChatViewState extends State<NativeChatView>
       );
     }
     if (_isRobotMarkdownPayload(e.payload)) {
+      final kpiSummary = KpiScoreSummaryData.fromMessage(e.payload, e.text);
+      if (kpiSummary != null) {
+        return RepaintBoundary(
+          child: ChatKpiScoreSummaryCard(data: kpiSummary),
+        );
+      }
       return RepaintBoundary(
         child: RobotMarkdown(markdown: e.text, selectable: true),
       );

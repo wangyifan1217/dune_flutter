@@ -924,7 +924,7 @@ void main() {
         ['totalCost', '项目成本 + 业务成本'],
         ['projectCost', '毛利润对应成本'],
         ['cost', '账单三级 BUSINESS_COST'],
-        ['prepaid', '后端直给 prepaid · 口径待核'],
+        ['prepaid', '系统直出数 · 口径核对中'],
         ['profit', '收入 − 成本合计'],
         ['netProfit', '毛利润 − 业务成本'],
         ['revenue', '核销额 × 利差率'],
@@ -1900,8 +1900,8 @@ void main() {
     expect(lighthouseAppBarTitleFontSize, 18);
     expect(lighthouseAppBarTitleColorValue, 0xFF7C5CE6);
     expect(lighthouseAppBarEnglishFontSize, 8.5);
-    expect(lighthouseAppBarToolbarHeight, 34);
-    expect(lighthouseAppBarToolbarRadius, 11);
+    expect(lighthouseAppBarToolbarHeight, 30);
+    expect(lighthouseAppBarToolbarRadius, 15);
     expect(lighthouseAppBarPutsDateOnTitleRow, isFalse);
     expect(
       lighthouseSyncedAtStamp(DateTime(2026, 8, 28, 9, 49)),
@@ -2686,6 +2686,65 @@ void main() {
     test('字号维持原状 —— 层级由分区承担，不放大数字', () {
       expect(lighthouseLedgerValueFontSize, 11.5);
       expect(lighthouseLedgerMetricLabelFontSize, 10);
+    });
+
+    test('v23 · 摘要格合成两块面板：数值独占一行放大，结果面板底色更淡', () {
+      // 与主 Hero 格子同一档：上下两块读起来是一套数。
+      expect(
+        lighthouseLedgerSummaryValueFontSize,
+        lighthouseHeroMetricValueFontSize,
+      );
+      expect(
+        lighthouseLedgerSummaryValueFontSize,
+        greaterThan(lighthouseLedgerValueFontSize),
+      );
+      expect(lighthouseLedgerSummaryUnitFontSize, 8.5);
+      expect(
+        lighthouseLedgerSummaryDeltaFontSize,
+        lighthouseHeroCellDeltaFontSize,
+      );
+      expect(lighthouseLedgerSummaryNeutralPanelValue, 0xFFF7F6FA);
+      expect(
+        lighthouseLedgerSummaryResultPanelAlpha,
+        lessThan(lighthouseLedgerResultBlockTintAlpha),
+      );
+      expect(lighthouseLedgerSummaryPanelRadius, 12);
+      expect(
+        lighthouseLedgerSummaryActiveCaretSize,
+        lessThanOrEqualTo(lighthouseLedgerMetricLabelFontSize),
+      );
+      expect(lighthouseLedgerSummaryRowDividerHeight, 0.6);
+      expect(lighthouseLedgerSummaryActiveInsetH, 2);
+    });
+
+    test('v23 · 主 Hero 与账本同一套皮、同一条左沿，面板带浅边', () {
+      expect(lighthouseHeroMatchesLedgerCard, isTrue);
+      expect(lighthouseHeroShellMarginH, 22);
+      expect(lighthouseHeroPanelEdgeWidth, greaterThan(0));
+      expect(
+        lighthouseHeroPanelResultEdgeAlpha,
+        greaterThan(lighthouseLedgerSummaryResultPanelAlpha),
+      );
+    });
+
+    test('v23.2 · 蓝面板上的分区标题用蓝色系，不再玫红 / 绿压蓝底', () {
+      expect(lighthouseHeroResultSectionChipValue, 0xFFD9E6F4);
+      expect(lighthouseHeroResultSectionTitleValue, 0xFF2C5A8C);
+    });
+
+    test('v23.3 · 分区标题走轻版：无彩色胶囊，图标中性灰紫', () {
+      expect(lighthouseHeroSectionUsesQuietTitle, isTrue);
+      expect(lighthouseHeroQuietSectionIconValue, 0xFF8A84A0);
+    });
+
+    test('v23 · 点日视图末点即本期，不进点选态；其余周期仍可点当天', () {
+      expect(lighthouseHeroLastPointIsPeriod('day'), isTrue);
+      expect(
+        lighthouseHeroLastPointIsPeriod('day', isCustomRange: true),
+        isFalse,
+      );
+      expect(lighthouseHeroLastPointIsPeriod('week'), isFalse);
+      expect(lighthouseHeroLastPointIsPeriod('month'), isFalse);
     });
   });
 

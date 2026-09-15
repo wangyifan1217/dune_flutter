@@ -213,6 +213,22 @@ class _FakeKpiService extends WorkbenchKpiService {
   Future<WorkProfileKpiScore> ackRubricScore({required String month}) async {
     return fetchScore(month: month);
   }
+
+  int publishCount = 0;
+  List<int>? lastPublishIds;
+
+  @override
+  Future<WorkbenchKpiRubricPublishResult> publishRubricScore({
+    required String month,
+    required List<int> userIds,
+  }) async {
+    publishCount++;
+    lastPublishIds = userIds;
+    return WorkbenchKpiRubricPublishResult(
+      month: month,
+      notified: userIds.length,
+    );
+  }
 }
 
 void main() {
@@ -290,7 +306,7 @@ void main() {
     await tester.tap(find.byKey(const Key('kpi-confirm-ok')));
     await tester.pump();
     expect(service.exportCount, 1);
-    expect(savedName, '业务绩效-2026-08.xlsx');
+    expect(savedName, '月度绩效考评-2026-08.xlsx');
     await tester.pump(const Duration(seconds: 3));
   });
 
@@ -479,6 +495,7 @@ void main() {
     expect(find.byKey(const Key('kpi-lens-dept')), findsNothing);
     expect(find.byKey(const Key('kpi-sector-telecom')), findsOneWidget);
     expect(find.byKey(const Key('kpi-sector-energy')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-sector-office')), findsOneWidget);
     expect(find.text('导出 Excel'), findsOneWidget);
     expect(find.text('导入量表'), findsOneWidget);
 
@@ -499,6 +516,8 @@ void main() {
       tester.widget<Text>(find.byKey(const Key('kpi-scope-hint'))).data,
       contains('能源 · 共'),
     );
+    expect(find.byKey(const Key('kpi-group-filter')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-section-平安')), findsOneWidget);
     expect(find.byKey(const Key('kpi-section-energy')), findsNothing);
   });
 
@@ -540,6 +559,9 @@ void main() {
     expect(find.byKey(const Key('kpi-section-AI研发')), findsOneWidget);
     expect(find.byKey(const Key('kpi-section-出行')), findsOneWidget);
     expect(find.text('待确认'), findsWidgets);
+    expect(find.byKey(const Key('kpi-group-filter')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-group-AI研发')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-group-出行')), findsOneWidget);
     expect(find.byKey(const Key('kpi-dept-filter')), findsNothing);
 
     await tester.tap(find.byKey(const Key('kpi-person-2')));
@@ -558,6 +580,7 @@ void main() {
     await tester.tap(find.byKey(const Key('kpi-detail-save')));
     await tester.pumpAndSettle();
     expect(find.text('确认录入量表分？'), findsOneWidget);
+    expect(find.textContaining('只写入工作台'), findsOneWidget);
     await tester.tap(find.byKey(const Key('kpi-confirm-ok')));
     await tester.pumpAndSettle();
     expect(service.saveRubricCount, 1);
@@ -587,6 +610,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('确认导入量表？'), findsOneWidget);
     expect(find.textContaining('整体绩效评价表写成团队系数'), findsOneWidget);
+    expect(find.textContaining('不会自动通知员工'), findsOneWidget);
     await tester.tap(find.byKey(const Key('kpi-confirm-ok')));
     await tester.pumpAndSettle();
     expect(service.importCount, 1);
@@ -627,6 +651,129 @@ void main() {
     expect(service.ackCount, 1);
     expect(find.byKey(const Key('kpi-acked')), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('publish sends scored rubric people to assistant', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _MixedKpiService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NativeWorkbenchKpiPage(
+            session: _session,
+            service: service,
+            now: DateTime(2026, 9, 3),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('发布结果'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('kpi-publish')));
+    await tester.pumpAndSettle();
+    expect(find.text('发布到绩效助手？'), findsOneWidget);
+    expect(find.textContaining('不会通知他们'), findsNothing);
+    await tester.tap(find.byKey(const Key('kpi-confirm-ok')));
+    await tester.pumpAndSettle();
+    expect(service.publishCount, 1);
+    expect(service.lastPublishIds, [2, 3]);
+    expect(find.textContaining('新发布 2 人'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('publish warns when some rubric people are still pending', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _PendingPublishKpiService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NativeWorkbenchKpiPage(
+            session: _session,
+            service: service,
+            now: DateTime(2026, 9, 3),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('未发布'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('kpi-publish')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('还有 1 人未评完'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('kpi-confirm-ok')));
+    await tester.pumpAndSettle();
+    expect(service.lastPublishIds, [2]);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('filters project groups and pins leaders in sector lists', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _ProjectGroupKpiService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NativeWorkbenchKpiPage(
+            session: _session,
+            service: service,
+            now: DateTime(2026, 9, 3),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('kpi-group-filter')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('kpi-sector-telecom')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('kpi-group-filter')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-group-出行会员')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-group-加油会员')), findsOneWidget);
+    var shi = tester.getTopLeft(find.text('石淼'));
+    var wan = tester.getTopLeft(find.text('万青'));
+    expect(shi.dy, lessThan(wan.dy));
+
+    await tester.tap(find.byKey(const Key('kpi-group-加油会员')));
+    await tester.pumpAndSettle();
+    expect(find.text('石淼'), findsNothing);
+    expect(find.text('徐峥'), findsOneWidget);
+    expect(find.text('万青'), findsNothing);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('kpi-scope-hint'))).data,
+      contains('通信 · 加油会员'),
+    );
+
+    await tester.tap(find.byKey(const Key('kpi-sector-energy')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('kpi-group-中石油')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-group-平安')), findsOneWidget);
+    final wang = tester.getTopLeft(find.text('王一凡'));
+    final xuan = tester.getTopLeft(find.text('王轩'));
+    expect(wang.dy, lessThan(xuan.dy));
+
+    await tester.tap(find.byKey(const Key('kpi-sector-rd')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('kpi-group-AI研发')), findsOneWidget);
+    final zhu = tester.getTopLeft(find.text('朱子姝'));
+    final yi = tester.getTopLeft(find.text('王奕凡'));
+    expect(zhu.dy, lessThan(yi.dy));
   });
 }
 
@@ -676,16 +823,21 @@ class _RankedKpiService extends _FakeKpiService {
 }
 
 WorkProfileKpiPerson _rubricWang({
+  int userId = 2,
+  String userName = '王奕凡',
+  String departmentName = 'AI研发',
+  String position = 'PHP工程师',
   bool pending = false,
   bool canWrite = true,
   bool canAck = false,
   String ackedAt = '',
+  bool needsPublish = false,
 }) {
   return WorkProfileKpiPerson(
-    userId: 2,
-    userName: '王奕凡',
-    departmentName: 'AI研发',
-    position: 'PHP工程师',
+    userId: userId,
+    userName: userName,
+    departmentName: departmentName,
+    position: position,
     mainScore: pending ? 0 : 95,
     bonus: 0,
     telecomWeight: 0,
@@ -701,6 +853,7 @@ WorkProfileKpiPerson _rubricWang({
     scoredByName: pending ? '' : '朱子姝',
     canAck: canAck,
     ackedAt: ackedAt,
+    needsPublish: needsPublish,
     categories: [
       WorkProfileKpiCategory(
         category: 'rd',
@@ -772,6 +925,7 @@ WorkProfileKpiPerson _rubricLei() {
     coefficient: 1,
     scoreSource: 'rubric',
     scoreStatus: 'scored',
+    canWrite: true,
     categories: [
       WorkProfileKpiCategory(
         category: 'rd',
@@ -881,5 +1035,125 @@ class _SelfAckKpiService extends _FakeKpiService {
     ackCount++;
     acked = true;
     return _personScore(month);
+  }
+}
+
+class _PendingPublishKpiService extends _FakeKpiService {
+  @override
+  WorkProfileKpiScore _personScore(String month) {
+    return WorkProfileKpiScore(
+      month: month,
+      prevMonth: '2026-07',
+      people: [
+        _rubricWang(needsPublish: true),
+        _rubricWang(userId: 4, userName: '待评', pending: true),
+      ],
+    );
+  }
+}
+
+WorkProfileKpiPerson _marketPerson({
+  required int id,
+  required String name,
+  required String sector,
+  required String product,
+  String channel = '',
+  double score = 80,
+}) {
+  return WorkProfileKpiPerson(
+    userId: id,
+    userName: name,
+    departmentName: sector == 'telecom' ? '通信板块' : '能源板块',
+    mainScore: score,
+    bonus: 0,
+    telecomWeight: sector == 'telecom' ? 1 : 0,
+    energyWeight: sector == 'energy' ? 1 : 0,
+    telecomScore: sector == 'telecom' ? score : 0,
+    energyScore: sector == 'energy' ? score : 0,
+    categories: [
+      WorkProfileKpiCategory(
+        category: sector,
+        categoryLabel: sector == 'telecom' ? '通信' : '能源',
+        categoryWeight: 1,
+        score: score,
+        tasks: [
+          WorkProfileKpiTask(
+            taskId: id,
+            taskName: product,
+            province: '全国',
+            productName: product,
+            productGroup: sector == 'telecom' ? '运营商' : '能源',
+            channelName: channel,
+            bucketLabel: sector == 'telecom' ? '通信' : '能源',
+            weightPct: 100,
+            taskTotal: score,
+            curRevenue: 0,
+            prevRevenue: 0,
+            curProfit: 0,
+            prevProfit: 0,
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
+class _ProjectGroupKpiService extends _FakeKpiService {
+  @override
+  Future<WorkProfileKpiScore> fetchScore({
+    required String month,
+    int userId = 0,
+  }) async {
+    return WorkProfileKpiScore(
+      month: month,
+      prevMonth: '2026-07',
+      people: [
+        _marketPerson(
+          id: 11,
+          name: '万青',
+          sector: 'telecom',
+          product: '小套-出行会员',
+          score: 96,
+        ),
+        _marketPerson(
+          id: 12,
+          name: '石淼',
+          sector: 'telecom',
+          product: '小套-出行会员',
+          score: 70,
+        ),
+        _marketPerson(
+          id: 13,
+          name: '徐峥',
+          sector: 'telecom',
+          product: '小套-加油会员',
+          score: 60,
+        ),
+        _marketPerson(
+          id: 21,
+          name: '王轩',
+          sector: 'energy',
+          product: '中石油现金券',
+          score: 99,
+        ),
+        _marketPerson(
+          id: 22,
+          name: '王一凡',
+          sector: 'energy',
+          product: '中石油现金券',
+          score: 50,
+        ),
+        _marketPerson(
+          id: 23,
+          name: '吕宙',
+          sector: 'energy',
+          product: '中石油现金券',
+          channel: '平安',
+          score: 40,
+        ),
+        _rubricWang(),
+        _rubricWang(userId: 31, userName: '朱子姝', position: 'AI应用架构师'),
+      ],
+    );
   }
 }

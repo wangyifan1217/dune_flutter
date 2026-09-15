@@ -271,6 +271,10 @@ class WorkProfileKpiPerson {
     this.scoredByName = '',
     this.ackedAt = '',
     this.canAck = false,
+    this.publishedAt = '',
+    this.needsPublish = false,
+    this.supervisorId = 0,
+    this.supervisorName = '',
     this.categories = const [],
   });
 
@@ -295,11 +299,16 @@ class WorkProfileKpiPerson {
   final String scoredByName;
   final String ackedAt;
   final bool canAck;
+  final String publishedAt;
+  final bool needsPublish;
+  final int supervisorId;
+  final String supervisorName;
   final List<WorkProfileKpiCategory> categories;
 
   bool get isRubric => scoreSource == 'rubric';
   bool get isPending => scoreStatus == 'pending';
   bool get isAcked => ackedAt.trim().isNotEmpty;
+  bool get isUnpublished => isRubric && !isPending && needsPublish;
 
   KpiGrade get resolvedGrade {
     if (gradeLabel.trim().isNotEmpty) {
@@ -337,6 +346,10 @@ class WorkProfileKpiPerson {
       scoredByName: '${json['scoredByName'] ?? ''}',
       ackedAt: '${json['ackedAt'] ?? ''}',
       canAck: json['canAck'] == true,
+      publishedAt: '${json['publishedAt'] ?? ''}',
+      needsPublish: json['needsPublish'] == true,
+      supervisorId: (json['supervisorId'] as num?)?.toInt() ?? 0,
+      supervisorName: '${json['supervisorName'] ?? ''}',
       categories: (json['categories'] as List? ?? const [])
           .whereType<Map>()
           .map(
@@ -521,16 +534,33 @@ String kpiScoreMonthTitle(String month) {
 List<WorkProfileKpiPerson> kpiPeopleByScoreDesc(
   List<WorkProfileKpiPerson> people,
 ) {
-  return [...people]..sort((a, b) {
-    if (a.isPending != b.isPending) return a.isPending ? 1 : -1;
-    final byScore = b.mainScore.compareTo(a.mainScore);
-    if (byScore != 0) return byScore;
-    return a.userName.compareTo(b.userName);
-  });
+  return [...people]..sort(kpiPersonScoreCompare);
+}
+
+int kpiPersonScoreCompare(WorkProfileKpiPerson a, WorkProfileKpiPerson b) {
+  if (a.isPending != b.isPending) return a.isPending ? 1 : -1;
+  final byScore = b.mainScore.compareTo(a.mainScore);
+  if (byScore != 0) return byScore;
+  return a.userName.compareTo(b.userName);
 }
 
 /// 研发量表名单按沙丘组织分组的展示顺序。
 const kKpiRdGroupOrder = ['AI研发', '产业研发', '出行', '能源', '大宗电商'];
+
+/// 通信领导层置顶顺序。
+const kKpiTelecomLeaders = ['石淼', '徐峥', '李同池'];
+
+/// 能源领导层置顶顺序。
+const kKpiEnergyLeaders = ['王一凡', '吕宙'];
+
+const kKpiTelecomGroupOrder = ['出行会员', '加油会员', '出行金', '明星来电', '点播加油权益'];
+
+const kKpiEnergyGroupOrder = ['中石油', '中石化', '民营加油', '平安', '石油科技'];
+
+const kKpiOfficeGroupOrder = ['行政', '财务'];
+
+final _kpiRdLeaderTitle = RegExp(r'总监|架构师');
+final _kpiOfficeLeaderTitle = RegExp(r'总监|经理|助理|主管');
 
 String kpiCanonicalRdGroup(String departmentName) {
   final name = departmentName.trim();
@@ -539,21 +569,207 @@ String kpiCanonicalRdGroup(String departmentName) {
   return name;
 }
 
+String kpiCanonicalMarketGroup(WorkProfileKpiTask task) {
+  final dims = parseKpiLighthouseDims(task);
+  final channel = (dims['channel'] ?? '').trim();
+  if (channel.contains('平安')) return '平安';
+  final product = [
+    dims['product'] ?? '',
+    dims['supply'] ?? '',
+    task.productName,
+    task.taskName,
+  ].map((e) => e.trim()).firstWhere((e) => e.isNotEmpty, orElse: () => '');
+  if (product.contains('中石化')) return '中石化';
+  if (product.contains('民营')) return '民营加油';
+  if (product.contains('石油科技')) return '石油科技';
+  if (product.contains('中石油')) return '中石油';
+  if (product.contains('出行会员')) return '出行会员';
+  if (product.contains('加油会员')) return '加油会员';
+  if (product.contains('明星来电')) return '明星来电';
+  if (product.contains('出行金')) return '出行金';
+  if (product.contains('点播')) return '点播加油权益';
+  final title = kpiLighthouseSliceTitle(task).trim();
+  if (title.isEmpty || kpiLighthouseBucketDim(title)) return '未分组';
+  return title;
+}
+
+String kpiCanonicalOfficeGroup(String departmentName) {
+  final name = departmentName.trim();
+  if (name.isEmpty) return '未分组';
+  if (name.contains('财务')) return '财务';
+  if (name.contains('行政') || name.contains('人事')) return '行政';
+  return name;
+}
+
+String kpiPrimarySectorOf(WorkProfileKpiPerson person) {
+  const sectors = {'telecom', 'energy', 'rd', 'office'};
+  WorkProfileKpiCategory? best;
+  for (final cat in person.categories) {
+    if (!sectors.contains(cat.category)) continue;
+    if (cat.tasks.isEmpty && cat.category != 'rd' && cat.category != 'office') {
+      continue;
+    }
+    if (best == null || cat.score > best.score) best = cat;
+  }
+  if (best != null) return best.category;
+  if (person.categories.any((c) => c.category == 'rd')) return 'rd';
+  if (person.categories.any((c) => c.category == 'office')) return 'office';
+  return 'none';
+}
+
+WorkProfileKpiTask? kpiPrimarySectorTask(
+  WorkProfileKpiPerson person,
+  String sector,
+) {
+  WorkProfileKpiTask? best;
+  var bestScore = double.negativeInfinity;
+  for (final cat in person.categories) {
+    if (cat.category != sector) continue;
+    for (final task in cat.tasks) {
+      if (best == null || task.taskTotal > bestScore) {
+        best = task;
+        bestScore = task.taskTotal;
+      }
+    }
+  }
+  return best;
+}
+
+String kpiPersonProjectGroup(WorkProfileKpiPerson person, String sector) {
+  if (sector == 'rd') return kpiCanonicalRdGroup(person.departmentName);
+  if (sector == 'office') return kpiCanonicalOfficeGroup(person.departmentName);
+  final task = kpiPrimarySectorTask(person, sector);
+  if (task == null) return '未分组';
+  return kpiCanonicalMarketGroup(task);
+}
+
+int kpiLeaderPriority(
+  WorkProfileKpiPerson person, {
+  required String sector,
+  required List<WorkProfileKpiPerson> peers,
+}) {
+  final view = sector == 'all' ? kpiPrimarySectorOf(person) : sector;
+  if (view == 'telecom') {
+    final i = kKpiTelecomLeaders.indexOf(person.userName);
+    if (i >= 0) return i;
+  } else if (view == 'energy') {
+    final i = kKpiEnergyLeaders.indexOf(person.userName);
+    if (i >= 0) return i;
+  } else if (view == 'rd') {
+    final title = person.position.trim();
+    if (title.contains('总监')) return 100;
+    if (_kpiRdLeaderTitle.hasMatch(title)) return 101;
+    if (person.userId > 0 &&
+        peers.any(
+          (p) => p.userId != person.userId && p.supervisorId == person.userId,
+        )) {
+      return 102;
+    }
+  } else if (view == 'office') {
+    final title = person.position.trim();
+    if (_kpiOfficeLeaderTitle.hasMatch(title)) return 100;
+    if (person.userId > 0 &&
+        peers.any(
+          (p) => p.userId != person.userId && p.supervisorId == person.userId,
+        )) {
+      return 102;
+    }
+  }
+  return 1000;
+}
+
+bool kpiIsLeader(
+  WorkProfileKpiPerson person, {
+  required String sector,
+  required List<WorkProfileKpiPerson> peers,
+}) {
+  return kpiLeaderPriority(person, sector: sector, peers: peers) < 1000;
+}
+
+List<WorkProfileKpiPerson> kpiPeopleLeadersFirst(
+  List<WorkProfileKpiPerson> people, {
+  required String sector,
+}) {
+  final rest = kpiPeopleByScoreDesc(people);
+  final leaders = <WorkProfileKpiPerson>[];
+  final others = <WorkProfileKpiPerson>[];
+  for (final person in rest) {
+    if (kpiIsLeader(person, sector: sector, peers: people)) {
+      leaders.add(person);
+    } else {
+      others.add(person);
+    }
+  }
+  leaders.sort((a, b) {
+    final byRank = kpiLeaderPriority(
+      a,
+      sector: sector,
+      peers: people,
+    ).compareTo(kpiLeaderPriority(b, sector: sector, peers: people));
+    if (byRank != 0) return byRank;
+    return kpiPersonScoreCompare(a, b);
+  });
+  return [...leaders, ...others];
+}
+
 List<MapEntry<String, List<WorkProfileKpiPerson>>> kpiRdPeopleByGroup(
   List<WorkProfileKpiPerson> people,
 ) {
+  return _kpiBucketPeople(
+    people,
+    groupOf: (person) => kpiCanonicalRdGroup(person.departmentName),
+    order: kKpiRdGroupOrder,
+  );
+}
+
+List<MapEntry<String, List<WorkProfileKpiPerson>>> kpiPeopleByProjectGroup(
+  List<WorkProfileKpiPerson> people, {
+  required String sector,
+}) {
+  final grouped = switch (sector) {
+    'rd' => kpiRdPeopleByGroup(people),
+    'office' => _kpiBucketPeople(
+      people,
+      groupOf: (person) => kpiCanonicalOfficeGroup(person.departmentName),
+      order: kKpiOfficeGroupOrder,
+    ),
+    _ => _kpiBucketPeople(
+      people,
+      groupOf: (person) => kpiPersonProjectGroup(person, sector),
+      order: sector == 'telecom' ? kKpiTelecomGroupOrder : kKpiEnergyGroupOrder,
+    ),
+  };
+  return [
+    for (final entry in grouped)
+      MapEntry(entry.key, kpiPeopleLeadersFirst(entry.value, sector: sector)),
+  ];
+}
+
+List<String> kpiProjectGroupFilterOptions(
+  List<WorkProfileKpiPerson> people, {
+  required String sector,
+}) {
+  return [
+    for (final entry in kpiPeopleByProjectGroup(people, sector: sector))
+      entry.key,
+  ];
+}
+
+List<MapEntry<String, List<WorkProfileKpiPerson>>> _kpiBucketPeople(
+  List<WorkProfileKpiPerson> people, {
+  required String Function(WorkProfileKpiPerson person) groupOf,
+  required List<String> order,
+}) {
   final buckets = <String, List<WorkProfileKpiPerson>>{};
   for (final person in people) {
-    buckets
-        .putIfAbsent(kpiCanonicalRdGroup(person.departmentName), () => [])
-        .add(person);
+    buckets.putIfAbsent(groupOf(person), () => []).add(person);
   }
   final keys = buckets.keys.toList()
     ..sort((a, b) {
-      final ia = kKpiRdGroupOrder.indexOf(a);
-      final ib = kKpiRdGroupOrder.indexOf(b);
-      final ra = ia < 0 ? kKpiRdGroupOrder.length : ia;
-      final rb = ib < 0 ? kKpiRdGroupOrder.length : ib;
+      final ia = order.indexOf(a);
+      final ib = order.indexOf(b);
+      final ra = ia < 0 ? order.length : ia;
+      final rb = ib < 0 ? order.length : ib;
       if (ra != rb) return ra.compareTo(rb);
       if (a == '未分组') return 1;
       if (b == '未分组') return -1;
@@ -576,7 +792,7 @@ String kpiScoreSummaryMarkdown(
 }) {
   final list = kpiPeopleByScoreDesc(people ?? score.people);
   final monthTitle = kpiScoreMonthTitle(score.month);
-  final title = monthTitle.isEmpty ? '业务绩效汇总' : '$monthTitle 业务绩效汇总';
+  final title = monthTitle.isEmpty ? '月度绩效考评汇总' : '$monthTitle 月度绩效考评汇总';
   final buf = StringBuffer()
     ..writeln('## $title')
     ..writeln()

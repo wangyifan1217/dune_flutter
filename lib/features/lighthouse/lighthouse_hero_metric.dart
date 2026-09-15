@@ -449,6 +449,17 @@ int lighthouseTrendHeroIndex(List<bool> available) {
 /// 30 不是拍脑袋：日环比在这门生意里 ±30% 以内是常态波动，越过就值得问一句。
 const double lighthouseDeltaLoudThreshold = 30;
 
+/// 主 Hero 走势图的末点是不是「本期」本身。
+///
+/// 点日视图里走势按天排、最后一点就是选中的那一天 = 本期；点它得到的数
+/// 和本期一模一样，却要多出一颗「回本期」再点一下才能退出 —— 所以点日
+/// 视图下点末点直接视为本期。周/月/季/年的末点只是「今天这一天」，跟整期
+/// 合计不是一个数，仍然进点选态。自定义区间不按这个规则。
+bool lighthouseHeroLastPointIsPeriod(
+  String period, {
+  bool isCustomRange = false,
+}) => period == 'day' && !isCustomRange;
+
 bool lighthouseDeltaIsLoud(double pct) =>
     pct.abs() >= lighthouseDeltaLoudThreshold;
 
@@ -578,6 +589,43 @@ const bool lighthouseHeroShowsSectionAccentDash = false;
 /// 交给标题胶囊里那颗分区色图标 —— 和大数卡「2026.07」胶囊同一个写法。
 /// 关掉即回到淡色底版。
 const bool lighthouseHeroSectionUsesHeroSurface = true;
+
+/// v23 · 主 Hero「产品汇总」与下方账本（产品 tab）同一套皮。
+///
+/// 旧版 Hero 是雾紫画布 + 白紫纸小卡 + 轻紫发丝边，左右各留 12；账本是白卡 +
+/// 淡紫边、左右 22。统一成账本那套：
+///   · 外壳：白底、账本面板同色同粗的边、同圆角同投影、左右同 22
+///   · 大数卡 / 走势卡 / 规模 / 成本：中性灰面板
+///   · 利润 / 经营性净现金流：淡蓝「结果」面板（跟账本右列一个色）
+///   · 面板内格与格之间：内缩发丝线
+/// 关掉即回到雾紫 Hero。
+const bool lighthouseHeroMatchesLedgerCard = true;
+
+/// 与账本外框同一条左沿。
+const double lighthouseHeroShellMarginH = 22;
+const double lighthouseHeroShellPaddingH = 12;
+
+/// v23.1 · 面板浅边。灰面板（#F7F6FA）压在白壳上只差一点明度，
+/// 没有边时规模 / 成本 / 利润三块像一片糊在一起的灰 —— 补一圈比底色
+/// 深一档的发丝边把块框出来，但不回到旧版那种紫框白卡的重量。
+const int lighthouseHeroPanelNeutralEdgeValue = 0xFFE7E3EF;
+
+/// 蓝面板的边：同一支蓝，比底色（alpha 24）深一档。
+const int lighthouseHeroPanelResultEdgeAlpha = 58;
+const double lighthouseHeroPanelEdgeWidth = 0.8;
+
+/// v23.2 · 蓝面板上的分区标题胶囊（利润 / 经营性净现金流）。
+/// 图标片用结果蓝 [lighthouseLedgerResultBlockAccentValue]；胶囊比面板底色
+/// 深一档的实色淡蓝；标题字用同色相的深蓝，保证对比度。
+const int lighthouseHeroResultSectionChipValue = 0xFFD9E6F4;
+const int lighthouseHeroResultSectionTitleValue = 0xFF2C5A8C;
+
+/// v23.3 · 分区标题「轻」版（方案 A）：线条图标 + 深灰字，去掉彩色胶囊。
+/// 关掉即回到彩色胶囊（v23.2 的蓝色系仍生效）。
+const bool lighthouseHeroSectionUsesQuietTitle = true;
+
+/// 规模 / 成本标题图标的中性灰紫。利润 / 现金流用结果蓝。
+const int lighthouseHeroQuietSectionIconValue = 0xFF8A84A0;
 const bool lighthouseHeroMastheadLabelAboveNumber = true;
 const double lighthouseHeroMastheadLabelFontSize = 11;
 const double lighthouseHeroMastheadLabelIconSize = 18;
@@ -956,6 +1004,45 @@ const double lighthouseLedgerUnitFontSize = 9.0;
 const double lighthouseLedgerMetricLabelFontSize = 10;
 const double lighthouseLedgerDeltaFontSize = 9;
 
+// ══ v23 · 账本摘要格「两块面板」═══════════════════════════════════════════
+//
+//  旧版一张卡里套六个各自描边、各自铺底的小框：规模灰、成本米、结果蓝三种底，
+//  六条边，外面再一圈卡边 —— 框比数字响。数值 11.5 还跟环比挤在同一行右端，
+//  「↓1853%」一长就把数字往左推。
+//
+//  改成按列合并成两块面板：左「规模 · 成本」中性底，右「结果」淡蓝底；
+//  面板内行与行之间只用一根内缩发丝线。环比挪到标签行右端，数值独占一行、
+//  左对齐、放大一档 —— 仍是两行（标签 / 数值），不回到三行结构。
+
+/// 摘要格数值字号（只作用于卡片摘要格；展开网格仍用 [lighthouseLedgerValueFontSize]）。
+const double lighthouseLedgerSummaryValueFontSize = 13;
+const double lighthouseLedgerSummaryUnitFontSize = 8.5;
+const double lighthouseLedgerSummaryDeltaFontSize = 9;
+
+/// 点开走势时标签旁的 ▾。必须 ≤ 标签字号。
+///
+/// Material 的 `arrow_drop_down_rounded` 常用 14px，比 10px 标签大约高 2.6px；
+/// 再叠上选中态上下 margin / 描边 / 末行 0.6px 发丝线，43px 摘要格会报
+/// `BOTTOM OVERFLOWED BY 2.6 PIXELS`。
+const double lighthouseLedgerSummaryActiveCaretSize =
+    lighthouseLedgerMetricLabelFontSize;
+
+/// 摘要格末行发丝线高度。选中态高度预算要把这一刀算进去。
+const double lighthouseLedgerSummaryRowDividerHeight = 0.6;
+
+/// 选中态只做水平 inset：上下再缩会把 43px 格的余量吃光。
+const double lighthouseLedgerSummaryActiveInsetH = 2;
+
+/// 左面板（规模 · 成本）底色。
+const int lighthouseLedgerSummaryNeutralPanelValue = 0xFFF7F6FA;
+
+/// 右面板（结果）底色不透明度：面板面积比单格大一倍，38 铺开会发闷，压到 24。
+const int lighthouseLedgerSummaryResultPanelAlpha = 24;
+
+/// 面板圆角、行间发丝线内缩。
+const double lighthouseLedgerSummaryPanelRadius = 12;
+const double lighthouseLedgerSummaryDividerInset = 8;
+
 /// 账本行品牌标和 Hero 标题旁那颗标同一尺寸。
 const double lighthouseLedgerIdentityMarkSize = lighthouseHeroSummaryIconSize;
 
@@ -1245,7 +1332,7 @@ const bool lighthouseLedgerSeparatesAnalysisTab = false;
 const bool lighthouseLedgerShowsAnalysisTab = false;
 const bool lighthouseLedgerShowsPeopleTab = true;
 
-/// 人效跟工作台「业务绩效」同一张牌：有 kpiPerformanceAccess 才出入口。
+/// 人效跟工作台「月度绩效考评」同一张牌：有 kpiPerformanceAccess 才出入口。
 bool lighthousePeopleTabVisible({required bool kpiPerformanceAccess}) =>
     lighthouseLedgerShowsPeopleTab && kpiPerformanceAccess;
 const bool lighthouseLedgerShowsDiscountBoard = false;
@@ -1266,8 +1353,8 @@ const int lighthousePeriodAnimationMs = 180;
 const double lighthouseAppBarTitleFontSize = 18;
 const int lighthouseAppBarTitleColorValue = 0xFF7C5CE6;
 const double lighthouseAppBarEnglishFontSize = 8.5;
-const double lighthouseAppBarToolbarHeight = 34;
-const double lighthouseAppBarToolbarRadius = 11;
+const double lighthouseAppBarToolbarHeight = 30;
+const double lighthouseAppBarToolbarRadius = 15;
 
 /// 日期与同步状态跟「灯塔 LIGHTHOUSE」同一行，不再单独占一行。
 const bool lighthouseAppBarPutsDateOnTitleRow = false;
@@ -2563,7 +2650,8 @@ const lighthouseHeroFormulas = <LighthouseHeroFormula>[
     //
     // 把那条式子写在界面上，用户拿旁边两个格子一减就能发现对不上 ——
     // 界面自己打自己。口径核清楚之前如实标「待核」。
-    expression: '后端直给 prepaid · 口径待核',
+    // v23 · 界面上不露字段名 prepaid；仍如实标明口径未核。
+    expression: '系统直出数 · 口径核对中',
     sources: [
       LighthouseHeroFormulaSource('sales', LighthouseHeroFormulaRole.plus),
       LighthouseHeroFormulaSource(

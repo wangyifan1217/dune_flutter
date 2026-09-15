@@ -13,6 +13,7 @@ import '../profile/native_work_profile_perf_page.dart';
 import '../profile/work_profile_kpi.dart';
 import '../shell/dunes_toast.dart';
 import '../tasks/native_task_home_pane.dart';
+import 'kpi_score_summary_card.dart';
 import 'native_workbench_kpi_detail.dart';
 import 'workbench_kpi_service.dart';
 
@@ -58,6 +59,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
   bool _loading = true;
   bool _busy = false;
   String _sector = 'all';
+  String _group = '';
   String? _error;
   WorkProfileKpiScore? _score;
   late DateTime _month;
@@ -272,7 +274,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
   ) async {
     final ok = await _confirm(
       title: '确认录入量表分？',
-      content: summary,
+      content: '$summary\n只写入工作台，不会通知员工。发布结果后才会发到绩效助手。',
       confirmLabel: '确认录入',
     );
     if (!ok || !mounted) return;
@@ -369,7 +371,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     try {
       final month = formatKpiMonth(_month);
       final bytes = await _service.exportScore(month);
-      final name = '业务绩效-$month.xlsx';
+      final name = '月度绩效考评-$month.xlsx';
       if (widget.saveExport != null) {
         await widget.saveExport!(bytes, name);
       } else {
@@ -419,7 +421,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     if (picked == null || !mounted) return;
     final ok = await _confirm(
       title: '确认导入量表？',
-      content: '将读取个人量表，并把整体绩效评价表写成团队系数（不改个人分）。仍跳过汇总表和统计表。写入 $label。',
+      content: '将读取个人量表，并把整体绩效评价表写成团队系数（不改个人分）。仍跳过汇总表和统计表。写入 $label，不会自动通知员工。',
       confirmLabel: '确认导入',
     );
     if (!ok || !mounted) return;
@@ -485,6 +487,8 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
             'robotMarkdown': true,
             'kpiScoreSummary': true,
             'month': score.month,
+            // 结构化名单：聊天里据此渲染汇总卡；正文 Markdown 留作预览 / 复制 / 旧客户端兜底。
+            'kpiSummary': kpiScoreSummaryData(score, people: people).toJson(),
           },
         );
       }
@@ -500,10 +504,75 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     }
   }
 
-  static const _sectorOrder = ['telecom', 'energy', 'rd'];
-  static const _sectorLabels = {'telecom': '通信', 'energy': '能源', 'rd': '研发'};
+  Future<void> _publishRubric() async {
+    final people = [
+      for (final person in _filteredPeople)
+        if (person.isRubric && person.canWrite) person,
+    ];
+    final scored = [
+      for (final person in people)
+        if (!person.isPending) person,
+    ];
+    if (scored.isEmpty) {
+      showDunesToast(context, '当前没有可发布的量表结果');
+      return;
+    }
+    final pending = people.length - scored.length;
+    final unpublished = scored.where((p) => p.needsPublish).length;
+    final bits = <String>[
+      '将把当前筛选里已评完的量表结果发到当事人的绩效助手，共 ${scored.length} 人。',
+      if (unpublished > 0) '其中 $unpublished 人尚未通知或分数有更新。',
+      if (pending > 0) '还有 $pending 人未评完，这次不会通知他们。',
+      '分数没有变化的人不会重复通知。',
+    ];
+    final ok = await _confirm(
+      title: '发布到绩效助手？',
+      content: bits.join(),
+      confirmLabel: '确认发布',
+    );
+    if (!ok || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final result = await _service.publishRubricScore(
+        month: formatKpiMonth(_month),
+        userIds: [for (final person in scored) person.userId],
+      );
+      if (!mounted) return;
+      unawaited(_load());
+      final parts = <String>[
+        if (result.notified > 0) '新发布 ${result.notified} 人',
+        if (result.updated > 0) '更新 ${result.updated} 人',
+        if (result.unchanged > 0) '无变化 ${result.unchanged} 人',
+        if (result.pending > 0) '未评完 ${result.pending} 人未通知',
+      ];
+      showDunesToast(
+        context,
+        result.sent > 0
+            ? (parts.isEmpty ? '已发布到绩效助手' : parts.join('，'))
+            : (result.pending > 0 ? '还有人未评完，没有发出通知' : '没有需要通知的人'),
+      );
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          friendlyErrorText(e, fallback: '发布失败'),
+          kind: DunesToastKind.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
-  List<WorkProfileKpiPerson> get _filteredPeople {
+  static const _sectorOrder = ['telecom', 'energy', 'rd', 'office'];
+  static const _sectorLabels = {
+    'telecom': '通信',
+    'energy': '能源',
+    'rd': '研发',
+    'office': '职能',
+  };
+
+  List<WorkProfileKpiPerson> get _sectorPeople {
     final needle = _keywordCtrl.text.trim().toLowerCase();
     return [
       for (final person in kpiPeopleByScoreDesc(
@@ -515,32 +584,40 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     ];
   }
 
-  String _primarySectorOf(WorkProfileKpiPerson person) {
-    WorkProfileKpiCategory? best;
-    for (final cat in person.categories) {
-      if (cat.tasks.isEmpty) continue;
-      if (!_sectorLabels.containsKey(cat.category)) continue;
-      if (best == null || cat.score > best.score) best = cat;
-    }
-    return best?.category ?? 'none';
+  String get _effectiveGroup {
+    if (_sector == 'all' || _group.isEmpty) return '';
+    if (!_groupOptions.contains(_group)) return '';
+    return _group;
   }
+
+  List<String> get _groupOptions {
+    if (_sector == 'all') return const [];
+    return kpiProjectGroupFilterOptions(_sectorPeople, sector: _sector);
+  }
+
+  List<WorkProfileKpiPerson> get _filteredPeople {
+    final people = _sectorPeople;
+    final group = _effectiveGroup;
+    if (group.isEmpty) return people;
+    return [
+      for (final person in people)
+        if (kpiPersonProjectGroup(person, _sector) == group) person,
+    ];
+  }
+
+  String _primarySectorOf(WorkProfileKpiPerson person) =>
+      kpiPrimarySectorOf(person);
 
   List<_KpiGroup> get _groups {
     final people = _filteredPeople;
     if (people.isEmpty) return const [];
-    if (_sector == 'rd') {
+    if (_sector == 'rd' ||
+        _sector == 'telecom' ||
+        _sector == 'energy' ||
+        _sector == 'office') {
       return [
-        for (final entry in kpiRdPeopleByGroup(people))
+        for (final entry in kpiPeopleByProjectGroup(people, sector: _sector))
           _KpiGroup(id: entry.key, title: entry.key, people: entry.value),
-      ];
-    }
-    if (_sector != 'all') {
-      return [
-        _KpiGroup(
-          id: _sector,
-          title: _sectorLabels[_sector] ?? _sector,
-          people: people,
-        ),
       ];
     }
     final buckets = <String, List<WorkProfileKpiPerson>>{
@@ -548,14 +625,22 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
       'none': <WorkProfileKpiPerson>[],
     };
     for (final person in people) {
-      buckets[_primarySectorOf(person)]!.add(person);
+      buckets.putIfAbsent(_primarySectorOf(person), () => []).add(person);
     }
     return [
       for (final id in _sectorOrder)
         if (buckets[id]!.isNotEmpty)
-          _KpiGroup(id: id, title: _sectorLabels[id]!, people: buckets[id]!),
+          _KpiGroup(
+            id: id,
+            title: _sectorLabels[id]!,
+            people: kpiPeopleLeadersFirst(buckets[id]!, sector: id),
+          ),
       if (buckets['none']!.isNotEmpty)
-        _KpiGroup(id: 'none', title: '未分板块', people: buckets['none']!),
+        _KpiGroup(
+          id: 'none',
+          title: '未分板块',
+          people: kpiPeopleByScoreDesc(buckets['none']!),
+        ),
     ];
   }
 
@@ -570,15 +655,22 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
       person.departmentName.trim();
 
   String _statsLine(List<WorkProfileKpiPerson> people) {
+    final group = _effectiveGroup;
     final scope = _sector == 'all'
         ? '全部板块'
-        : (_sectorLabels[_sector] ?? _sector);
+        : [
+            _sectorLabels[_sector] ?? _sector,
+            if (group.isNotEmpty) group,
+          ].join(' · ');
     final scored = [
       for (final p in people)
         if (!p.isPending) p,
     ];
     final pending = people.length - scored.length;
-    final toAck = scored.where((p) => p.isRubric && !p.isAcked).length;
+    final unpublished = scored.where((p) => p.isUnpublished).length;
+    final toAck = scored
+        .where((p) => p.isRubric && !p.needsPublish && !p.isAcked)
+        .length;
     final avg = scored.isEmpty
         ? null
         : scored.fold<double>(0, (s, p) => s + p.mainScore) / scored.length;
@@ -586,6 +678,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
       '$scope · 共 ${people.length} 人',
       if (avg != null) '均分 ${avg.toStringAsFixed(1)}',
       if (pending > 0) '待录入 $pending',
+      if (unpublished > 0) '未发布 $unpublished',
       if (toAck > 0) '待确认 $toAck',
     ].join(' · ');
   }
@@ -596,7 +689,16 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
 
   void _setSector(String value) {
     if (_sector == value) return;
-    setState(() => _sector = value);
+    setState(() {
+      _sector = value;
+      _group = '';
+    });
+    _jumpRosterTop();
+  }
+
+  void _setGroup(String value) {
+    if (_effectiveGroup == value) return;
+    setState(() => _group = value);
     _jumpRosterTop();
   }
 
@@ -663,7 +765,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     return _KpiRosterPane(
       people: people,
       groups: _groups,
-      showSections: _sector == 'all' || _sector == 'rd',
+      showSections: true,
       emptyLabel: (_score?.people.isEmpty ?? true) ? '该月暂无绩效人员' : '当前筛选下暂无人员',
       deptNameOf: _deptNameOf,
       scrollController: _scrollController,
@@ -691,25 +793,28 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     );
   }
 
+  /// 操作按流程排：先处理数据（导入 / 重跑），再对外输出（导出 / 转发），
+  /// 最后「发布结果」—— 唯一会通知到员工的动作，做成主按钮。
   List<_KpiAction> _actions(List<WorkProfileKpiPerson> people) {
+    final idle = !_busy && !_loading;
     return [
+      _KpiAction(
+        key: const Key('kpi-import'),
+        icon: Icons.upload_file_outlined,
+        label: '导入量表',
+        onTap: idle ? () => unawaited(_importRubric()) : null,
+      ),
       _KpiAction(
         key: const Key('kpi-rerun'),
         icon: Icons.refresh_rounded,
         label: '重跑计算',
-        onTap: _busy || _loading ? null : () => unawaited(_rerun()),
+        onTap: idle ? () => unawaited(_rerun()) : null,
       ),
       _KpiAction(
         key: const Key('kpi-export'),
         icon: Icons.file_download_outlined,
         label: '导出 Excel',
-        onTap: _busy || _loading ? null : () => unawaited(_export()),
-      ),
-      _KpiAction(
-        key: const Key('kpi-import'),
-        icon: Icons.file_upload_outlined,
-        label: '导入量表',
-        onTap: _busy || _loading ? null : () => unawaited(_importRubric()),
+        onTap: idle ? () => unawaited(_export()) : null,
       ),
       _KpiAction(
         key: const Key('kpi-summary-forward'),
@@ -718,6 +823,13 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
         onTap: _busy || people.isEmpty
             ? null
             : () => unawaited(_forwardSummary()),
+      ),
+      _KpiAction(
+        key: const Key('kpi-publish'),
+        icon: Icons.campaign_outlined,
+        label: '发布结果',
+        primary: true,
+        onTap: idle ? () => unawaited(_publishRubric()) : null,
       ),
     ];
   }
@@ -790,9 +902,21 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
                   MapEntry('telecom', '通信'),
                   MapEntry('energy', '能源'),
                   MapEntry('rd', '研发'),
+                  MapEntry('office', '职能'),
                 ],
               ),
             ),
+            if (_groupOptions.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _KpiGroupFilter(
+                  value: _effectiveGroup,
+                  options: _groupOptions,
+                  onChanged: _busy ? null : _setGroup,
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
             Expanded(child: _buildListBody()),
           ],
@@ -819,12 +943,14 @@ class _KpiAction {
     required this.key,
     required this.icon,
     required this.label,
+    this.primary = false,
     this.onTap,
   });
 
   final Key key;
   final IconData icon;
   final String label;
+  final bool primary;
   final VoidCallback? onTap;
 }
 
@@ -987,7 +1113,11 @@ class _KpiMonthStepper extends StatelessWidget {
   }
 }
 
-/// 顶部控制卡：月份 + 统计 + 四个明确带文字的操作（重跑 / 导出 / 导入 / 转发）。
+/// 顶部控制卡：月份 + 统计 + 操作（导入 / 重跑 / 导出 / 转发 / 发布）。
+///
+/// 手机上五个操作排成一行「快捷入口」：圆形图标 + 下方短标签，不再是
+/// 3 + 2 两排大紫块（上下宽度不齐、整片紫色很重、禁用态灰块很突兀）。
+/// 只有「发布结果」用实心紫圆，其余是浅紫圆 —— 主次一眼分开。
 class _KpiControlPanel extends StatelessWidget {
   const _KpiControlPanel({
     required this.compact,
@@ -1010,7 +1140,7 @@ class _KpiControlPanel extends StatelessWidget {
       key: const Key('kpi-scope-hint'),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      textAlign: compact ? TextAlign.right : TextAlign.left,
+      textAlign: TextAlign.right,
       style: const TextStyle(
         fontSize: 12,
         color: DunesColors.text3,
@@ -1020,8 +1150,16 @@ class _KpiControlPanel extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _line),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D2B1A4F),
+            blurRadius: 12,
+            spreadRadius: -2,
+            offset: Offset(0, 3),
+          ),
+        ],
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -1038,42 +1176,43 @@ class _KpiControlPanel extends StatelessWidget {
                 : null,
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(10, 6, 12, 10),
-            child: compact
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          month,
-                          const SizedBox(width: 10),
-                          Expanded(child: statsText),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          for (var i = 0; i < actions.length; i++) ...[
-                            if (i > 0) const SizedBox(width: 8),
-                            Expanded(child: _KpiActionTile(action: actions[i])),
-                          ],
-                        ],
-                      ),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      month,
-                      const SizedBox(width: 14),
-                      Expanded(child: statsText),
-                      for (final action in actions)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 8),
-                          child: _KpiActionButton(action: action),
-                        ),
-                    ],
-                  ),
+            padding: EdgeInsets.fromLTRB(10, 6, 12, compact ? 4 : 12),
+            child: Row(
+              children: [
+                month,
+                const SizedBox(width: 10),
+                Expanded(child: statsText),
+              ],
+            ),
           ),
+          Container(
+            height: 1,
+            margin: const EdgeInsets.symmetric(horizontal: 12),
+            color: _line,
+          ),
+          if (compact)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final action in actions)
+                    Expanded(child: _KpiActionTile(action: action)),
+                ],
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final action in actions)
+                    _KpiActionButton(action: action),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -1088,30 +1227,72 @@ class _KpiActionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = action.onTap != null;
-    final fg = enabled ? DunesColors.brandPurpleDeep : DunesColors.text3;
+    final primary = action.primary;
+    final Color iconColor;
+    final BoxDecoration circle;
+    if (!enabled) {
+      iconColor = DunesColors.text3;
+      circle = const BoxDecoration(
+        color: Color(0xFFF3F1F6),
+        shape: BoxShape.circle,
+      );
+    } else if (primary) {
+      iconColor = Colors.white;
+      circle = const BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [DunesColors.brandPurple, DunesColors.brandPurpleDeep],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x407B5CD8),
+            blurRadius: 8,
+            spreadRadius: -2,
+            offset: Offset(0, 3),
+          ),
+        ],
+      );
+    } else {
+      iconColor = DunesColors.brandPurpleDeep;
+      circle = const BoxDecoration(
+        color: DunesColors.brandPurpleSoft,
+        shape: BoxShape.circle,
+      );
+    }
+    final labelColor = !enabled
+        ? DunesColors.text3
+        : (primary ? DunesColors.brandPurpleDeep : DunesColors.text2);
     return Material(
-      color: DunesColors.brandPurpleSoft,
-      borderRadius: BorderRadius.circular(10),
+      type: MaterialType.transparency,
       child: InkWell(
         key: action.key,
         onTap: action.onTap,
         borderRadius: BorderRadius.circular(10),
-        child: SizedBox(
-          height: 54,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(action.icon, size: 19, color: fg),
-              const SizedBox(height: 4),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                width: 38,
+                height: 38,
+                decoration: circle,
+                child: Icon(action.icon, size: 18, color: iconColor),
+              ),
+              const SizedBox(height: 6),
               Text(
                 action.label,
                 maxLines: 1,
                 softWrap: false,
                 overflow: TextOverflow.fade,
                 style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w500,
-                  color: fg,
+                  fontSize: 11,
+                  height: 1.1,
+                  fontWeight: primary ? FontWeight.w600 : FontWeight.w500,
+                  color: labelColor,
                 ),
               ),
             ],
@@ -1129,18 +1310,24 @@ class _KpiActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primary = action.primary;
     return TextButton.icon(
       key: action.key,
       onPressed: action.onTap,
       style: TextButton.styleFrom(
-        foregroundColor: DunesColors.brandPurpleDeep,
-        backgroundColor: DunesColors.brandPurpleSoft,
+        foregroundColor: primary ? Colors.white : DunesColors.brandPurpleDeep,
+        backgroundColor: primary ? DunesColors.brandPurple : Colors.white,
         disabledForegroundColor: DunesColors.text3,
+        disabledBackgroundColor: const Color(0xFFF3F1F6),
         minimumSize: const Size(0, 34),
         padding: const EdgeInsets.symmetric(horizontal: 12),
         visualDensity: VisualDensity.compact,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+        side: primary ? null : const BorderSide(color: _line),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+        textStyle: TextStyle(
+          fontSize: 13,
+          fontWeight: primary ? FontWeight.w600 : FontWeight.w500,
+        ),
       ),
       icon: Icon(action.icon, size: 16),
       label: Text(action.label),
@@ -1207,7 +1394,10 @@ class _KpiSectorTabs extends StatelessWidget {
             widthFactor: expand ? null : 1,
             heightFactor: 1,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+              padding: EdgeInsets.symmetric(
+                horizontal: expand ? 8 : 18,
+                vertical: 6,
+              ),
               child: Text(
                 option.value,
                 style: TextStyle(
@@ -1216,6 +1406,55 @@ class _KpiSectorTabs extends StatelessWidget {
                   color: selected ? DunesColors.text : DunesColors.text2,
                 ),
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _KpiGroupFilter extends StatelessWidget {
+  const _KpiGroupFilter({
+    required this.value,
+    required this.options,
+    this.onChanged,
+  });
+
+  final String value;
+  final List<String> options;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      key: const Key('kpi-group-filter'),
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        _pill(id: '', label: '全部'),
+        for (final option in options) _pill(id: option, label: option),
+      ],
+    );
+  }
+
+  Widget _pill({required String id, required String label}) {
+    final selected = value == id;
+    return Material(
+      color: selected ? DunesColors.brandPurple : const Color(0xFFECE7F4),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        key: Key(id.isEmpty ? 'kpi-group-all' : 'kpi-group-$id'),
+        borderRadius: BorderRadius.circular(8),
+        onTap: onChanged == null ? null : () => onChanged!(id),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              color: selected ? Colors.white : DunesColors.text2,
             ),
           ),
         ),
@@ -1403,13 +1642,16 @@ class _KpiBadge extends StatelessWidget {
 }
 
 Widget _kpiAckText(WorkProfileKpiPerson person) {
+  final unpublished = person.isUnpublished;
   return Text(
-    person.isAcked ? '已确认' : '待确认',
+    unpublished ? '未发布' : (person.isAcked ? '已确认' : '待确认'),
     key: Key('kpi-ack-status-${person.userId}'),
     style: TextStyle(
       fontSize: 11.5,
       fontWeight: FontWeight.w500,
-      color: person.isAcked ? DunesColors.text3 : DunesColors.amber,
+      color: unpublished
+          ? DunesColors.text3
+          : (person.isAcked ? DunesColors.text3 : DunesColors.amber),
     ),
   );
 }

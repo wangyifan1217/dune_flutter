@@ -110,7 +110,7 @@ class AuthSession {
   /// 工作情况查看全部部门；未开通仅自己及下属。
   final bool workSituationViewAll;
 
-  /// 工作台行政「业务绩效」。
+  /// 工作台行政「月度绩效考评」。
   final bool kpiPerformanceAccess;
 
   /// 工作台行政「工资报表」。

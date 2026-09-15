@@ -210,6 +210,44 @@ class WorkbenchKpiRubricImportResult {
   }
 }
 
+class WorkbenchKpiRubricPublishResult {
+  const WorkbenchKpiRubricPublishResult({
+    required this.month,
+    this.notified = 0,
+    this.updated = 0,
+    this.pending = 0,
+    this.unchanged = 0,
+    this.skipped = 0,
+    this.pendingNames = const [],
+  });
+
+  final String month;
+  final int notified;
+  final int updated;
+  final int pending;
+  final int unchanged;
+  final int skipped;
+  final List<String> pendingNames;
+
+  factory WorkbenchKpiRubricPublishResult.fromJson(Map<String, dynamic> json) {
+    final names = json['pendingNames'] as List? ?? const [];
+    return WorkbenchKpiRubricPublishResult(
+      month: '${json['month'] ?? ''}',
+      notified: (json['notified'] as num?)?.toInt() ?? 0,
+      updated: (json['updated'] as num?)?.toInt() ?? 0,
+      pending: (json['pending'] as num?)?.toInt() ?? 0,
+      unchanged: (json['unchanged'] as num?)?.toInt() ?? 0,
+      skipped: (json['skipped'] as num?)?.toInt() ?? 0,
+      pendingNames: [
+        for (final name in names)
+          if ('$name'.trim().isNotEmpty) '$name'.trim(),
+      ],
+    );
+  }
+
+  int get sent => notified + updated;
+}
+
 class WorkbenchKpiService {
   WorkbenchKpiService({required this.session, http.Client? client})
     : _client = client;
@@ -467,6 +505,26 @@ class WorkbenchKpiService {
         ? Map<String, dynamic>.from(data)
         : <String, dynamic>{};
     return WorkbenchKpiRubricImportResult.fromJson(map);
+  }
+
+  Future<WorkbenchKpiRubricPublishResult> publishRubricScore({
+    required String month,
+    required List<int> userIds,
+  }) async {
+    final resp = await dunesHttpPost(
+      session,
+      '/kpi/rubric-score/publish',
+      body: jsonEncode({
+        'month': month.trim(),
+        'userIds': userIds,
+      }),
+      client: _client,
+    );
+    final data = _unwrap(resp);
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    return WorkbenchKpiRubricPublishResult.fromJson(map);
   }
 
   Future<WorkProfileKpiScore> ackRubricScore({required String month}) async {

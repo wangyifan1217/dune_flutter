@@ -168,6 +168,19 @@ class KpiAssistantAvatar extends StatelessWidget {
   }
 }
 
+/// 绩效助手会话里的结果卡。
+///
+/// 旧版的问题：
+///   · 卡里又放了一枚和左侧头像一模一样的 insights 图标，信息重复
+///   · 最关键的「待确认」混在灰色副标题尾巴上，一眼看不到要不要处理
+///   · 90 / 良 / 系数 1 三个数挤成一行、同色同重，看不出主次，也看不出 90 是满分多少
+///   · 底栏「沙丘绩效 · 确认按钮 · 查看详情」三件并排，主操作被挤得很小
+///
+/// 这版：
+///   · 顶部一行：来源「沙丘绩效」+ 右侧状态胶囊（待确认 琥珀 / 已更新 蓝 / 已确认 绿）
+///   · 标题 + 身份行，去掉重复图标
+///   · 成绩面板：大号得分 + 百分制进度条 │ 等级徽章（按等级上色，与工作台一致）│ 系数
+///   · 主操作做成整宽按钮，「查看详情」退为右侧文字链；已确认时换成确认时间
 class ChatKpiAssistantCard extends StatelessWidget {
   const ChatKpiAssistantCard({
     super.key,
@@ -204,207 +217,437 @@ class ChatKpiAssistantCard extends StatelessWidget {
     final parts = <String>[
       if (data.userName.trim().isNotEmpty) data.userName.trim(),
       if (data.identityLine.isNotEmpty) data.identityLine,
-      data.statusLabel,
     ];
     return parts.join(' · ');
   }
 
+  String get _ackedAtText {
+    final dt = DateTime.tryParse(data.ackedAt.trim())?.toLocal();
+    if (dt == null) return '已确认';
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(dt.month)}-${two(dt.day)} ${two(dt.hour)}:${two(dt.minute)} 已确认';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final showConfirm = data.canConfirm && onConfirm != null;
     return GestureDetector(
       onTap: onOpenDetail,
       child: Container(
-        constraints: const BoxConstraints(minWidth: 220, maxWidth: 290),
-        padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
+        constraints: const BoxConstraints(minWidth: 236, maxWidth: 292),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: DunesColors.brandPurpleLine.withValues(alpha: 0.75),
-          ),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: DunesColors.borderSoft),
+          boxShadow: [
+            BoxShadow(
+              color: DunesColors.brandPurpleDeep.withValues(alpha: 0.07),
+              blurRadius: 14,
+              spreadRadius: -2,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: DunesColors.brandPurpleSoft,
-                    borderRadius: BorderRadius.circular(9),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 12, 0),
+              child: Row(
+                children: [
+                  Container(
+                    width: 5,
+                    height: 5,
+                    decoration: const BoxDecoration(
+                      color: DunesColors.brandPurple,
+                      shape: BoxShape.circle,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.insights_outlined,
-                    size: 18,
-                    color: DunesColors.brandPurpleDeep,
+                  const SizedBox(width: 6),
+                  Text(
+                    '沙丘绩效',
+                    style: DunesTypography.sans(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w500,
+                      color: DunesColors.brandPurpleDeep,
+                      letterSpacing: 0.3,
+                      height: 1.0,
+                    ),
+                  ),
+                  const Spacer(),
+                  _KpiStatusPill(data: data),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 9, 14, 0),
+              child: Text(
+                _title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: DunesTypography.sans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: DunesColors.text,
+                  letterSpacing: -0.2,
+                  height: 1.25,
+                ),
+              ),
+            ),
+            if (_subtitle.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 3, 14, 0),
+                child: Text(
+                  _subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: DunesTypography.sans(
+                    fontSize: 11,
+                    color: DunesColors.text3,
+                    height: 1.35,
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: DunesTypography.sans(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: DunesColors.text,
-                          height: 1.25,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        _subtitle,
-                        maxLines: 2,
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 11, 10, 0),
+              child: _KpiScorePanel(data: data),
+            ),
+            if (data.scoredByName.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.person_outline_rounded,
+                      size: 12,
+                      color: DunesColors.text3,
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        '考核人 ${data.scoredByName}',
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: DunesTypography.sans(
                           fontSize: 10.5,
-                          color: DunesColors.text3,
-                          height: 1.3,
+                          color: DunesColors.text2,
+                          height: 1.0,
                         ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 11, 12, 10),
+              child: Row(
+                children: [
+                  if (showConfirm)
+                    Expanded(
+                      child: SizedBox(
+                        height: 34,
+                        child: TextButton(
+                          onPressed: acking ? null : onConfirm,
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            backgroundColor: DunesColors.brandPurple,
+                            disabledBackgroundColor: DunesColors.brandPurple
+                                .withValues(alpha: 0.6),
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: acking
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 1.8,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Text(
+                                  '确认本月绩效',
+                                  style: DunesTypography.sans(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                    height: 1.0,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: Text(
+                          data.isAcked ? _ackedAtText : '',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: DunesTypography.sans(
+                            fontSize: 10.5,
+                            color: DunesColors.text3,
+                            height: 1.0,
+                          ),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(width: 10),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '查看详情',
+                        style: DunesTypography.sans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: DunesColors.text2,
+                          height: 1.0,
+                        ),
+                      ),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        size: 15,
+                        color: DunesColors.text3,
                       ),
                     ],
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  data.scoreText,
-                  style: DunesTypography.sans(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: DunesColors.text,
-                    height: 1,
-                  ),
-                ),
-                const SizedBox(width: 3),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Text(
-                    '分',
-                    style: DunesTypography.sans(
-                      fontSize: 11,
-                      color: DunesColors.text3,
-                    ),
-                  ),
-                ),
-                if (data.gradeText.isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 1),
-                    child: Text(
-                      data.gradeText,
-                      style: DunesTypography.sans(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: DunesColors.brandPurpleDeep,
-                      ),
-                    ),
-                  ),
                 ],
-                if (data.coefficient > 0) ...[
-                  const SizedBox(width: 8),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 2),
-                    child: Text(
-                      '系数 ${formatKpiAssistantScore(data.coefficient)}',
-                      style: DunesTypography.sans(
-                        fontSize: 11,
-                        color: DunesColors.text2,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            if (data.scoredByName.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(
-                '考核人 ${data.scoredByName}',
-                style: DunesTypography.sans(
-                  fontSize: 10.5,
-                  color: DunesColors.text3,
-                ),
               ),
-            ],
-            const SizedBox(height: 9),
-            const Divider(height: 1, color: DunesColors.borderSoft),
-            const SizedBox(height: 7),
-            Row(
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KpiStatusPill extends StatelessWidget {
+  const _KpiStatusPill({required this.data});
+
+  final KpiAssistantCardData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color fg;
+    final Color bg;
+    if (data.isAcked) {
+      fg = DunesColors.green;
+      bg = DunesColors.greenSoft;
+    } else if (data.isUpdated) {
+      fg = DunesColors.blue;
+      bg = DunesColors.blueSoft;
+    } else {
+      fg = DunesColors.amber;
+      bg = DunesColors.amberSoft;
+    }
+    return Container(
+      height: 20,
+      padding: const EdgeInsets.symmetric(horizontal: 7),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (data.isAcked)
+            Icon(Icons.check_rounded, size: 11, color: fg)
+          else
+            Container(
+              width: 5,
+              height: 5,
+              decoration: BoxDecoration(color: fg, shape: BoxShape.circle),
+            ),
+          const SizedBox(width: 4),
+          Text(
+            data.statusLabel,
+            style: DunesTypography.sans(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: fg,
+              height: 1.0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 等级色与工作台绩效列表保持一致。
+(Color, Color) _kpiAssistantGradeColors(String code) {
+  switch (code) {
+    case '优':
+      return (DunesColors.green, DunesColors.greenSoft);
+    case '良':
+      return (DunesColors.brandPurple, DunesColors.brandPurpleSoft);
+    case '中':
+      return (DunesColors.blue, DunesColors.blueSoft);
+    case '普':
+      return (DunesColors.amber, DunesColors.amberSoft);
+    case '改':
+    case '辅':
+      return (DunesColors.coral, DunesColors.coralSoft);
+  }
+  return (DunesColors.text2, DunesColors.bgSoft);
+}
+
+class _KpiScorePanel extends StatelessWidget {
+  const _KpiScorePanel({required this.data});
+
+  final KpiAssistantCardData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final grade = data.gradeText;
+    final (gradeFg, gradeBg) = _kpiAssistantGradeColors(grade);
+    final ratio = (data.mainScore / 100).clamp(0.0, 1.0);
+
+    Widget divider() => Container(
+      width: 1,
+      height: 34,
+      margin: const EdgeInsets.symmetric(horizontal: 10),
+      color: DunesColors.brandPurpleLine.withValues(alpha: 0.35),
+    );
+
+    Widget caption(String text) => Text(
+      text,
+      style: DunesTypography.sans(
+        fontSize: 9.5,
+        color: DunesColors.text3,
+        letterSpacing: 0.4,
+        height: 1.0,
+      ),
+    );
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFF8F5FD), DunesColors.brandPurpleSoft],
+        ),
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '沙丘绩效',
-                  style: DunesTypography.sans(
-                    fontSize: 10,
-                    color: DunesColors.brandPurpleDeep,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const Spacer(),
-                if (data.canConfirm && onConfirm != null)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: TextButton(
-                      onPressed: acking ? null : onConfirm,
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        backgroundColor: DunesColors.brandPurple,
-                        minimumSize: const Size(0, 28),
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        visualDensity: VisualDensity.compact,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: acking
-                          ? const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 1.6,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              '确认本月绩效',
-                              style: TextStyle(fontSize: 11),
-                            ),
-                    ),
-                  ),
+                caption('得分'),
+                const SizedBox(height: 5),
                 Row(
-                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      '查看详情',
-                      style: DunesTypography.sans(
-                        fontSize: 10,
-                        color: DunesColors.text3,
+                      data.scoreText,
+                      style: DunesTypography.mono(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w700,
+                        color: DunesColors.text,
+                        letterSpacing: -0.8,
+                        height: 1.0,
                       ),
                     ),
-                    const SizedBox(width: 2),
-                    const Icon(
-                      Icons.chevron_right_rounded,
-                      size: 14,
-                      color: DunesColors.text3,
+                    const SizedBox(width: 3),
+                    Text(
+                      '分',
+                      style: DunesTypography.sans(
+                        fontSize: 11,
+                        color: DunesColors.text3,
+                        height: 1.0,
+                      ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 7),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: SizedBox(
+                    height: 3,
+                    child: Stack(
+                      children: [
+                        Container(color: Colors.white),
+                        FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: ratio,
+                          child: Container(color: gradeFg),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (grade.isNotEmpty) ...[
+            divider(),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                caption('等级'),
+                const SizedBox(height: 5),
+                Container(
+                  width: 30,
+                  height: 30,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: gradeBg,
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(
+                      color: gradeFg.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Text(
+                    grade,
+                    style: DunesTypography.sans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: gradeFg,
+                      height: 1.0,
+                    ),
+                  ),
                 ),
               ],
             ),
           ],
-        ),
+          if (data.coefficient > 0) ...[
+            divider(),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                caption('系数'),
+                const SizedBox(height: 5),
+                SizedBox(
+                  height: 30,
+                  child: Center(
+                    child: Text(
+                      data.coefficient.toStringAsFixed(1),
+                      style: DunesTypography.mono(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: DunesColors.text,
+                        height: 1.0,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
       ),
     );
   }

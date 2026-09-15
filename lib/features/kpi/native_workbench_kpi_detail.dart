@@ -278,6 +278,13 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
               key: const Key('kpi-acked'),
               style: const TextStyle(fontSize: 13, color: DunesColors.text2),
             ),
+          ] else if (person.isRubric && person.isUnpublished) ...[
+            const SizedBox(height: 4),
+            const Text(
+              '尚未发布到绩效助手',
+              key: Key('kpi-unpublished'),
+              style: TextStyle(fontSize: 13, color: DunesColors.text2),
+            ),
           ],
           const SizedBox(height: 8),
           _ScoreHeader(person: person),

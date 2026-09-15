@@ -284,7 +284,7 @@ void main() {
     });
   });
 
-  test('人效入口跟业务绩效权限走，没有权限不露 tab', () {
+  test('人效入口跟月度绩效考评权限走，没有权限不露 tab', () {
     expect(lighthouseLedgerShowsPeopleTab, isTrue);
     expect(
       lighthousePeopleTabVisible(kpiPerformanceAccess: true),

@@ -510,7 +510,7 @@ class _NativeKpiAssistantPageState extends State<NativeKpiAssistantPage> {
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: 28),
           child: Text(
-            '考核人写分或导入量表后，本月绩效会发到这里。点卡片可看分项、等级和考核人，并确认已知悉。',
+            '考核人发布本月结果后，绩效会发到这里。点卡片可看分项、等级和考核人，并确认已知悉。',
             textAlign: TextAlign.center,
             style: TextStyle(color: DunesColors.text3, height: 1.5),
           ),

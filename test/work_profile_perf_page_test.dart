@@ -100,7 +100,7 @@ void main() {
       ],
     );
     final md = kpiScoreSummaryMarkdown(score);
-    expect(md, contains('## 2026年8月 业务绩效汇总'));
+    expect(md, contains('## 2026年8月 月度绩效考评汇总'));
     expect(md, contains('共 **2** 人'));
     expect(md, contains('| 部门 | 姓名 | 岗位 | 绩效得分 | 绩效等级 | 绩效系数 |'));
     expect(md.indexOf('李四'), lessThan(md.indexOf('何佳伟')));

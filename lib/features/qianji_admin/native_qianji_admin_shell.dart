@@ -136,7 +136,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _WorkbenchView.proposalIntake: '销售提案',
     _WorkbenchView.purchaseProposalIntake: '采购提案',
     _WorkbenchView.travelImport: '差旅导入',
-    _WorkbenchView.kpiPerformance: '业务绩效',
+    _WorkbenchView.kpiPerformance: '月度绩效考评',
     _WorkbenchView.payrollReports: '工资报表',
     _WorkbenchView.paymentInvoice: '付款发票审批',
   };
@@ -894,8 +894,8 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         ),
       if (!_session.isExternalUser && _canSeeKpiPerformance == true)
         _WorkbenchTile(
-          title: '业务绩效',
-          subtitle: '灯塔规则计分 · 重跑与导出',
+          title: '月度绩效考评',
+          subtitle: '导入量表 · 发布结果 · 导出',
           icon: Icons.insights_outlined,
           color: const Color(0xFF0F766E),
           enabled: true,

@@ -38,7 +38,7 @@ DateTime parseKpiMonth(String raw, DateTime fallback) {
 }
 
 /// 绩效发展：按灯塔数据规则查看切片与得分等级，不可自行增改。
-/// 默认上一自然月（与工作台业务绩效、灯塔月报一致），可自选月份；
+/// 默认上一自然月（与工作台月度绩效考评、灯塔月报一致），可自选月份；
 /// 未注入 [score] 时请求 `/kpi/my-score`。
 class NativeWorkProfilePerfPage extends StatefulWidget {
   const NativeWorkProfilePerfPage({

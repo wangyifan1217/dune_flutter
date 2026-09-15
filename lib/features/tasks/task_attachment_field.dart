@@ -143,7 +143,10 @@ class _TaskAttachmentFieldState extends State<TaskAttachmentField> {
         continue;
       }
       try {
-        final uploaded = await _api.uploadAttachment(bytes: bytes, fileName: name);
+        final uploaded = await _api.uploadAttachment(
+          bytes: bytes,
+          fileName: name,
+        );
         next.add(uploaded);
         accepted++;
         widget.onChanged(List<TaskAttachment>.from(next));
@@ -247,7 +250,11 @@ class _TaskAttachmentFieldState extends State<TaskAttachmentField> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.insert_drive_file_outlined, size: 18, color: accent),
+                    Icon(
+                      Icons.insert_drive_file_outlined,
+                      size: 18,
+                      color: accent,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -260,7 +267,11 @@ class _TaskAttachmentFieldState extends State<TaskAttachmentField> {
                     IconButton(
                       visualDensity: VisualDensity.compact,
                       onPressed: () => _remove(i),
-                      icon: const Icon(Icons.close, size: 18, color: DunesColors.text3),
+                      icon: const Icon(
+                        Icons.close,
+                        size: 18,
+                        color: DunesColors.text3,
+                      ),
                     ),
                   ],
                 ),

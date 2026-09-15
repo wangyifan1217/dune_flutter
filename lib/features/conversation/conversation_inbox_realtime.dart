@@ -333,6 +333,7 @@ abstract final class ConversationInboxRealtime {
     bool? pinned,
     bool? hasUnreadMention,
     bool? hasUnreadAtAll,
+    String? peerImStatus,
   }) {
     return NativeConversation(
       id: c.id,
@@ -360,6 +361,7 @@ abstract final class ConversationInboxRealtime {
       assistantGeneratingStatus: c.assistantGeneratingStatus,
       hasUnreadMention: hasUnreadMention ?? c.hasUnreadMention,
       hasUnreadAtAll: hasUnreadAtAll ?? c.hasUnreadAtAll,
+      peerImStatus: peerImStatus ?? c.peerImStatus,
     );
   }
 }

@@ -10,6 +10,8 @@ void main() {
     final catalog = SettlementCatalogService.offline();
     expect(await catalog.fetchSyncSources(), isEmpty);
     expect(await catalog.fetchProductCategoryL1(), isEmpty);
+    expect(await catalog.fetchProductCategoryL2(), isEmpty);
+    expect(await catalog.fetchProductCategoryL3(), isEmpty);
     expect(await catalog.fetchChannelCategoryL1(), isEmpty);
     expect(await catalog.fetchChannelCategoryL2(parentCode: 'YH'), isEmpty);
     expect(await catalog.fetchProjects(keyword: '星和'), isEmpty);
@@ -26,7 +28,57 @@ void main() {
     expect({a, b}, hasLength(2));
   });
 
-  test('bill type tree flattens path for dropdown labels', () {
+  test('bill type tree flattens to level-3 leaves only', () {
+    final rows = flattenBillTypeTree([
+      {
+        'id': 1,
+        'code': 'ar',
+        'name': '应收账单',
+        'level': 1,
+        'children': [
+          {
+            'id': 2,
+            'code': 'ar_XSK',
+            'name': '销售款',
+            'level': 2,
+            'children': [
+              {
+                'id': 3,
+                'code': 'SUBSIDY_RECEIVABLE',
+                'name': '电子券补贴销售款',
+                'level': 3,
+                'children': const [],
+              },
+              {
+                'id': 4,
+                'code': 'CASH_RECEIVABLE',
+                'name': '电子券现金销售款',
+                'level': 3,
+              },
+            ],
+          },
+          {
+            'id': 5,
+            'code': 'service_ar',
+            'name': '服务费',
+            'level': 2,
+            'children': const [],
+          },
+        ],
+      },
+    ]);
+    expect(rows.map((e) => e.displayPath).toList(), [
+      '应收账单 / 销售款 / 电子券补贴销售款',
+      '应收账单 / 销售款 / 电子券现金销售款',
+    ]);
+    expect(rows.map((e) => e.code).toList(), [
+      'SUBSIDY_RECEIVABLE',
+      'CASH_RECEIVABLE',
+    ]);
+    expect(rows.every((e) => e.name.contains('服务费') == false), isTrue);
+  });
+
+  test('bill type tree without level still keeps unlabeled leaves', () {
     final rows = flattenBillTypeTree([
       {
         'id': 1,
@@ -42,12 +94,8 @@ void main() {
         ],
       },
     ]);
-    expect(rows.map((e) => e.displayPath).toList(), [
-      '销售',
-      '销售 / 电子券销售款',
-    ]);
-    expect(rows.last.code, 'XS_DZ');
-    expect(rows.last.id, 2);
+    expect(rows.map((e) => e.displayPath).toList(), ['销售 / 电子券销售款']);
+    expect(rows.single.code, 'XS_DZ');
   });
 
   test('channel json maps channelCode to CatalogRef.code', () {
@@ -157,6 +205,128 @@ void main() {
     expect(rows.map((e) => e.name).toList(), ['小套-出行会员', '小套-好车主会员']);
     expect(rows.first.idText, '2070042866993868805');
     expect(rows.last.parentCode, 'YYS');
+  });
+
+  test('fetchProductCategoryL3 maps 资管三级分类 rows', () async {
+    Uri? seen;
+    final client = MockClient((request) async {
+      seen = request.url;
+      return http.Response(
+        jsonEncode({
+          'code': 200,
+          'msg': '操作成功',
+          'data': [
+            {
+              'id': 3,
+              'code': 'NY_JYQ_A',
+              'name': '细类A',
+              'level': 3,
+              'parentId': 2,
+              'parentCode': 'NY_JYQ',
+              'parentName': '加油券',
+            },
+            {
+              'id': '2070042866993868999',
+              'code': 'GGCX_CXXTHY_A',
+              'name': '出行会员-细类',
+              'level': 3,
+              'parentId': '2070042866993868805',
+              'parentCode': 'GGCX_CXXTHY',
+              'parentName': '小套-出行会员',
+            },
+          ],
+        }),
+        200,
+        headers: const {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final catalog = SettlementCatalogService(client: client);
+    addTearDown(catalog.dispose);
+    final rows = await catalog.fetchProductCategoryL3();
+    expect(seen?.path, contains('/out/shaqiu/catalog/product-category/l3'));
+    expect(seen?.queryParameters.containsKey('parentId'), isFalse);
+    expect(rows.map((e) => e.name).toList(), ['细类A', '出行会员-细类']);
+    expect(rows.first.parentCode, 'NY_JYQ');
+    expect(rows.last.idText, '2070042866993868999');
+  });
+
+  test('fetchProductCategoryL3 can filter by 标签一 parentCode', () async {
+    Uri? seen;
+    final client = MockClient((request) async {
+      seen = request.url;
+      return http.Response(
+        jsonEncode({
+          'code': 200,
+          'msg': '操作成功',
+          'data': [
+            {
+              'id': 3,
+              'code': 'NY_JYQ_A',
+              'name': '细类A',
+              'level': 3,
+              'parentCode': 'NY_JYQ',
+              'parentName': '中石化普惠现金券',
+            },
+          ],
+        }),
+        200,
+        headers: const {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final catalog = SettlementCatalogService(client: client);
+    addTearDown(catalog.dispose);
+    final rows = await catalog.fetchProductCategoryL3(parentCode: 'NY_JYQ');
+    expect(seen?.queryParameters['parentCode'], 'NY_JYQ');
+    expect(rows.map((e) => e.name).toList(), ['细类A']);
+  });
+
+  test('子分类 options come from 资管 product L3 filtered by 标签一', () {
+    const l3A = CatalogRef(
+      idText: '31',
+      code: 'NY_JYQ_A',
+      name: '细类A',
+      parentCode: 'NY_JYQ',
+      parentName: '中石化普惠现金券',
+    );
+    const l3B = CatalogRef(
+      idText: '32',
+      code: 'GGCX_CXXTHY_A',
+      name: '出行会员-细类',
+      parentCode: 'GGCX_CXXTHY',
+      parentIdText: '2070042866993868805',
+      parentName: '小套-出行会员',
+    );
+    const catalog = [l3A, l3B];
+    expect(
+      proposalIntakeProductL3ForProduct(
+        catalog,
+        product: const CatalogRef(code: 'NY_JYQ', name: '加油券'),
+      ).map((e) => e.name).toList(),
+      ['细类A'],
+    );
+    expect(
+      proposalIntakeProductL3ForProduct(
+        catalog,
+        product: const CatalogRef(
+          name: '中石化普惠现金券（交易）',
+        ),
+      ).map((e) => e.name).toList(),
+      ['细类A'],
+    );
+    expect(
+      proposalIntakeProductL3ForProduct(
+        catalog,
+        product: const CatalogRef(
+          idText: '2070042866993868805',
+          name: '小套-出行会员',
+        ),
+      ).map((e) => e.name).toList(),
+      ['出行会员-细类'],
+    );
+    expect(
+      proposalIntakeProductL3ForProduct(catalog, product: CatalogRef.empty),
+      isEmpty,
+    );
   });
 
   test('标签一 options come from 资管 product L2 filtered by sector', () {
@@ -431,6 +601,81 @@ void main() {
     expect(data?.items, hasLength(1));
     expect(data?.items.single.settleMethod, 1);
     expect(data?.items.single.billTypeRef?.displayPath, '应收账单 / 销售款 / 电子券销售款');
+  });
+
+  test('fetchChannelProductPacketItems maps parent and child settlements', () async {
+    Uri? seen;
+    final client = MockClient((request) async {
+      seen = request.url;
+      return http.Response(
+        jsonEncode({
+          'code': 200,
+          'msg': '操作成功',
+          'data': {
+            'id': 2086081200000000295,
+            'productCode': 'YYS_XTMXLD_001',
+            'productName': '明星来电(黄圣依等组合包)',
+            'channelId': 10001,
+            'channelName': '广东移动',
+            'syncSource': 'YD',
+            'submitStatus': 'EFFECTIVE',
+            'settlementItems': [
+              {
+                'billTypeL3Code': 'QB_SALES',
+                'billTypeL3Name': '券包销售款',
+                'settleMethod': 1,
+                'formulaContent': 1,
+                'settlementRatio': 100,
+                'sortNo': 1,
+              },
+            ],
+            'items': [
+              {
+                'itemProductId': 10,
+                'itemExternalId': 88001,
+                'itemSyncSource': 'DIGITALG',
+                'num': 2,
+                'productCode': 'CP001',
+                'productName': '中石油100',
+                'channelId': 1,
+                'channelName': '银联商务',
+                'syncSource': 'DIGITALG',
+                'submitStatus': 'EFFECTIVE',
+                'settlementItems': [
+                  {
+                    'billTypeL3Code': 'E_COUPON_SALES',
+                    'billTypeL3Name': '电子券销售款',
+                    'settleMethod': 1,
+                    'settlementRatio': 98.5,
+                    'taxRateCode': '13%',
+                    'invoiceTypeCode': '专票',
+                    'sortNo': 1,
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+        200,
+        headers: const {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final catalog = SettlementCatalogService(client: client);
+    addTearDown(catalog.dispose);
+    expect(await catalog.fetchChannelProductPacketItems(0), isNull);
+    final data = await catalog.fetchChannelProductPacketItems(10);
+    expect(
+      seen?.path,
+      contains('/out/shaqiu/catalog/channel-product/packet-items'),
+    );
+    expect(seen?.queryParameters['id'], '10');
+    expect(data?.product.productName, '明星来电(黄圣依等组合包)');
+    expect(data?.parent.items.single.billTypeL3Code, 'QB_SALES');
+    expect(data?.items, hasLength(1));
+    expect(data?.items.single.quantity, 2);
+    expect(data?.items.single.itemProductId, 10);
+    expect(data?.items.single.product.productName, '中石油100');
+    expect(data?.items.single.settlementItems.single.taxRateCode, '13%');
   });
 
   test('missing settlement payload returns null', () async {

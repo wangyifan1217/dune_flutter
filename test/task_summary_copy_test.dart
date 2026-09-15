@@ -45,7 +45,7 @@ void main() {
       pendingApproval: 2,
     );
     expect(st.allClosed, isFalse);
-    expect(st.summaryLine, contains('1 个主任务'));
+    expect(st.summaryLine, contains('1 个主目标'));
     expect(st.summaryLine, contains('0 已办结'));
     expect(st.summaryLine, contains('1 已逾期未办结'));
     expect(st.summaryLine, isNot(contains('待审核')));

@@ -83,6 +83,27 @@ void main() {
     service.close();
   });
 
+  test('私聊会话解析 peerImStatus', () async {
+    final client = MockClient((request) async {
+      return http.Response(
+        jsonEncode(
+          okPayload([
+            conv(id: 11, title: '李凡伊')..['peerImStatus'] = 'trip',
+            conv(id: 12, title: '王奕凡'),
+          ]),
+        ),
+        200,
+        headers: const {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final service = ConversationService(session: session(), client: client);
+    final rows = await service.fetchConversations();
+    expect(rows, hasLength(2));
+    expect(rows[0].peerImStatus, 'trip');
+    expect(rows[1].peerImStatus, 'online');
+    service.close();
+  });
+
   test('UTF-8 截断 JSON 两次都失败时给出中文解析错误', () async {
     final client = MockClient((request) async {
       return http.Response(

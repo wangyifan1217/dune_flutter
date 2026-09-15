@@ -89,6 +89,7 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
         priority: draft.priority,
         startAt: draft.startAt,
         dueAt: draft.dueAt,
+        parentTaskId: draft.parentTaskId,
       );
       if (!mounted) return;
       showDunesCenterToast(context, '已创建「${task.title}」');
@@ -142,6 +143,7 @@ class _MeetingSuggestionImCardState extends State<MeetingSuggestionImCard> {
           priority: draft.priority,
           startAt: draft.startAt,
           dueAt: draft.dueAt,
+          parentTaskId: draft.parentTaskId,
         );
       }
       if (!mounted) return;

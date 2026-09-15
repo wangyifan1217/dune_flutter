@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../tasks/task_api.dart';
+import '../tasks/task_create_confirm.dart';
+import '../tasks/task_first_use_guide.dart';
 import '../tasks/task_models.dart';
 
 class MeetingTaskCreateDraft {
@@ -14,6 +16,7 @@ class MeetingTaskCreateDraft {
     this.priority = 'medium',
     required this.startAt,
     required this.dueAt,
+    this.parentTaskId,
   });
 
   final String? title;
@@ -23,16 +26,11 @@ class MeetingTaskCreateDraft {
   final String priority;
   final DateTime startAt;
   final DateTime dueAt;
+  final int? parentTaskId;
 }
 
 String? meetingTaskRangeError(DateTime? startAt, DateTime? dueAt) {
-  if (startAt == null || dueAt == null) {
-    return '请选择开始时间和结束时间';
-  }
-  final start = DateTime(startAt.year, startAt.month, startAt.day);
-  final due = DateTime(dueAt.year, dueAt.month, dueAt.day);
-  if (due.isBefore(start)) return '结束时间不能早于开始时间';
-  return null;
+  return taskCreateRangeError(startAt, dueAt, required: true);
 }
 
 /// 纪要创建任务：填写负责人、优先级、验收和周期后再提交。
@@ -88,6 +86,10 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
   late int _ownerId;
   late String _ownerName;
   List<TaskAssignee> _assignees = const [];
+  List<TaskItem> _goals = const [];
+  bool _linkExisting = false;
+  int? _parentTaskId;
+  bool _guideAutoStarted = false;
 
   bool get _batch => widget.batchCount > 1;
   bool get _showCopy => !_batch;
@@ -102,6 +104,29 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
     _ownerName = (widget.session.displayName ?? '').trim().isEmpty
         ? '我'
         : widget.session.displayName!.trim();
+    _loadGoals();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showGuide();
+    });
+  }
+
+  Future<void> _showGuide({bool force = false}) async {
+    if (!force && _guideAutoStarted) return;
+    if (!force) _guideAutoStarted = true;
+    await showTaskFirstUseGuide(
+      context,
+      userId: widget.session.userId,
+      page: TaskGuidePage.meetingCreate,
+      force: force,
+    );
+  }
+
+  Future<void> _loadGoals() async {
+    try {
+      final list = await _api.listTasks(scope: 'goals', size: 50);
+      if (!mounted) return;
+      setState(() => _goals = list.where((t) => t.isMain).toList());
+    } catch (_) {}
   }
 
   @override
@@ -114,9 +139,7 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
 
   String _fmt(DateTime? d) {
     if (d == null) return '请选择';
-    final m = d.month.toString().padLeft(2, '0');
-    final day = d.day.toString().padLeft(2, '0');
-    return '${d.year}-$m-$day';
+    return formatTaskYmd(d);
   }
 
   Future<void> _pickOwner() async {
@@ -201,9 +224,9 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-              primary: DunesColors.brandPurple,
-            ),
+            colorScheme: Theme.of(
+              context,
+            ).colorScheme.copyWith(primary: DunesColors.brandPurple),
           ),
           child: child!,
         );
@@ -220,7 +243,7 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
     });
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     final err = meetingTaskRangeError(_startAt, _dueAt);
     if (err != null) {
       setState(() => _error = err);
@@ -230,6 +253,26 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
       setState(() => _error = '请填写任务标题');
       return;
     }
+    if (_linkExisting && (_parentTaskId == null || _parentTaskId! <= 0)) {
+      setState(() => _error = '请选择要关联的主目标');
+      return;
+    }
+    if (!_linkExisting && _showCopy && _acceptCtrl.text.trim().isEmpty) {
+      setState(() => _error = '新建主目标请填写验收标准');
+      return;
+    }
+    final title = _showCopy ? _titleCtrl.text.trim() : widget.title;
+    final ok = await confirmCreateTask(
+      context,
+      title: title,
+      startAt: _startAt,
+      dueAt: _dueAt,
+      kind: _linkExisting ? '子目标' : '主目标',
+      message: _batch
+          ? '确认创建 ${widget.batchCount} 个${_linkExisting ? '子目标' : '主目标'}？它们将共用该周期。'
+          : null,
+    );
+    if (!ok || !mounted) return;
     Navigator.pop(
       context,
       MeetingTaskCreateDraft(
@@ -240,6 +283,7 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
         priority: _priority,
         startAt: _startAt!,
         dueAt: _dueAt!,
+        parentTaskId: _linkExisting ? _parentTaskId : null,
       ),
     );
   }
@@ -311,7 +355,12 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
     final heading = _batch ? '全部创建任务' : '创建任务';
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Text(heading),
+      title: Row(
+        children: [
+          Expanded(child: Text(heading)),
+          TaskGuideHelpButton(onPressed: () => _showGuide(force: true)),
+        ],
+      ),
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(
@@ -329,6 +378,37 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                   height: 1.4,
                 ),
               ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  ChoiceChip(
+                    label: const Text('新建主目标'),
+                    selected: !_linkExisting,
+                    onSelected: (_) => setState(() {
+                      _linkExisting = false;
+                      _parentTaskId = null;
+                    }),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text('关联已有主目标'),
+                    selected: _linkExisting,
+                    onSelected: (_) => setState(() => _linkExisting = true),
+                  ),
+                ],
+              ),
+              if (_linkExisting) ...[
+                const SizedBox(height: 10),
+                DropdownButtonFormField<int>(
+                  initialValue: _parentTaskId,
+                  decoration: _fieldDecoration('选择主目标'),
+                  items: [
+                    for (final g in _goals)
+                      DropdownMenuItem(value: g.id, child: Text(g.title)),
+                  ],
+                  onChanged: (v) => setState(() => _parentTaskId = v),
+                ),
+              ],
               const SizedBox(height: 12),
               if (_showCopy) ...[
                 TextField(
@@ -349,11 +429,7 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                 ),
                 const SizedBox(height: 10),
               ],
-              _tile(
-                label: '负责人',
-                value: _ownerName,
-                onTap: _pickOwner,
-              ),
+              _tile(label: '负责人', value: _ownerName, onTap: _pickOwner),
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14),

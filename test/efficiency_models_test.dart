@@ -184,8 +184,22 @@ void main() {
       ],
     });
     expect(board.viewAll, isTrue);
+    expect(board.grain, 'month');
     expect(board.people.single.taskOverdue, 2);
     expect(board.people.single.items.single.title, '需求评审纪要落地');
+  });
+
+  test('parses work situation board grain', () {
+    final board = WorkSituationBoard.fromJson({
+      'grain': 'day',
+      'date': '2026-09-03',
+      'month': '2026-09',
+      'viewAll': false,
+      'people': [],
+    });
+    expect(board.grain, 'day');
+    expect(board.date, '2026-09-03');
+    expect(board.month, '2026-09');
   });
 
   test('QJEA is allowed on desktop', () {

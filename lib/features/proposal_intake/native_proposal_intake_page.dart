@@ -1067,7 +1067,10 @@ class _ProposalListTile extends StatelessWidget {
     final (label, kind) = switch (row.status) {
       'done' => ('已完成', ProposalChipKind.ok),
       'pending_president' => ('待最终确认', ProposalChipKind.purple),
-      'reviewing' => ('复核中', ProposalChipKind.purple),
+      'reviewing' => (
+        proposalIntakeStatusChipLabel(row),
+        ProposalChipKind.purple,
+      ),
       'filling' => ('填写中', ProposalChipKind.draft),
       _ => ('草稿', ProposalChipKind.draft),
     };
@@ -1392,6 +1395,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   bool _ownsCatalog = false;
   List<CatalogRef> _sectorCatalog = const [];
   List<CatalogRef> _productCatalogAll = const [];
+  List<CatalogRef> _productL3CatalogAll = const [];
+  List<CatalogRef> _productL3ForCurrent = const [];
+  String _productL3LoadedKey = '';
+  int _productL3Seq = 0;
   List<CatalogRef> _projectCatalog = const [];
   List<CatalogRef> _syncSourceCatalog = const [];
   List<CatalogRef> _channelCategoryL1 = const [];
@@ -2784,6 +2791,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final results = await Future.wait([
       _catalog.fetchProductCategoryL1(),
       _catalog.fetchProductCategoryL2(),
+      _catalog.fetchProductCategoryL3(),
       _catalog.fetchProjects(),
       _catalog.fetchSyncSources(),
     ]);
@@ -2791,8 +2799,48 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     setState(() {
       _sectorCatalog = results[0];
       _productCatalogAll = results[1];
-      _projectCatalog = results[2];
-      _syncSourceCatalog = results[3];
+      _productL3CatalogAll = results[2];
+      _projectCatalog = results[3];
+      _syncSourceCatalog = results[4];
+    });
+    unawaited(
+      _loadProductL3(
+        _formRef('productRef') ?? CatalogRef.fromName(_text('product')),
+      ),
+    );
+  }
+
+  Future<void> _loadProductL3(CatalogRef? product) async {
+    final seq = ++_productL3Seq;
+    if (product == null || product.isEmpty) {
+      if (!mounted || seq != _productL3Seq) return;
+      setState(() {
+        _productL3ForCurrent = const [];
+        _productL3LoadedKey = '';
+      });
+      return;
+    }
+    final cached = proposalIntakeProductL3ForProduct(
+      _productL3CatalogAll,
+      product: product,
+    );
+    if (mounted && seq == _productL3Seq) {
+      setState(() {
+        _productL3ForCurrent = cached;
+        _productL3LoadedKey = product.identity;
+      });
+    }
+    final parentCode = product.code.trim();
+    final parentIdText = parentCode.isEmpty ? product.resolvedIdText : '';
+    if (parentCode.isEmpty && parentIdText.isEmpty) return;
+    final rows = await _catalog.fetchProductCategoryL3(
+      parentCode: parentCode,
+      parentIdText: parentIdText,
+    );
+    if (!mounted || seq != _productL3Seq) return;
+    setState(() {
+      _productL3ForCurrent = rows.isNotEmpty ? rows : cached;
+      _productL3LoadedKey = product.identity;
     });
   }
 
@@ -2937,7 +2985,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }) async {
     final seq = (_assetProductSyncSeq[rowId] ?? 0) + 1;
     _assetProductSyncSeq[rowId] = seq;
-    if (hit == null || hit.id == null || hit.id! <= 0) {
+    if (hit == null || !hit.hasId) {
       _assetProductSyncing.remove(rowId);
       _assetProductSyncHint.remove(rowId);
       if (mounted) setState(() {});
@@ -2946,7 +2994,27 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     _assetProductSyncing.add(rowId);
     _assetProductSyncHint[rowId] = '正在同步结算规则…';
     if (mounted) setState(() {});
-    final data = await _catalog.fetchChannelProductSettlement(hit.id!);
+    final isChild = _isChildSkuId(rowId);
+    if (!isChild) {
+      final packet = await _catalog.fetchChannelProductPacketItems(
+        hit.id ?? 0,
+        idText: hit.idText,
+      );
+      if (!mounted || _assetProductSyncSeq[rowId] != seq) return;
+      if (packet != null) {
+        await _applyChannelPacket(
+          rowId: rowId,
+          hit: hit,
+          packet: packet,
+          seq: seq,
+        );
+        return;
+      }
+    }
+    final data = await _catalog.fetchChannelProductSettlement(
+      hit.id ?? 0,
+      idText: hit.idText,
+    );
     if (!mounted || _assetProductSyncSeq[rowId] != seq) return;
     if (data == null) {
       _assetProductSyncing.remove(rowId);
@@ -2969,7 +3037,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ? '该产品暂无结算行，请财务手工填写'
         : '已从资管同步 ${data.items.length} 条结算规则';
     _patchSellableSku(rowId, (current) {
-      if (current.assetProduct?.id != hit.id) return current;
+      if (current.assetProduct != hit) return current;
+      if (data.items.isEmpty &&
+          proposalIntakeSkuHasFilledSettlements(current)) {
+        return current;
+      }
       final rows = proposalIntakeSettlementsFromChannelCatalog(
         data,
         fallbackChannel: current.channelRef,
@@ -2978,6 +3050,170 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       );
       return current.applyAssetProduct(hit, settlements: rows);
     });
+  }
+
+  Future<ChannelProductPacket> _hydratePacketChildSettlements(
+    ChannelProductPacket packet,
+  ) async {
+    if (packet.items.isEmpty) return packet;
+    final items = await Future.wait([
+      for (final item in packet.items) _hydratePacketItemSettlements(item),
+    ]);
+    return ChannelProductPacket(parent: packet.parent, items: items);
+  }
+
+  Future<ChannelProductPacketItem> _hydratePacketItemSettlements(
+    ChannelProductPacketItem item,
+  ) async {
+    if (item.settlementItems.isNotEmpty) return item;
+    if (!item.product.hasId) return item;
+    final data = await _catalog.fetchChannelProductSettlement(
+      item.product.id ?? 0,
+      idText: item.product.idText,
+    );
+    return proposalIntakeHydratePacketItemSettlements(item, data);
+  }
+
+  Future<void> _applyChannelPacket({
+    required String rowId,
+    required ChannelProductHit hit,
+    required ChannelProductPacket packet,
+    required int seq,
+  }) async {
+    final source = hit.syncSource.trim().isNotEmpty
+        ? hit.syncSource.trim()
+        : _assetRowSyncSource(rowId);
+    final parentBundle = source.isEmpty
+        ? const _SettleCatalogBundle()
+        : await _ensureSettleBundle(
+            syncSource: source,
+            productSource: 'CHANNEL',
+          );
+    if (!mounted || _assetProductSyncSeq[rowId] != seq) return;
+    final hydrated = await _hydratePacketChildSettlements(packet);
+    if (!mounted || _assetProductSyncSeq[rowId] != seq) return;
+    final childSources = <String>{
+      for (final item in hydrated.items)
+        if (item.resolvedSyncSource.isNotEmpty) item.resolvedSyncSource,
+    };
+    final childBundles = <String, _SettleCatalogBundle>{};
+    for (final childSource in childSources) {
+      childBundles[childSource] = await _ensureSettleBundle(
+        syncSource: childSource,
+        productSource: 'CHANNEL',
+      );
+      if (!mounted || _assetProductSyncSeq[rowId] != seq) return;
+    }
+    final current = proposalIntakeSkuDetails(
+      _form,
+    ).where((item) => item.id == rowId).firstOrNull;
+    if (current == null || current.assetProduct != hit) {
+      _assetProductSyncing.remove(rowId);
+      if (mounted) setState(() {});
+      return;
+    }
+    final fill = proposalIntakeFillFromChannelPacket(
+      hydrated,
+      parentSkuId: rowId,
+      parentChannel: current.channelRef,
+      parentFormulas: parentBundle.formulas,
+      parentBillTypes: parentBundle.billTypes,
+      syncSourceOf: _syncSourceRefForCode,
+      formulasOf: (code) => childBundles[code]?.formulas ?? const [],
+      billTypesOf: (code) => childBundles[code]?.billTypes ?? const [],
+    );
+    _assetProductSyncing.remove(rowId);
+    if (fill.hasChildren) {
+      final childHint = fill.children.length == 1
+          ? '1 个子产品'
+          : '${fill.children.length} 个子产品';
+      final childSettled = fill.children
+          .where(proposalIntakeSkuHasFilledSettlements)
+          .length;
+      if (childSettled > 0) {
+        _assetProductSyncHint[rowId] =
+            '已从资管同步${packet.parent.items.isEmpty ? '' : ' ${packet.parent.items.length} 条'}结算规则，并带出$childHint及结算';
+      } else if (packet.parent.items.isEmpty) {
+        _assetProductSyncHint[rowId] = '已带出$childHint，结算请财务手工填写';
+      } else {
+        _assetProductSyncHint[rowId] =
+            '已从资管同步 ${packet.parent.items.length} 条结算规则，并带出$childHint';
+      }
+    } else {
+      _assetProductSyncHint[rowId] = packet.parent.items.isEmpty
+          ? '该产品暂无结算行，请财务手工填写'
+          : '已从资管同步 ${packet.parent.items.length} 条结算规则';
+    }
+    _writeExistingProductPacket(
+      rowId: rowId,
+      hit: hit,
+      fill: fill,
+    );
+    for (final child in fill.children) {
+      if (proposalIntakeSkuHasFilledSettlements(child)) continue;
+      final childHit = child.assetProduct;
+      if (childHit == null || !childHit.hasId) continue;
+      unawaited(
+        _syncAssetProductSettlement(rowId: child.id, hit: childHit),
+      );
+    }
+  }
+
+  CatalogRef? _syncSourceRefForCode(String code) {
+    final key = code.trim();
+    if (key.isEmpty) return null;
+    for (final item in _syncSourceCatalog) {
+      if (item.code.trim() == key) return item;
+    }
+    return CatalogRef(code: key, name: key);
+  }
+
+  void _writeExistingProductPacket({
+    required String rowId,
+    required ChannelProductHit hit,
+    required ProposalChannelPacketFill fill,
+  }) {
+    var form = Map<String, dynamic>.from(_form);
+    final skus = [
+      for (final row in proposalIntakeSkuDetails(form))
+        if (row.id == rowId && row.assetProduct == hit)
+          row.applyAssetProduct(hit, settlements: fill.parentSettlements)
+        else
+          row,
+    ];
+    form['skuDetails'] = [for (final row in skus) row.toJson()];
+    if (fill.hasChildren) {
+      final children = proposalIntakeReplacePacketChildren(
+        current: proposalIntakeChildProducts(form),
+        parentSkuId: rowId,
+        packetChildren: fill.children,
+      );
+      form['childProducts'] = [for (final row in children) row.toJson()];
+      form['childIsExistingBuilt'] = true;
+      final quantities = <String, int>{
+        for (final child in children)
+          if (!fill.childQuantities.containsKey(child.id))
+            child.id: proposalIntakeChildProductQuantity(form, child.id),
+        ...fill.childQuantities,
+      };
+      final benefit = form['benefitProduct'] is Map
+          ? Map<String, dynamic>.from(form['benefitProduct'] as Map)
+          : <String, dynamic>{};
+      benefit['skuQuantities'] = quantities;
+      form['benefitProduct'] = benefit;
+      if (fill.children.isNotEmpty) {
+        _activeChildProductId = fill.children.first.id;
+      }
+    }
+    form = proposalIntakeSyncChildProductMeta(form);
+    form = _withEstimatedFinanceCosts(form);
+    final review = Map<String, dynamic>.from(_review)
+      ..['marketCompleted'] = false
+      ..['financeCompleted'] = false;
+    _dirty = true;
+    _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
+    if (mounted) setState(() {});
+    widget.onChanged(_row);
   }
 
   String _settleCacheKey(String syncSource, String productSource) =>
@@ -3067,6 +3303,28 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       for (final item in widget.options.products)
         CatalogRef.fromName(item.value),
     ];
+  }
+
+  CatalogRef _selectedProduct() {
+    return _formRef('productRef') ?? CatalogRef.fromName(_text('product'));
+  }
+
+  List<CatalogRef> _productL3Options() {
+    final product = _selectedProduct();
+    if (product.isEmpty) return const [];
+    if (_productL3LoadedKey == product.identity) return _productL3ForCurrent;
+    return proposalIntakeProductL3ForProduct(
+      _productL3CatalogAll,
+      product: product,
+    );
+  }
+
+  String _productL3LoadingEmptyText() {
+    if (_selectedProduct().isEmpty) return '请先选择产品（标签一）';
+    if (_productL3CatalogAll.isEmpty && _productL3ForCurrent.isEmpty) {
+      return '字典加载中或暂无子分类';
+    }
+    return '该产品暂无子分类';
   }
 
   List<CatalogRef> _projectOptions() {
@@ -3903,9 +4161,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         const SizedBox(width: 7),
       ],
       ProposalStatusChip(
-        label: _stage == 'awaiting_submit'
-            ? '待通知最终人'
-            : proposalIntakeStatusLabel(_row.status),
+        label: proposalIntakeStatusChipLabel(_row),
         kind: _row.status == 'done'
             ? ProposalChipKind.ok
             : ProposalChipKind.purple,
@@ -4947,7 +5203,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   'sectorRef': catalogRefToJson(value),
                   'product': '',
                   'productRef': null,
+                  'productL3': '',
+                  'productL3Ref': null,
                 }, resetReview: 'marketCompleted');
+                unawaited(_loadProductL3(null));
               },
             ),
             _personField(
@@ -5007,9 +5266,32 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                           .isEmpty
                       ? '请先选择业务板块'
                       : '请选择产品二级分类',
+                  onSelected: (value) {
+                    _setMany({
+                      'product': value?.name ?? '',
+                      'productRef': catalogRefToJson(value),
+                      'productL3': '',
+                      'productL3Ref': null,
+                    }, resetReview: 'marketCompleted');
+                    unawaited(_loadProductL3(value));
+                  },
+                ),
+                _catalogDropdownField(
+                  '子分类',
+                  current:
+                      _formRef('productL3Ref') ??
+                      CatalogRef.fromName(_text('productL3')),
+                  options: _productL3Options(),
+                  required: false,
+                  resetReview: 'marketCompleted',
+                  enabled: _selectedProduct().isNotEmpty,
+                  hint: _selectedProduct().isEmpty
+                      ? '请先选择产品（标签一）'
+                      : '请选择子分类（选填）',
+                  emptyText: _productL3LoadingEmptyText(),
                   onSelected: (value) => _setMany({
-                    'product': value?.name ?? '',
-                    'productRef': catalogRefToJson(value),
+                    'productL3': value?.name ?? '',
+                    'productL3Ref': catalogRefToJson(value),
                   }, resetReview: 'marketCompleted'),
                 ),
                 _catalogDropdownField(
@@ -5909,38 +6191,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 : '全部$kProposalMainProductLabel的收入、成本、结算、账户、周转资金及复核均在本组内独立核算。',
           ),
           const SizedBox(height: 12),
+          _financeReviewToolbar(children: children),
+          const SizedBox(height: 12),
           children ? _childSettlementsBlock(wide) : _skuSettlementsBlock(wide),
           if (!children)
             _mainFinanceDetails(wide)
           else ...[
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    children
-                        ? '$kProposalChildProductLabel财务复核'
-                        : '$kProposalMainProductLabel财务复核',
-                    style: const TextStyle(
-                      color: ProposalPalette.text,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                _financeReviewModeButton(),
-                const SizedBox(width: 8),
-                ProposalStatusChip(
-                  label: _review['financeCompleted'] == true
-                      ? '财务部复核已完成'
-                      : '待财务部负责人二逐项复核',
-                  kind: _review['financeCompleted'] == true
-                      ? ProposalChipKind.ok
-                      : ProposalChipKind.purple,
-                ),
-              ],
-            ),
             const Padding(
-              padding: EdgeInsets.only(top: 6, bottom: 10),
+              padding: EdgeInsets.only(bottom: 10),
               child: Text(
                 '销售规模、收入、采购、利润、毛利率、周转资金按本组产品结算自动测算。',
                 style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
@@ -6087,31 +6346,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: 16),
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                '$kProposalMainProductLabel财务复核',
-                style: TextStyle(
-                  color: ProposalPalette.text,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            _financeReviewModeButton(),
-            const SizedBox(width: 8),
-            ProposalStatusChip(
-              label: _review['financeCompleted'] == true
-                  ? '财务部复核已完成'
-                  : '待财务部负责人二逐项复核',
-              kind: _review['financeCompleted'] == true
-                  ? ProposalChipKind.ok
-                  : ProposalChipKind.purple,
-            ),
-          ],
-        ),
         const Padding(
-          padding: EdgeInsets.only(top: 6, bottom: 10),
+          padding: EdgeInsets.only(bottom: 10),
           child: Text(
             '销售规模、收入、采购、利润、毛利率、周转资金按$kProposalMainProductLabel结算自动测算。',
             style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
@@ -8329,11 +8565,14 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ],
           ),
         ),
-        const Padding(
-          padding: EdgeInsets.only(top: 4, left: 28),
+        Padding(
+          padding: const EdgeInsets.only(top: 4, left: 28),
           child: Text(
-            '不勾：手工填写产品信息。\n'
-            '勾选：先选业务平台，再搜索选中资管已建的产品。选中后会按资管结算规则同步账单类型、结算方式、税率，下面的字段不用再填。',
+            child
+                ? '不勾：手工填写产品信息。\n'
+                    '勾选：先选业务平台，再搜索选中资管已建的产品。选中后会按资管结算规则同步账单类型、结算方式、税率，下面的字段不用再填。'
+                : '不勾：手工填写产品信息。\n'
+                    '勾选：先选业务平台，再搜索选中资管已建的产品。选中后会按资管结算规则同步账单类型、结算方式、税率；券包会带出子产品基础信息和对应结算，仍可继续增改。',
             style: TextStyle(
               color: ProposalPalette.text3,
               fontSize: 11,
@@ -10202,7 +10441,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       required ProposalFinanceSettleTerms Function(CatalogRef?) write,
       String? Function(CatalogRef item)? metaOf,
     }) {
-      final selected = _selectedCatalog(current, options);
+      final selected =
+          _selectedCatalog(current, options) ??
+          ((current != null && current.isNotEmpty) ? current : null);
       final values = _withCurrent(options, selected);
       return ProposalField(
         label: label,
@@ -11664,6 +11905,46 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   bool _isFinanceLongTextKey(String key) => key == 'financeRemark';
+
+  Widget _financeReviewToolbar({required bool children}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                children
+                    ? '$kProposalChildProductLabel财务复核'
+                    : '$kProposalMainProductLabel财务复核',
+                style: const TextStyle(
+                  color: ProposalPalette.text,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            _financeReviewModeButton(),
+            const SizedBox(width: 8),
+            ProposalStatusChip(
+              label: _review['financeCompleted'] == true
+                  ? '财务部复核已完成'
+                  : '待财务部负责人二逐项复核',
+              kind: _review['financeCompleted'] == true
+                  ? ProposalChipKind.ok
+                  : ProposalChipKind.purple,
+            ),
+          ],
+        ),
+        const Padding(
+          padding: EdgeInsets.only(top: 6),
+          child: Text(
+            '先核结算信息，再核收入成本。点「开始逐条复核」后，结算与财务字段旁会出现复核按钮。',
+            style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
+          ),
+        ),
+      ],
+    );
+  }
 
   /// 逐条复核的总开关：关掉时字段旁只留圆点，打开才显示复核 / 驳回按钮。
   Widget _financeReviewModeButton() {

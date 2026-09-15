@@ -23,6 +23,7 @@ class _FakeEfficiencyService extends EfficiencyService {
   Future<EfficiencySnapshot> fetchOverview({
     required String scope,
     required String month,
+    String? date,
   }) async {
     return EfficiencySnapshot(
       scope: scope,
@@ -97,7 +98,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('AI效能分析'), findsOneWidget);
-    expect(find.text('2026.8'), findsOneWidget);
+    expect(find.text('按月'), findsOneWidget);
+    expect(find.text('按日'), findsOneWidget);
+    expect(find.text('2026.9'), findsOneWidget);
     expect(find.text('个人分析'), findsOneWidget);
     expect(find.text('部门汇总'), findsOneWidget);
     expect(find.text('任务完成率'), findsOneWidget);
@@ -116,6 +119,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('部门效能分析'), findsOneWidget);
     expect(find.textContaining('看闭环和质量'), findsOneWidget);
+
+    await tester.tap(find.text('按日'));
+    await tester.pumpAndSettle();
+    expect(find.text('9月8日'), findsOneWidget);
   });
 
   testWidgets('switching tabs with extra metrics does not paint an error', (
@@ -198,7 +205,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('上传后没人用'));
     expect(openedFilter, 'kb');
-    expect(openedMonth, DateTime(2026, 8));
+    expect(openedMonth, DateTime(2026, 9));
   });
 
   test('metric grid fills width without wrapping early', () {

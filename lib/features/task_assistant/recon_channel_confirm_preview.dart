@@ -1,7 +1,7 @@
 import '../conversation/conversation_models.dart';
 
-/// 对账助手里给对账人看的渠道对账名片。看完改回 false。
-const kReconChannelStaticPreview = true;
+/// 对账助手渠道对账名片静态预览。正式联调保持 false。
+const kReconChannelStaticPreview = false;
 
 class ReconChannelDayLine {
   const ReconChannelDayLine({

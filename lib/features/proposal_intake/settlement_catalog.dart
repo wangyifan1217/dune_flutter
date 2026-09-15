@@ -194,9 +194,18 @@ List<CatalogRef> flattenBillTypeTree(Object? raw, {String prefix = ''}) {
     final node = CatalogRef.fromJson(map);
     if (node.isEmpty) continue;
     final path = prefix.isEmpty ? node.name : '$prefix / ${node.name}';
-    out.add(node.copyWith(displayPath: path));
+    final level = catalogInt(map['level']);
+    if (level == 3) {
+      out.add(node.copyWith(displayPath: path));
+      continue;
+    }
     final children = flattenBillTypeTree(map['children'], prefix: path);
-    out.addAll(children);
+    if (children.isNotEmpty) {
+      out.addAll(children);
+      continue;
+    }
+    if (level != null) continue;
+    out.add(node.copyWith(displayPath: path));
   }
   return out;
 }
@@ -271,10 +280,59 @@ bool _productL2MatchesSector(
   return rowCode.toLowerCase() == parentName;
 }
 
+String catalogNameKey(String raw) {
+  return raw
+      .trim()
+      .toLowerCase()
+      .replaceAll(RegExp(r'[（(][^）)]*[）)]'), '')
+      .replaceAll(RegExp(r'\s+'), '');
+}
+
+bool _productL3MatchesProduct(CatalogRef row, CatalogRef product) {
+  final parentCode = product.code.trim();
+  final codeKey = parentCode.toLowerCase();
+  if (_productL2MatchesSector(
+    row,
+    parentCode: parentCode,
+    codeKey: codeKey,
+    parentIdText: product.resolvedIdText,
+    parentName: product.name.trim().toLowerCase(),
+  )) {
+    return true;
+  }
+  final productName = catalogNameKey(product.name);
+  final parentName = catalogNameKey(row.parentName);
+  if (productName.isNotEmpty &&
+      parentName.isNotEmpty &&
+      (productName == parentName ||
+          productName.contains(parentName) ||
+          parentName.contains(productName))) {
+    return true;
+  }
+  if (parentCode.isEmpty) return false;
+  final rowCode = row.code.trim();
+  if (rowCode.toLowerCase() == codeKey) return true;
+  return rowCode.toLowerCase().startsWith('${codeKey}_');
+}
+
+/// 销售提案「子分类」= 资管产品三级，按已选产品（标签一 / 二级分类）过滤。
+List<CatalogRef> proposalIntakeProductL3ForProduct(
+  List<CatalogRef> catalog, {
+  CatalogRef? product,
+}) {
+  if (catalog.isEmpty) return const [];
+  if (product == null || product.isEmpty) return const [];
+  return [
+    for (final row in catalog)
+      if (_productL3MatchesProduct(row, product)) row,
+  ];
+}
+
 /// 已建渠道产品查询命中。来自 [GET /out/shaqiu/catalog/channel-product]。
 class ChannelProductHit {
   const ChannelProductHit({
     this.id,
+    this.idText = '',
     this.productCode = '',
     this.productName = '',
     this.channelId,
@@ -287,6 +345,8 @@ class ChannelProductHit {
   });
 
   final int? id;
+  /// 资管雪花 id 原文，避免 web 把 19 位 id 截断。
+  final String idText;
   final String productCode;
   final String productName;
   final int? channelId;
@@ -297,8 +357,20 @@ class ChannelProductHit {
   final String syncSource;
   final String submitStatus;
 
+  String get resolvedIdText {
+    final text = idText.trim();
+    if (text.isNotEmpty) return text;
+    if (id != null && id != 0) return '$id';
+    return '';
+  }
+
+  bool get hasId {
+    final text = resolvedIdText;
+    return text.isNotEmpty && text != '0';
+  }
+
   bool get isEmpty =>
-      (id == null || id == 0) &&
+      !hasId &&
       productCode.trim().isEmpty &&
       productName.trim().isEmpty;
 
@@ -310,7 +382,7 @@ class ChannelProductHit {
   }
 
   String get identity =>
-      '${id ?? ''}|${productCode.trim()}|${productName.trim()}';
+      '${resolvedIdText}|${productCode.trim()}|${productName.trim()}';
 
   CatalogRef get productRef => CatalogRef(
     id: id,
@@ -339,7 +411,7 @@ class ChannelProductHit {
   }
 
   Map<String, dynamic> toJson() => {
-    if (id != null && id != 0) 'id': id,
+    if (_jsonId(resolvedIdText, id) != null) 'id': _jsonId(resolvedIdText, id),
     if (productCode.trim().isNotEmpty) 'productCode': productCode.trim(),
     if (productName.trim().isNotEmpty) 'productName': productName.trim(),
     if (channelId != null && channelId != 0) 'channelId': channelId,
@@ -354,8 +426,11 @@ class ChannelProductHit {
   factory ChannelProductHit.fromJson(Object? raw) {
     if (raw is! Map) return const ChannelProductHit();
     final map = Map<String, dynamic>.from(raw);
+    final idRaw = map['id'] ?? map['itemProductId'];
+    final idText = idRaw == null ? '' : '$idRaw'.trim();
     return ChannelProductHit(
-      id: catalogInt(map['id']),
+      id: catalogInt(idRaw),
+      idText: idText == 'null' ? '' : idText,
       productCode: '${map['productCode'] ?? map['code'] ?? ''}'.trim(),
       productName: _firstCatalogText([
         map['productName'],
@@ -603,6 +678,104 @@ class ChannelProductSettlement {
   }
 }
 
+/// 券包父产品下的子项。来自 [GET /out/shaqiu/catalog/channel-product/packet-items]。
+class ChannelProductPacketItem {
+  const ChannelProductPacketItem({
+    this.product = const ChannelProductHit(),
+    this.itemExternalId,
+    this.itemSyncSource = '',
+    this.quantity = 0,
+    this.settlementItems = const [],
+  });
+
+  final ChannelProductHit product;
+  final int? itemExternalId;
+  final String itemSyncSource;
+  final int quantity;
+  final List<ChannelProductSettlementItem> settlementItems;
+
+  int? get itemProductId => product.id;
+
+  String get resolvedSyncSource {
+    final fromProduct = product.syncSource.trim();
+    if (fromProduct.isNotEmpty) return fromProduct;
+    return itemSyncSource.trim();
+  }
+
+  ChannelProductSettlement get asSettlement => ChannelProductSettlement(
+    product: product,
+    items: settlementItems,
+  );
+
+  ChannelProductPacketItem copyWith({
+    ChannelProductHit? product,
+    int? itemExternalId,
+    String? itemSyncSource,
+    int? quantity,
+    List<ChannelProductSettlementItem>? settlementItems,
+  }) => ChannelProductPacketItem(
+    product: product ?? this.product,
+    itemExternalId: itemExternalId ?? this.itemExternalId,
+    itemSyncSource: itemSyncSource ?? this.itemSyncSource,
+    quantity: quantity ?? this.quantity,
+    settlementItems: settlementItems ?? this.settlementItems,
+  );
+
+  factory ChannelProductPacketItem.fromJson(Object? raw) {
+    if (raw is! Map) return const ChannelProductPacketItem();
+    final map = Map<String, dynamic>.from(raw);
+    final nestedProduct = map['product'];
+    final productJson = Map<String, dynamic>.from(
+      nestedProduct is Map ? nestedProduct : map,
+    )..['id'] = map['itemProductId'] ?? map['id'] ?? (nestedProduct is Map ? nestedProduct['id'] : null);
+    final itemsRaw =
+        map['settlementItems'] ??
+        map['settlements'] ??
+        map['channelSettlementItems'] ??
+        (nestedProduct is Map
+            ? (nestedProduct['settlementItems'] ?? nestedProduct['settlements'])
+            : null);
+    final items = <ChannelProductSettlementItem>[
+      for (final item in itemsRaw is List ? itemsRaw : const [])
+        ChannelProductSettlementItem.fromJson(item),
+    ]..sort((a, b) => a.sortNo.compareTo(b.sortNo));
+    return ChannelProductPacketItem(
+      product: ChannelProductHit.fromJson(productJson),
+      itemExternalId: catalogInt(map['itemExternalId']),
+      itemSyncSource: '${map['itemSyncSource'] ?? ''}'.trim(),
+      quantity: catalogInt(map['num']) ?? 0,
+      settlementItems: items,
+    );
+  }
+}
+
+/// 券包父产品：父级结算行 + 子产品基础信息与结算行。
+class ChannelProductPacket {
+  const ChannelProductPacket({
+    this.parent = const ChannelProductSettlement(),
+    this.items = const [],
+  });
+
+  final ChannelProductSettlement parent;
+  final List<ChannelProductPacketItem> items;
+
+  int? get id => parent.id;
+  ChannelProductHit get product => parent.product;
+
+  factory ChannelProductPacket.fromJson(Object? raw) {
+    if (raw is! Map) return const ChannelProductPacket();
+    final map = Map<String, dynamic>.from(raw);
+    final itemsRaw = map['items'];
+    return ChannelProductPacket(
+      parent: ChannelProductSettlement.fromJson(map),
+      items: [
+        for (final item in itemsRaw is List ? itemsRaw : const [])
+          ChannelProductPacketItem.fromJson(item),
+      ],
+    );
+  }
+}
+
 /// 资管结算字典。测试可传 [enabled]=false，避免真实 HTTP。
 class SettlementCatalogService {
   SettlementCatalogService({
@@ -647,6 +820,24 @@ class SettlementCatalogService {
         : (parentId != null && parentId > 0 ? '$parentId' : '');
     return _mapList(
       '/out/shaqiu/catalog/product-category/l2',
+      CatalogRef.fromJson,
+      query: {
+        if (parentCode.trim().isNotEmpty) 'parentCode': parentCode.trim(),
+        if (idText.isNotEmpty) 'parentId': idText,
+      },
+    );
+  }
+
+  Future<List<CatalogRef>> fetchProductCategoryL3({
+    String parentCode = '',
+    int? parentId,
+    String parentIdText = '',
+  }) async {
+    final idText = parentIdText.trim().isNotEmpty
+        ? parentIdText.trim()
+        : (parentId != null && parentId > 0 ? '$parentId' : '');
+    return _mapList(
+      '/out/shaqiu/catalog/product-category/l3',
       CatalogRef.fromJson,
       query: {
         if (parentCode.trim().isNotEmpty) 'parentCode': parentCode.trim(),
@@ -719,14 +910,32 @@ class SettlementCatalogService {
     ].where((item) => item.isNotEmpty).toList(growable: false);
   }
 
-  Future<ChannelProductSettlement?> fetchChannelProductSettlement(int id) async {
-    if (id <= 0) return null;
+  Future<ChannelProductSettlement?> fetchChannelProductSettlement(
+    int id, {
+    String idText = '',
+  }) async {
+    final queryId = _catalogIdQuery(id: id, idText: idText);
+    if (queryId.isEmpty) return null;
     final data = await _getMap(
       '/out/shaqiu/catalog/channel-product/settlement',
-      query: {'id': '$id'},
+      query: {'id': queryId},
     );
     if (data == null) return null;
     return ChannelProductSettlement.fromJson(data);
+  }
+
+  Future<ChannelProductPacket?> fetchChannelProductPacketItems(
+    int id, {
+    String idText = '',
+  }) async {
+    final queryId = _catalogIdQuery(id: id, idText: idText);
+    if (queryId.isEmpty) return null;
+    final data = await _getMap(
+      '/out/shaqiu/catalog/channel-product/packet-items',
+      query: {'id': queryId},
+    );
+    if (data == null) return null;
+    return ChannelProductPacket.fromJson(data);
   }
 
   Future<List<CatalogRef>> fetchSuppliers({
@@ -767,6 +976,13 @@ class SettlementCatalogService {
       for (final item in raw)
         if (item is Map) ChannelProductHit.fromJson(item),
     ].where((item) => item.isNotEmpty).toList(growable: false);
+  }
+
+  String _catalogIdQuery({int? id, String idText = ''}) {
+    final text = idText.trim();
+    if (text.isNotEmpty && text != '0' && text != 'null') return text;
+    if (id != null && id > 0) return '$id';
+    return '';
   }
 
   Future<ChannelProductSettlement?> fetchSupplierProductSettlement(int id) async {

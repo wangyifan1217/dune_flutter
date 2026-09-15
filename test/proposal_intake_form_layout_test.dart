@@ -896,7 +896,8 @@ void main() {
     expect(find.text('王奕凡 发起'), findsNothing);
     expect(find.text('已通过'), findsNothing);
     expect(find.text('刘雨滴'), findsWidgets);
-    expect(find.text('进行中'), findsWidgets);
+    expect(find.text('待复核'), findsWidgets);
+    expect(find.text('进行中'), findsNothing);
 
     await tester.tap(find.text('查看全部步骤'));
     await tester.pump();
@@ -1233,6 +1234,11 @@ void main() {
     await tester.pumpWidget(_harness(1440));
     await tester.pump();
     await _scrollUntil(tester, '项目名称（标签一二级）');
+    expect(find.text('子分类'), findsOneWidget);
+    expect(
+      tester.widget<ProposalField>(_fieldOf('子分类').first).required,
+      isFalse,
+    );
 
     final field = _childInField<ProposalSelectField<CatalogRef>>(
       tester,
@@ -4772,6 +4778,10 @@ void main() {
     await tester.pump();
     expect(find.text('开始逐条复核'), findsOneWidget);
     expect(find.text('退出逐条复核'), findsNothing);
+    expect(
+      tester.getTopLeft(find.text('开始逐条复核')).dy,
+      lessThan(tester.getTopLeft(find.text('产品结算')).dy),
+    );
     expect(
       find.descendant(of: _fieldOf('是否回滚'), matching: find.text('财务部负责人二复核')),
       findsNothing,

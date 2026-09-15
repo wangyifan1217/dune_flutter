@@ -183,16 +183,20 @@ class _FakeEfficiencyService extends EfficiencyService {
   }
 
   @override
-  Future<WorkSituationBoard> fetchWorkSituation({required String month}) async {
-    return _boardFor(month);
+  Future<WorkSituationBoard> fetchWorkSituation({
+    String? month,
+    String? date,
+  }) async {
+    return _boardFor(date ?? month ?? '');
   }
 
   @override
   Future<WorkSituationPerson> fetchWorkSituationPerson({
-    required String month,
+    String? month,
+    String? date,
     required int userId,
   }) async {
-    return _boardFor(month).people.firstWhere((p) => p.userId == userId);
+    return _boardFor(date ?? month ?? '').people.firstWhere((p) => p.userId == userId);
   }
 }
 
@@ -233,7 +237,7 @@ void main() {
     expect(find.text('工作情况'), findsWidgets);
     expect(find.text('每个人工作实不实'), findsOneWidget);
     expect(find.text('工作实不实'), findsOneWidget);
-    expect(find.textContaining('任务 3人在推进'), findsOneWidget);
+    expect(find.textContaining('人在推进'), findsWidgets);
     expect(find.text('把事办掉'), findsNothing);
 
     await tester.tap(find.text('工作实不实'));
@@ -245,6 +249,8 @@ void main() {
     expect(find.text('3个部门'), findsNothing);
     expect(find.text('陈可'), findsOneWidget);
     expect(find.text('王敏'), findsOneWidget);
+    await tester.tap(find.text('8月'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('开会有闭环'), findsWidgets);
 
     await tester.tap(find.text('9月'));
@@ -258,6 +264,8 @@ void main() {
 
   testWidgets('search person and open efficiency details', (tester) async {
     await pumpPreview(tester);
+    await tester.tap(find.text('8月'));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '陈可');
     await tester.pumpAndSettle();
     expect(find.text('周衡'), findsNothing);
@@ -287,6 +295,15 @@ void main() {
     expect(find.text('周衡'), findsNothing);
   });
 
+  testWidgets('can switch to day grain', (tester) async {
+    await pumpPreview(tester);
+    expect(find.text('按月'), findsOneWidget);
+    expect(find.text('9月'), findsWidgets);
+    await tester.tap(find.text('按日'));
+    await tester.pumpAndSettle();
+    expect(find.text('按日'), findsOneWidget);
+  });
+
   testWidgets('help icon explains analysis sources', (tester) async {
     await pumpPreview(tester);
     await tester.tap(find.byIcon(Icons.help_outline_rounded));
@@ -296,17 +313,17 @@ void main() {
     expect(find.textContaining('来自任务助手'), findsOneWidget);
     expect(find.textContaining('来自会议纪要'), findsOneWidget);
     expect(find.textContaining('来自知识库'), findsOneWidget);
-    expect(find.textContaining('抽本月活跃会话给 AI'), findsOneWidget);
+    expect(find.textContaining('每天抽当天会话给 AI'), findsOneWidget);
     expect(find.text('再看一遍指引'), findsOneWidget);
   });
 
   testWidgets('first visit shows spotlight tour', (tester) async {
     await pumpPreview(tester, tourSeen: false);
-    expect(find.text('先选月份'), findsOneWidget);
+    expect(find.text('先选时间'), findsOneWidget);
     expect(find.text('下一步'), findsOneWidget);
     await tester.tap(find.text('跳过').first);
     await tester.pumpAndSettle();
-    expect(find.text('先选月份'), findsNothing);
+    expect(find.text('先选时间'), findsNothing);
   });
 
   test('task judgment prefers overdue and rejected over AI', () {

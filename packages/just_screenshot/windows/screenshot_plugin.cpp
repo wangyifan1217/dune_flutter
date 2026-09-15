@@ -20,7 +20,40 @@
 #pragma comment(lib, "windowscodecs.lib")
 #pragma comment(lib, "msimg32.lib")  // AlphaBlend
 
+#ifndef DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+#define DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 \
+  ((DPI_AWARENESS_CONTEXT)(-4))
+#endif
+
 namespace screenshot {
+
+// Keep Per-Monitor V2 (manifest) for this thread. Never call SetProcessDPIAware.
+struct DpiScope {
+  DPI_AWARENESS_CONTEXT previous = nullptr;
+  bool restored = false;
+
+  DpiScope() {
+    using Fn = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
+    static const Fn set_ctx = reinterpret_cast<Fn>(GetProcAddress(
+        GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext"));
+    if (set_ctx) {
+      previous = set_ctx(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
+  }
+
+  ~DpiScope() { Restore(); }
+
+  void Restore() {
+    if (restored) return;
+    restored = true;
+    using Fn = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
+    static const Fn set_ctx = reinterpret_cast<Fn>(GetProcAddress(
+        GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext"));
+    if (set_ctx && previous) {
+      set_ctx(previous);
+    }
+  }
+};
 
 // Helper function to encode HBITMAP to PNG bytes using WIC
 std::vector<uint8_t> EncodeBitmapToPNG(HBITMAP hBitmap, int width, int height) {
@@ -132,9 +165,8 @@ std::vector<uint8_t> EncodeBitmapToPNG(HBITMAP hBitmap, int width, int height) {
 
 // Capture virtual desktop (all monitors) to HBITMAP.
 // Bitmap origin (0,0) maps to (SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN).
+// Caller should already be in Per-Monitor V2 (see DpiScope).
 HBITMAP CaptureScreenToBitmap(int* width, int* height, bool includeCursor) {
-  SetProcessDPIAware();
-
   HDC hdcScreen = GetDC(nullptr);
   if (!hdcScreen) return nullptr;
 
@@ -163,7 +195,7 @@ HBITMAP CaptureScreenToBitmap(int* width, int* height, bool includeCursor) {
   HBITMAP hOldBitmap = static_cast<HBITMAP>(SelectObject(hdcMemory, hBitmap));
 
   if (!BitBlt(hdcMemory, 0, 0, *width, *height, hdcScreen, virtualX, virtualY,
-              SRCCOPY)) {
+              SRCCOPY | CAPTUREBLT)) {
     SelectObject(hdcMemory, hOldBitmap);
     DeleteObject(hBitmap);
     DeleteDC(hdcMemory);
@@ -225,8 +257,11 @@ struct SelectionState {
   bool cancelled = false;
   bool finished = false;
   HBITMAP frozenBitmap = nullptr;
+  HBITMAP dimmedBitmap = nullptr;
   int screenWidth = 0;
   int screenHeight = 0;
+  int virtualX = 0;
+  int virtualY = 0;
   DWORD lastClickTick = 0;
   POINT lastClickPt{};
 };
@@ -339,18 +374,162 @@ static void ApplyHitDrag(RECT* r, HitZone hit, int dx, int dy, int sw, int sh) {
   *r = ClampRectToScreen(next, sw, sh);
 }
 
+static HFONT TipFont() {
+  static HFONT font = CreateFontW(
+      16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+      OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+      DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+  return font;
+}
+
+static HFONT HintFont() {
+  static HFONT font = CreateFontW(
+      14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+      OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+      DEFAULT_PITCH | FF_SWISS, L"Microsoft YaHei UI");
+  return font;
+}
+
+static HPEN SelectionPen() {
+  static HPEN pen = CreatePen(PS_SOLID, 2, RGB(7, 193, 96));
+  return pen;
+}
+
 static void DrawHandle(HDC hdc, int cx, int cy) {
   RECT hr = {cx - kHandleSize / 2, cy - kHandleSize / 2,
              cx + kHandleSize / 2 + 1, cy + kHandleSize / 2 + 1};
-  HBRUSH fill = CreateSolidBrush(RGB(255, 255, 255));
-  HPEN pen = CreatePen(PS_SOLID, 1, RGB(7, 193, 96));  // WeChat green
+  static HBRUSH fill = CreateSolidBrush(RGB(255, 255, 255));
+  static HPEN pen = CreatePen(PS_SOLID, 1, RGB(7, 193, 96));
   HGDIOBJ oldBrush = SelectObject(hdc, fill);
   HGDIOBJ oldPen = SelectObject(hdc, pen);
   Rectangle(hdc, hr.left, hr.top, hr.right, hr.bottom);
   SelectObject(hdc, oldBrush);
   SelectObject(hdc, oldPen);
-  DeleteObject(fill);
-  DeleteObject(pen);
+}
+
+static RECT ChromeInvalidateRect(const RECT& sel, int sw, int sh) {
+  RECT r = sel;
+  InflateRect(&r, kHandleSize + 8, kHandleSize + 8);
+  r.top -= 40;
+  r.bottom += 44;
+  r.left -= 12;
+  r.right += 12;
+  if (r.left < 0) r.left = 0;
+  if (r.top < 0) r.top = 0;
+  if (r.right > sw) r.right = sw;
+  if (r.bottom > sh) r.bottom = sh;
+  return r;
+}
+
+static RECT CurrentSelRect(bool* has) {
+  RECT sel{};
+  *has = false;
+  if (!g_selectionState) return sel;
+  if (g_selectionState->phase == OverlayPhase::Selecting) {
+    sel = NormalizedRect(g_selectionState->startPoint,
+                         g_selectionState->currentPoint);
+  } else if (g_selectionState->phase == OverlayPhase::Confirmed) {
+    sel = g_selectionState->selectedRect;
+  } else {
+    return sel;
+  }
+  *has = (sel.right - sel.left) > 0 && (sel.bottom - sel.top) > 0;
+  return sel;
+}
+
+static void InvalidateSelChange(HWND hwnd, const RECT& prev, bool prev_has,
+                                const RECT& next, bool next_has) {
+  if (!g_selectionState) return;
+  const int sw = g_selectionState->screenWidth;
+  const int sh = g_selectionState->screenHeight;
+  if (prev_has) {
+    RECT a = ChromeInvalidateRect(prev, sw, sh);
+    InvalidateRect(hwnd, &a, FALSE);
+  }
+  if (next_has) {
+    RECT b = ChromeInvalidateRect(next, sw, sh);
+    InvalidateRect(hwnd, &b, FALSE);
+  }
+}
+
+static POINT OverlayCursorPoint() {
+  POINT pt{};
+  GetCursorPos(&pt);
+  if (!g_selectionState) return pt;
+  pt.x -= g_selectionState->virtualX;
+  pt.y -= g_selectionState->virtualY;
+  if (pt.x < 0) pt.x = 0;
+  if (pt.y < 0) pt.y = 0;
+  if (pt.x > g_selectionState->screenWidth) {
+    pt.x = g_selectionState->screenWidth;
+  }
+  if (pt.y > g_selectionState->screenHeight) {
+    pt.y = g_selectionState->screenHeight;
+  }
+  return pt;
+}
+
+static LPCWSTR CursorForHit(HitZone hit) {
+  switch (hit) {
+    case HitZone::Move:
+      return IDC_SIZEALL;
+    case HitZone::N:
+    case HitZone::S:
+      return IDC_SIZENS;
+    case HitZone::E:
+    case HitZone::W:
+      return IDC_SIZEWE;
+    case HitZone::NE:
+    case HitZone::SW:
+      return IDC_SIZENESW;
+    case HitZone::NW:
+    case HitZone::SE:
+      return IDC_SIZENWSE;
+    default:
+      return IDC_CROSS;
+  }
+}
+
+static HBITMAP CreateDimmedBitmap(HBITMAP frozen, int width, int height) {
+  HDC hdcScreen = GetDC(nullptr);
+  if (!hdcScreen) return nullptr;
+  HDC hdcSrc = CreateCompatibleDC(hdcScreen);
+  HDC hdcDst = CreateCompatibleDC(hdcScreen);
+  HBITMAP dimmed = CreateCompatibleBitmap(hdcScreen, width, height);
+  if (!hdcSrc || !hdcDst || !dimmed) {
+    if (dimmed) DeleteObject(dimmed);
+    if (hdcSrc) DeleteDC(hdcSrc);
+    if (hdcDst) DeleteDC(hdcDst);
+    ReleaseDC(nullptr, hdcScreen);
+    return nullptr;
+  }
+  HBITMAP oldSrc = static_cast<HBITMAP>(SelectObject(hdcSrc, frozen));
+  HBITMAP oldDst = static_cast<HBITMAP>(SelectObject(hdcDst, dimmed));
+  BitBlt(hdcDst, 0, 0, width, height, hdcSrc, 0, 0, SRCCOPY);
+
+  HDC hdcDim = CreateCompatibleDC(hdcScreen);
+  HBITMAP hbmDim = CreateCompatibleBitmap(hdcScreen, width, height);
+  if (hdcDim && hbmDim) {
+    HBITMAP oldDim = static_cast<HBITMAP>(SelectObject(hdcDim, hbmDim));
+    RECT rc = {0, 0, width, height};
+    HBRUSH brush = CreateSolidBrush(RGB(0, 0, 0));
+    FillRect(hdcDim, &rc, brush);
+    DeleteObject(brush);
+    BLENDFUNCTION blend = {};
+    blend.BlendOp = AC_SRC_OVER;
+    blend.SourceConstantAlpha = 120;
+    AlphaBlend(hdcDst, 0, 0, width, height, hdcDim, 0, 0, width, height, blend);
+    SelectObject(hdcDim, oldDim);
+  }
+  if (hbmDim) DeleteObject(hbmDim);
+  if (hdcDim) DeleteDC(hdcDim);
+
+  SelectObject(hdcSrc, oldSrc);
+  SelectObject(hdcDst, oldDst);
+  DeleteDC(hdcSrc);
+  DeleteDC(hdcDst);
+  ReleaseDC(nullptr, hdcScreen);
+  return dimmed;
 }
 
 static void DrawSelectionChrome(HDC hdc, const RECT& sel, bool showHandles) {
@@ -359,13 +538,11 @@ static void DrawSelectionChrome(HDC hdc, const RECT& sel, bool showHandles) {
   const int right = sel.right;
   const int bottom = sel.bottom;
 
-  HPEN hPen = CreatePen(PS_SOLID, 2, RGB(7, 193, 96));
-  HGDIOBJ oldPen = SelectObject(hdc, hPen);
+  HGDIOBJ oldPen = SelectObject(hdc, SelectionPen());
   HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
   Rectangle(hdc, left, top, right, bottom);
   SelectObject(hdc, oldBrush);
   SelectObject(hdc, oldPen);
-  DeleteObject(hPen);
 
   if (showHandles) {
     DrawHandle(hdc, left, top);
@@ -378,36 +555,27 @@ static void DrawSelectionChrome(HDC hdc, const RECT& sel, bool showHandles) {
     DrawHandle(hdc, right, (top + bottom) / 2);
   }
 
-  // Size tip (WeChat-like)
   wchar_t tip[64];
   swprintf_s(tip, L"%d × %d", max(0, right - left), max(0, bottom - top));
   SIZE tipSize{};
-  HFONT font = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                           CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                           DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+  HFONT font = TipFont();
   HGDIOBJ oldFont = SelectObject(hdc, font);
   GetTextExtentPoint32W(hdc, tip, lstrlenW(tip), &tipSize);
   int tipX = left;
   int tipY = top - tipSize.cy - 10;
   if (tipY < 4) tipY = bottom + 8;
   RECT tipBg = {tipX, tipY, tipX + tipSize.cx + 12, tipY + tipSize.cy + 6};
-  HBRUSH tipBrush = CreateSolidBrush(RGB(0, 0, 0));
+  static HBRUSH tipBrush = CreateSolidBrush(RGB(0, 0, 0));
   FillRect(hdc, &tipBg, tipBrush);
-  DeleteObject(tipBrush);
   SetBkMode(hdc, TRANSPARENT);
   SetTextColor(hdc, RGB(255, 255, 255));
   TextOutW(hdc, tipX + 6, tipY + 3, tip, lstrlenW(tip));
   SelectObject(hdc, oldFont);
-  DeleteObject(font);
 
   if (showHandles) {
     const wchar_t* hint = L"Enter / 双击完成 · Esc 取消";
     SIZE hintSize{};
-    HFONT hintFont = CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                                 CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                                 DEFAULT_PITCH | FF_SWISS, L"Microsoft YaHei UI");
+    HFONT hintFont = HintFont();
     HGDIOBJ oldHintFont = SelectObject(hdc, hintFont);
     GetTextExtentPoint32W(hdc, hint, lstrlenW(hint), &hintSize);
     int hx = right - hintSize.cx - 12;
@@ -417,73 +585,65 @@ static void DrawSelectionChrome(HDC hdc, const RECT& sel, bool showHandles) {
       hy = top - hintSize.cy - 12;
     }
     RECT hintBg = {hx, hy, hx + hintSize.cx + 12, hy + hintSize.cy + 6};
-    HBRUSH hintBrush = CreateSolidBrush(RGB(0, 0, 0));
-    FillRect(hdc, &hintBg, hintBrush);
-    DeleteObject(hintBrush);
+    FillRect(hdc, &hintBg, tipBrush);
     SetTextColor(hdc, RGB(220, 220, 220));
     TextOutW(hdc, hx + 6, hy + 3, hint, lstrlenW(hint));
     SelectObject(hdc, oldHintFont);
-    DeleteObject(hintFont);
   }
 }
 
-static void PaintOverlay(HWND hwnd, HDC hdc) {
+static void PaintOverlay(HWND hwnd, HDC hdc, const RECT& paintRect) {
   if (!g_selectionState || !g_selectionState->frozenBitmap) return;
 
   RECT clientRect;
   GetClientRect(hwnd, &clientRect);
-  const int width = clientRect.right - clientRect.left;
-  const int height = clientRect.bottom - clientRect.top;
+  RECT rc = paintRect;
+  if (rc.right <= rc.left || rc.bottom <= rc.top) {
+    rc = clientRect;
+  }
+  const int pw = rc.right - rc.left;
+  const int ph = rc.bottom - rc.top;
+  if (pw <= 0 || ph <= 0) return;
 
   HDC hdcMem = CreateCompatibleDC(hdc);
-  HBITMAP hbmMem = CreateCompatibleBitmap(hdc, width, height);
+  HBITMAP hbmMem = CreateCompatibleBitmap(hdc, pw, ph);
+  if (!hdcMem || !hbmMem) {
+    if (hbmMem) DeleteObject(hbmMem);
+    if (hdcMem) DeleteDC(hdcMem);
+    return;
+  }
   HBITMAP hbmOld = static_cast<HBITMAP>(SelectObject(hdcMem, hbmMem));
 
-  // Base: frozen screen
-  HDC hdcFrozen = CreateCompatibleDC(hdc);
-  HBITMAP oldFrozen =
-      static_cast<HBITMAP>(SelectObject(hdcFrozen, g_selectionState->frozenBitmap));
-  BitBlt(hdcMem, 0, 0, width, height, hdcFrozen, 0, 0, SRCCOPY);
+  HBITMAP base = g_selectionState->dimmedBitmap
+                     ? g_selectionState->dimmedBitmap
+                     : g_selectionState->frozenBitmap;
+  HDC hdcBase = CreateCompatibleDC(hdc);
+  HBITMAP oldBase = static_cast<HBITMAP>(SelectObject(hdcBase, base));
+  BitBlt(hdcMem, 0, 0, pw, ph, hdcBase, rc.left, rc.top, SRCCOPY);
+  SelectObject(hdcBase, oldBase);
+  DeleteDC(hdcBase);
 
-  // Dim whole screen (WeChat-like dark mask)
-  HDC hdcDim = CreateCompatibleDC(hdc);
-  HBITMAP hbmDim = CreateCompatibleBitmap(hdc, width, height);
-  HBITMAP oldDim = static_cast<HBITMAP>(SelectObject(hdcDim, hbmDim));
-  HBRUSH dimBrush = CreateSolidBrush(RGB(0, 0, 0));
-  FillRect(hdcDim, &clientRect, dimBrush);
-  DeleteObject(dimBrush);
-  BLENDFUNCTION blend = {};
-  blend.BlendOp = AC_SRC_OVER;
-  blend.SourceConstantAlpha = 120;  // ~47% dark
-  blend.AlphaFormat = 0;
-  AlphaBlend(hdcMem, 0, 0, width, height, hdcDim, 0, 0, width, height, blend);
-  SelectObject(hdcDim, oldDim);
-  DeleteObject(hbmDim);
-  DeleteDC(hdcDim);
-
-  RECT sel = {};
   bool hasSel = false;
-  if (g_selectionState->phase == OverlayPhase::Selecting) {
-    sel = NormalizedRect(g_selectionState->startPoint,
-                         g_selectionState->currentPoint);
-    hasSel = (sel.right - sel.left) > 0 && (sel.bottom - sel.top) > 0;
-  } else if (g_selectionState->phase == OverlayPhase::Confirmed) {
-    sel = g_selectionState->selectedRect;
-    hasSel = (sel.right - sel.left) > 0 && (sel.bottom - sel.top) > 0;
-  }
-
+  RECT sel = CurrentSelRect(&hasSel);
   if (hasSel) {
-    // Restore clear preview inside selection from frozen bitmap
-    BitBlt(hdcMem, sel.left, sel.top, sel.right - sel.left, sel.bottom - sel.top,
+    HDC hdcFrozen = CreateCompatibleDC(hdc);
+    HBITMAP oldFrozen = static_cast<HBITMAP>(
+        SelectObject(hdcFrozen, g_selectionState->frozenBitmap));
+    const int dx = sel.left - rc.left;
+    const int dy = sel.top - rc.top;
+    BitBlt(hdcMem, dx, dy, sel.right - sel.left, sel.bottom - sel.top,
            hdcFrozen, sel.left, sel.top, SRCCOPY);
+    SelectObject(hdcFrozen, oldFrozen);
+    DeleteDC(hdcFrozen);
+
+    POINT oldOrg{};
+    SetWindowOrgEx(hdcMem, rc.left, rc.top, &oldOrg);
     DrawSelectionChrome(hdcMem, sel,
                         g_selectionState->phase == OverlayPhase::Confirmed);
+    SetWindowOrgEx(hdcMem, oldOrg.x, oldOrg.y, nullptr);
   }
 
-  SelectObject(hdcFrozen, oldFrozen);
-  DeleteDC(hdcFrozen);
-
-  BitBlt(hdc, 0, 0, width, height, hdcMem, 0, 0, SRCCOPY);
+  BitBlt(hdc, rc.left, rc.top, pw, ph, hdcMem, 0, 0, SRCCOPY);
   SelectObject(hdcMem, hbmOld);
   DeleteObject(hbmMem);
   DeleteDC(hdcMem);
@@ -502,12 +662,12 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam,
 
   switch (msg) {
     case WM_LBUTTONDOWN: {
-      const int x = GET_X_LPARAM(lParam);
-      const int y = GET_Y_LPARAM(lParam);
+      const POINT pt = OverlayCursorPoint();
+      const int x = pt.x;
+      const int y = pt.y;
       const DWORD now = GetTickCount();
 
       if (g_selectionState->phase == OverlayPhase::Confirmed) {
-        // Double-click inside selection = done (WeChat)
         const bool isDouble =
             (now - g_selectionState->lastClickTick) <= GetDoubleClickTime() &&
             abs(x - g_selectionState->lastClickPt.x) <= 4 &&
@@ -528,12 +688,14 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam,
           SetCapture(hwnd);
           return 0;
         }
-        // Click outside: start a new selection
+        bool prevHas = false;
+        RECT prev = CurrentSelRect(&prevHas);
         g_selectionState->phase = OverlayPhase::Selecting;
         g_selectionState->startPoint = {x, y};
         g_selectionState->currentPoint = {x, y};
         g_selectionState->activeHit = HitZone::None;
         SetCapture(hwnd);
+        InvalidateSelChange(hwnd, prev, prevHas, RECT{}, false);
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
       }
@@ -543,17 +705,25 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam,
       g_selectionState->currentPoint = {x, y};
       g_selectionState->activeHit = HitZone::None;
       SetCapture(hwnd);
-      InvalidateRect(hwnd, nullptr, FALSE);
       return 0;
     }
 
     case WM_MOUSEMOVE: {
-      const int x = GET_X_LPARAM(lParam);
-      const int y = GET_Y_LPARAM(lParam);
+      const POINT pt = OverlayCursorPoint();
+      const int x = pt.x;
+      const int y = pt.y;
       if (g_selectionState->phase == OverlayPhase::Selecting &&
           (GetCapture() == hwnd)) {
+        if (g_selectionState->currentPoint.x == x &&
+            g_selectionState->currentPoint.y == y) {
+          return 0;
+        }
+        bool prevHas = false;
+        RECT prev = CurrentSelRect(&prevHas);
         g_selectionState->currentPoint = {x, y};
-        InvalidateRect(hwnd, nullptr, FALSE);
+        bool nextHas = false;
+        RECT next = CurrentSelRect(&nextHas);
+        InvalidateSelChange(hwnd, prev, prevHas, next, nextHas);
       } else if (g_selectionState->phase == OverlayPhase::Confirmed &&
                  g_selectionState->activeHit != HitZone::None &&
                  (GetCapture() == hwnd)) {
@@ -563,45 +733,39 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam,
         ApplyHitDrag(&next, g_selectionState->activeHit, dx, dy,
                      g_selectionState->screenWidth,
                      g_selectionState->screenHeight);
+        if (EqualRect(&next, &g_selectionState->selectedRect)) {
+          return 0;
+        }
+        RECT prev = g_selectionState->selectedRect;
         g_selectionState->selectedRect = next;
-        InvalidateRect(hwnd, nullptr, FALSE);
+        InvalidateSelChange(hwnd, prev, true, next, true);
       } else if (g_selectionState->phase == OverlayPhase::Confirmed) {
         HitZone hit = HitTestSelection(g_selectionState->selectedRect, x, y);
-        LPCWSTR cursor = IDC_CROSS;
-        switch (hit) {
-          case HitZone::Move:
-            cursor = IDC_SIZEALL;
-            break;
-          case HitZone::N:
-          case HitZone::S:
-            cursor = IDC_SIZENS;
-            break;
-          case HitZone::E:
-          case HitZone::W:
-            cursor = IDC_SIZEWE;
-            break;
-          case HitZone::NE:
-          case HitZone::SW:
-            cursor = IDC_SIZENESW;
-            break;
-          case HitZone::NW:
-          case HitZone::SE:
-            cursor = IDC_SIZENWSE;
-            break;
-          default:
-            cursor = IDC_CROSS;
-            break;
-        }
-        SetCursor(LoadCursor(nullptr, cursor));
+        SetCursor(LoadCursor(nullptr, CursorForHit(hit)));
       }
       return 0;
     }
 
+    case WM_SETCURSOR: {
+      if (LOWORD(lParam) != HTCLIENT) break;
+      const POINT pt = OverlayCursorPoint();
+      LPCWSTR cursor = IDC_CROSS;
+      if (g_selectionState->phase == OverlayPhase::Confirmed) {
+        cursor = CursorForHit(
+            HitTestSelection(g_selectionState->selectedRect, pt.x, pt.y));
+      }
+      SetCursor(LoadCursor(nullptr, cursor));
+      return TRUE;
+    }
+
     case WM_LBUTTONUP: {
-      const int x = GET_X_LPARAM(lParam);
-      const int y = GET_Y_LPARAM(lParam);
+      const POINT pt = OverlayCursorPoint();
+      const int x = pt.x;
+      const int y = pt.y;
       if (g_selectionState->phase == OverlayPhase::Selecting) {
         ReleaseCapture();
+        bool prevHas = false;
+        RECT prev = CurrentSelRect(&prevHas);
         g_selectionState->currentPoint = {x, y};
         RECT sel = NormalizedRect(g_selectionState->startPoint,
                                   g_selectionState->currentPoint);
@@ -611,28 +775,30 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             sel.bottom - sel.top < kMinSelSize) {
           g_selectionState->phase = OverlayPhase::Idle;
           g_selectionState->selectedRect = {};
+          InvalidateSelChange(hwnd, prev, prevHas, RECT{}, false);
         } else {
           g_selectionState->selectedRect = sel;
           g_selectionState->phase = OverlayPhase::Confirmed;
           g_selectionState->lastClickTick = GetTickCount();
           g_selectionState->lastClickPt = {x, y};
+          InvalidateSelChange(hwnd, prev, prevHas, sel, true);
         }
-        InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
       }
       if (g_selectionState->activeHit != HitZone::None) {
         ReleaseCapture();
         g_selectionState->activeHit = HitZone::None;
-        InvalidateRect(hwnd, nullptr, FALSE);
+        bool has = false;
+        RECT sel = CurrentSelRect(&has);
+        InvalidateSelChange(hwnd, sel, has, sel, has);
       }
       return 0;
     }
 
     case WM_LBUTTONDBLCLK: {
       if (g_selectionState->phase == OverlayPhase::Confirmed) {
-        const int x = GET_X_LPARAM(lParam);
-        const int y = GET_Y_LPARAM(lParam);
-        if (PtInRectInflated(g_selectionState->selectedRect, x, y, 0)) {
+        const POINT pt = OverlayCursorPoint();
+        if (PtInRectInflated(g_selectionState->selectedRect, pt.x, pt.y, 0)) {
           FinishOverlay(hwnd, false);
         }
       }
@@ -660,7 +826,7 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam,
     case WM_PAINT: {
       PAINTSTRUCT ps;
       HDC hdc = BeginPaint(hwnd, &ps);
-      PaintOverlay(hwnd, hdc);
+      PaintOverlay(hwnd, hdc, ps.rcPaint);
       EndPaint(hwnd, &ps);
       return 0;
     }
@@ -673,46 +839,57 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam,
   return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
-// Temporarily hide the Flutter root window so we don't capture ourselves.
-// Always restores in destructor (including cancel / early return).
-struct AppWindowHideGuard {
+static HWND g_flutter_root_hwnd = nullptr;
+
+// Hide the live app AFTER freeze, so the frozen frame still contains the app
+// (user can crop the app) while the real window cannot steal clicks or poke
+// through the overlay.
+struct AppWindowShieldGuard {
   HWND hwnd = nullptr;
   bool did_hide = false;
 
-  explicit AppWindowHideGuard(HWND app_hwnd) : hwnd(app_hwnd) {
-    if (!hwnd || !IsWindow(hwnd)) return;
+  explicit AppWindowShieldGuard(HWND app_hwnd) : hwnd(app_hwnd) {}
+
+  ~AppWindowShieldGuard() { Restore(); }
+
+  void Shield() {
+    if (did_hide || !hwnd || !IsWindow(hwnd)) return;
     if (!IsWindowVisible(hwnd)) return;
     ShowWindow(hwnd, SW_HIDE);
     did_hide = true;
-    // Allow DWM/desktop to redraw without our window.
-    Sleep(200);
   }
-
-  ~AppWindowHideGuard() { Restore(); }
 
   void Restore() {
     if (!did_hide || !hwnd || !IsWindow(hwnd)) return;
     did_hide = false;
     ShowWindow(hwnd, SW_SHOW);
-    ShowWindow(hwnd, SW_RESTORE);
-    SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
     SetForegroundWindow(hwnd);
-    BringWindowToTop(hwnd);
   }
 };
 
-static HWND g_flutter_root_hwnd = nullptr;
+static void FocusAppWindow() {
+  HWND hwnd = g_flutter_root_hwnd;
+  if (!hwnd || !IsWindow(hwnd)) return;
+  if (!IsWindowVisible(hwnd)) {
+    ShowWindow(hwnd, SW_SHOW);
+  }
+  if (IsIconic(hwnd)) {
+    ShowWindow(hwnd, SW_RESTORE);
+  }
+  SetForegroundWindow(hwnd);
+}
 
 // Capture region with interactive overlay
 HBITMAP CaptureRegionToBitmap(int* width, int* height, int* x, int* y,
                               bool* cancelled) {
   *cancelled = false;
 
-  SetProcessDPIAware();
+  DpiScope dpi;
 
-  // Hide app first, then freeze virtual desktop (all monitors).
-  AppWindowHideGuard hide_guard(g_flutter_root_hwnd);
+  if (g_selectionState) {
+    *cancelled = true;
+    return nullptr;
+  }
 
   const int virtualX = GetSystemMetrics(SM_XVIRTUALSCREEN);
   const int virtualY = GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -723,6 +900,9 @@ HBITMAP CaptureRegionToBitmap(int* width, int* height, int* x, int* y,
     screenHeight = GetSystemMetrics(SM_CYSCREEN);
   }
 
+  AppWindowShieldGuard shield(g_flutter_root_hwnd);
+
+  // Freeze while the app is still visible, then shield the live window.
   int frozenW = 0;
   int frozenH = 0;
   HBITMAP frozen = CaptureScreenToBitmap(&frozenW, &frozenH, false);
@@ -733,19 +913,24 @@ HBITMAP CaptureRegionToBitmap(int* width, int* height, int* x, int* y,
   if (frozenW > 0) screenWidth = frozenW;
   if (frozenH > 0) screenHeight = frozenH;
 
+  HBITMAP dimmed = CreateDimmedBitmap(frozen, screenWidth, screenHeight);
+
   SelectionState state = {};
   state.phase = OverlayPhase::Idle;
   state.cancelled = false;
   state.finished = false;
   state.frozenBitmap = frozen;
+  state.dimmedBitmap = dimmed;
   state.screenWidth = screenWidth;
   state.screenHeight = screenHeight;
+  state.virtualX = virtualX;
+  state.virtualY = virtualY;
   g_selectionState = &state;
 
   const wchar_t* className = L"DunesScreenshotOverlayClass";
   WNDCLASSEXW wc = {};
   wc.cbSize = sizeof(WNDCLASSEXW);
-  wc.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
+  wc.style = CS_DBLCLKS;
   wc.lpfnWndProc = OverlayWndProc;
   wc.hInstance = GetModuleHandle(nullptr);
   wc.hCursor = LoadCursor(nullptr, IDC_CROSS);
@@ -754,6 +939,7 @@ HBITMAP CaptureRegionToBitmap(int* width, int* height, int* x, int* y,
 
   if (!RegisterClassExW(&wc)) {
     if (GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+      if (dimmed) DeleteObject(dimmed);
       DeleteObject(frozen);
       g_selectionState = nullptr;
       return nullptr;
@@ -767,6 +953,7 @@ HBITMAP CaptureRegionToBitmap(int* width, int* height, int* x, int* y,
       nullptr, nullptr, GetModuleHandle(nullptr), nullptr);
 
   if (!hwndOverlay) {
+    if (dimmed) DeleteObject(dimmed);
     DeleteObject(frozen);
     UnregisterClassW(className, GetModuleHandle(nullptr));
     g_selectionState = nullptr;
@@ -774,7 +961,10 @@ HBITMAP CaptureRegionToBitmap(int* width, int* height, int* x, int* y,
   }
 
   ShowWindow(hwndOverlay, SW_SHOW);
+  SetWindowPos(hwndOverlay, HWND_TOPMOST, virtualX, virtualY, screenWidth,
+               screenHeight, SWP_SHOWWINDOW);
   UpdateWindow(hwndOverlay);
+  shield.Shield();
   SetForegroundWindow(hwndOverlay);
   SetFocus(hwndOverlay);
 
@@ -785,9 +975,11 @@ HBITMAP CaptureRegionToBitmap(int* width, int* height, int* x, int* y,
   }
 
   UnregisterClassW(className, GetModuleHandle(nullptr));
+  shield.Restore();
+  FocusAppWindow();
 
-  // Restore app window before returning (also runs again in destructor — safe).
-  hide_guard.Restore();
+  if (dimmed) DeleteObject(dimmed);
+  state.dimmedBitmap = nullptr;
 
   if (state.cancelled || !state.finished) {
     *cancelled = true;
@@ -1006,9 +1198,8 @@ void ScreenshotPlugin::HandleMethodCall(
     if (*mode_str == "screen") {
       int width = 0;
       int height = 0;
-      AppWindowHideGuard hide_guard(g_flutter_root_hwnd);
+      DpiScope dpi;
       HBITMAP hBitmap = CaptureScreenToBitmap(&width, &height, includeCursor);
-      hide_guard.Restore();
       if (!hBitmap) {
         result->Error("internal_error", "Failed to capture screen",
                       flutter::EncodableValue(static_cast<int>(GetLastError())));

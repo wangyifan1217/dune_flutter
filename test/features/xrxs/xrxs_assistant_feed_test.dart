@@ -14,9 +14,14 @@ NativeChatMessage _msg(int id) {
 }
 
 void main() {
-  test('xrxsAssistantFeedMessages puts newest first', () {
+  test('xrxsAssistantFeedMessages keeps oldest first', () {
     final feed = xrxsAssistantFeedMessages([_msg(1), _msg(2), _msg(3)]);
-    expect(feed.map((m) => m.id), [3, 2, 1]);
+    expect(feed.map((m) => m.id), [1, 2, 3]);
+  });
+
+  test('xrxsAssistantFeedMessages sorts out-of-order input', () {
+    final feed = xrxsAssistantFeedMessages([_msg(3), _msg(1), _msg(2)]);
+    expect(feed.map((m) => m.id), [1, 2, 3]);
   });
 
   test('xrxsAssistantFeedMessages keeps empty and single lists', () {
@@ -24,12 +29,12 @@ void main() {
     expect(xrxsAssistantFeedMessages([_msg(9)]).single.id, 9);
   });
 
-  test('static preview is already newest-first', () {
+  test('static preview is oldest-first', () {
     final preview = xrxsAssistantStaticPreviewMessages();
     expect(preview, isNotEmpty);
     for (var i = 1; i < preview.length; i++) {
-      final newer = preview[i - 1].createdAt;
-      final older = preview[i].createdAt;
+      final older = preview[i - 1].createdAt;
+      final newer = preview[i].createdAt;
       expect(newer, isNotNull);
       expect(older, isNotNull);
       expect(

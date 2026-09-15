@@ -43,20 +43,16 @@ class TaskLink {
 
   /// 撤销删除时按原关联重新添加。
   Map<String, dynamic> toCreateJson() => {
-        'kind': kind,
-        if (meetingId != null) 'meetingId': meetingId,
-        if (kbDocumentId != null) 'kbDocumentId': kbDocumentId,
-        'title': title,
-        'decisionExcerpt': decisionExcerpt,
-      };
+    'kind': kind,
+    if (meetingId != null) 'meetingId': meetingId,
+    if (kbDocumentId != null) 'kbDocumentId': kbDocumentId,
+    'title': title,
+    'decisionExcerpt': decisionExcerpt,
+  };
 }
 
 class TaskBindRun {
-  const TaskBindRun({
-    required this.status,
-    this.detail = '',
-    this.updatedAt,
-  });
+  const TaskBindRun({required this.status, this.detail = '', this.updatedAt});
 
   final String status; // running | done | failed
   final String detail;
@@ -146,10 +142,7 @@ class TaskLinkCandidateDoc {
 }
 
 class TaskLinkCandidates {
-  const TaskLinkCandidates({
-    this.meetings = const [],
-    this.docs = const [],
-  });
+  const TaskLinkCandidates({this.meetings = const [], this.docs = const []});
 
   final List<TaskLinkCandidateMeeting> meetings;
   final List<TaskLinkCandidateDoc> docs;

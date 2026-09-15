@@ -128,6 +128,8 @@ class TaskProgressBarItem {
     required this.userName,
     required this.taskTitle,
     required this.progressPct,
+    this.startAt,
+    this.dueAt,
     this.overdue = false,
     this.colorIndex = 0,
   });
@@ -137,6 +139,8 @@ class TaskProgressBarItem {
   final String userName;
   final String taskTitle;
   final int progressPct;
+  final DateTime? startAt;
+  final DateTime? dueAt;
   final bool overdue;
   final int colorIndex;
 }
@@ -170,6 +174,8 @@ List<TaskProgressBarItem> buildTaskProgressBars(TaskDetail detail) {
         userName: t.ownerName.trim().isEmpty ? '未指定' : t.ownerName.trim(),
         taskTitle: t.title.trim().isEmpty ? '未命名' : t.title.trim(),
         progressPct: t.progressPct.clamp(0, 100),
+        startAt: t.startAt,
+        dueAt: t.dueAt,
         overdue: t.overdue,
         colorIndex: colorIndex,
       ),
@@ -184,7 +190,7 @@ List<TaskProgressBarItem> buildTaskProgressBars(TaskDetail detail) {
   return out;
 }
 
-/// 竖向柱状图：一柱 = 一个子任务；同一人多子任务并排多柱（同色系）。
+/// 横向进度列表：一行 = 一个子目标；同一负责人使用相同颜色。
 class TaskMemberProgressChart extends StatelessWidget {
   const TaskMemberProgressChart({super.key, required this.bars, this.onBarTap});
 
@@ -206,10 +212,6 @@ class TaskMemberProgressChart extends StatelessWidget {
       );
     }
 
-    final barWidth = 56.0;
-    final gap = 12.0;
-    final chartWidth = bars.length * barWidth + (bars.length - 1) * gap + 8;
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
@@ -222,50 +224,38 @@ class TaskMemberProgressChart extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            bars.length > 1
-                ? '每个事项一根柱。同一人负责的会并排，颜色相同。'
-                : '当前这条任务的填报进度',
+            bars.length > 1 ? '每个子目标横向展示，同一负责人使用相同颜色。' : '当前这条任务的填报进度',
             style: const TextStyle(fontSize: 12, color: DunesColors.text3),
           ),
           const SizedBox(height: 12),
-          SizedBox(
-            height: 220,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: chartWidth < 280 ? 280 : chartWidth,
-                height: 220,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (var i = 0; i < bars.length; i++) ...[
-                      if (i > 0) SizedBox(width: gap),
-                      SizedBox(
-                        width: barWidth,
-                        child: _VerticalBar(
-                          item: bars[i],
-                          onTap: onBarTap == null
-                              ? null
-                              : () => onBarTap!(bars[i].taskId),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+          for (var i = 0; i < bars.length; i++) ...[
+            if (i > 0) const SizedBox(height: 10),
+            _HorizontalProgressRow(
+              item: bars[i],
+              onTap: onBarTap == null ? null : () => onBarTap!(bars[i].taskId),
             ),
-          ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _VerticalBar extends StatelessWidget {
-  const _VerticalBar({required this.item, this.onTap});
+class _HorizontalProgressRow extends StatelessWidget {
+  const _HorizontalProgressRow({required this.item, this.onTap});
 
   final TaskProgressBarItem item;
   final VoidCallback? onTap;
+
+  String get _period {
+    String fmt(DateTime value) => formatTaskYmd(value.toLocal());
+    if (item.startAt != null && item.dueAt != null) {
+      return '${fmt(item.startAt!)} — ${fmt(item.dueAt!)}';
+    }
+    if (item.startAt != null) return '开始 ${fmt(item.startAt!)}';
+    if (item.dueAt != null) return '截止 ${fmt(item.dueAt!)}';
+    return '未设置任务周期';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -278,72 +268,104 @@ class _VerticalBar extends StatelessWidget {
         : base;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Column(
-        children: [
-          Text(
-            '${item.progressPct}%',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, c) {
-                final maxH = c.maxHeight;
-                if (!maxH.isFinite || maxH <= 0) {
-                  return const SizedBox.shrink();
-                }
-                final target = maxH * (pct <= 0 ? 0.04 : pct);
-                final h = target.clamp(0.0, maxH);
-                return Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Container(
-                    height: h,
-                    width: 28,
-                    decoration: BoxDecoration(
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(8),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.045),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.16)),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  item.userName,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: DunesColors.text,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.taskTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: DunesColors.text2,
+                        ),
                       ),
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [color, color.withValues(alpha: 0.72)],
+                      const SizedBox(height: 2),
+                      Text(
+                        _period,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  '${item.progressPct}%',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              height: 8,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE5E7EB),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = constraints.maxWidth * pct;
+                  return Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 280),
+                        width: width,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(999),
+                          gradient: LinearGradient(
+                            colors: [color, color.withValues(alpha: 0.65)],
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            item.userName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: DunesColors.text,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            item.taskTitle,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 10,
-              color: DunesColors.text3,
-              height: 1.2,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -615,8 +637,8 @@ class TaskNameCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final subtitle = [
       if (task.ownerName.isNotEmpty) task.ownerName,
-      if (_dateRange != null) _dateRange!,
-      if (task.subtaskCount > 0) '${task.subtaskCount} 子任务',
+      ?_dateRange,
+      if (task.subtaskCount > 0) '${task.subtaskCount} 子目标',
       '${task.progressPct}%',
     ].join(' · ');
 
@@ -681,7 +703,7 @@ class TaskNameCard extends StatelessWidget {
                 runSpacing: 6,
                 children: [
                   TaskMetaChip(
-                    text: task.isMain ? '主任务' : '子任务',
+                    text: task.isMain ? '主目标' : '子目标',
                     color: _kindColor,
                   ),
                   if (task.category.isNotEmpty)
@@ -749,10 +771,24 @@ class TaskWorkbenchCard extends StatelessWidget {
   final VoidCallback? onReject;
   final bool groupMode;
 
-  String? get _due {
-    final d = task.dueAt?.toLocal();
-    if (d == null) return null;
-    return '止 ${d.month}/${d.day}';
+  String? get _period {
+    String fmt(DateTime value) => formatTaskYmd(value.toLocal());
+    if (task.startAt != null && task.dueAt != null) {
+      return '${fmt(task.startAt!)} — ${fmt(task.dueAt!)}';
+    }
+    if (task.startAt != null) return '开始 ${fmt(task.startAt!)}';
+    if (task.dueAt != null) return '截止 ${fmt(task.dueAt!)}';
+    return null;
+  }
+
+  Color get _statusColor {
+    if (task.overdue) return const Color(0xFFD97706);
+    return switch (task.status) {
+      'completed' => const Color(0xFF23856D),
+      'pending_approval' => const Color(0xFF2563A9),
+      'rejected' => const Color(0xFFC24156),
+      _ => kTaskPurple,
+    };
   }
 
   @override
@@ -760,70 +796,151 @@ class TaskWorkbenchCard extends StatelessWidget {
     final pending = task.isPending;
     final belong = task.parentTitle.trim();
     final contextLine = taskCardContextLine(task);
+    final statusColor = _statusColor;
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE3E5EA)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.025),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                task.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  height: 1.3,
-                ),
-              ),
-              if (groupMode) ...[
-                const SizedBox(height: 6),
-                Text(
-                  [
-                    if (contextLine != null) contextLine,
-                    if (task.subtaskCount > 0)
-                      '${task.subtaskCount} 项 · 汇总 ${task.progressPct}%'
-                    else
-                      '还没有事项',
-                  ].join(' · '),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12, color: DunesColors.text3),
-                ),
-              ] else ...[
-                if (belong.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    '属于 $belong',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: DunesColors.text3,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 4,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: statusColor,
+                      borderRadius: BorderRadius.circular(4),
                     ),
                   ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          task.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            height: 1.3,
+                          ),
+                        ),
+                        if (!groupMode && belong.isNotEmpty)
+                          Text(
+                            '所属主目标：$belong',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: DunesColors.text3,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  TaskMetaChip(
+                    text: task.overdue ? '已逾期' : taskStatusLabel(task.status),
+                    color: statusColor,
+                  ),
                 ],
-                const SizedBox(height: 6),
-                Text(
-                  [
-                    if (contextLine != null) contextLine,
-                    if (_due != null) _due!,
-                    if (!pending) '${task.progressPct}%',
-                    if (pending && task.ownerName.isNotEmpty)
-                      '${task.ownerName}提交',
-                  ].join(' · '),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+              ),
+              if (groupMode) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF7F6FC),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Wrap(
+                    spacing: 16,
+                    runSpacing: 6,
+                    children: [
+                      _TaskInfoItem(
+                        icon: Icons.account_tree_outlined,
+                        text: task.subtaskCount > 0
+                            ? '${task.subtaskCount} 个子目标'
+                            : '暂无子目标',
+                      ),
+                      if (task.ownerName.isNotEmpty)
+                        _TaskInfoItem(
+                          icon: Icons.person_outline,
+                          text: task.ownerName,
+                        ),
+                      if (_period != null)
+                        _TaskInfoItem(
+                          icon: Icons.event_outlined,
+                          text: _period!,
+                        ),
+                    ],
+                  ),
+                ),
+              ] else ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 14,
+                  runSpacing: 6,
+                  children: [
+                    if (task.ownerName.isNotEmpty)
+                      _TaskInfoItem(
+                        icon: Icons.person_outline,
+                        text: pending ? '${task.ownerName}提交' : task.ownerName,
+                      ),
+                    if (contextLine != null)
+                      _TaskInfoItem(
+                        icon: Icons.label_outline,
+                        text: contextLine,
+                      ),
+                    if (_period != null)
+                      _TaskInfoItem(icon: Icons.event_outlined, text: _period!),
+                  ],
                 ),
               ],
               if (!pending) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Text(
+                      '目标进度',
+                      style: TextStyle(fontSize: 12, color: DunesColors.text3),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${task.progressPct}%',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: statusColor,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
                 TaskProgressBar(
                   progressPct: task.progressPct,
                   overdue: task.overdue,
@@ -832,7 +949,7 @@ class TaskWorkbenchCard extends StatelessWidget {
                   showLabel: false,
                 ),
               ],
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               if (pending)
                 Row(
                   children: [
@@ -856,27 +973,58 @@ class TaskWorkbenchCard extends StatelessWidget {
                   ],
                 )
               else if (groupMode)
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: kTaskPurple,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: onTap,
+                    icon: const Icon(Icons.arrow_forward, size: 16),
+                    label: const Text('查看详情与拆解'),
                   ),
-                  onPressed: onTap,
-                  child: const Text('查看拆解'),
                 )
               else if (onProgress != null)
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: kTaskPurple,
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: kTaskPurple,
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                    ),
+                    onPressed: onProgress,
+                    icon: const Icon(Icons.tune, size: 16),
+                    label: const Text('更新进度'),
                   ),
-                  onPressed: onProgress,
-                  child: const Text('更新进度'),
                 ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _TaskInfoItem extends StatelessWidget {
+  const _TaskInfoItem({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: DunesColors.text3),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+        ),
+      ],
     );
   }
 }

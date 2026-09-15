@@ -1,3 +1,5 @@
+import 'work_situation_copy.dart';
+
 class EfficiencyMetric {
   const EfficiencyMetric({
     required this.key,
@@ -116,6 +118,8 @@ class EfficiencySnapshot {
     required this.stages,
     required this.bottlenecks,
     required this.sources,
+    this.grain = 'month',
+    this.date = '',
     this.quality = const [],
     this.funnel = const [],
     this.trends = const [],
@@ -127,7 +131,9 @@ class EfficiencySnapshot {
   });
 
   final String scope;
+  final String grain;
   final String month;
+  final String date;
   final String title;
   final int peopleCount;
   final bool hasDepartmentView;
@@ -157,7 +163,9 @@ class EfficiencySnapshot {
 
     return EfficiencySnapshot(
       scope: '${json['scope'] ?? 'personal'}',
+      grain: '${json['grain'] ?? 'month'}',
       month: '${json['month'] ?? ''}',
+      date: '${json['date'] ?? ''}',
       title: '${json['title'] ?? ''}',
       peopleCount: (json['peopleCount'] as num?)?.toInt() ?? 1,
       hasDepartmentView: json['hasDepartmentView'] == true,
@@ -580,7 +588,7 @@ class WorkSituationPerson {
       title: '${json['title'] ?? ''}'.trim(),
       departmentId: (json['departmentId'] as num?)?.toInt() ?? 0,
       departmentName: '${json['departmentName'] ?? ''}'.trim(),
-      note: '${json['note'] ?? ''}'.trim(),
+      note: humanizeWorkSituationCopy('${json['note'] ?? ''}'),
       taskTotal: (json['taskTotal'] as num?)?.toInt() ?? 0,
       taskCompleted: (json['taskCompleted'] as num?)?.toInt() ?? 0,
       taskOverdue: (json['taskOverdue'] as num?)?.toInt() ?? 0,
@@ -604,7 +612,9 @@ class WorkSituationPerson {
       waitingOnOthersMeet: (json['waitingOnOthersMeet'] as num?)?.toInt() ?? 0,
       actionWithoutAssignee: (json['actionWithoutAssignee'] as num?)?.toInt() ?? 0,
       meetingReviewLevel: '${json['meetingReviewLevel'] ?? ''}'.trim(),
-      meetingReviewWhy: '${json['meetingReviewWhy'] ?? ''}'.trim(),
+      meetingReviewWhy: humanizeWorkSituationCopy(
+        '${json['meetingReviewWhy'] ?? ''}',
+      ),
       kbDocuments: (json['kbDocuments'] as num?)?.toInt() ?? 0,
       kbUnused: (json['kbUnused'] as num?)?.toInt() ?? 0,
       kbUsed: (json['kbUsed'] as num?)?.toInt() ?? 0,
@@ -615,14 +625,14 @@ class WorkSituationPerson {
       kbUncitedConversations: (json['kbUncitedConversations'] as num?)?.toInt() ?? 0,
       kbReferences: (json['kbReferences'] as num?)?.toInt() ?? 0,
       kbReviewLevel: '${json['kbReviewLevel'] ?? ''}'.trim(),
-      kbReviewWhy: '${json['kbReviewWhy'] ?? ''}'.trim(),
+      kbReviewWhy: humanizeWorkSituationCopy('${json['kbReviewWhy'] ?? ''}'),
       imSessions: (json['imSessions'] as num?)?.toInt() ?? 0,
       imCards: (json['imCards'] as num?)?.toInt() ?? 0,
       imUniqueObjects: (json['imUniqueObjects'] as num?)?.toInt() ?? 0,
       imUrges: (json['imUrges'] as num?)?.toInt() ?? 0,
       imDuplicates: (json['imDuplicates'] as num?)?.toInt() ?? 0,
       imTalkLevel: '${json['imTalkLevel'] ?? ''}'.trim(),
-      imTalkWhy: '${json['imTalkWhy'] ?? ''}'.trim(),
+      imTalkWhy: humanizeWorkSituationCopy('${json['imTalkWhy'] ?? ''}'),
       taskSubtotal: (json['taskSubtotal'] as num?)?.toInt() ?? 0,
       taskSubCompleted: (json['taskSubCompleted'] as num?)?.toInt() ?? 0,
       taskSubOverdue: (json['taskSubOverdue'] as num?)?.toInt() ?? 0,
@@ -633,7 +643,9 @@ class WorkSituationPerson {
       taskStaleOpen: (json['taskStaleOpen'] as num?)?.toInt() ?? 0,
       taskOverdueHighWeight: (json['taskOverdueHighWeight'] as num?)?.toInt() ?? 0,
       taskReviewLevel: '${json['taskReviewLevel'] ?? ''}'.trim(),
-      taskReviewWhy: '${json['taskReviewWhy'] ?? ''}'.trim(),
+      taskReviewWhy: humanizeWorkSituationCopy(
+        '${json['taskReviewWhy'] ?? ''}',
+      ),
       items: (json['items'] as List? ?? const [])
           .whereType<Map>()
           .map((row) => WorkSituationItem.fromJson(Map<String, dynamic>.from(row)))
@@ -711,11 +723,15 @@ class WorkSituationBoard {
   const WorkSituationBoard({
     required this.month,
     required this.viewAll,
+    this.grain = 'month',
+    this.date = '',
     this.scopeLabel = '',
     this.departments = const [],
     this.people = const [],
   });
 
+  final String grain;
+  final String date;
   final String month;
   final bool viewAll;
   final String scopeLabel;
@@ -724,6 +740,8 @@ class WorkSituationBoard {
 
   factory WorkSituationBoard.fromJson(Map<String, dynamic> json) {
     return WorkSituationBoard(
+      grain: '${json['grain'] ?? 'month'}',
+      date: '${json['date'] ?? ''}',
       month: '${json['month'] ?? ''}',
       viewAll: json['viewAll'] == true,
       scopeLabel: '${json['scopeLabel'] ?? ''}',

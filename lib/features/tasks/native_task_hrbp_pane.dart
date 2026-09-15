@@ -9,6 +9,7 @@ import 'native_task_action_page.dart';
 import 'native_task_detail_page.dart';
 import 'native_task_home_pane.dart';
 import 'task_api.dart';
+import 'task_first_use_guide.dart';
 import 'task_models.dart';
 import 'task_widgets.dart';
 
@@ -47,10 +48,12 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
   bool _hasMoreTasks = false;
   int _taskPage = 0;
   String? _error;
+  bool _guideAutoStarted = false;
   static const int _pageSize = 20;
 
   /// null = 全部部门
   int? _deptFilter;
+  int? _ownerFilter;
   double _boardScrollOffset = 0;
   late DateTime _dateFrom;
   late DateTime _dateTo;
@@ -69,8 +72,22 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
     _dateFrom = month.from;
     _dateTo = month.to;
     _scrollController.addListener(_onScroll);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _publishChrome());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _publishChrome();
+      unawaited(_showGuide());
+    });
     unawaited(_reload());
+  }
+
+  Future<void> _showGuide({bool force = false}) async {
+    if (!force && _guideAutoStarted) return;
+    if (!force) _guideAutoStarted = true;
+    await showTaskFirstUseGuide(
+      context,
+      userId: widget.session.userId,
+      page: TaskGuidePage.summary,
+      force: force,
+    );
   }
 
   @override
@@ -96,6 +113,14 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
     }
   }
 
+  Widget _guideHelpButton() {
+    return IconButton(
+      tooltip: '使用指引',
+      onPressed: () => unawaited(_showGuide(force: true)),
+      icon: const Icon(Icons.help_outline, color: DunesColors.text2),
+    );
+  }
+
   void _publishChrome() {
     if (_page == _HrbpPage.detail || _page == _HrbpPage.action) {
       widget.onChromeChanged?.call(
@@ -109,13 +134,14 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
     if (_deptFilter != null) {
       widget.onChromeChanged?.call(
         TaskShellChrome(
+          trailing: _guideHelpButton(),
           onBack: () => unawaited(_selectDept(null)),
           backLabel: '全部部门',
         ),
       );
       return;
     }
-    widget.onChromeChanged?.call(const TaskShellChrome());
+    widget.onChromeChanged?.call(TaskShellChrome(trailing: _guideHelpButton()));
   }
 
   Future<void> _reload() async {
@@ -216,6 +242,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
   Future<void> _selectDept(int? deptId) async {
     setState(() {
       _deptFilter = deptId;
+      _ownerFilter = null;
       _deptTasks = const [];
       _hasMoreTasks = false;
       _taskPage = 0;
@@ -232,14 +259,24 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
     return _depts.where((d) => d.departmentId == _deptFilter).toList();
   }
 
-  int get _sumTotal =>
-      _visibleDepts.fold(0, (a, d) => a + d.mainTotal);
+  int get _sumTotal => _visibleDepts.fold(0, (a, d) => a + d.mainTotal);
 
-  int get _sumCompleted =>
-      _visibleDepts.fold(0, (a, d) => a + d.mainCompleted);
+  int get _sumOverdue => _visibleDepts.fold(0, (a, d) => a + d.mainOverdue);
 
-  int get _sumOverdue =>
-      _visibleDepts.fold(0, (a, d) => a + d.mainOverdue);
+  int get _sumOnTime =>
+      _visibleDepts.fold(0, (a, d) => a + d.mainOnTimeCompleted);
+
+  int get _sumRisk => _visibleDepts.fold(0, (a, d) => a + d.inProgressRisk);
+
+  String get _reportRateLabel {
+    final expected = _visibleDepts.fold(0, (a, d) => a + d.dailyReportExpected);
+    final submitted = _visibleDepts.fold(
+      0,
+      (a, d) => a + d.dailyReportSubmitted,
+    );
+    if (expected <= 0) return '—';
+    return '${(submitted * 100 / expected).round()}%';
+  }
 
   String get _deptFilterLabel {
     if (_deptFilter == null) return '全部部门';
@@ -265,8 +302,11 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
     );
     if (!mounted || picked == null) return;
     setState(() {
-      _dateFrom =
-          DateTime(picked.start.year, picked.start.month, picked.start.day);
+      _dateFrom = DateTime(
+        picked.start.year,
+        picked.start.month,
+        picked.start.day,
+      );
       _dateTo = DateTime(picked.end.year, picked.end.month, picked.end.day);
     });
     unawaited(_reload());
@@ -336,9 +376,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
     _rememberBoardScroll();
     setState(() {
       _pageNavBack = false;
-      if (_page == _HrbpPage.detail &&
-          _detailId != null &&
-          _detailId != id) {
+      if (_page == _HrbpPage.detail && _detailId != null && _detailId != id) {
         _detailStack.add(_detailId!);
       }
       _page = _HrbpPage.detail;
@@ -370,11 +408,10 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
   }
 
   Key get _pageKey => switch (_page) {
-        _HrbpPage.board => const ValueKey('hrbp-board'),
-        _HrbpPage.detail => ValueKey('hrbp-detail-$_detailId'),
-        _HrbpPage.action =>
-          ValueKey('hrbp-action-$_actionMode-${_actionTask?.id}'),
-      };
+    _HrbpPage.board => const ValueKey('hrbp-board'),
+    _HrbpPage.detail => ValueKey('hrbp-detail-$_detailId'),
+    _HrbpPage.action => ValueKey('hrbp-action-$_actionMode-${_actionTask?.id}'),
+  };
 
   Widget _pageBody() {
     switch (_page) {
@@ -431,8 +468,10 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
             ? (isBack ? const Offset(-0.18, 0) : const Offset(1, 0))
             : (isBack ? const Offset(1, 0) : const Offset(-0.18, 0));
         return SlideTransition(
-          position:
-              Tween<Offset>(begin: begin, end: Offset.zero).animate(animation),
+          position: Tween<Offset>(
+            begin: begin,
+            end: Offset.zero,
+          ).animate(animation),
           child: transitionChild,
         );
       },
@@ -448,7 +487,9 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
     IconData? icon,
   }) {
     return Material(
-      color: active ? kTaskPurple.withValues(alpha: 0.08) : const Color(0xFFF5F6F8),
+      color: active
+          ? kTaskPurple.withValues(alpha: 0.08)
+          : const Color(0xFFF5F6F8),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -561,7 +602,10 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+                      Text(
+                        _error!,
+                        style: const TextStyle(color: Colors.redAccent),
+                      ),
                       TextButton(onPressed: _reload, child: const Text('重试')),
                     ],
                   ),
@@ -575,7 +619,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const Text(
-                        '看各部门主任务办得怎样。进度是填报比例，办结才算完成。没有起止日的任务按创建日计入所选周期。',
+                        '默认看各部门主目标健康度，进入主目标详情可查看子目标。主、子目标均可独立纳入考核。',
                         style: TextStyle(
                           fontSize: 13,
                           color: DunesColors.text3,
@@ -587,8 +631,10 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
                       const SizedBox(height: 12),
                       _StatStrip(
                         total: _sumTotal,
-                        completed: _sumCompleted,
+                        completed: _sumOnTime,
                         overdue: _sumOverdue,
+                        risk: _sumRisk,
+                        reportRate: _reportRateLabel,
                       ),
                       const SizedBox(height: 14),
                       _buildChartCard(),
@@ -625,9 +671,9 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
     if (singleDept) {
       final tasks = _deptTasks;
       return _HrbpBarChart(
-        title: '该部门主任务填报进度',
-        hint: '柱高是每条主任务自己填的进度，点柱打开详情。',
-        emptyText: '该部门暂无主任务',
+        title: '该部门主目标进度',
+        hint: '柱高是每个主目标的填报进度，点柱查看相关子目标。',
+        emptyText: '该部门暂无主目标',
         bars: [
           for (final t in tasks)
             _HrbpBarData(
@@ -648,7 +694,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
 
     return _HrbpBarChart(
       title: '各部门填报进度',
-      hint: '柱高是该部门主任务进度的平均值，点柱查看这个部门。',
+      hint: '柱高是该部门主目标进度的平均值，点柱查看这个部门。',
       emptyText: '暂无部门数据',
       bars: [
         for (final d in _visibleDepts)
@@ -658,7 +704,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
                 ? '部门 ${d.departmentId}'
                 : d.departmentName,
             sublabel: [
-              '${d.mainTotal} 个主任务',
+              '${d.mainTotal} 个主目标',
               if (d.mainOverdue > 0) '${d.mainOverdue} 逾期',
             ].join(' · '),
             progress: d.avgProgress,
@@ -672,7 +718,78 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
 
   List<Widget> _buildDeptOrTaskSlivers() {
     if (_deptFilter != null) {
-      final tasks = _deptTasks;
+      final tasks = _ownerFilter == null
+          ? _deptTasks
+          : _deptTasks.where((t) => t.ownerUserId == _ownerFilter).toList();
+      if (_ownerFilter == null) {
+        final byOwner = <int, List<TaskItem>>{};
+        for (final t in _deptTasks) {
+          byOwner.putIfAbsent(t.ownerUserId, () => []).add(t);
+        }
+        final owners = byOwner.entries.toList()
+          ..sort((a, b) => b.value.length.compareTo(a.value.length));
+        return [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            sliver: SliverToBoxAdapter(
+              child: Row(
+                children: [
+                  const Text(
+                    '部门人员',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => unawaited(_selectDept(null)),
+                    child: const Text('返回全部部门'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (owners.isEmpty)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.all(40),
+                child: Center(
+                  child: Text(
+                    '暂无主目标',
+                    style: TextStyle(color: DunesColors.text3),
+                  ),
+                ),
+              ),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate((_, i) {
+                  final e = owners[i];
+                  final name = e.value.first.ownerName.trim().isEmpty
+                      ? '未指定'
+                      : e.value.first.ownerName.trim();
+                  final overdue = e.value
+                      .where((t) => t.overdue && t.status != 'completed')
+                      .length;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _DeptStatCard(
+                      name: name,
+                      summary: '${e.value.length} 个主目标',
+                      overdue: overdue,
+                      avgProgress: e.value.isEmpty
+                          ? 0
+                          : e.value.fold<int>(0, (a, t) => a + t.progressPct) /
+                                e.value.length,
+                      completed: e.value.every((t) => t.status == 'completed'),
+                      onTap: () => setState(() => _ownerFilter = e.key),
+                    ),
+                  );
+                }, childCount: owners.length),
+              ),
+            ),
+        ];
+      }
       if (tasks.isEmpty) {
         return [
           SliverPadding(
@@ -680,8 +797,8 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
             sliver: SliverToBoxAdapter(
               child: Row(
                 children: [
-                    const Text(
-                    '这个部门的主任务',
+                  const Text(
+                    '这个部门的主目标',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                   ),
                   const Spacer(),
@@ -710,13 +827,13 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
             child: Row(
               children: [
                 const Text(
-                  '这个部门的主任务',
+                  '这个人的主目标',
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                 ),
                 const Spacer(),
                 TextButton(
-                  onPressed: () => unawaited(_selectDept(null)),
-                  child: const Text('返回全部部门'),
+                  onPressed: () => setState(() => _ownerFilter = null),
+                  child: const Text('返回人员'),
                 ),
               ],
             ),
@@ -725,19 +842,13 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
           sliver: SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (_, i) {
-                final t = tasks[i];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _TaskStatCard(
-                    task: t,
-                    onTap: () => _openDetail(t.id),
-                  ),
-                );
-              },
-              childCount: tasks.length,
-            ),
+            delegate: SliverChildBuilderDelegate((_, i) {
+              final t = tasks[i];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _TaskStatCard(task: t, onTap: () => _openDetail(t.id)),
+              );
+            }, childCount: tasks.length),
           ),
         ),
       ];
@@ -769,26 +880,23 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
         sliver: SliverList(
-          delegate: SliverChildBuilderDelegate(
-            (_, i) {
-              final st = _visibleDepts[i];
-              final name = st.departmentName.isEmpty
-                  ? '部门 ${st.departmentId}'
-                  : st.departmentName;
-                return Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _DeptStatCard(
-                  name: name,
-                  summary: st.summaryLine,
-                  overdue: st.mainOverdue,
-                  avgProgress: st.avgProgress,
-                  completed: st.allClosed,
-                  onTap: () => unawaited(_selectDept(st.departmentId)),
-                ),
-              );
-            },
-            childCount: _visibleDepts.length,
-          ),
+          delegate: SliverChildBuilderDelegate((_, i) {
+            final st = _visibleDepts[i];
+            final name = st.departmentName.isEmpty
+                ? '部门 ${st.departmentId}'
+                : st.departmentName;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _DeptStatCard(
+                name: name,
+                summary: st.summaryLine,
+                overdue: st.mainOverdue,
+                avgProgress: st.avgProgress,
+                completed: st.allClosed,
+                onTap: () => unawaited(_selectDept(st.departmentId)),
+              ),
+            );
+          }, childCount: _visibleDepts.length),
         ),
       ),
     ];
@@ -879,9 +987,7 @@ class _HrbpBarChart extends StatelessWidget {
                       ? minColW
                       : (c.maxWidth - gap * (n - 1)) / n;
                   final scroll = evenW < minColW;
-                  final colW = scroll
-                      ? minColW
-                      : evenW.clamp(minColW, maxColW);
+                  final colW = scroll ? minColW : evenW.clamp(minColW, maxColW);
                   final rowWidth = n * colW + (n - 1) * gap;
                   final row = Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -953,7 +1059,10 @@ class _HrbpVerticalBar extends StatelessWidget {
               child: LayoutBuilder(
                 builder: (context, c) {
                   const labelH = 20.0;
-                  final maxBarH = (c.maxHeight - labelH).clamp(8.0, c.maxHeight);
+                  final maxBarH = (c.maxHeight - labelH).clamp(
+                    8.0,
+                    c.maxHeight,
+                  );
                   final barH = pct <= 0
                       ? 5.0
                       : (maxBarH * pct).clamp(8.0, maxBarH);
@@ -1034,11 +1143,15 @@ class _StatStrip extends StatelessWidget {
     required this.total,
     required this.completed,
     required this.overdue,
+    required this.risk,
+    required this.reportRate,
   });
 
   final int total;
   final int completed;
   final int overdue;
+  final int risk;
+  final String reportRate;
 
   @override
   Widget build(BuildContext context) {
@@ -1083,13 +1196,27 @@ class _StatStrip extends StatelessWidget {
       );
     }
 
-    return Row(
+    return Column(
       children: [
-        cell('$total', '主任务', '当期一共几条', kTaskPurple),
-        const SizedBox(width: 8),
-        cell('$completed', '已办结', '已经闭环', const Color(0xFF1F9D76)),
-        const SizedBox(width: 8),
-        cell('$overdue', '已逾期', '过期还未办结', const Color(0xFFB45309)),
+        Row(
+          children: [
+            cell('$total', '主目标', '默认列表口径', kTaskPurple),
+            const SizedBox(width: 8),
+            cell('$completed', '按期完成', '期内按时办结', const Color(0xFF1F9D76)),
+            const SizedBox(width: 8),
+            cell('$risk', '进行中风险', '临近无更新或逾期', const Color(0xFFB45309)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            cell('$overdue', '逾期', '过期还未办结', const Color(0xFFB45309)),
+            const SizedBox(width: 8),
+            cell(reportRate, '日报提交率', '工作日按时+补填', const Color(0xFF3D7A8C)),
+            const SizedBox(width: 8),
+            const Expanded(child: SizedBox()),
+          ],
+        ),
       ],
     );
   }
@@ -1185,10 +1312,7 @@ class _DeptStatCard extends StatelessWidget {
 }
 
 class _TaskStatCard extends StatelessWidget {
-  const _TaskStatCard({
-    required this.task,
-    required this.onTap,
-  });
+  const _TaskStatCard({required this.task, required this.onTap});
 
   final TaskItem task;
   final VoidCallback onTap;
@@ -1260,9 +1384,7 @@ class _TaskStatCard extends StatelessWidget {
                     text: overdueOpen ? '已逾期未办结' : taskStatusLabel(task.status),
                     color: overdueOpen
                         ? const Color(0xFFB45309)
-                        : (done
-                            ? const Color(0xFF1F9D76)
-                            : kTaskPurple),
+                        : (done ? const Color(0xFF1F9D76) : kTaskPurple),
                   ),
                   if (task.ownerName.isNotEmpty)
                     TaskMetaChip(
@@ -1282,7 +1404,10 @@ class _TaskStatCard extends StatelessWidget {
                   taskCardContextLine(task)!,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: DunesColors.text3,
+                  ),
                 ),
               ],
               if (hint != null) ...[

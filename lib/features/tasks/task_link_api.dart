@@ -13,9 +13,9 @@ class TaskLinkApi {
   final AuthSession session;
 
   Map<String, String> get _headers => {
-        'Authorization': 'Bearer ${session.token}',
-        'Content-Type': 'application/json',
-      };
+    'Authorization': 'Bearer ${session.token}',
+    'Content-Type': 'application/json',
+  };
 
   Uri _uri(String path, [Map<String, String>? query]) {
     final base = session.apiBase.replaceAll(RegExp(r'/+$'), '');
@@ -40,7 +40,9 @@ class TaskLinkApi {
   Future<TaskLinksResult> fetchLinks(int taskId) async {
     final resp = await http.get(_uri('tasks/$taskId/links'), headers: _headers);
     final data = _unwrap(resp);
-    final map = data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
     final links = (map['links'] as List? ?? const [])
         .whereType<Map>()
         .map((e) => TaskLink.fromJson(Map<String, dynamic>.from(e)))
@@ -79,17 +81,22 @@ class TaskLinkApi {
       headers: _headers,
     );
     final data = _unwrap(resp);
-    final map = data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
     return TaskLinkCandidates(
       meetings: (map['meetings'] as List? ?? const [])
           .whereType<Map>()
-          .map((e) =>
-              TaskLinkCandidateMeeting.fromJson(Map<String, dynamic>.from(e)))
+          .map(
+            (e) =>
+                TaskLinkCandidateMeeting.fromJson(Map<String, dynamic>.from(e)),
+          )
           .toList(growable: false),
       docs: (map['kbDocs'] as List? ?? const [])
           .whereType<Map>()
-          .map((e) =>
-              TaskLinkCandidateDoc.fromJson(Map<String, dynamic>.from(e)))
+          .map(
+            (e) => TaskLinkCandidateDoc.fromJson(Map<String, dynamic>.from(e)),
+          )
           .toList(growable: false),
     );
   }
@@ -109,12 +116,15 @@ class TaskLinkApi {
       headers: _headers,
     );
     final data = _unwrap(resp);
-    final map = data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
     return MeetingTaskBindData(
       suggestions: (map['suggestions'] as List? ?? const [])
           .whereType<Map>()
-          .map((e) =>
-              MeetingTaskSuggestion.fromJson(Map<String, dynamic>.from(e)))
+          .map(
+            (e) => MeetingTaskSuggestion.fromJson(Map<String, dynamic>.from(e)),
+          )
           .toList(growable: false),
       syncedTasks: (map['syncedTasks'] as List? ?? const [])
           .whereType<Map>()
@@ -134,6 +144,7 @@ class TaskLinkApi {
     String? priority,
     required DateTime startAt,
     required DateTime dueAt,
+    int? parentTaskId,
   }) async {
     final start = DateTime(startAt.year, startAt.month, startAt.day);
     final due = DateTime(dueAt.year, dueAt.month, dueAt.day, 23, 59, 59);
@@ -143,9 +154,12 @@ class TaskLinkApi {
       body: jsonEncode({
         if (title != null) 'title': title,
         if (description != null) 'description': description,
-        if (acceptanceCriteria != null) 'acceptanceCriteria': acceptanceCriteria,
+        if (acceptanceCriteria != null)
+          'acceptanceCriteria': acceptanceCriteria,
         if (ownerUserId != null) 'ownerUserId': ownerUserId,
         if (priority != null && priority.isNotEmpty) 'priority': priority,
+        if (parentTaskId != null && parentTaskId > 0)
+          'parentTaskId': parentTaskId,
         'startAt': start.toUtc().toIso8601String(),
         'dueAt': due.toUtc().toIso8601String(),
       }),

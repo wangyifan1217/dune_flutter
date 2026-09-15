@@ -11,7 +11,6 @@ import 'desktop_screenshot_windows.dart' as win;
 
 Future<Uint8List?> captureDesktopRegionScreenshotImpl() async {
   if (Platform.isWindows) {
-    // 新方案：系统截图，不藏本窗口。
     return win.captureWindowsRegionScreenshot();
   }
   if (Platform.isMacOS) {

@@ -13,6 +13,7 @@ import '../chat/chat_media_cache.dart';
 import '../xflow/approval_chat_share.dart';
 import 'conversation_mention_utils.dart';
 import 'conversation_models.dart';
+import 'im_user_status.dart';
 import 'message_preview_text.dart';
 
 /// 上传分块大小：把文件切成小块逐块写入，配合 socket 背压才能得到真实的
@@ -202,6 +203,43 @@ class ConversationService {
       return (data['totalUnread'] as num?)?.toInt();
     }
     return (body['totalUnread'] as num?)?.toInt();
+  }
+
+  Future<String> fetchImStatus() async {
+    final resp = await _client.get(
+      _uri('/conversations/im-status'),
+      headers: _headers,
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('状态加载失败: HTTP ${resp.statusCode}');
+    }
+    return _imStatusFromBody(resp.body);
+  }
+
+  Future<String> putImStatus(String status) async {
+    final resp = await _client.put(
+      _uri('/conversations/im-status'),
+      headers: _headers,
+      body: jsonEncode(<String, String>{
+        'status': ImUserStatusCatalog.normalize(status),
+      }),
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('状态更新失败: HTTP ${resp.statusCode}');
+    }
+    return _imStatusFromBody(resp.body);
+  }
+
+  String _imStatusFromBody(String raw) {
+    final body = _decode(raw);
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '状态加载失败').toString());
+    }
+    final data = body['data'];
+    if (data is Map) {
+      return ImUserStatusCatalog.normalize(data['status']?.toString());
+    }
+    return ImUserStatusCatalog.online;
   }
 
   /// 仅查找已有私聊，不创建。用于打开聊天窗口；真正建会话放到首次发消息时。
@@ -2282,6 +2320,9 @@ class ConversationService {
           .toString(),
       hasUnreadMention: ConversationMentionUtils.unreadMentionFromJson(raw),
       hasUnreadAtAll: ConversationMentionUtils.unreadAtAllFromJson(raw),
+      peerImStatus: ImUserStatusCatalog.normalize(
+        (raw['peerImStatus'] ?? peerMap['imStatus'] ?? '').toString(),
+      ),
     );
   }
 

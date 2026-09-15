@@ -17,14 +17,16 @@ import '../conversation/inbox_format.dart';
 import '../desktop/windows_desktop_tray.dart';
 import '../shell/dunes_toast.dart';
 import '../tasks/native_task_action_page.dart';
+import '../tasks/native_task_daily_report_page.dart';
 import '../tasks/native_task_detail_page.dart';
 import '../tasks/task_api.dart';
+import '../tasks/task_first_use_guide.dart';
 import '../tasks/task_link_models.dart';
 import '../tasks/task_models.dart';
 import '../tasks/task_widgets.dart';
 import 'meeting_suggestion_im_card.dart';
 
-/// 任务助手：只读通知流，入口仅展示当前用户负责的进行中子任务。
+/// 任务助手：通知流，并保留当前用户负责的进行中子目标入口。
 class NativeTaskAssistantPage extends StatefulWidget {
   const NativeTaskAssistantPage({
     super.key,
@@ -68,10 +70,13 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
   DateTime? _userScrollHoldUntil;
   bool _showTasks = false;
   bool _clearing = false;
-  TaskItem? _actionTask;
-  TaskActionMode _actionMode = TaskActionMode.progress;
   int? _detailTaskId;
   int _detailReloadTick = 0;
+  bool _showDailyReport = false;
+  DateTime? _dailyReportDate;
+  bool _dailyPending = false;
+  bool _guideAutoStarted = false;
+  bool _activeTasksGuideStarted = false;
   int _resolvedConvId = 0;
   String? _error;
   StreamSubscription<ConversationRealtimeEvent>? _rtSub;
@@ -85,10 +90,36 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     _syncBackInterceptor();
     _scroll.addListener(_onScroll);
     _loadMessages();
+    unawaited(_refreshDailyStatus());
     // 页面常驻（尤其 PC 双栏）时新通知实时进屏，不依赖重新打开
     final realtime = ConversationRealtimeHub.instance.of(widget.session);
     unawaited(realtime.connect());
     _rtSub = realtime.events.listen(_onRealtime);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_showGuide());
+    });
+  }
+
+  Future<void> _showGuide({bool force = false}) async {
+    if (!force && _guideAutoStarted) return;
+    if (!force) _guideAutoStarted = true;
+    await showTaskFirstUseGuide(
+      context,
+      userId: widget.session.userId,
+      page: TaskGuidePage.assistant,
+      force: force,
+    );
+  }
+
+  Future<void> _showActiveTasksGuide({bool force = false}) async {
+    if (!force && _activeTasksGuideStarted) return;
+    if (!force) _activeTasksGuideStarted = true;
+    await showTaskFirstUseGuide(
+      context,
+      userId: widget.session.userId,
+      page: TaskGuidePage.assistantActiveTasks,
+      force: force,
+    );
   }
 
   @override
@@ -123,7 +154,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
   }
 
   bool get _hasInternalBack =>
-      _actionTask != null || _detailTaskId != null || _showTasks;
+      _detailTaskId != null || _showDailyReport || _showTasks;
 
   void _installBackInterceptor() {
     final nav = widget.navigation;
@@ -154,8 +185,8 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
   bool _canHandleInternalBack() => _hasInternalBack;
 
   bool _handleInternalBack() {
-    if (_actionTask != null) {
-      _closeProgress(refresh: false);
+    if (_showDailyReport) {
+      _closeDailyReport();
       return true;
     }
     if (_detailTaskId != null) {
@@ -186,6 +217,38 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
   void _closeTaskDetail() {
     setState(() => _detailTaskId = null);
     _syncBackInterceptor();
+  }
+
+  Future<void> _refreshDailyStatus() async {
+    try {
+      final bundle = await _taskApi.getDailyReport();
+      if (!mounted) return;
+      setState(
+        () => _dailyPending =
+            bundle.canSubmit && bundle.report?.submitted != true,
+      );
+    } catch (_) {}
+  }
+
+  void _openDailyReport({String? reportDate}) {
+    DateTime? parsed;
+    if (reportDate != null && reportDate.trim().isNotEmpty) {
+      parsed = DateTime.tryParse(reportDate.trim());
+    }
+    setState(() {
+      _showDailyReport = true;
+      _dailyReportDate = parsed;
+    });
+    _syncBackInterceptor();
+  }
+
+  void _closeDailyReport() {
+    setState(() {
+      _showDailyReport = false;
+      _dailyReportDate = null;
+    });
+    _syncBackInterceptor();
+    unawaited(_refreshDailyStatus());
   }
 
   Future<void> _loadMessages({bool silent = false}) async {
@@ -461,7 +524,6 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
   Future<void> _openActiveTasks() async {
     setState(() {
       _showTasks = true;
-      _actionTask = null;
       _loading = true;
       _error = null;
     });
@@ -469,6 +531,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     try {
       final tasks = await _loadOwnedActiveSubtasks();
       if (mounted) setState(() => _tasks = tasks);
+      if (mounted) unawaited(_showActiveTasksGuide());
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     } finally {
@@ -545,30 +608,24 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     for (final item in _tasks) {
       if (item.id == pid) return item.title;
     }
-    return '主任务 #$pid';
+    return '主目标 #$pid';
   }
 
-  void _openProgress(
+  Future<void> _openProgress(
     TaskItem task, {
     TaskActionMode mode = TaskActionMode.progress,
-  }) {
-    setState(() {
-      _actionTask = task;
-      _actionMode = mode;
-    });
-    _syncBackInterceptor();
-  }
-
-  void _closeProgress({required bool refresh}) {
-    setState(() {
-      _actionTask = null;
-      if (refresh && _detailTaskId != null) {
-        // 从内嵌任务详情发起的操作：完成后强制详情重新拉取
-        _detailReloadTick++;
-      }
-    });
-    _syncBackInterceptor();
-    if (refresh && _detailTaskId == null && _showTasks) {
+  }) async {
+    final changed = await showTaskActionDialog(
+      context,
+      session: widget.session,
+      task: task,
+      mode: mode,
+      accentColor: const Color(0xFF2F8F7E),
+    );
+    if (!changed || !mounted) return;
+    if (_detailTaskId != null) {
+      setState(() => _detailReloadTick++);
+    } else if (_showTasks) {
       unawaited(_openActiveTasks());
     }
   }
@@ -584,27 +641,19 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
 
   @override
   Widget build(BuildContext context) {
-    final action = _actionTask;
-    if (action != null) {
-      // 嵌在任务助手右侧栏内，避免 Navigator.push 全屏/双栏撑破布局。
-      // APP 需 SafeArea，否则状态栏会压住「返回 / 调整进度」顶栏。
+    if (_showDailyReport) {
       return Scaffold(
         backgroundColor: DunesColors.bgApp,
         body: SafeArea(
           bottom: false,
-          child: NativeTaskActionView(
+          child: NativeTaskDailyReportPage(
             session: widget.session,
-            task: action,
-            mode: _actionMode,
-            accentColor: const Color(0xFF2F8F7E),
-            backgroundColor: DunesColors.bgApp,
-            onBack: () => _closeProgress(refresh: false),
-            onDone: () => _closeProgress(refresh: true),
+            initialDate: _dailyReportDate,
+            onBack: _closeDailyReport,
           ),
         ),
       );
     }
-
     final detailTaskId = _detailTaskId;
     if (detailTaskId != null) {
       // 点通知卡片打开的内嵌任务详情（进度/评价复用上面的三级页）。
@@ -642,6 +691,42 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
               showBackButton: _showTasks || widget.showBackButton,
               leadingAvatar: const TaskAssistantAvatar(size: 45),
               actions: [
+                TaskGuideHelpButton(
+                  onPressed: () => unawaited(
+                    _showTasks
+                        ? _showActiveTasksGuide(force: true)
+                        : _showGuide(force: true),
+                  ),
+                ),
+                if (!_showTasks)
+                  TextButton(
+                    onPressed: () => _openDailyReport(),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _dailyPending ? '日报待填' : '日报',
+                          style: TextStyle(
+                            color: _dailyPending
+                                ? const Color(0xFFE11D48)
+                                : DunesColors.text2,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (_dailyPending) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFE11D48),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 if (!_showTasks)
                   IconButton(
                     tooltip: '清空通知记录',
@@ -661,7 +746,32 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
               ],
             ),
             Expanded(child: _showTasks ? _buildTasks() : _buildMessages()),
-            // 「进行中的任务」入口暂时下线（产品要求先隐藏，代码保留随时可恢复）。
+            if (!_showTasks)
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  10,
+                  16,
+                  12 + MediaQuery.paddingOf(context).bottom,
+                ),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(top: BorderSide(color: Color(0xFFE8EAED))),
+                ),
+                child: FilledButton.icon(
+                  onPressed: _openActiveTasks,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF2F8F7E),
+                    minimumSize: const Size.fromHeight(44),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  icon: const Icon(Icons.task_alt_outlined, size: 19),
+                  label: const Text('进入任务'),
+                ),
+              ),
           ],
         ),
       ),
@@ -749,6 +859,10 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     final parent = (payload['parentTitle'] ?? '').toString();
     final taskId = (payload['taskId'] as num?)?.toInt() ?? 0;
     final isSug = noticeType == 'meetingTaskSuggestions';
+    final isDaily = noticeType == 'taskDailyReport';
+    final reportDate = (payload['reportDate'] ?? '').toString();
+    final pendingCount = (payload['pendingTaskCount'] as num?)?.toInt() ?? 0;
+    final deadline = (payload['deadline'] ?? '').toString();
     final meetingId = isSug
         ? ((payload['meetingId'] as num?)?.toInt() ?? 0)
         : 0;
@@ -759,9 +873,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
       snapshot = (payload['suggestions'] as List? ?? const [])
           .whereType<Map>()
           .map(
-            (e) => MeetingTaskSuggestion.fromJson(
-              Map<String, dynamic>.from(e),
-            ),
+            (e) => MeetingTaskSuggestion.fromJson(Map<String, dynamic>.from(e)),
           )
           .toList(growable: false);
     }
@@ -776,11 +888,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ChatTextBubble(
-            text: m.bodyText,
-            mine: false,
-            enableSelection: false,
-          ),
+          ChatTextBubble(text: m.bodyText, mine: false, enableSelection: false),
           if (isSug && meetingId > 0)
             Padding(
               padding: const EdgeInsets.only(top: 6),
@@ -790,6 +898,18 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
                 meetingId: meetingId,
                 meetingTitle: meetingTitle,
                 snapshot: snapshot,
+              ),
+            )
+          else if (isDaily)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: _TaskAssignmentCard(
+                title: reportDate.isEmpty ? '任务日报' : '$reportDate 日报',
+                parentTitle: [
+                  if (pendingCount > 0) '待填 $pendingCount 项',
+                  if (deadline.isNotEmpty) '截止 $deadline',
+                ].join(' · '),
+                onTap: () => _openDailyReport(reportDate: reportDate),
               ),
             )
           else if (title.isNotEmpty)
@@ -819,7 +939,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     final tasks = _activeSubtasks;
     if (tasks.isEmpty) {
       return const Center(
-        child: Text('暂无你负责的进行中子任务', style: TextStyle(color: DunesColors.text3)),
+        child: Text('暂无你负责的进行中子目标', style: TextStyle(color: DunesColors.text3)),
       );
     }
     return ListView.separated(
@@ -890,7 +1010,7 @@ class _TaskAssignmentCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  parentTitle.isEmpty ? title : '$title\n主任务：$parentTitle',
+                  parentTitle.isEmpty ? title : '$title\n主目标：$parentTitle',
                   style: const TextStyle(fontSize: 12, height: 1.4),
                 ),
               ),
@@ -960,13 +1080,13 @@ class _ActiveSubtaskCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              task.title.trim().isEmpty ? '未命名子任务' : task.title.trim(),
+              task.title.trim().isEmpty ? '未命名子目标' : task.title.trim(),
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
             ),
             if (parentTitle.isNotEmpty) ...[
               const SizedBox(height: 4),
               Text(
-                '主任务：$parentTitle',
+                '主目标：$parentTitle',
                 style: const TextStyle(fontSize: 12, color: DunesColors.text3),
               ),
             ],

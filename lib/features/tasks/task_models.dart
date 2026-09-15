@@ -35,6 +35,13 @@ class TaskItem {
     this.overdue = false,
     this.coOwnerUserIds = const [],
     this.aiState = '',
+    this.completedAt,
+    this.completedAtInferred = false,
+    this.assessmentIncluded = false,
+    this.assessmentWeight = 1,
+    this.openItemCount = 0,
+    this.itemsReadyToClose = false,
+    this.displayStatus = '',
   });
 
   final int id;
@@ -74,6 +81,13 @@ class TaskItem {
 
   /// 服务端展示态：analyzing = AI 分析中，binding = AI 匹配知识库中。
   final String aiState;
+  final DateTime? completedAt;
+  final bool completedAtInferred;
+  final bool assessmentIncluded;
+  final double assessmentWeight;
+  final int openItemCount;
+  final bool itemsReadyToClose;
+  final String displayStatus;
 
   bool get isMain => parentId == null;
   bool get isPending => status == 'pending_approval';
@@ -128,6 +142,13 @@ class TaskItem {
               .toList(growable: false) ??
           const [],
       aiState: '${json['aiState'] ?? ''}',
+      completedAt: parseTime(json['completedAt']),
+      completedAtInferred: json['completedAtInferred'] == true,
+      assessmentIncluded: json['assessmentIncluded'] == true,
+      assessmentWeight: (json['assessmentWeight'] as num?)?.toDouble() ?? 1,
+      openItemCount: (json['openItemCount'] as num?)?.toInt() ?? 0,
+      itemsReadyToClose: json['itemsReadyToClose'] == true,
+      displayStatus: '${json['displayStatus'] ?? ''}',
     );
   }
 }
@@ -356,20 +377,30 @@ class HrbpDeptStat {
     this.departmentName = '',
     this.mainTotal = 0,
     this.mainCompleted = 0,
+    this.mainOnTimeCompleted = 0,
     this.mainOverdue = 0,
+    this.inProgressRisk = 0,
     this.avgProgress = 0,
     this.pendingApproval = 0,
     this.rejected = 0,
+    this.dailyReportExpected = 0,
+    this.dailyReportSubmitted = 0,
+    this.dailyReportRate = 0,
   });
 
   final int departmentId;
   final String departmentName;
   final int mainTotal;
   final int mainCompleted;
+  final int mainOnTimeCompleted;
   final int mainOverdue;
+  final int inProgressRisk;
   final double avgProgress;
   final int pendingApproval;
   final int rejected;
+  final int dailyReportExpected;
+  final int dailyReportSubmitted;
+  final double dailyReportRate;
 
   factory HrbpDeptStat.fromJson(Map<String, dynamic> json) {
     return HrbpDeptStat(
@@ -377,21 +408,24 @@ class HrbpDeptStat {
       departmentName: '${json['departmentName'] ?? ''}',
       mainTotal: (json['mainTotal'] as num?)?.toInt() ?? 0,
       mainCompleted: (json['mainCompleted'] as num?)?.toInt() ?? 0,
+      mainOnTimeCompleted: (json['mainOnTimeCompleted'] as num?)?.toInt() ?? 0,
       mainOverdue: (json['mainOverdue'] as num?)?.toInt() ?? 0,
+      inProgressRisk: (json['inProgressRisk'] as num?)?.toInt() ?? 0,
       avgProgress: (json['avgProgress'] as num?)?.toDouble() ?? 0,
       pendingApproval: (json['pendingApproval'] as num?)?.toInt() ?? 0,
       rejected: (json['rejected'] as num?)?.toInt() ?? 0,
+      dailyReportExpected: (json['dailyReportExpected'] as num?)?.toInt() ?? 0,
+      dailyReportSubmitted:
+          (json['dailyReportSubmitted'] as num?)?.toInt() ?? 0,
+      dailyReportRate: (json['dailyReportRate'] as num?)?.toDouble() ?? 0,
     );
   }
 
-  /// 主任务是否都已办结（与填报进度是否 100% 无关）。
+  /// 主目标是否都已办结（与填报进度是否 100% 无关）。
   bool get allClosed => mainTotal > 0 && mainCompleted >= mainTotal;
 
   String get summaryLine {
-    final parts = <String>[
-      '$mainTotal 个主任务',
-      '$mainCompleted 已办结',
-    ];
+    final parts = <String>['$mainTotal 个主目标', '$mainCompleted 已办结'];
     if (mainOverdue > 0) parts.add('$mainOverdue 已逾期未办结');
     return parts.join(' · ');
   }
@@ -410,6 +444,38 @@ String? taskUnfinishedOverdueHint({
     return '已过截止日，尚未办结。进度填满不等于已经完成。';
   }
   return '已过截止日，尚未办结。';
+}
+
+String formatTaskYmd(DateTime? d) {
+  if (d == null) return '';
+  final local = d.toLocal();
+  final m = local.month.toString().padLeft(2, '0');
+  final day = local.day.toString().padLeft(2, '0');
+  return '${local.year}-$m-$day';
+}
+
+String? taskCreateRangeLabel(DateTime? startAt, DateTime? dueAt) {
+  if (startAt == null && dueAt == null) return null;
+  if (startAt != null && dueAt != null) {
+    return '${formatTaskYmd(startAt)} ~ ${formatTaskYmd(dueAt)}';
+  }
+  if (startAt != null) return '起 ${formatTaskYmd(startAt)}';
+  return '止 ${formatTaskYmd(dueAt!)}';
+}
+
+/// 新建任务周期，开始时间和结束时间必填。
+String? taskCreateRangeError(
+  DateTime? startAt,
+  DateTime? dueAt, {
+  bool required = true,
+}) {
+  if (startAt == null || dueAt == null) {
+    return required ? '请选择开始时间和结束时间' : null;
+  }
+  final start = DateTime(startAt.year, startAt.month, startAt.day);
+  final due = DateTime(dueAt.year, dueAt.month, dueAt.day);
+  if (due.isBefore(start)) return '结束时间不能早于开始时间';
+  return null;
 }
 
 String? taskPostponeError({
@@ -432,8 +498,10 @@ String? taskPostponeError({
 
 String taskStatusLabel(String status) {
   switch (status) {
+    case 'not_started':
+      return '待开始';
     case 'pending_approval':
-      return '待审核';
+      return '待确认';
     case 'completed':
       return '已完成';
     case 'cancelled':
@@ -445,6 +513,14 @@ String taskStatusLabel(String status) {
     default:
       return '进行中';
   }
+}
+
+String taskKindLabel(TaskItem task) => task.isMain ? '主目标' : '子目标';
+
+String taskDisplayStatusLabel(TaskItem task) {
+  final raw = task.displayStatus.trim();
+  if (raw.isNotEmpty) return taskStatusLabel(raw);
+  return taskStatusLabel(task.status);
 }
 
 String taskPriorityLabel(String priority) {
@@ -477,4 +553,181 @@ String? taskCardContextLine(TaskItem task) {
   if (line.isEmpty) return null;
   if (line.length <= 36) return line;
   return '${line.substring(0, 36)}…';
+}
+
+class TaskDailyReportItem {
+  const TaskDailyReportItem({
+    this.id = 0,
+    this.reportId = 0,
+    required this.taskId,
+    this.mainTaskId = 0,
+    this.progressPct = 0,
+    this.workDone = '',
+    this.nextAction = '',
+    this.taskTitle = '',
+    this.mainTitle = '',
+    this.isItem = false,
+  });
+
+  final int id;
+  final int reportId;
+  final int taskId;
+  final int mainTaskId;
+  final int progressPct;
+  final String workDone;
+  final String nextAction;
+  final String taskTitle;
+  final String mainTitle;
+  final bool isItem;
+
+  factory TaskDailyReportItem.fromJson(Map<String, dynamic> json) {
+    return TaskDailyReportItem(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      reportId: (json['reportId'] as num?)?.toInt() ?? 0,
+      taskId: (json['taskId'] as num?)?.toInt() ?? 0,
+      mainTaskId: (json['mainTaskId'] as num?)?.toInt() ?? 0,
+      progressPct: (json['progressPct'] as num?)?.toInt() ?? 0,
+      workDone: '${json['workDone'] ?? ''}',
+      nextAction: '${json['nextAction'] ?? ''}',
+      taskTitle: '${json['taskTitle'] ?? ''}',
+      mainTitle: '${json['mainTitle'] ?? ''}',
+      isItem: json['isItem'] == true,
+    );
+  }
+}
+
+class TaskDailyReport {
+  const TaskDailyReport({
+    this.id = 0,
+    this.userId = 0,
+    required this.reportDate,
+    this.summary = '',
+    this.blockers = '',
+    this.nextPlan = '',
+    this.status = '',
+    this.submittedAt,
+    this.source = '',
+    this.items = const [],
+    this.comments = const [],
+  });
+
+  final int id;
+  final int userId;
+  final String reportDate;
+  final String summary;
+  final String blockers;
+  final String nextPlan;
+  final String status;
+  final DateTime? submittedAt;
+  final String source;
+  final List<TaskDailyReportItem> items;
+  final List<TaskDailyReportComment> comments;
+
+  bool get submitted => status == 'submitted';
+
+  factory TaskDailyReport.fromJson(Map<String, dynamic> json) {
+    DateTime? parseTime(dynamic v) {
+      if (v == null) return null;
+      return DateTime.tryParse(v.toString());
+    }
+
+    return TaskDailyReport(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      userId: (json['userId'] as num?)?.toInt() ?? 0,
+      reportDate: '${json['reportDate'] ?? ''}',
+      summary: '${json['summary'] ?? ''}',
+      blockers: '${json['blockers'] ?? ''}',
+      nextPlan: '${json['nextPlan'] ?? ''}',
+      status: '${json['status'] ?? ''}',
+      submittedAt: parseTime(json['submittedAt']),
+      source: '${json['source'] ?? ''}',
+      items:
+          (json['items'] as List?)
+              ?.whereType<Map>()
+              .map(
+                (e) =>
+                    TaskDailyReportItem.fromJson(Map<String, dynamic>.from(e)),
+              )
+              .toList(growable: false) ??
+          const [],
+      comments:
+          (json['comments'] as List?)
+              ?.whereType<Map>()
+              .map(
+                (e) => TaskDailyReportComment.fromJson(
+                  Map<String, dynamic>.from(e),
+                ),
+              )
+              .toList(growable: false) ??
+          const [],
+    );
+  }
+}
+
+class TaskDailyReportComment {
+  const TaskDailyReportComment({
+    required this.id,
+    required this.reportId,
+    required this.userId,
+    required this.body,
+    required this.createdAt,
+    this.userName = '',
+  });
+
+  final int id;
+  final int reportId;
+  final int userId;
+  final String body;
+  final DateTime createdAt;
+  final String userName;
+
+  factory TaskDailyReportComment.fromJson(Map<String, dynamic> json) {
+    return TaskDailyReportComment(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      reportId: (json['reportId'] as num?)?.toInt() ?? 0,
+      userId: (json['userId'] as num?)?.toInt() ?? 0,
+      body: '${json['body'] ?? ''}',
+      createdAt:
+          DateTime.tryParse('${json['createdAt'] ?? ''}') ?? DateTime.now(),
+      userName: '${json['userName'] ?? ''}',
+    );
+  }
+}
+
+class TaskDailyReportBundle {
+  const TaskDailyReportBundle({
+    this.report,
+    this.candidates = const [],
+    this.canSubmit = false,
+    this.canBackfill = false,
+    this.businessDate = '',
+    this.backfillUntil = '',
+  });
+
+  final TaskDailyReport? report;
+  final List<TaskItem> candidates;
+  final bool canSubmit;
+  final bool canBackfill;
+  final String businessDate;
+  final String backfillUntil;
+
+  factory TaskDailyReportBundle.fromJson(Map<String, dynamic> json) {
+    return TaskDailyReportBundle(
+      report: json['report'] is Map
+          ? TaskDailyReport.fromJson(
+              Map<String, dynamic>.from(json['report'] as Map),
+            )
+          : null,
+      candidates:
+          (json['candidates'] as List?)
+              ?.whereType<Map>()
+              .map((e) => TaskItem.fromJson(Map<String, dynamic>.from(e)))
+              .toList(growable: false) ??
+          const [],
+      canSubmit: json['canSubmit'] == true,
+      canBackfill: json['canBackfill'] == true,
+      businessDate: '${json['businessDate'] ?? ''}',
+      backfillUntil: '${json['backfillUntil'] ?? ''}',
+    );
+  }
 }

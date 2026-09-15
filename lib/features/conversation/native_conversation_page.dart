@@ -27,6 +27,7 @@ import 'conversation_realtime_dedup.dart';
 import 'conversation_realtime_hub.dart';
 import 'conversation_realtime_service.dart';
 import 'conversation_service.dart';
+import 'im_user_status.dart';
 import 'inbox_conversation_file_drop.dart';
 import 'inbox_format.dart';
 import 'inbox_hidden_storage.dart';
@@ -233,6 +234,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   int _contactSearchSeq = 0;
   Map<String, String> _novaStorage = const {};
   Map<String, InboxHiddenEntry> _hiddenConversations = const {};
+  String _selfImStatus = ImUserStatusCatalog.online;
 
   @override
   void initState() {
@@ -263,6 +265,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     }
     _bootRealtime();
     unawaited(_preloadRobotCatalog());
+    unawaited(_loadSelfImStatus());
     NovaBackgroundCoordinator.instance.addListener(_onNovaBackgroundUpdate);
     RobotAnalyzingCoordinator.instance.bindSession(widget.session);
     RobotAnalyzingCoordinator.instance.addListener(_onRobotAnalyzingUpdate);
@@ -694,7 +697,81 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     setState(() => _aiSummaryPreview = latest);
   }
 
+  Future<void> _loadSelfImStatus() async {
+    try {
+      final status = await _service.fetchImStatus();
+      if (!mounted) return;
+      if (status != _selfImStatus) {
+        setState(() => _selfImStatus = status);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _setSelfImStatus(String status) async {
+    final next = ImUserStatusCatalog.normalize(status);
+    if (next == _selfImStatus) return;
+    final prev = _selfImStatus;
+    setState(() => _selfImStatus = next);
+    try {
+      final saved = await _service.putImStatus(next);
+      if (!mounted) return;
+      if (saved != _selfImStatus) {
+        setState(() => _selfImStatus = saved);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _selfImStatus = prev);
+    }
+  }
+
+  void _applyImStatusEvent(ConversationRealtimeEvent event) {
+    final userId = (event.raw['userId'] as num?)?.toInt() ?? 0;
+    final status = ImUserStatusCatalog.normalize(
+      event.raw['status']?.toString(),
+    );
+    if (userId <= 0 || !mounted) return;
+    if (userId == widget.session.userId) {
+      if (status != _selfImStatus) {
+        setState(() => _selfImStatus = status);
+      }
+      return;
+    }
+    var changed = false;
+    final next = <NativeConversation>[];
+    for (final item in _items) {
+      if (item.isPrivate &&
+          !item.isSelfMemo &&
+          (item.peerUserId ?? 0) == userId &&
+          item.peerImStatus != status) {
+        changed = true;
+        next.add(
+          ConversationInboxRealtime.copyConversation(
+            item,
+            peerImStatus: status,
+          ),
+        );
+      } else {
+        next.add(item);
+      }
+    }
+    if (changed) {
+      setState(() => _items = next);
+      ConversationInboxCache.instance.put(
+        userId: widget.session.userId,
+        conversations: _items,
+        notif: _notif,
+        novaStorage: _novaStorage,
+        aiSummaryPreview: _aiSummaryPreview,
+        aiSummaryUnread: _aiSummaryUnread,
+      );
+    }
+  }
+
   void _onInboxRealtimeEvent(ConversationRealtimeEvent event) {
+    if (event.type == 'im_status') {
+      _applyImStatusEvent(event);
+      return;
+    }
     final like = ConversationInboxRealtime.fromEvent(event);
     final convId = like.conversationId ?? 0;
 
@@ -1485,6 +1562,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           : null,
       sysTag: c.businessType,
       mentionLabel: selected ? null : c.unreadMentionLabel,
+      imStatus: c.isPrivate && !c.isSelfMemo ? c.peerImStatus : null,
       showDivider: true,
       onTap: onTap,
     );
@@ -1822,6 +1900,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 onOpenAiSummary: widget.session.isExternalUser
                     ? null
                     : () => unawaited(_openAiSummaryHub()),
+                onSelectImStatus: (status) =>
+                    unawaited(_setSelfImStatus(status)),
+                selfImStatus: _selfImStatus,
                 novaThinking: widget.session.isExternalUser
                     ? false
                     : _novaGeneratingFor(

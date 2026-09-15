@@ -56,7 +56,7 @@ const _kindMeta = {
   _Kind.meeting: _KindMeta('会议待跟进', Color(0xFF6B5B95), _purpleSoft),
   _Kind.proposal: _KindMeta('提案已退回', DunesColors.pink, Color(0xFFF6E6EC)),
   _Kind.kb: _KindMeta('知识待使用', _purple, _purpleSoft),
-  _Kind.done: _KindMeta('本月已完成', DunesColors.green, DunesColors.greenSoft),
+  _Kind.done: _KindMeta('已完成', DunesColors.green, DunesColors.greenSoft),
   _Kind.talk: _KindMeta('会话抽样', _purple, _purpleSoft),
 };
 
@@ -134,7 +134,7 @@ List<_Item> _itemsOf(WorkSituationPerson person) {
         hint: person.assignedOverdue > 0
             ? '${person.assignedOverdue} 条行动项已超期'
             : person.minutesGenerated == 0
-            ? '本月相关会还没有纪要'
+            ? '相关会还没有纪要'
             : '纪要或行动项还没变成任务',
       ),
     if (person.kbUnused > 0)
@@ -142,7 +142,7 @@ List<_Item> _itemsOf(WorkSituationPerson person) {
     if (person.taskCompleted > 0)
       _Item(
         kind: _Kind.done,
-        title: '本月已完成任务',
+        title: '已完成任务',
         hint: '${person.taskCompleted} 件',
       ),
   ];
@@ -527,7 +527,7 @@ String _talkDetailText(WorkSituationPerson person) {
   }
   switch (person.imTalkLevel) {
     case 'quiet':
-      return '这个月几乎没有可分析的会话。';
+      return '这段时间几乎没有可分析的会话。';
     case 'shallow':
       return '抽看会话后，沟通大多停在寒暄或催办。';
     case 'substantial':
@@ -536,9 +536,9 @@ String _talkDetailText(WorkSituationPerson person) {
       return '抽看会话后，有的在跟事，有的偏水。';
     default:
       if (person.imSessions <= 0) {
-        return '这个月几乎没有可分析的会话。';
+        return '这段时间几乎没有可分析的会话。';
       }
-      return '抽本月会话给 AI 看是否在推进事情。分析完成后会写出判断，界面不展示聊天原文。';
+      return '每天由 AI 看当天会话是否在推进事情。月视图是这些天的汇总，界面不展示聊天原文。';
   }
 }
 
@@ -631,8 +631,14 @@ String _deptSay(_Dept dept) {
 
 String _monthLabel(DateTime month) => '${month.year}年${month.month}月';
 
+String _dayLabel(DateTime day) =>
+    '${day.year}年${day.month}月${day.day}日';
+
 String _monthKey(DateTime month) =>
     '${month.year.toString().padLeft(4, '0')}-${month.month.toString().padLeft(2, '0')}';
+
+String _dayKey(DateTime day) =>
+    '${_monthKey(day)}-${day.day.toString().padLeft(2, '0')}';
 
 class NativeQianjiEfficiencyBossPreview extends StatefulWidget {
   const NativeQianjiEfficiencyBossPreview({
@@ -664,6 +670,8 @@ class NativeQianjiEfficiencyBossPreview extends StatefulWidget {
 class _NativeQianjiEfficiencyBossPreviewState
     extends State<NativeQianjiEfficiencyBossPreview> {
   late DateTime _month;
+  late DateTime _day;
+  String _grain = 'month';
   late final EfficiencyService? _service;
   final _search = TextEditingController();
   final _searchFocus = FocusNode();
@@ -689,8 +697,12 @@ class _NativeQianjiEfficiencyBossPreviewState
   void initState() {
     super.initState();
     final now = widget.now ?? DateTime.now();
-    final seed = widget.initialMonth ?? DateTime(now.year, now.month - 1);
+    final seed = widget.initialMonth ?? DateTime(now.year, now.month);
     _month = DateTime(seed.year, seed.month);
+    _day = DateTime(now.year, now.month, now.day);
+    if (_day.isAfter(DateTime(now.year, now.month, now.day))) {
+      _day = DateTime(now.year, now.month, now.day);
+    }
     _filter = widget.initialFilter.isEmpty ? 'all' : widget.initialFilter;
     _service =
         widget.service ??
@@ -710,9 +722,20 @@ class _NativeQianjiEfficiencyBossPreviewState
 
   String get _monthId => _monthKey(_month);
 
+  String get _dateId => _dayKey(_day);
+
+  String get _periodLabel =>
+      _grain == 'day' ? _dayLabel(_day) : _monthLabel(_month);
+
   List<DateTime> get _recentMonths {
     final now = widget.now ?? DateTime.now();
     return [for (var i = 0; i < 6; i++) DateTime(now.year, now.month - i)];
+  }
+
+  List<DateTime> get _recentDays {
+    final now = widget.now ?? DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return [for (var i = 0; i < 7; i++) today.subtract(Duration(days: i))];
   }
 
   List<_Dept> get _depts {
@@ -808,7 +831,9 @@ class _NativeQianjiEfficiencyBossPreviewState
       _error = null;
     });
     try {
-      final board = await service.fetchWorkSituation(month: _monthId);
+      final board = _grain == 'day'
+          ? await service.fetchWorkSituation(date: _dateId)
+          : await service.fetchWorkSituation(month: _monthId);
       if (!mounted || generation != _generation) return;
       setState(() {
         _board = board;
@@ -841,10 +866,15 @@ class _NativeQianjiEfficiencyBossPreviewState
     final service = _service;
     if (service == null || person.userId <= 0) return;
     try {
-      final detail = await service.fetchWorkSituationPerson(
-        month: _monthId,
-        userId: person.userId,
-      );
+      final detail = _grain == 'day'
+          ? await service.fetchWorkSituationPerson(
+              date: _dateId,
+              userId: person.userId,
+            )
+          : await service.fetchWorkSituationPerson(
+              month: _monthId,
+              userId: person.userId,
+            );
       if (!mounted || _person?.userId != person.userId) return;
       setState(() => _person = detail);
     } catch (_) {}
@@ -866,6 +896,49 @@ class _NativeQianjiEfficiencyBossPreviewState
       _person = null;
     });
     await _load();
+  }
+
+  Future<void> _pickDay({DateTime? firstDate, DateTime? lastDate}) async {
+    final now = widget.now ?? DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final first = firstDate ?? DateTime(now.year - 3);
+    var last = lastDate ?? today;
+    if (last.isAfter(today)) last = today;
+    var initial = _day;
+    if (initial.isBefore(first)) initial = first;
+    if (initial.isAfter(last)) initial = last;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: first,
+      lastDate: last,
+      helpText: '选择日期',
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _grain = 'day';
+      _day = DateTime(picked.year, picked.month, picked.day);
+      _month = DateTime(picked.year, picked.month);
+      _person = null;
+    });
+    await _load();
+  }
+
+  void _setGrain(String grain) {
+    if (grain == _grain) return;
+    final now = widget.now ?? DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    setState(() {
+      _grain = grain;
+      _person = null;
+      if (grain == 'day') {
+        final lastOfMonth = DateTime(_month.year, _month.month + 1, 0);
+        _day = lastOfMonth.isAfter(today) ? today : lastOfMonth;
+      } else {
+        _month = DateTime(_day.year, _day.month);
+      }
+    });
+    unawaited(_load());
   }
 
   Future<void> _maybeStartTour() async {
@@ -901,8 +974,8 @@ class _NativeQianjiEfficiencyBossPreviewState
   List<SpotlightTourStep> get _tourSteps => [
     SpotlightTourStep(
       targetKey: _monthBarKey,
-      title: '先选月份',
-      body: '工作情况按自然月汇总。切月份后，下面的人和问题标签都会跟着变。',
+      title: '先选时间',
+      body: '每天由 AI 算当天统计，月是这些天的汇总。默认同月，可切某一天。',
     ),
     SpotlightTourStep(
       targetKey: _deptBarKey,
@@ -913,7 +986,7 @@ class _NativeQianjiEfficiencyBossPreviewState
       targetKey: _filterBarKey,
       title: '四个问题标签',
       body:
-          '任务没办完、开会没落地、知识没用上、沟通偏浅。任务、会议、知识按单据统计；沟通是抽本月会话给 AI 看有没有把事情推进去，不打分。点标签只看对应的人。',
+          '任务没办完、开会没落地、知识没用上、沟通偏浅。每天由 AI 根据当天事实包判断；月视图汇总各日统计单。点标签只看对应的人。',
     ),
     SpotlightTourStep(
       targetKey: _helpKey,
@@ -960,7 +1033,7 @@ class _NativeQianjiEfficiencyBossPreviewState
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    '按你选的自然月，汇总本人权限范围内的任务、审批/提案、会议纪要、知识库，并抽看 IM 会话。沟通由 AI 判断是否在推进事情，不打分。界面不展示聊天原文。',
+                    '每天由 AI 算当天任务、会议、知识和会话统计并落库。月视图只汇总这些每日统计单，存量（超期、未使用）取月末那天的快照。沟通由 AI 判断是否在推进事情，不打分。界面不展示聊天原文。',
                     style: TextStyle(
                       fontSize: 12,
                       color: DunesColors.text3,
@@ -971,22 +1044,22 @@ class _NativeQianjiEfficiencyBossPreviewState
                   const _GuideItem(
                     title: '任务没办完',
                     body:
-                        '来自任务助手，含子任务和共同负责。看本月创建、完成或仍在办的单。超期、提案退回是硬事实；AI 抽看标题、进度、验收和评价，判断是在推进还是空转。点开事项可进任务详情。',
+                        '来自任务助手，含子任务和共同负责。计数抄当天事实包；超期是当天结束时的快照。AI 只解释当天样本，判断是在推进还是空转。点开事项可进任务详情。',
                   ),
                   const _GuideItem(
                     title: '开会没落地',
                     body:
-                        '来自会议纪要，含组织者和行动项负责人。看本月开过或补过纪要/跟进的会。没纪要、行动超期、一场都没转到任务是硬事实；一场空会不会把整月打成没落地。AI 抽看标题和纪要截断，判断是有下文还是走过场。点开事项可进会议详情。不听录音、不读转写全文。',
+                        '来自会议纪要，含组织者和行动项负责人。当天开会或出纪要计入流量；行动超期取日终快照。AI 抽看当天标题和纪要截断。点开事项可进会议详情。不听录音、不读转写全文。',
                   ),
                   const _GuideItem(
                     title: '知识没用上',
                     body:
-                        '来自知识库，按上传人看这个月传上去的文档有没有别人用。别人打开、对话引用或绑到任务才算用上，自己打开不算。全月都没人用才算弱项；有的用了有的没用算部分没用。入库失败、问了没引用是中档。点开事项可进知识详情，不展示正文摘录。',
+                        '来自知识库，按上传人看当天传上去的文档。别人打开、对话引用或绑到任务才算用上，自己打开不算。未使用取日终快照，月视图用月末那天。点开事项可进知识详情，不展示正文摘录。',
                   ),
                   const _GuideItem(
                     title: '沟通偏浅',
                     body:
-                        '抽本月活跃会话给 AI 看有没有把事情说到结论或下一步。寒暄、收到、反复催会标成偏浅；对齐目标和推进事项算在跟事。不看有没有发业务卡片，界面不展示聊天原文。点开人后会分析，凌晨也会批量看一遍。',
+                        '每天抽当天会话给 AI 看有没有把事情说到结论或下一步。寒暄、收到、反复催会标成偏浅；对齐目标和推进事项算在跟事。月视图汇总各日判断。界面不展示聊天原文。凌晨按日批量计算，历史日不自动重算。',
                   ),
                   if (offerTour) ...[
                     const SizedBox(height: 4),
@@ -1022,7 +1095,7 @@ class _NativeQianjiEfficiencyBossPreviewState
   @override
   Widget build(BuildContext context) {
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 80;
-    final monthLabel = _monthLabel(_month);
+    final monthLabel = _periodLabel;
     final scopeLabel = _board?.scopeLabel.isNotEmpty == true
         ? _board!.scopeLabel
         : (widget.viewAll ? '全部部门' : '本人及下级');
@@ -1049,8 +1122,11 @@ class _NativeQianjiEfficiencyBossPreviewState
                   if (_person == null)
                     _PinnedFilters(
                       compact: keyboardOpen,
+                      grain: _grain,
                       month: _month,
                       months: _recentMonths,
+                      day: _day,
+                      days: _recentDays,
                       monthLabel: monthLabel,
                       scopeLabel: scopeLabel,
                       search: _search,
@@ -1061,6 +1137,7 @@ class _NativeQianjiEfficiencyBossPreviewState
                       monthKey: _monthBarKey,
                       deptKey: _deptBarKey,
                       filterKey: _filterBarKey,
+                      onGrain: _setGrain,
                       onMonth: (value) {
                         FocusManager.instance.primaryFocus?.unfocus();
                         setState(() {
@@ -1072,6 +1149,19 @@ class _NativeQianjiEfficiencyBossPreviewState
                       onPickMonth: () {
                         FocusManager.instance.primaryFocus?.unfocus();
                         unawaited(_pickMonth());
+                      },
+                      onDay: (value) {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        setState(() {
+                          _day = DateTime(value.year, value.month, value.day);
+                          _month = DateTime(value.year, value.month);
+                          _person = null;
+                        });
+                        unawaited(_load());
+                      },
+                      onPickDay: () {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        unawaited(_pickDay());
                       },
                       onQuery: (value) => setState(() {
                         _query = value;
@@ -1097,6 +1187,25 @@ class _NativeQianjiEfficiencyBossPreviewState
                                 _person = null;
                               });
                             },
+                            onDrillDay: _grain == 'month'
+                                ? () {
+                                    final last = DateTime(
+                                      _month.year,
+                                      _month.month + 1,
+                                      0,
+                                    );
+                                    unawaited(
+                                      _pickDay(
+                                        firstDate: DateTime(
+                                          _month.year,
+                                          _month.month,
+                                          1,
+                                        ),
+                                        lastDate: last,
+                                      ),
+                                    );
+                                  }
+                                : null,
                           )
                         : _Board(
                             loading: _loading,
@@ -1208,8 +1317,11 @@ class _Header extends StatelessWidget {
 class _PinnedFilters extends StatelessWidget {
   const _PinnedFilters({
     required this.compact,
+    required this.grain,
     required this.month,
     required this.months,
+    required this.day,
+    required this.days,
     required this.monthLabel,
     required this.scopeLabel,
     required this.search,
@@ -1217,8 +1329,11 @@ class _PinnedFilters extends StatelessWidget {
     required this.filter,
     required this.departmentId,
     required this.departments,
+    required this.onGrain,
     required this.onMonth,
     required this.onPickMonth,
+    required this.onDay,
+    required this.onPickDay,
     required this.onQuery,
     required this.onFilter,
     required this.onDepartment,
@@ -1228,8 +1343,11 @@ class _PinnedFilters extends StatelessWidget {
   });
 
   final bool compact;
+  final String grain;
   final DateTime month;
   final List<DateTime> months;
+  final DateTime day;
+  final List<DateTime> days;
   final String monthLabel;
   final String scopeLabel;
   final TextEditingController search;
@@ -1237,8 +1355,11 @@ class _PinnedFilters extends StatelessWidget {
   final String filter;
   final int? departmentId;
   final List<_Dept> departments;
+  final ValueChanged<String> onGrain;
   final ValueChanged<DateTime> onMonth;
   final VoidCallback onPickMonth;
+  final ValueChanged<DateTime> onDay;
+  final VoidCallback onPickDay;
   final ValueChanged<String> onQuery;
   final ValueChanged<String> onFilter;
   final ValueChanged<int?> onDepartment;
@@ -1258,11 +1379,26 @@ class _PinnedFilters extends StatelessWidget {
             if (!compact) ...[
               KeyedSubtree(
                 key: monthKey,
-                child: _MonthBar(
-                  month: month,
-                  months: months,
-                  onChanged: onMonth,
-                  onPick: onPickMonth,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _GrainBar(grain: grain, onChanged: onGrain),
+                    const SizedBox(height: 8),
+                    if (grain == 'day')
+                      _DayBar(
+                        day: day,
+                        days: days,
+                        onChanged: onDay,
+                        onPick: onPickDay,
+                      )
+                    else
+                      _MonthBar(
+                        month: month,
+                        months: months,
+                        onChanged: onMonth,
+                        onPick: onPickMonth,
+                      ),
+                  ],
                 ),
               ),
               const SizedBox(height: 10),
@@ -1405,7 +1541,7 @@ class _Board extends StatelessWidget {
               const SizedBox(height: 10),
             ],
           const Text(
-            '按任务、会议、知识和会话抽样看，沟通由 AI 判断，不打分。',
+            '按任务、会议、知识和会话的每日统计看；月是这些天的汇总。沟通由 AI 判断，不打分。',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 11, color: DunesColors.text3),
           ),
@@ -1449,6 +1585,74 @@ class _HeroCard extends StatelessWidget {
               fontWeight: FontWeight.w800,
               height: 1.2,
             ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            '每天由 AI 算当天统计，月是这些天的汇总',
+            style: TextStyle(color: Color(0xDFFFFFFF), fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GrainBar extends StatelessWidget {
+  const _GrainBar({required this.grain, required this.onChanged});
+
+  final String grain;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _Chip(label: '按月', selected: grain != 'day', onTap: () => onChanged('month')),
+        const SizedBox(width: 8),
+        _Chip(label: '按日', selected: grain == 'day', onTap: () => onChanged('day')),
+      ],
+    );
+  }
+}
+
+class _DayBar extends StatelessWidget {
+  const _DayBar({
+    required this.day,
+    required this.days,
+    required this.onChanged,
+    required this.onPick,
+  });
+
+  final DateTime day;
+  final List<DateTime> days;
+  final ValueChanged<DateTime> onChanged;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return HorizontalDragScrollView(
+      child: Row(
+        children: [
+          for (final item in days) ...[
+            _Chip(
+              label: '${item.month}/${item.day}',
+              selected:
+                  item.year == day.year &&
+                  item.month == day.month &&
+                  item.day == day.day,
+              onTap: () => onChanged(item),
+            ),
+            const SizedBox(width: 8),
+          ],
+          _Chip(
+            label: '更多',
+            selected: !days.any(
+              (item) =>
+                  item.year == day.year &&
+                  item.month == day.month &&
+                  item.day == day.day,
+            ),
+            onTap: onPick,
           ),
         ],
       ),
@@ -2192,12 +2396,14 @@ class _PersonDetail extends StatelessWidget {
     required this.person,
     required this.monthLabel,
     required this.onOpenDept,
+    this.onDrillDay,
     this.session,
   });
 
   final WorkSituationPerson person;
   final String monthLabel;
   final VoidCallback onOpenDept;
+  final VoidCallback? onDrillDay;
   final AuthSession? session;
 
   @override
@@ -2254,6 +2460,16 @@ class _PersonDetail extends StatelessWidget {
                   ),
                 ],
               ),
+              if (onDrillDay != null) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: onDrillDay,
+                    child: const Text('看这一天'),
+                  ),
+                ),
+              ],
               const SizedBox(height: 10),
               _SigPills(person: person),
               _WhyLines(person: person),

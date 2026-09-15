@@ -9,6 +9,8 @@ import '../shell/dunes_toast.dart';
 import 'task_api.dart';
 import 'task_attachment_field.dart';
 import 'task_avatar.dart';
+import 'task_create_confirm.dart';
+import 'task_first_use_guide.dart';
 import 'task_models.dart';
 import 'task_widgets.dart';
 
@@ -157,6 +159,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
   TaskItem? _parentTask;
   bool _loadingAssignees = false;
   bool _saving = false;
+  bool _guideAutoStarted = false;
   String? _titleError;
   String? _dateError;
 
@@ -179,6 +182,20 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
       unawaited(_loadParentIfNeeded());
       unawaited(_loadAssignees());
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_showGuide());
+    });
+  }
+
+  Future<void> _showGuide({bool force = false}) async {
+    if (!force && _guideAutoStarted) return;
+    if (!force) _guideAutoStarted = true;
+    await showTaskFirstUseGuide(
+      context,
+      userId: widget.session.userId,
+      page: _isSub ? TaskGuidePage.createSub : TaskGuidePage.createMain,
+      force: force,
+    );
   }
 
   void _applyParentDefaults(TaskItem? parent) {
@@ -189,6 +206,21 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
     }
     if (parent.category.trim().isNotEmpty) {
       _category = parent.category;
+    }
+    final parentStart = parent.startAt?.toLocal();
+    if (_startAt == null && parentStart != null) {
+      _startAt = DateTime(parentStart.year, parentStart.month, parentStart.day);
+    }
+    final parentDue = parent.dueAt?.toLocal();
+    if (_dueAt == null && parentDue != null) {
+      _dueAt = DateTime(
+        parentDue.year,
+        parentDue.month,
+        parentDue.day,
+        23,
+        59,
+        59,
+      );
     }
   }
 
@@ -324,15 +356,13 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
       } else {
         _dueAt = DateTime(picked.year, picked.month, picked.day, 23, 59, 59);
       }
-      _dateError = null;
+      _dateError = taskCreateRangeError(_startAt, _dueAt, required: false);
     });
   }
 
   String _fmtDate(DateTime? d) {
     if (d == null) return '请选择';
-    final m = d.month.toString().padLeft(2, '0');
-    final day = d.day.toString().padLeft(2, '0');
-    return '${d.year}-$m-$day';
+    return formatTaskYmd(d);
   }
 
   Future<void> _submit() async {
@@ -341,11 +371,24 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
       setState(() => _titleError = '请填写标题');
       return;
     }
-    if (_startAt != null && _dueAt != null && _dueAt!.isBefore(_startAt!)) {
-      setState(() => _dateError = '结束时间不能早于开始时间');
+    final dateErr = taskCreateRangeError(_startAt, _dueAt);
+    if (dateErr != null) {
+      setState(() => _dateError = dateErr);
+      return;
+    }
+    if (_acceptCtrl.text.trim().isEmpty) {
+      showDunesCenterToast(context, '请填写验收标准');
       return;
     }
     if (!mounted) return;
+    final ok = await confirmCreateTask(
+      context,
+      title: title,
+      startAt: _startAt,
+      dueAt: _dueAt,
+      kind: _isSub ? '子目标' : '主目标',
+    );
+    if (!ok || !mounted) return;
     setState(() {
       _titleError = null;
       _dateError = null;
@@ -363,10 +406,9 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
         'ownerUserId': _ownerId ?? widget.session.userId,
         if (_attachments.isNotEmpty)
           'attachments': _attachments.map((e) => e.toCreateJson()).toList(),
+        'startAt': _startAt!.toUtc().toIso8601String(),
+        'dueAt': _dueAt!.toUtc().toIso8601String(),
       };
-      if (_startAt != null)
-        body['startAt'] = _startAt!.toUtc().toIso8601String();
-      if (_dueAt != null) body['dueAt'] = _dueAt!.toUtc().toIso8601String();
       final TaskItem created;
       if (_isSub) {
         created = await _api.createSubtask(widget.parentTaskId!, body);
@@ -490,6 +532,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             value: _fmtDate(_startAt),
             onTap: () => _pickDate(isStart: true),
             placeholder: _startAt == null,
+            required: true,
           ),
           const SizedBox(height: 14),
           _pickerField(
@@ -497,6 +540,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             value: _fmtDate(_dueAt),
             onTap: () => _pickDate(isStart: false),
             placeholder: _dueAt == null,
+            required: true,
           ),
         ] else
           Row(
@@ -508,6 +552,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                   value: _fmtDate(_startAt),
                   onTap: () => _pickDate(isStart: true),
                   placeholder: _startAt == null,
+                  required: true,
                 ),
               ),
               const SizedBox(width: 14),
@@ -517,6 +562,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                   value: _fmtDate(_dueAt),
                   onTap: () => _pickDate(isStart: false),
                   placeholder: _dueAt == null,
+                  required: true,
                 ),
               ),
             ],
@@ -530,10 +576,14 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
         ],
         const SizedBox(height: 14),
         _field(_descCtrl, '描述', hint: '背景 / 目标（可选）', maxLines: 2),
-        if (!_isSub) ...[
-          const SizedBox(height: 14),
-          _field(_acceptCtrl, '验收标准', hint: '可选', maxLines: 2),
-        ],
+        const SizedBox(height: 14),
+        _field(
+          _acceptCtrl,
+          '验收标准',
+          hint: _isSub ? '填写子目标完成的判断标准' : '填写目标完成的判断标准',
+          maxLines: 2,
+          required: true,
+        ),
         const SizedBox(height: 14),
         TaskAttachmentField(
           session: widget.session,
@@ -544,7 +594,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
           const SizedBox(height: 8),
           Text(
             _parentSelfCreated
-                ? '仅可分配给自己或下级；这组事由你创建时，自己加的事项无需审核。'
+                ? '仅可分配给自己或下级；主目标由你创建时，自己添加的子目标无需确认。'
                 : '仅可分配给自己或下级；分给自己时需上级审核。',
             style: const TextStyle(
               fontSize: 12,
@@ -571,12 +621,20 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                 ),
                 Expanded(
                   child: Text(
-                    _isSub ? '添加事项' : '新建一组事',
+                    _isSub ? '添加子目标' : '新建主目标',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
                       color: DunesColors.text,
                     ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: '使用指引',
+                  onPressed: () => unawaited(_showGuide(force: true)),
+                  icon: const Icon(
+                    Icons.help_outline,
+                    color: DunesColors.text2,
                   ),
                 ),
                 FilledButton(
@@ -631,9 +689,23 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 22, 24, 0),
-          child: Text(
-            _isSub ? '添加事项' : '新建一组事',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _isSub ? '添加子目标' : '新建主目标',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: '使用指引',
+                onPressed: () => unawaited(_showGuide(force: true)),
+                icon: const Icon(Icons.help_outline, color: DunesColors.text2),
+              ),
+            ],
           ),
         ),
         Flexible(
@@ -766,9 +838,11 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
     required String value,
     VoidCallback? onTap,
     bool placeholder = false,
+    bool required = false,
   }) {
     return _Labeled(
       label: label,
+      required: required,
       child: Material(
         color: const Color(0xFFF5F6F8),
         borderRadius: BorderRadius.circular(10),

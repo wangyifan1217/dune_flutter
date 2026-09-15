@@ -6,14 +6,16 @@ import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'native_task_action_page.dart';
+import 'native_task_daily_report_page.dart';
 import 'native_task_detail_page.dart';
 import 'native_task_form.dart';
-import 'native_task_quick_create.dart';
 import 'task_api.dart';
+import 'task_approval_confirm.dart';
+import 'task_first_use_guide.dart';
 import 'task_models.dart';
 import 'task_widgets.dart';
 
-enum _TaskPage { list, detail, action }
+enum _TaskPage { list, detail, action, daily }
 
 class TaskShellChrome {
   const TaskShellChrome({
@@ -62,6 +64,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   /// 当前页切换是否为「返回」（决定滑动方向）。
   bool _pageNavBack = false;
   int? _detailId;
+  int _detailReloadTick = 0;
   final List<int> _detailStack = [];
   TaskItem? _actionTask;
   TaskActionMode? _actionMode;
@@ -75,20 +78,37 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   String? _error;
   static const int _pageSize = 20;
 
-  /// actionable | initiated
-  String _scope = 'actionable';
+  /// actionable | goals；进入任务板块默认展示主目标列表。
+  String _scope = 'goals';
+  String? _goalRole;
   String? _status;
   String? _priority;
   DateTime? _dateFrom;
   DateTime? _dateTo;
+  bool _dailyPending = false;
+  bool _guideAutoStarted = false;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
     _search.addListener(_onSearchChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _publishChrome());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _publishChrome();
+      unawaited(_showGuide());
+    });
     unawaited(_reload());
+  }
+
+  Future<void> _showGuide({bool force = false}) async {
+    if (!force && _guideAutoStarted) return;
+    if (!force) _guideAutoStarted = true;
+    await showTaskFirstUseGuide(
+      context,
+      userId: widget.session.userId,
+      page: TaskGuidePage.home,
+      force: force,
+    );
   }
 
   @override
@@ -125,29 +145,49 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   String get _apiScope => _scope;
 
   void _publishChrome() {
-    if (_page == _TaskPage.detail || _page == _TaskPage.action) {
+    if (_page == _TaskPage.detail ||
+        _page == _TaskPage.action ||
+        _page == _TaskPage.daily) {
       widget.onChromeChanged?.call(
         TaskShellChrome(
           hideShellHeader: true,
-          onBack: _page == _TaskPage.action ? _backFromAction : _backFromDetail,
+          onBack: _page == _TaskPage.action
+              ? _backFromAction
+              : _page == _TaskPage.daily
+              ? _backFromDaily
+              : _backFromDetail,
         ),
       );
       return;
     }
     widget.onChromeChanged?.call(
       TaskShellChrome(
-        trailing: FilledButton.icon(
-          onPressed: () => _openQuickCreate(),
-          icon: const Icon(Icons.add, size: 18),
-          label: const Text('新建'),
-          style: FilledButton.styleFrom(
-            backgroundColor: kTaskPurple,
-            visualDensity: VisualDensity.compact,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: '使用指引',
+              onPressed: () => unawaited(_showGuide(force: true)),
+              icon: const Icon(Icons.help_outline, color: DunesColors.text2),
             ),
-          ),
+            const SizedBox(width: 4),
+            FilledButton.icon(
+              onPressed: () => _openCreate(),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('新建主目标'),
+              style: FilledButton.styleFrom(
+                backgroundColor: kTaskPurple,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -166,11 +206,16 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         status: _status,
         priority: _priority,
         q: _search.text,
+        goalRole: _scope == 'goals' ? _goalRole : null,
         dateFrom: _dateFrom,
         dateTo: _dateTo,
         page: 0,
         size: _pageSize,
       );
+      TaskDailyReportBundle? daily;
+      try {
+        daily = await _api.getDailyReport();
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _items = list.items;
@@ -178,6 +223,8 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         _hasMore = list.hasMore;
         _loading = false;
         _loadingMore = false;
+        _dailyPending =
+            daily != null && daily.canSubmit && daily.report?.submitted != true;
       });
     } catch (e) {
       if (!mounted) return;
@@ -199,6 +246,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         status: _status,
         priority: _priority,
         q: _search.text,
+        goalRole: _scope == 'goals' ? _goalRole : null,
         dateFrom: _dateFrom,
         dateTo: _dateTo,
         page: next,
@@ -263,14 +311,16 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     _publishChrome();
   }
 
-  void _openAction(TaskItem task, TaskActionMode mode) {
-    setState(() {
-      _pageNavBack = false;
-      _page = _TaskPage.action;
-      _actionTask = task;
-      _actionMode = mode;
-    });
-    _publishChrome();
+  Future<void> _openAction(TaskItem task, TaskActionMode mode) async {
+    final changed = await showTaskActionDialog(
+      context,
+      session: widget.session,
+      task: task,
+      mode: mode,
+    );
+    if (changed && mounted) {
+      unawaited(_reload());
+    }
   }
 
   void _backFromAction() => _closeAction(refresh: false);
@@ -288,21 +338,23 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     if (refresh) unawaited(_reload());
   }
 
-  Future<void> _openQuickCreate() async {
-    final created = await openTaskQuickCreate(
-      context,
-      session: widget.session,
-      asGroup: _scope == 'initiated',
-    );
-    if (created == null || !mounted) return;
-    showDunesCenterToast(
-      context,
-      _scope == 'initiated' ? '已创建一组事「${created.title}」' : '已创建「${created.title}」',
-    );
-    await _reload();
-    if (_scope == 'initiated' && mounted) {
-      _openDetail(created.id);
-    }
+  Future<void> _openQuickCreate() => _openCreate();
+
+  void _openDaily() {
+    setState(() {
+      _pageNavBack = false;
+      _page = _TaskPage.daily;
+    });
+    _publishChrome();
+  }
+
+  void _backFromDaily() {
+    setState(() {
+      _pageNavBack = true;
+      _page = _TaskPage.list;
+    });
+    _publishChrome();
+    unawaited(_reload());
   }
 
   Future<void> _openCreate({int? parentId, TaskItem? parentTask}) async {
@@ -317,9 +369,12 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
               : null),
     );
     if (created == null || !mounted) return;
-    showDunesCenterToast(context, parentId == null ? '已创建' : '事项已添加');
+    showDunesCenterToast(context, parentId == null ? '已创建主目标' : '子目标已添加');
     await _reload();
-    if (parentId != null && mounted) {
+    if (parentId == null && mounted) {
+      _openDetail(created.id);
+    } else if (parentId != null && mounted) {
+      setState(() => _detailReloadTick++);
       _openDetail(parentId);
     }
   }
@@ -414,7 +469,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   }
 
   String get _statusLabel => switch (_status) {
-    'pending_approval' => '待审核',
+    'pending_approval' => '待确认',
     'completed' => '已完成',
     'rejected' => '已驳回',
     'active' => '进行中',
@@ -423,8 +478,9 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
 
   Key get _pageKey => switch (_page) {
     _TaskPage.list => const ValueKey('task-list'),
-    _TaskPage.detail => ValueKey('task-detail-$_detailId'),
+    _TaskPage.detail => ValueKey('task-detail-$_detailId-$_detailReloadTick'),
     _TaskPage.action => ValueKey('task-action-$_actionMode-${_actionTask?.id}'),
+    _TaskPage.daily => const ValueKey('task-daily'),
   };
 
   Widget _pageBody() {
@@ -440,16 +496,24 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
           onBack: _backFromAction,
           onDone: _doneAction,
         );
+      case _TaskPage.daily:
+        return NativeTaskDailyReportPage(
+          session: widget.session,
+          onBack: _backFromDaily,
+        );
       case _TaskPage.detail:
         final id = _detailId;
         if (id == null) return _buildList();
         return NativeTaskDetailView(
           session: widget.session,
           taskId: id,
+          reloadToken: _detailReloadTick,
           onBack: _backFromDetail,
           onAddSubtask: () => _openCreate(
             parentId: id,
-            parentTask: _detailParentCache?.id == id ? _detailParentCache : null,
+            parentTask: _detailParentCache?.id == id
+                ? _detailParentCache
+                : null,
           ),
           onOpenTask: _openDetail,
           onOpenProgress: (t) => _openAction(t, TaskActionMode.progress),
@@ -524,22 +588,36 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                   children: [
                     Row(
                       children: [
-                        _tabChip('actionable', '待我处理'),
+                        _tabChip('actionable', '今日'),
                         const SizedBox(width: 8),
-                        _tabChip('initiated', '我发起的'),
+                        _tabChip('goals', '主目标'),
                       ],
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _scope == 'initiated'
-                          ? '你发起的一组事，进度由下面的事项汇总'
-                          : '只列出需要你动手的事',
+                      _scope == 'goals'
+                          ? '默认展示本人负责或分派的主目标，进入详情查看子目标。'
+                          : '今天要执行的子目标、未拆解的主目标和待确认子目标。',
                       style: const TextStyle(
                         fontSize: 13,
                         color: DunesColors.text3,
                         height: 1.3,
                       ),
                     ),
+                    const SizedBox(height: 10),
+                    _dailyStatusChip(),
+                    if (_scope == 'goals') ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          _roleChip(null, '全部'),
+                          const SizedBox(width: 8),
+                          _roleChip('owned', '我负责'),
+                          const SizedBox(width: 8),
+                          _roleChip('assigned', '我分派'),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     _buildToolbar(),
                   ],
@@ -564,6 +642,76 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _roleChip(String? value, String label) {
+    final on = _goalRole == value;
+    return Material(
+      color: on ? kTaskPurple.withValues(alpha: 0.12) : Colors.white,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () {
+          if (_goalRole == value) return;
+          setState(() => _goalRole = value);
+          unawaited(_reload());
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: on ? kTaskPurple : DunesColors.text2,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _dailyStatusChip() {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: _openDaily,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Icon(
+                _dailyPending ? Icons.edit_calendar_outlined : Icons.task_alt,
+                size: 18,
+                color: _dailyPending
+                    ? const Color(0xFFB45309)
+                    : const Color(0xFF1F9D76),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _dailyPending ? '今日日报待填' : '打开日报',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (_dailyPending)
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE11D48),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right, color: DunesColors.text3),
+            ],
+          ),
         ),
       ),
     );
@@ -646,7 +794,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                 items: const [
                   (null, '全部状态'),
                   ('active', '进行中'),
-                  ('pending_approval', '待审核'),
+                  ('pending_approval', '待确认'),
                   ('completed', '已完成'),
                   ('rejected', '已驳回'),
                 ],
@@ -761,7 +909,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                   ),
                   const SizedBox(height: 18),
                   Text(
-                    _scope == 'initiated' ? '还没有你发起的一组事' : '还没有待处理的事项',
+                    _scope == 'goals' ? '还没有主目标' : '还没有待处理的子目标',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 17,
@@ -771,9 +919,9 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    _scope == 'initiated'
-                        ? '点右上角新建一组事，再往里面加事项'
-                        : '点右上角记一条要做的事，不必先建组',
+                    _scope == 'goals'
+                        ? '点右上角新建主目标，再在详情里添加子目标'
+                        : '今天要做的子目标会列在这里',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 13,
@@ -785,7 +933,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                   FilledButton.icon(
                     onPressed: () => _openQuickCreate(),
                     icon: const Icon(Icons.add, size: 18),
-                    label: const Text('新建'),
+                    label: const Text('新建主目标'),
                     style: FilledButton.styleFrom(
                       backgroundColor: kTaskPurple,
                       padding: const EdgeInsets.symmetric(
@@ -816,7 +964,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   }
 
   List<Widget> _buildItemCards(List<TaskItem> items) {
-    final groupMode = _scope == 'initiated';
+    final groupMode = _scope == 'goals';
     if (groupMode) {
       return [
         for (final t in items) ...[
@@ -833,45 +981,53 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     final pending = items.where((t) => t.isPending).toList(growable: false);
     final out = <Widget>[];
     if (work.isNotEmpty) {
-      out.add(const Padding(
-        padding: EdgeInsets.only(bottom: 8),
-        child: Text(
-          '今天要做',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: DunesColors.text3,
+      out.add(
+        const Padding(
+          padding: EdgeInsets.only(bottom: 8),
+          child: Text(
+            '今天要做',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: DunesColors.text3,
+            ),
           ),
         ),
-      ));
+      );
       for (final t in work) {
-        out.add(TaskWorkbenchCard(
-          task: t,
-          onTap: () => _openDetail(t.id),
-          onProgress: () => _openAction(t, TaskActionMode.progress),
-        ));
+        out.add(
+          TaskWorkbenchCard(
+            task: t,
+            onTap: () => _openDetail(t.id),
+            onProgress: () => _openAction(t, TaskActionMode.progress),
+          ),
+        );
         out.add(const SizedBox(height: 10));
       }
     }
     if (pending.isNotEmpty) {
-      out.add(const Padding(
-        padding: EdgeInsets.only(top: 4, bottom: 8),
-        child: Text(
-          '待我审核',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: DunesColors.text3,
+      out.add(
+        const Padding(
+          padding: EdgeInsets.only(top: 4, bottom: 8),
+          child: Text(
+            '待我审核',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: DunesColors.text3,
+            ),
           ),
         ),
-      ));
+      );
       for (final t in pending) {
-        out.add(TaskWorkbenchCard(
-          task: t,
-          onTap: () => _openDetail(t.id),
-          onApprove: () => _decide(t, pass: true),
-          onReject: () => _decide(t, pass: false),
-        ));
+        out.add(
+          TaskWorkbenchCard(
+            task: t,
+            onTap: () => _openDetail(t.id),
+            onApprove: () => _decide(t, pass: true),
+            onReject: () => _decide(t, pass: false),
+          ),
+        );
         out.add(const SizedBox(height: 10));
       }
     }
@@ -879,13 +1035,15 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   }
 
   Future<void> _decide(TaskItem t, {required bool pass}) async {
+    final result = await confirmTaskApproval(context, pass: pass);
+    if (!result.confirmed || !mounted) return;
     try {
       if (pass) {
-        await _api.approve(t.id);
+        await _api.approve(t.id, comment: result.comment);
         if (!mounted) return;
         showDunesCenterToast(context, '已通过');
       } else {
-        await _api.reject(t.id);
+        await _api.reject(t.id, comment: result.comment);
         if (!mounted) return;
         showDunesCenterToast(context, '已驳回');
       }

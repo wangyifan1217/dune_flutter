@@ -34,6 +34,7 @@ import '../conversation/conversation_realtime_dedup.dart';
 import '../conversation/conversation_realtime_hub.dart';
 import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
+import '../conversation/im_user_status.dart';
 import '../conversation/inbox_format.dart';
 import '../desktop/windows_desktop_tray.dart';
 import '../drive/chat_save_to_drive.dart';
@@ -362,6 +363,7 @@ class _NativeChatViewState extends State<NativeChatView>
 
   /// 窗口收起/还原时 reverse 列表会乱跳，这段时间不要把像素变化当成用户上滑。
   bool _backgroundLayoutActive = false;
+
   /// 本次失焦是否把窗口收起/夹扁。仅切软件时为 false，恢复后不要重载列表。
   bool _foregroundPauseWasObscured = false;
   DateTime? _foregroundRestoredAt;
@@ -1310,6 +1312,10 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   void _onRealtimeEvent(ConversationRealtimeEvent event) {
+    if (event.type == 'im_status') {
+      _applyPeerImStatusEvent(event);
+      return;
+    }
     final convId = _conversation?.id ?? 0;
     if (convId <= 0) return;
     if (event.conversationId != null && event.conversationId != convId) return;
@@ -1335,6 +1341,25 @@ class _NativeChatViewState extends State<NativeChatView>
     if (!handled) {
       _scheduleRealtimeRefresh();
     }
+  }
+
+  void _applyPeerImStatusEvent(ConversationRealtimeEvent event) {
+    if (!_isPrivate || !mounted) return;
+    final conv = _conversation;
+    if (conv == null || conv.isSelfMemo) return;
+    final userId = (event.raw['userId'] as num?)?.toInt() ?? 0;
+    final peerId = conv.peerUserId ?? 0;
+    if (userId <= 0 || peerId <= 0 || userId != peerId) return;
+    final status = ImUserStatusCatalog.normalize(
+      event.raw['status']?.toString(),
+    );
+    if (status == conv.peerImStatus) return;
+    setState(() {
+      _conversation = ConversationInboxRealtime.copyConversation(
+        conv,
+        peerImStatus: status,
+      );
+    });
   }
 
   bool _applyPinnedMessagesEvent(ConversationRealtimeEvent event) {
@@ -3282,6 +3307,7 @@ class _NativeChatViewState extends State<NativeChatView>
       peerAvatarPreset: current?.peerAvatarPreset,
       peerAvatarObjectKey: current?.peerAvatarObjectKey,
       peerAvatarUrl: current?.peerAvatarUrl,
+      peerImStatus: current?.peerImStatus ?? '',
     );
     final enriched = await _enrichPrivateConversation(fresh);
     if (!mounted) return enriched;
@@ -3344,6 +3370,9 @@ class _NativeChatViewState extends State<NativeChatView>
       membershipStatus: conv.membershipStatus,
       assistantGenerating: conv.assistantGenerating,
       assistantGeneratingStatus: conv.assistantGeneratingStatus,
+      hasUnreadMention: conv.hasUnreadMention,
+      hasUnreadAtAll: conv.hasUnreadAtAll,
+      peerImStatus: conv.peerImStatus,
     );
   }
 
@@ -4034,7 +4063,7 @@ class _NativeChatViewState extends State<NativeChatView>
     }, cancelToken: cancel);
   }
 
-  /// PC：微信式应用内框选截图 → 裁剪编辑 → 发送。
+  /// PC：冻屏框选（含本窗口）→ 预览编辑 → 发送。
   Future<void> _desktopScreenshotAndSend() async {
     if (!isDesktopCommOnly || _mediaBusy || _conversation == null) return;
     if (_conversation!.dissolved) {
@@ -4048,18 +4077,12 @@ class _NativeChatViewState extends State<NativeChatView>
     } catch (e) {
       if (!mounted) return;
       final msg = friendlyErrorText(e);
-      if (msg.contains('取消')) {
-        _showToast('已取消截图');
-      } else {
-        _showToast('截图失败：$msg', error: true);
-      }
+      if (msg.contains('取消')) return;
+      _showToast('截图失败：$msg', error: true);
       return;
     }
     if (!mounted) return;
-    if (image == null || image.isEmpty) {
-      _showToast('已取消截图');
-      return;
-    }
+    if (image == null || image.isEmpty) return;
 
     await _sendPastedImageBytes(
       image,
@@ -8847,6 +8870,9 @@ class _NativeChatViewState extends State<NativeChatView>
                               onTapTitle: _isPrivate
                                   ? widget.onOpenProfile
                                   : widget.onOpenGroupInfo,
+                              imStatus: _isPrivate && !conv.isSelfMemo
+                                  ? conv.peerImStatus
+                                  : null,
                               showOnlineDot:
                                   _isPrivate &&
                                   !(_conversation?.isSelfMemo ??

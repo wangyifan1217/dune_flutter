@@ -5789,6 +5789,42 @@ body::before,body::after{display:none}
   font-weight:400;letter-spacing:.02em;
 }
 
+/* IM 自定义状态 · 仅私聊用户名旁；默认/在线不展示；绿点仍是实时在线 */
+.im-st{
+  display:inline-flex;align-items:center;gap:3px;
+  font-size:11px;font-weight:500;line-height:1;flex-shrink:0;
+  letter-spacing:-.01em;white-space:nowrap;
+}
+.im-st i{font-size:12px;line-height:1}
+.im-st.busy{color:#E67E22}
+.im-st.dnd{color:#E25555}
+.im-st.meeting{color:#3B82F6}
+.im-st.trip{color:#0D9488}
+.im-st.rest{color:#7B5CD8}
+.im-st.leave{color:#CA8A04}
+.chat-row .cr-bd .cr-nm .cr-name{
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;
+}
+.chat-conv-header .cv-nm .im-st{flex-shrink:0}
+
+.im-more-wrap{position:relative}
+.im-more-pop,.im-st-pop{
+  position:absolute;top:calc(100% + 6px);right:0;z-index:40;
+  min-width:168px;padding:6px 0;
+  background:#fff;border:1px solid var(--border-soft);border-radius:10px;
+  box-shadow:0 8px 24px -10px rgba(40,38,32,.22);
+}
+.im-more-pop .im-mi,.im-st-pop .im-mi{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 14px;font-size:13.5px;color:var(--text);cursor:pointer;
+  white-space:nowrap;
+}
+.im-more-pop .im-mi:hover,.im-st-pop .im-mi:hover{background:var(--bg-soft)}
+.im-more-pop .im-mi i,.im-st-pop .im-mi i{font-size:16px;width:18px;text-align:center}
+.im-more-pop .im-mi .trail{margin-left:auto;font-size:12px;color:#9CA3AF}
+.im-st-pop{display:none}
+.im-st-pop.on{display:block}
+
 /* AI 角标 · 唯一保留色彩的角标 */
 .chat-row .cr-bd .cr-nm .ai-mark{
   font-family:var(--mono);font-size:8.5px;font-weight:700;
@@ -8373,7 +8409,23 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
         <div class="ch-act">
           <div class="ic-btn" data-go="C3" title="通讯录"><i class="ti ti-users"></i></div>
           <div class="ic-btn" data-go="C7" title="新建会话"><i class="ti ti-edit"></i></div>
-          <div class="ic-btn" title="扫一扫"><i class="ti ti-scan"></i></div>
+          <div class="im-more-wrap">
+            <div class="ic-btn" id="c1-more-btn" title="更多"><i class="ti ti-dots"></i></div>
+            <div class="im-more-pop" id="c1-more-pop" style="display:none">
+              <div class="im-mi" id="c1-set-status"><i class="ti ti-mood-smile" style="color:#6B7280"></i>设置状态</div>
+              <div class="im-mi" data-go="C7"><i class="ti ti-users-plus" style="color:#4B5563"></i>发起群聊</div>
+              <div class="im-mi" data-go="C3"><i class="ti ti-users" style="color:#4B5563"></i>通讯录</div>
+            </div>
+            <div class="im-st-pop" id="c1-st-pop">
+              <div class="im-mi" data-im-st="online"><i class="ti ti-circle-minus" style="color:#6B7280"></i>取消状态</div>
+              <div class="im-mi" data-im-st="busy"><i class="ti ti-clock" style="color:#E67E22"></i>忙碌</div>
+              <div class="im-mi" data-im-st="dnd"><i class="ti ti-bell-off" style="color:#E25555"></i>勿扰</div>
+              <div class="im-mi" data-im-st="meeting"><i class="ti ti-video" style="color:#3B82F6"></i>会议中</div>
+              <div class="im-mi" data-im-st="trip"><i class="ti ti-plane" style="color:#0D9488"></i>出差中</div>
+              <div class="im-mi" data-im-st="rest"><i class="ti ti-moon" style="color:#7B5CD8"></i>休息中</div>
+              <div class="im-mi" data-im-st="leave"><i class="ti ti-beach" style="color:#CA8A04"></i>请假中</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -8493,7 +8545,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
           <div class="cr-av person-b">朱<div class="av-dot"></div></div>
           <div class="cr-bd">
             <div class="cr-top">
-              <div class="cr-nm">朱子姝 <span class="role">业务·DIRECT_SUP</span></div>
+              <div class="cr-nm"><span class="cr-name">朱子姝</span> <span class="role">业务·DIRECT_SUP</span></div>
               <div class="cr-tm">昨天 16:24</div>
             </div>
             <div class="cr-pv">同意你这个提案的方向，slot 4 注意一下</div>
@@ -8504,7 +8556,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
           <div class="cr-av person-e">邓<div class="av-dot"></div></div>
           <div class="cr-bd">
             <div class="cr-top">
-              <div class="cr-nm">邓艳丽 <span class="role finance">FINANCE</span></div>
+              <div class="cr-nm"><span class="cr-name">邓艳丽</span> <span class="im-st meeting"><i class="ti ti-video"></i>会议中</span> <span class="role finance">FINANCE</span></div>
               <div class="cr-tm">前天 10:33</div>
             </div>
             <div class="cr-pv">PAY-2026-0298 的押金条记得补一下，PREPAY 不计欠票但要留痕</div>
@@ -8516,7 +8568,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
           <div class="cr-av person-c">许</div>
           <div class="cr-bd">
             <div class="cr-top">
-              <div class="cr-nm">许正阳 <span class="role boss">PRESIDENT</span></div>
+              <div class="cr-nm"><span class="cr-name">许正阳</span> <span class="im-st trip"><i class="ti ti-plane"></i>出差中</span> <span class="role boss">PRESIDENT</span></div>
               <div class="cr-tm">5-26</div>
             </div>
             <div class="cr-pv"><span class="draft">[草稿]</span> 关于湖北中石油这单的承诺履行…</div>
@@ -8527,7 +8579,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
           <div class="cr-av person-d">杨</div>
           <div class="cr-bd">
             <div class="cr-top">
-              <div class="cr-nm">杨芬 <span class="role">CRM</span></div>
+              <div class="cr-nm"><span class="cr-name">杨芬</span> <span class="im-st leave"><i class="ti ti-beach"></i>请假中</span> <span class="role">CRM</span></div>
               <div class="cr-tm">5-25</div>
             </div>
             <div class="cr-pv">客户赔付 #ZF-0123 已处理完成，扫码退款已到账</div>
@@ -8538,7 +8590,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
           <div class="cr-av person-a">吕</div>
           <div class="cr-bd">
             <div class="cr-top">
-              <div class="cr-nm">吕奇 <span class="role seal">SEAL</span></div>
+              <div class="cr-nm"><span class="cr-name">吕奇</span> <span class="im-st dnd"><i class="ti ti-bell-off"></i>勿扰</span> <span class="role seal">SEAL</span></div>
               <div class="cr-tm">5-25</div>
             </div>
             <div class="cr-pv">合同 HT-2026-0088 已用印 · 2 份 · 下午寄出顺丰</div>
@@ -9102,7 +9154,7 @@ body.mobile-mode .screen[data-screen="C1"] .chat-search-wrap{padding:4px 14px 10
         <div class="back" data-go="C1"><i class="ti ti-chevron-left"></i></div>
         <div class="cv-av-mini" data-go="C9" style="cursor:pointer">邓</div>
         <div class="cv-bd">
-          <div class="cv-nm">邓艳丽</div>
+          <div class="cv-nm">邓艳丽 <span class="im-st meeting"><i class="ti ti-video"></i>会议中</span></div>
           <div class="cv-sub">财务部 · FINANCE · 在线</div>
         </div>
         <div class="cv-act">
@@ -21837,6 +21889,7 @@ DunesApi.init();
 </body>
 </html>
 </html>
+
 
 
 

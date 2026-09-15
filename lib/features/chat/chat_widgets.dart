@@ -11,6 +11,7 @@ import '../../core/util/friendly_error.dart';
 import 'chat_file_type_icon.dart';
 import 'chat_quote.dart';
 import '../conversation/conversation_models.dart';
+import '../conversation/im_user_status.dart';
 import '../conversation/inbox_format.dart';
 import 'chat_voice_player.dart';
 import 'voice_asr_store.dart';
@@ -26,6 +27,7 @@ class ChatConvHeader extends StatelessWidget {
     this.leadingAvatar,
     this.showOnlineDot = false,
     this.showBackButton = true,
+    this.imStatus,
   });
 
   final String title;
@@ -36,6 +38,7 @@ class ChatConvHeader extends StatelessWidget {
   final Widget? leadingAvatar;
   final bool showOnlineDot;
   final bool showBackButton;
+  final String? imStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -64,16 +67,26 @@ class ChatConvHeader extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: DunesTypography.sans(
-                      fontSize: 15.5,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.01 * 15.5,
-                      color: DunesColors.text,
-                    ),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: DunesTypography.sans(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.01 * 15.5,
+                            color: DunesColors.text,
+                          ),
+                        ),
+                      ),
+                      if (ImUserStatusCatalog.showsBadge(imStatus)) ...[
+                        const SizedBox(width: 6),
+                        ImStatusBadge(status: imStatus!),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 2),
                   Row(
@@ -138,7 +151,7 @@ class ChatQuickActions extends StatelessWidget {
   /// 长按拍照：录制小视频（微信式）。
   final VoidCallback? onCameraLongPress;
 
-  /// PC：微信式区域截图（截完可裁剪编辑后发送）。
+  /// PC：微信式区域截图（截完可预览编辑后发送）。
   final VoidCallback? onScreenshot;
   final VoidCallback? onAt;
   final VoidCallback? onEmoji;
@@ -159,7 +172,7 @@ class ChatQuickActions extends StatelessWidget {
           _QaCell(
             icon: Icons.crop_free_rounded,
             label: '截图',
-            hint: '系统截图 Ctrl+Alt+A',
+            hint: 'Ctrl+Alt+A',
             onTap: onScreenshot!,
           ),
         _QaCell(icon: Icons.attach_file, label: '文件', onTap: onFile),
@@ -445,7 +458,9 @@ class ChatInputBar extends StatelessWidget {
           child: Container(
             padding: EdgeInsets.fromLTRB(
               wide ? 12 : 10,
-              canResize ? 0 : (showTopBorder ? (wide ? 10 : 8) : (wide ? 6 : 4)),
+              canResize
+                  ? 0
+                  : (showTopBorder ? (wide ? 10 : 8) : (wide ? 6 : 4)),
               wide ? 12 : 10,
               bottomInset > 0
                   ? bottomInset + (wide ? 6 : 4)
@@ -1683,7 +1698,10 @@ class _ChatSelectableRichTextState extends State<_ChatSelectableRichText> {
     });
   }
 
-  void _onSelectionChanged(TextSelection selection, SelectionChangedCause? cause) {
+  void _onSelectionChanged(
+    TextSelection selection,
+    SelectionChangedCause? cause,
+  ) {
     if (!widget.selectAllOnLongPress) return;
     if (!selection.isValid || selection.isCollapsed) {
       _didInitialSelectAll = false;
@@ -1984,9 +2002,7 @@ class ChatQuotePreviewBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: wide ? DunesColors.bgApp : _composerGray,
         border: Border(
-          top: BorderSide(
-            color: wide ? DunesColors.borderSoft : _composerLine,
-          ),
+          top: BorderSide(color: wide ? DunesColors.borderSoft : _composerLine),
         ),
       ),
       child: IntrinsicHeight(

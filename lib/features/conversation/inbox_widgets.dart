@@ -7,6 +7,7 @@ import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
 import '../nova/nova_icon.dart';
+import 'im_user_status.dart';
 import 'inbox_format.dart';
 
 class ChatInboxHeader extends StatelessWidget {
@@ -17,6 +18,8 @@ class ChatInboxHeader extends StatelessWidget {
     this.onOpenNova,
     this.onOpenAiSummary,
     this.onOpenFavorites,
+    this.onSelectImStatus,
+    this.selfImStatus = ImUserStatusCatalog.online,
     this.novaThinking = false,
     this.novaUnread = false,
   });
@@ -28,6 +31,8 @@ class ChatInboxHeader extends StatelessWidget {
   final VoidCallback? onOpenNova;
   final VoidCallback? onOpenAiSummary;
   final VoidCallback? onOpenFavorites;
+  final ValueChanged<String>? onSelectImStatus;
+  final String selfImStatus;
   final bool novaThinking;
   final bool novaUnread;
 
@@ -74,6 +79,8 @@ class ChatInboxHeader extends StatelessWidget {
                 onNewChat: onNewChat,
                 onOpenAiSummary: onOpenAiSummary,
                 onOpenFavorites: onOpenFavorites,
+                onSelectImStatus: onSelectImStatus,
+                selfImStatus: selfImStatus,
               ),
             ),
           ],
@@ -90,12 +97,16 @@ class _InboxHeaderActions extends StatefulWidget {
     this.onNewChat,
     this.onOpenAiSummary,
     this.onOpenFavorites,
+    this.onSelectImStatus,
+    this.selfImStatus = ImUserStatusCatalog.online,
   });
 
   final VoidCallback onOpenContacts;
   final VoidCallback? onNewChat;
   final VoidCallback? onOpenAiSummary;
   final VoidCallback? onOpenFavorites;
+  final ValueChanged<String>? onSelectImStatus;
+  final String selfImStatus;
 
   @override
   State<_InboxHeaderActions> createState() => _InboxHeaderActionsState();
@@ -161,6 +172,8 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
                 showAiSummary: widget.onOpenAiSummary != null,
                 showNewChat: widget.onNewChat != null,
                 showFavorites: widget.onOpenFavorites != null,
+                showSetStatus: widget.onSelectImStatus != null,
+                selfImStatus: widget.selfImStatus,
                 onAiSummary: widget.onOpenAiSummary == null
                     ? null
                     : () => _runAndClose(widget.onOpenAiSummary!),
@@ -171,6 +184,52 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
                 onFavorites: widget.onOpenFavorites == null
                     ? null
                     : () => _runAndClose(widget.onOpenFavorites!),
+                onSetStatus: widget.onSelectImStatus == null
+                    ? null
+                    : _openStatusPicker,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    overlay.insert(_overlay!);
+    setState(() => _expanded = true);
+  }
+
+  void _openStatusPicker() {
+    _removeOverlay();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _showStatusOverlay();
+    });
+  }
+
+  void _showStatusOverlay() {
+    final overlay = Overlay.of(context);
+    _overlay = OverlayEntry(
+      builder: (ctx) {
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _removeOverlay,
+                child: const SizedBox.expand(),
+              ),
+            ),
+            CompositedTransformFollower(
+              link: _layerLink,
+              showWhenUnlinked: false,
+              targetAnchor: Alignment.bottomRight,
+              followerAnchor: Alignment.topRight,
+              offset: const Offset(0, 6),
+              child: _InboxStatusPicker(
+                currentStatus: widget.selfImStatus,
+                onSelect: (status) {
+                  _removeOverlay();
+                  widget.onSelectImStatus?.call(status);
+                },
               ),
             ),
           ],
@@ -215,18 +274,152 @@ class _InboxActionsDropdown extends StatelessWidget {
     required this.showNewChat,
     required this.showFavorites,
     required this.onContacts,
+    this.showSetStatus = false,
+    this.selfImStatus = ImUserStatusCatalog.online,
     this.onAiSummary,
     this.onNewChat,
     this.onFavorites,
+    this.onSetStatus,
   });
 
   final bool showAiSummary;
   final bool showNewChat;
   final bool showFavorites;
+  final bool showSetStatus;
+  final String selfImStatus;
   final VoidCallback? onAiSummary;
   final VoidCallback onContacts;
   final VoidCallback? onNewChat;
   final VoidCallback? onFavorites;
+  final VoidCallback? onSetStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    final statusDef = ImUserStatusCatalog.of(selfImStatus);
+    return _InboxMenuCard(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (showSetStatus && onSetStatus != null)
+            _DropdownItem(
+              leading: Icon(statusDef.icon, size: 20, color: statusDef.color),
+              label: '设置状态',
+              trailing: ImUserStatusCatalog.showsBadge(selfImStatus)
+                  ? Text(
+                      statusDef.label,
+                      style: DunesTypography.sans(
+                        fontSize: 12,
+                        color: const Color(0xFF9CA3AF),
+                      ),
+                    )
+                  : null,
+              onTap: onSetStatus!,
+            ),
+          if (showNewChat && onNewChat != null)
+            _DropdownItem(
+              leading: const Icon(
+                Icons.group_add_outlined,
+                size: 20,
+                color: Color(0xFF4B5563),
+              ),
+              label: '发起群聊',
+              onTap: onNewChat!,
+            ),
+          _DropdownItem(
+            leading: const Icon(
+              Icons.people_outline_rounded,
+              size: 20,
+              color: Color(0xFF4B5563),
+            ),
+            label: '通讯录',
+            onTap: onContacts,
+          ),
+          if (showAiSummary && onAiSummary != null)
+            _DropdownItem(
+              leading: const SizedBox(
+                width: 22,
+                height: 22,
+                child: CustomPaint(
+                  painter: GeminiSparklePainter(
+                    colors: kAiSummaryPurpleGradient,
+                    showCompanion: true,
+                    pulse: 1,
+                  ),
+                ),
+              ),
+              label: '智能总结',
+              onTap: onAiSummary!,
+            ),
+          if (showFavorites && onFavorites != null)
+            _DropdownItem(
+              leading: const Icon(
+                Icons.bookmark_border_rounded,
+                size: 20,
+                color: Color(0xFF4B5563),
+              ),
+              label: '我的收藏',
+              onTap: onFavorites!,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InboxStatusPicker extends StatelessWidget {
+  const _InboxStatusPicker({
+    required this.currentStatus,
+    required this.onSelect,
+  });
+
+  final String currentStatus;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = ImUserStatusCatalog.normalize(currentStatus);
+    return _InboxMenuCard(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 168),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (ImUserStatusCatalog.showsBadge(current))
+              _DropdownItem(
+                leading: const Icon(
+                  Icons.remove_circle_outline,
+                  size: 20,
+                  color: Color(0xFF6B7280),
+                ),
+                label: '取消状态',
+                onTap: () => onSelect(ImUserStatusCatalog.online),
+              ),
+            for (final item in ImUserStatusCatalog.all)
+              _DropdownItem(
+                leading: Icon(item.icon, size: 20, color: item.color),
+                label: item.label,
+                trailing: item.key == current
+                    ? const Icon(
+                        Icons.check_rounded,
+                        size: 18,
+                        color: Color(0xFF07A957),
+                      )
+                    : null,
+                onTap: () => onSelect(item.key),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InboxMenuCard extends StatelessWidget {
+  const _InboxMenuCard({required this.child});
+
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
@@ -245,59 +438,7 @@ class _InboxActionsDropdown extends StatelessWidget {
           ],
           border: Border.all(color: const Color(0xFFECECEC)),
         ),
-        child: IntrinsicWidth(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (showNewChat && onNewChat != null)
-                _DropdownItem(
-                  leading: const Icon(
-                    Icons.group_add_outlined,
-                    size: 20,
-                    color: Color(0xFF4B5563),
-                  ),
-                  label: '发起群聊',
-                  onTap: onNewChat!,
-                ),
-              _DropdownItem(
-                leading: const Icon(
-                  Icons.people_outline_rounded,
-                  size: 20,
-                  color: Color(0xFF4B5563),
-                ),
-                label: '通讯录',
-                onTap: onContacts,
-              ),
-              if (showAiSummary && onAiSummary != null)
-                _DropdownItem(
-                  leading: const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CustomPaint(
-                      painter: GeminiSparklePainter(
-                        colors: kAiSummaryPurpleGradient,
-                        showCompanion: true,
-                        pulse: 1,
-                      ),
-                    ),
-                  ),
-                  label: '智能总结',
-                  onTap: onAiSummary!,
-                ),
-              if (showFavorites && onFavorites != null)
-                _DropdownItem(
-                  leading: const Icon(
-                    Icons.bookmark_border_rounded,
-                    size: 20,
-                    color: Color(0xFF4B5563),
-                  ),
-                  label: '我的收藏',
-                  onTap: onFavorites!,
-                ),
-            ],
-          ),
-        ),
+        child: IntrinsicWidth(child: child),
       ),
     );
   }
@@ -308,11 +449,13 @@ class _DropdownItem extends StatelessWidget {
     required this.leading,
     required this.label,
     required this.onTap,
+    this.trailing,
   });
 
   final Widget leading;
   final String label;
   final VoidCallback onTap;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -335,6 +478,7 @@ class _DropdownItem extends StatelessWidget {
                 ),
               ),
             ),
+            if (trailing != null) ...[const SizedBox(width: 12), trailing!],
           ],
         ),
       ),
@@ -547,6 +691,7 @@ class ChatInboxRow extends StatelessWidget {
     this.selected = false,
     this.robotAvatar,
     this.mentionLabel,
+    this.imStatus,
   });
 
   final ChatInboxRowKind kind;
@@ -576,6 +721,9 @@ class ChatInboxRow extends StatelessWidget {
 
   /// 群聊未读 @ 提示，如 `[@了你]`，不受后续消息预览覆盖。
   final String? mentionLabel;
+
+  /// 私聊对端自定义状态；空/在线不展示。
+  final String? imStatus;
 
   Color get _rowBg {
     if (selected) return DunesColors.accentSoft;
@@ -676,6 +824,12 @@ class ChatInboxRow extends StatelessWidget {
                                       ),
                                     ),
                                   ),
+                                  if (ImUserStatusCatalog.showsBadge(
+                                    imStatus,
+                                  )) ...[
+                                    const SizedBox(width: 6),
+                                    ImStatusBadge(status: imStatus!),
+                                  ],
                                   if (showAiMark) ...[
                                     const SizedBox(width: 6),
                                     Container(

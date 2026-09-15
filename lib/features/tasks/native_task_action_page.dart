@@ -4,13 +4,44 @@ import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'task_api.dart';
+import 'task_approval_confirm.dart';
 import 'task_attachment_field.dart';
+import 'task_first_use_guide.dart';
 import 'task_models.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
 const _workbenchBg = Color(0xFFF5F6F8);
 
-enum TaskActionMode { progress, evaluate }
+enum TaskActionMode { progress, evaluate, complete }
+
+Future<bool> showTaskActionDialog(
+  BuildContext context, {
+  required AuthSession session,
+  required TaskItem task,
+  required TaskActionMode mode,
+  Color accentColor = _themePurple,
+}) async {
+  final changed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => Dialog(
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: SizedBox(
+        width: 560,
+        height: MediaQuery.sizeOf(dialogContext).height * 0.72,
+        child: NativeTaskActionView(
+          session: session,
+          task: task,
+          mode: mode,
+          onBack: () => Navigator.pop(dialogContext, false),
+          onDone: () => Navigator.pop(dialogContext, true),
+          accentColor: accentColor,
+        ),
+      ),
+    ),
+  );
+  return changed == true;
+}
 
 /// 三级页：进度调整 / 任务评价（均可上传附件）。
 ///
@@ -46,14 +77,30 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
   late final TextEditingController _commentCtrl;
   List<TaskAttachment> _attachments = const [];
   bool _saving = false;
+  bool _guideAutoStarted = false;
 
   bool get _isProgress => widget.mode == TaskActionMode.progress;
+  bool get _isComplete => widget.mode == TaskActionMode.complete;
   Color get _accent => widget.accentColor;
 
   @override
   void initState() {
     super.initState();
     _commentCtrl = TextEditingController(text: widget.task.evalComment);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_isComplete) _showGuide();
+    });
+  }
+
+  Future<void> _showGuide({bool force = false}) async {
+    if (!force && _guideAutoStarted) return;
+    if (!force) _guideAutoStarted = true;
+    await showTaskFirstUseGuide(
+      context,
+      userId: widget.session.userId,
+      page: _isProgress ? TaskGuidePage.progress : TaskGuidePage.evaluate,
+      force: force,
+    );
   }
 
   @override
@@ -65,6 +112,25 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
 
   Future<void> _submit() async {
     if (_saving) return;
+    if (_isComplete) {
+      final ok = await confirmTaskComplete(context, title: widget.task.title);
+      if (!ok || !mounted) return;
+      setState(() => _saving = true);
+      try {
+        await _api.patchTask(widget.task.id, {
+          'status': 'completed',
+          'forceComplete': true,
+        });
+        if (mounted) showDunesCenterToast(context, '已办结');
+        if (!mounted) return;
+        widget.onDone();
+      } catch (e) {
+        if (mounted) showDunesCenterToast(context, '$e');
+      } finally {
+        if (mounted) setState(() => _saving = false);
+      }
+      return;
+    }
     if (!_isProgress && _commentCtrl.text.trim().isEmpty) {
       showDunesCenterToast(context, '请填写评价意见');
       return;
@@ -163,7 +229,11 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      _isProgress ? '调整进度' : '任务评价',
+                      _isComplete
+                          ? '标记完成'
+                          : _isProgress
+                          ? '调整进度'
+                          : '任务评价',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -171,6 +241,15 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
                       ),
                     ),
                   ),
+                  if (!_isComplete)
+                    IconButton(
+                      tooltip: '使用指引',
+                      onPressed: () => _showGuide(force: true),
+                      icon: const Icon(
+                        Icons.help_outline,
+                        color: DunesColors.text2,
+                      ),
+                    ),
                   FilledButton(
                     style: FilledButton.styleFrom(
                       backgroundColor: _accent,
@@ -192,7 +271,13 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
                               color: Colors.white,
                             ),
                           )
-                        : Text(_isProgress ? '保存' : '提交'),
+                        : Text(
+                            _isComplete
+                                ? '办结'
+                                : _isProgress
+                                ? '保存'
+                                : '提交',
+                          ),
                   ),
                 ],
               ),
@@ -257,6 +342,14 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
                             controller: _noteCtrl,
                             maxLines: 3,
                             decoration: _softDecoration('进展说明（可选）'),
+                          ),
+                        ] else if (_isComplete) ...[
+                          const Text(
+                            '确认办结后，完成月份不会因后续编辑或延期改动。',
+                            style: TextStyle(
+                              color: DunesColors.text2,
+                              height: 1.4,
+                            ),
                           ),
                         ] else ...[
                           TextField(

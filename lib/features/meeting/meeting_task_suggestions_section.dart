@@ -108,6 +108,7 @@ class _MeetingTaskSuggestionsSectionState
     String? priority,
     required DateTime startAt,
     required DateTime dueAt,
+    int? parentTaskId,
     bool silent = false,
   }) async {
     try {
@@ -121,6 +122,7 @@ class _MeetingTaskSuggestionsSectionState
         priority: priority,
         startAt: startAt,
         dueAt: dueAt,
+        parentTaskId: parentTaskId,
       );
       if (!mounted) return;
       if (!silent) {
@@ -151,6 +153,7 @@ class _MeetingTaskSuggestionsSectionState
           priority: draft.priority,
           startAt: draft.startAt,
           dueAt: draft.dueAt,
+          parentTaskId: draft.parentTaskId,
           silent: true,
         );
       }
@@ -212,6 +215,7 @@ class _MeetingTaskSuggestionsSectionState
         priority: draft.priority,
         startAt: draft.startAt,
         dueAt: draft.dueAt,
+        parentTaskId: draft.parentTaskId,
       );
     } finally {
       if (mounted) setState(() => _busy = false);

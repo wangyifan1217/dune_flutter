@@ -51,17 +51,22 @@ class _TaskPostponeDialogState extends State<_TaskPostponeDialog> {
   Future<void> _pickDue() async {
     final now = DateTime.now();
     final current = widget.task.dueAt?.toLocal();
-    final initial = _dueAt ??
+    final initial =
+        _dueAt ??
         (current == null
             ? now
-            : DateTime(current.year, current.month, current.day).add(
-                const Duration(days: 1),
-              ));
+            : DateTime(
+                current.year,
+                current.month,
+                current.day,
+              ).add(const Duration(days: 1)));
     final first = current == null
         ? DateTime(now.year - 1)
-        : DateTime(current.year, current.month, current.day).add(
-            const Duration(days: 1),
-          );
+        : DateTime(
+            current.year,
+            current.month,
+            current.day,
+          ).add(const Duration(days: 1));
     var last = DateTime(now.year + 5);
     if (first.isAfter(last)) last = first;
     final picked = await showDatePicker(
@@ -73,9 +78,9 @@ class _TaskPostponeDialogState extends State<_TaskPostponeDialog> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-              primary: DunesColors.brandPurple,
-            ),
+            colorScheme: Theme.of(
+              context,
+            ).colorScheme.copyWith(primary: DunesColors.brandPurple),
           ),
           child: child!,
         );

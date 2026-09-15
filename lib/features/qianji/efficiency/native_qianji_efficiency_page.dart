@@ -143,6 +143,8 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
   late final EfficiencyService _service;
   late final TabController _tabs;
   late DateTime _month;
+  late DateTime _day;
+  String _grain = 'month';
   final Map<String, EfficiencySnapshot> _snapshots = {};
   final Map<String, EfficiencyAiResult> _analyses = {};
   final Set<String> _loading = {};
@@ -153,7 +155,10 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
   String get _scope => _tabs.index == 0 ? 'personal' : 'department';
   String get _monthKey =>
       '${_month.year.toString().padLeft(4, '0')}-${_month.month.toString().padLeft(2, '0')}';
-  String _cacheKey(String scope) => '$scope:$_monthKey';
+  String get _dateKey =>
+      '$_monthKey-${_day.day.toString().padLeft(2, '0')}';
+  String _cacheKey(String scope) =>
+      _grain == 'day' ? '$scope:day:$_dateKey' : '$scope:month:$_monthKey';
 
   @override
   void initState() {
@@ -162,7 +167,8 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
     _tabs = TabController(length: 2, vsync: this)
       ..addListener(_handleTabChange);
     final now = widget.now ?? DateTime.now();
-    _month = DateTime(now.year, now.month - 1);
+    _month = DateTime(now.year, now.month);
+    _day = DateTime(now.year, now.month, now.day);
     unawaited(_load('personal'));
   }
 
@@ -194,6 +200,7 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
       final value = await _service.fetchOverview(
         scope: scope,
         month: _monthKey,
+        date: _grain == 'day' ? _dateKey : null,
       );
       if (!mounted || generation != _generation) return;
       setState(() {
@@ -249,6 +256,7 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
       final text = await _service.exportBriefing(
         scope: scope,
         month: _monthKey,
+        date: _grain == 'day' ? _dateKey : null,
       );
       await Clipboard.setData(ClipboardData(text: text));
       if (!mounted) return;
@@ -263,8 +271,24 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
     }
   }
 
-  Future<void> _pickMonth() async {
+  Future<void> _pickPeriod() async {
     final now = widget.now ?? DateTime.now();
+    if (_grain == 'day') {
+      final picked = await showDatePicker(
+        context: context,
+        initialDate: _day,
+        firstDate: DateTime(now.year - 3),
+        lastDate: DateTime(now.year, now.month, now.day),
+        helpText: '选择分析日期',
+      );
+      if (picked == null || !mounted) return;
+      setState(() {
+        _day = DateTime(picked.year, picked.month, picked.day);
+        _month = DateTime(picked.year, picked.month);
+      });
+      await _load(_scope, force: true);
+      return;
+    }
     final picked = await showDatePicker(
       context: context,
       initialDate: _month,
@@ -276,6 +300,25 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
     if (picked == null || !mounted) return;
     setState(() => _month = DateTime(picked.year, picked.month));
     await _load(_scope, force: true);
+  }
+
+  void _setGrain(String grain) {
+    if (grain == _grain) return;
+    setState(() {
+      _grain = grain;
+      if (grain == 'day') {
+        final lastOfMonth = DateTime(_month.year, _month.month + 1, 0);
+        final now = widget.now ?? DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        var day = today.day;
+        if (day > lastOfMonth.day) day = lastOfMonth.day;
+        _day = DateTime(_month.year, _month.month, day);
+        if (_day.isAfter(today)) _day = today;
+      } else {
+        _month = DateTime(_day.year, _day.month);
+      }
+    });
+    unawaited(_load(_scope, force: true));
   }
 
   void _showGuide() {
@@ -315,7 +358,7 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    '按所选自然月，用任务、审批、提案、会议纪要、知识库和群里的业务卡片汇总。AI 只做解读，不参与打分；不看聊天正文。',
+                    '按所选自然月或某一天，用任务、审批、提案、会议纪要、知识库和群里的业务卡片汇总。AI 只做解读，不参与打分；不看聊天正文。按日看当天窗口，按月看整月。',
                     style: TextStyle(
                       fontSize: 12,
                       color: DunesColors.text3,
@@ -395,11 +438,32 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
                     ),
                   ),
                   const SizedBox(width: 8),
+                  _EfficiencyGrainChip(
+                    label: '按月',
+                    selected: _grain != 'day',
+                    onTap: () => _setGrain('month'),
+                  ),
+                  const SizedBox(width: 6),
+                  _EfficiencyGrainChip(
+                    label: '按日',
+                    selected: _grain == 'day',
+                    onTap: () => _setGrain('day'),
+                  ),
+                  const SizedBox(width: 8),
                   ActionChip(
                     key: const Key('efficiency-month'),
-                    onPressed: _pickMonth,
-                    avatar: const Icon(Icons.calendar_month_outlined, size: 16),
-                    label: Text('${_month.year}.${_month.month}'),
+                    onPressed: _pickPeriod,
+                    avatar: Icon(
+                      _grain == 'day'
+                          ? Icons.today_outlined
+                          : Icons.calendar_month_outlined,
+                      size: 16,
+                    ),
+                    label: Text(
+                      _grain == 'day'
+                          ? '${_day.month}月${_day.day}日'
+                          : '${_month.year}.${_month.month}',
+                    ),
                     visualDensity: VisualDensity.compact,
                     side: const BorderSide(color: Color(0xFFE8E2EE)),
                     backgroundColor: const Color(0xFFF7F5FA),
@@ -461,6 +525,7 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
             analyzing: _analyzing.contains(key),
             error: _errors['$key:ai'],
             scheduled: snapshot.latestAnalysis?.isScheduled == true,
+            analyzeEnabled: _grain != 'day',
             onAnalyze: () => _runAnalysis(scope),
             onExport: () => _export(scope),
           ),
@@ -1047,6 +1112,47 @@ class _ChainList extends StatelessWidget {
   }
 }
 
+class _EfficiencyGrainChip extends StatelessWidget {
+  const _EfficiencyGrainChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? _purpleSoft : Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected ? _purple : const Color(0xFFE8E2EE),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: selected ? _purple : DunesColors.text2,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _AiCard extends StatelessWidget {
   const _AiCard({
     required this.result,
@@ -1055,6 +1161,7 @@ class _AiCard extends StatelessWidget {
     required this.onAnalyze,
     required this.onExport,
     this.scheduled = false,
+    this.analyzeEnabled = true,
   });
 
   final EfficiencyAiResult? result;
@@ -1063,6 +1170,7 @@ class _AiCard extends StatelessWidget {
   final VoidCallback onAnalyze;
   final VoidCallback onExport;
   final bool scheduled;
+  final bool analyzeEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -1114,7 +1222,9 @@ class _AiCard extends StatelessWidget {
                         ),
                         FilledButton(
                           key: const Key('efficiency-analyze'),
-                          onPressed: analyzing ? null : onAnalyze,
+                          onPressed: !analyzeEnabled || analyzing
+                              ? null
+                              : onAnalyze,
                           style: FilledButton.styleFrom(
                             backgroundColor: _purple,
                             visualDensity: VisualDensity.compact,
@@ -1123,6 +1233,8 @@ class _AiCard extends StatelessWidget {
                           child: Text(
                             analyzing
                                 ? '分析中…'
+                                : !analyzeEnabled
+                                ? '请切回按月'
                                 : result == null
                                 ? '开始分析'
                                 : '重新分析',

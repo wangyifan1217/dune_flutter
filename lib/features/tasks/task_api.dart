@@ -12,9 +12,9 @@ class TaskApi {
   final AuthSession session;
 
   Map<String, String> get _headers => {
-        'Authorization': 'Bearer ${session.token}',
-        'Content-Type': 'application/json',
-      };
+    'Authorization': 'Bearer ${session.token}',
+    'Content-Type': 'application/json',
+  };
 
   Uri _uri(String path, [Map<String, String>? query]) {
     final base = session.apiBase.replaceAll(RegExp(r'/+$'), '');
@@ -51,6 +51,7 @@ class TaskApi {
     String? status,
     String? priority,
     String? q,
+    String? goalRole,
     DateTime? dateFrom,
     DateTime? dateTo,
     int page = 0,
@@ -64,6 +65,7 @@ class TaskApi {
     if (status != null && status.isNotEmpty) query['status'] = status;
     if (priority != null && priority.isNotEmpty) query['priority'] = priority;
     if (q != null && q.trim().isNotEmpty) query['q'] = q.trim();
+    if (goalRole != null && goalRole.isNotEmpty) query['goalRole'] = goalRole;
     final from = _dateQuery(dateFrom);
     final to = _dateQuery(dateTo);
     if (from != null) query['dateFrom'] = from;
@@ -90,6 +92,7 @@ class TaskApi {
     String? status,
     String? priority,
     String? q,
+    String? goalRole,
     DateTime? dateFrom,
     DateTime? dateTo,
     int size = 100,
@@ -102,6 +105,7 @@ class TaskApi {
         status: status,
         priority: priority,
         q: q,
+        goalRole: goalRole,
         dateFrom: dateFrom,
         dateTo: dateTo,
         page: page,
@@ -127,7 +131,9 @@ class TaskApi {
     final resp = await http.get(_uri('$id'), headers: _headers);
     final data = _unwrap(resp);
     final map = Map<String, dynamic>.from(data as Map);
-    final task = TaskItem.fromJson(Map<String, dynamic>.from(map['task'] as Map));
+    final task = TaskItem.fromJson(
+      Map<String, dynamic>.from(map['task'] as Map),
+    );
     final subs = (map['subtasks'] as List? ?? const [])
         .whereType<Map>()
         .map((e) => TaskItem.fromJson(Map<String, dynamic>.from(e)))
@@ -179,7 +185,9 @@ class TaskApi {
     final req = http.MultipartRequest('POST', uri);
     req.headers['Authorization'] = 'Bearer ${session.token}';
     req.fields['bucket'] = 'xflow-proposals';
-    req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: fileName));
+    req.files.add(
+      http.MultipartFile.fromBytes('file', bytes, filename: fileName),
+    );
     final streamed = await req.send();
     final bodyText = await streamed.stream.bytesToString();
     if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
@@ -203,7 +211,10 @@ class TaskApi {
     );
   }
 
-  Future<TaskItem> createSubtask(int parentId, Map<String, dynamic> body) async {
+  Future<TaskItem> createSubtask(
+    int parentId,
+    Map<String, dynamic> body,
+  ) async {
     final resp = await http.post(
       _uri('$parentId/subtasks'),
       headers: _headers,
@@ -277,15 +288,18 @@ class TaskApi {
     final key = a.objectKey.trim().isNotEmpty ? a.objectKey.trim() : direct;
     if (key.isEmpty) return '';
     if (key.startsWith('http://') || key.startsWith('https://')) return key;
-    final bucket = a.bucket.trim().isEmpty ? 'xflow-proposals' : a.bucket.trim();
+    final bucket = a.bucket.trim().isEmpty
+        ? 'xflow-proposals'
+        : a.bucket.trim();
     final base = session.apiBase.replaceAll(RegExp(r'/+$'), '');
     try {
       final uri = Uri.parse(
         '$base/storage/presigned-get?bucket=${Uri.encodeQueryComponent(bucket)}&objectKey=${Uri.encodeQueryComponent(key)}',
       );
-      final resp = await http.get(uri, headers: {
-        'Authorization': 'Bearer ${session.token}',
-      });
+      final resp = await http.get(
+        uri,
+        headers: {'Authorization': 'Bearer ${session.token}'},
+      );
       final data = _unwrap(resp);
       if (data is Map) {
         final url = '${data['url'] ?? ''}'.trim();
@@ -297,8 +311,12 @@ class TaskApi {
 
   /// 带鉴权拉取附件字节，保证 PC/APP 真正落到本地。
   Future<Uint8List> downloadAttachmentBytes(TaskAttachment a) async {
-    final key = a.objectKey.trim().isNotEmpty ? a.objectKey.trim() : a.url.trim();
-    final bucket = a.bucket.trim().isEmpty ? 'xflow-proposals' : a.bucket.trim();
+    final key = a.objectKey.trim().isNotEmpty
+        ? a.objectKey.trim()
+        : a.url.trim();
+    final bucket = a.bucket.trim().isEmpty
+        ? 'xflow-proposals'
+        : a.bucket.trim();
     final base = session.apiBase.replaceAll(RegExp(r'/+$'), '');
     final headers = <String, String>{
       'Authorization': 'Bearer ${session.token}',
@@ -311,7 +329,9 @@ class TaskApi {
         '$base/storage/download?bucket=${Uri.encodeQueryComponent(bucket)}&objectKey=${Uri.encodeQueryComponent(key)}&proxy=1',
       );
       final resp = await http.get(authUri, headers: headers);
-      if (resp.statusCode >= 200 && resp.statusCode < 300 && resp.bodyBytes.isNotEmpty) {
+      if (resp.statusCode >= 200 &&
+          resp.statusCode < 300 &&
+          resp.bodyBytes.isNotEmpty) {
         return resp.bodyBytes;
       }
     }
@@ -319,7 +339,9 @@ class TaskApi {
     final url = await resolveAttachmentUrl(a);
     if (url.isEmpty) throw Exception('无法获取文件链接');
     final resp = await http.get(Uri.parse(url), headers: headers);
-    if (resp.statusCode < 200 || resp.statusCode >= 300 || resp.bodyBytes.isEmpty) {
+    if (resp.statusCode < 200 ||
+        resp.statusCode >= 300 ||
+        resp.bodyBytes.isEmpty) {
       throw Exception('下载失败: HTTP ${resp.statusCode}');
     }
     return resp.bodyBytes;
@@ -381,10 +403,7 @@ class TaskApi {
     int page = 0,
     int size = 20,
   }) async {
-    final query = <String, String>{
-      'page': '$page',
-      'size': '$size',
-    };
+    final query = <String, String>{'page': '$page', 'size': '$size'};
     final from = _dateQuery(dateFrom);
     final to = _dateQuery(dateTo);
     if (from != null) query['dateFrom'] = from;
@@ -405,5 +424,65 @@ class TaskApi {
       return TaskListPage(items: items, hasMore: false, total: items.length);
     }
     return const TaskListPage(items: []);
+  }
+
+  Uri _dailyUri(String path, [Map<String, String>? query]) {
+    final base = session.apiBase.replaceAll(RegExp(r'/+$'), '');
+    final p = path.replaceAll(RegExp(r'^/+'), '');
+    final full = p.isEmpty
+        ? '$base/qianji/task-daily-reports'
+        : '$base/qianji/task-daily-reports/$p';
+    return Uri.parse(full).replace(queryParameters: query);
+  }
+
+  Future<TaskDailyReportBundle> getDailyReport({DateTime? date}) async {
+    final query = <String, String>{};
+    final d = _dateQuery(date);
+    if (d != null) query['date'] = d;
+    final resp = await http.get(_dailyUri('', query), headers: _headers);
+    final data = _unwrap(resp);
+    return TaskDailyReportBundle.fromJson(
+      Map<String, dynamic>.from(data as Map),
+    );
+  }
+
+  Future<TaskDailyReport> submitDailyReport(Map<String, dynamic> body) async {
+    final resp = await http.post(
+      _dailyUri(''),
+      headers: _headers,
+      body: jsonEncode(body),
+    );
+    final data = _unwrap(resp);
+    return TaskDailyReport.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<List<TaskDailyReport>> listDailyReportHistory({
+    int page = 0,
+    int size = 20,
+  }) async {
+    final resp = await http.get(
+      _dailyUri('history', {'page': '$page', 'size': '$size'}),
+      headers: _headers,
+    );
+    final data = _unwrap(resp);
+    if (data is Map) {
+      final items = data['items'];
+      if (items is List) {
+        return items
+            .whereType<Map>()
+            .map((e) => TaskDailyReport.fromJson(Map<String, dynamic>.from(e)))
+            .toList(growable: false);
+      }
+    }
+    return const [];
+  }
+
+  Future<void> commentDailyReport(int id, String body) async {
+    final resp = await http.post(
+      _dailyUri('$id/comments'),
+      headers: _headers,
+      body: jsonEncode({'body': body}),
+    );
+    _unwrap(resp);
   }
 }

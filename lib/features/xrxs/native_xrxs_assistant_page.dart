@@ -19,13 +19,26 @@ import 'xrxs_service.dart';
 /// 临时静态预览开关；正式联调请保持 false。
 const bool kXrxsAssistantStaticPreview = false;
 
-/// 薪人薪事是审批通知流，不是聊天：接口按时间正序（旧→新）返回，
-/// 展示时改成最新在上，避免 APP 点进去还要滑到最下面才能看到刚收到的通知。
+/// 与普通 IM 一致：旧消息在上、最新在下。接口已按时间正序返回，按 createdAt / id 再排一次。
 List<NativeChatMessage> xrxsAssistantFeedMessages(
   List<NativeChatMessage> chronological,
 ) {
   if (chronological.length <= 1) return chronological;
-  return chronological.reversed.toList(growable: false);
+  final out = List<NativeChatMessage>.from(chronological);
+  out.sort((a, b) {
+    final at = a.createdAt;
+    final bt = b.createdAt;
+    if (at != null && bt != null) {
+      final byTime = at.compareTo(bt);
+      if (byTime != 0) return byTime;
+    } else if (at != null) {
+      return 1;
+    } else if (bt != null) {
+      return -1;
+    }
+    return a.id.compareTo(b.id);
+  });
+  return List<NativeChatMessage>.unmodifiable(out);
 }
 
 List<NativeChatMessage> xrxsAssistantStaticPreviewMessages() {
@@ -64,15 +77,15 @@ List<NativeChatMessage> xrxsAssistantStaticPreviewMessages() {
 
   return [
     card(
-      id: -1,
-      body: '你有一条薪人薪事审批待办：测试员工的调岗',
-      sid: '597873626267779073',
-      title: '测试员工的调岗',
-      subtitle: '待你审批',
-      statusLabel: '待审批',
-      eventType: 'flow_todo',
-      roleHint: 'approver',
-      ago: const Duration(minutes: 2),
+      id: -3,
+      body: '薪人薪事审批已结束：采购申请',
+      sid: '597873626267779120',
+      title: '采购申请',
+      subtitle: '审批已结束',
+      statusLabel: '已通过',
+      eventType: 'flow_process',
+      roleHint: 'viewer',
+      ago: const Duration(hours: 2),
     ),
     card(
       id: -2,
@@ -86,15 +99,15 @@ List<NativeChatMessage> xrxsAssistantStaticPreviewMessages() {
       ago: const Duration(minutes: 18),
     ),
     card(
-      id: -3,
-      body: '薪人薪事审批已结束：采购申请',
-      sid: '597873626267779120',
-      title: '采购申请',
-      subtitle: '审批已结束',
-      statusLabel: '已通过',
-      eventType: 'flow_process',
-      roleHint: 'viewer',
-      ago: const Duration(hours: 2),
+      id: -1,
+      body: '你有一条薪人薪事审批待办：测试员工的调岗',
+      sid: '597873626267779073',
+      title: '测试员工的调岗',
+      subtitle: '待你审批',
+      statusLabel: '待审批',
+      eventType: 'flow_todo',
+      roleHint: 'approver',
+      ago: const Duration(minutes: 2),
     ),
   ];
 }
@@ -161,10 +174,21 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
     super.dispose();
   }
 
-  void _scrollToFeedTop() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+  bool _nearLatest() {
+    if (!_scroll.hasClients) return true;
+    final pos = _scroll.position;
+    return pos.maxScrollExtent - pos.pixels < 80;
+  }
+
+  void _scrollToLatest() {
+    void jump() {
       if (!mounted || !_scroll.hasClients) return;
-      _scroll.jumpTo(0);
+      _scroll.jumpTo(_scroll.position.maxScrollExtent);
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      jump();
+      WidgetsBinding.instance.addPostFrameCallback((_) => jump());
     });
   }
 
@@ -178,13 +202,14 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
     try {
       if (kXrxsAssistantStaticPreview) {
         if (!mounted) return;
+        final followLatest = !silent || _nearLatest();
         setState(() {
           _conversationId = widget.conversationHint.id;
           _messages = xrxsAssistantStaticPreviewMessages();
           _loading = false;
           _error = null;
         });
-        if (!silent) _scrollToFeedTop();
+        if (followLatest) _scrollToLatest();
         return;
       }
       var id = widget.conversationHint.id;
@@ -202,8 +227,9 @@ class _NativeXrxsAssistantPageState extends State<NativeXrxsAssistantPage> {
       await _service.markConversationRead(id);
       widget.onConversationRead?.call(id);
       if (!mounted) return;
+      final followLatest = !silent || _nearLatest();
       setState(() => _messages = xrxsAssistantFeedMessages(messages));
-      if (!silent) _scrollToFeedTop();
+      if (followLatest) _scrollToLatest();
     } catch (e) {
       if (mounted && !silent) setState(() => _error = '$e');
     } finally {

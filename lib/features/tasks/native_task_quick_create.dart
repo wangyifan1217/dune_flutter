@@ -6,10 +6,12 @@ import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'task_api.dart';
+import 'task_create_confirm.dart';
+import 'task_first_use_guide.dart';
 import 'task_models.dart';
 import 'task_widgets.dart';
 
-/// 工作台轻量新建：一条事项或一组事，不走完整任务表单。
+/// 工作台轻量新建：一个主目标或一个子目标，不走完整目标表单。
 Future<TaskItem?> openTaskQuickCreate(
   BuildContext context, {
   required AuthSession session,
@@ -43,10 +45,13 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
   late final TaskApi _api = TaskApi(widget.session);
   final _title = TextEditingController();
   final _desc = TextEditingController();
-  DateTime? _due;
+  DateTime? _startAt;
+  DateTime? _dueAt;
   int? _groupId;
   List<TaskItem> _groups = const [];
   bool _saving = false;
+  bool _guideAutoStarted = false;
+  String? _dateError;
 
   @override
   void initState() {
@@ -54,6 +59,22 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
     if (!widget.asGroup) {
       unawaited(_loadGroups());
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_showGuide());
+    });
+  }
+
+  Future<void> _showGuide({bool force = false}) async {
+    if (!force && _guideAutoStarted) return;
+    if (!force) _guideAutoStarted = true;
+    await showTaskFirstUseGuide(
+      context,
+      userId: widget.session.userId,
+      page: widget.asGroup
+          ? TaskGuidePage.quickCreateMain
+          : TaskGuidePage.quickCreateSub,
+      force: force,
+    );
   }
 
   @override
@@ -75,16 +96,35 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
     } catch (_) {}
   }
 
-  Future<void> _pickDue() async {
+  Future<void> _pickDate({required bool isStart}) async {
     final now = DateTime.now();
+    final initial = isStart ? (_startAt ?? now) : (_dueAt ?? _startAt ?? now);
     final picked = await showDatePicker(
       context: context,
-      initialDate: _due ?? now,
+      initialDate: initial,
       firstDate: DateTime(now.year - 1),
-      lastDate: DateTime(now.year + 3),
+      lastDate: DateTime(now.year + 5),
+      helpText: isStart ? '选择开始时间' : '选择结束时间',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(
+              context,
+            ).colorScheme.copyWith(primary: kTaskPurple),
+          ),
+          child: child!,
+        );
+      },
     );
     if (picked == null || !mounted) return;
-    setState(() => _due = picked);
+    setState(() {
+      if (isStart) {
+        _startAt = DateTime(picked.year, picked.month, picked.day);
+      } else {
+        _dueAt = DateTime(picked.year, picked.month, picked.day, 23, 59, 59);
+      }
+      _dateError = taskCreateRangeError(_startAt, _dueAt, required: false);
+    });
   }
 
   Future<void> _submit() async {
@@ -93,6 +133,20 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
       showDunesCenterToast(context, '请填写名称');
       return;
     }
+    final dateErr = taskCreateRangeError(_startAt, _dueAt);
+    if (dateErr != null) {
+      setState(() => _dateError = dateErr);
+      return;
+    }
+    final kind = widget.asGroup ? '主目标' : '子目标';
+    final ok = await confirmCreateTask(
+      context,
+      title: title,
+      startAt: _startAt,
+      dueAt: _dueAt,
+      kind: kind,
+    );
+    if (!ok || !mounted) return;
     setState(() => _saving = true);
     try {
       final desc = _desc.text.trim();
@@ -102,14 +156,8 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
           'description': desc
         else if (widget.asGroup || _groupId == null)
           'description': title,
-        if (!widget.asGroup && _due != null)
-          'dueAt': DateTime(
-            _due!.year,
-            _due!.month,
-            _due!.day,
-            23,
-            59,
-          ).toUtc().toIso8601String(),
+        'startAt': _startAt!.toUtc().toIso8601String(),
+        'dueAt': _dueAt!.toUtc().toIso8601String(),
       };
       final TaskItem created;
       if (widget.asGroup || _groupId == null) {
@@ -129,11 +177,10 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
     }
   }
 
+  String _dateValue(DateTime? d) => d == null ? '请选择' : formatTaskYmd(d);
+
   @override
   Widget build(BuildContext context) {
-    final dueLabel = _due == null
-        ? '可选'
-        : '${_due!.year}/${_due!.month}/${_due!.day}';
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
@@ -152,15 +199,25 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
               ),
             ),
             const SizedBox(height: 12),
-            Text(
-              widget.asGroup ? '新建一组事' : '新建事项',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.asGroup ? '新建主目标' : '新建子目标',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                TaskGuideHelpButton(
+                  onPressed: () => unawaited(_showGuide(force: true)),
+                ),
+              ],
             ),
             const SizedBox(height: 4),
             Text(
-              widget.asGroup
-                  ? '给这组起个名，进去后再添加事项。'
-                  : '给自己记一条要做的事，不必先建组。',
+              widget.asGroup ? '给主目标起个名，进去后再添加子目标。' : '给自己记一条要做的子目标。',
               style: const TextStyle(fontSize: 12, color: DunesColors.text3),
             ),
             const SizedBox(height: 12),
@@ -191,35 +248,87 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
                 ),
               ),
             ),
-            if (!widget.asGroup) ...[
-              const SizedBox(height: 10),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('截止', style: TextStyle(fontSize: 13)),
-                trailing: Text(
-                  dueLabel,
-                  style: const TextStyle(color: DunesColors.text2),
-                ),
-                onTap: _pickDue,
-              ),
-              if (_groups.isNotEmpty)
-                DropdownButtonFormField<int?>(
-                  initialValue: _groupId,
-                  decoration: const InputDecoration(
-                    labelText: '属于哪一组（可选）',
-                    border: InputBorder.none,
-                  ),
-                  items: [
-                    const DropdownMenuItem<int?>(
-                      value: null,
-                      child: Text('不挂组，只给自己做'),
+            const SizedBox(height: 10),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text.rich(
+                TextSpan(
+                  text: '开始时间',
+                  style: TextStyle(fontSize: 13),
+                  children: [
+                    TextSpan(
+                      text: ' *',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFE35D6A),
+                      ),
                     ),
-                    for (final g in _groups)
-                      DropdownMenuItem<int?>(value: g.id, child: Text(g.title)),
                   ],
-                  onChanged: (v) => setState(() => _groupId = v),
                 ),
-            ],
+              ),
+              trailing: Text(
+                _dateValue(_startAt),
+                style: TextStyle(
+                  color: _startAt == null
+                      ? DunesColors.text3
+                      : DunesColors.text2,
+                ),
+              ),
+              onTap: () => _pickDate(isStart: true),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text.rich(
+                TextSpan(
+                  text: '结束时间',
+                  style: TextStyle(fontSize: 13),
+                  children: [
+                    TextSpan(
+                      text: ' *',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFE35D6A),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              trailing: Text(
+                _dateValue(_dueAt),
+                style: TextStyle(
+                  color: _dueAt == null ? DunesColors.text3 : DunesColors.text2,
+                ),
+              ),
+              onTap: () => _pickDate(isStart: false),
+            ),
+            if (_dateError != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  _dateError!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFFE35D6A),
+                  ),
+                ),
+              ),
+            if (!widget.asGroup && _groups.isNotEmpty)
+              DropdownButtonFormField<int?>(
+                initialValue: _groupId,
+                decoration: const InputDecoration(
+                  labelText: '属于哪一组（可选）',
+                  border: InputBorder.none,
+                ),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('不挂组，只给自己做'),
+                  ),
+                  for (final g in _groups)
+                    DropdownMenuItem<int?>(value: g.id, child: Text(g.title)),
+                ],
+                onChanged: (v) => setState(() => _groupId = v),
+              ),
             const SizedBox(height: 12),
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: kTaskPurple),

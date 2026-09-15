@@ -146,7 +146,10 @@ class _TaskAttachmentTileState extends State<TaskAttachmentTile> {
                 if (sizeText.isNotEmpty)
                   Text(
                     sizeText,
-                    style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: DunesColors.text3,
+                    ),
                   ),
               ],
             ),

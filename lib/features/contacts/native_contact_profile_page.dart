@@ -7,6 +7,7 @@ import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../chat/chat_widgets.dart';
 import '../chat/group_info_widgets.dart';
+import '../chat/user_avatar_preview.dart';
 import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
@@ -422,14 +423,38 @@ class _ProfileHero extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          ImUserAvatar(
-            initial: initial,
-            seed: seed,
-            size: _avatarSize,
-            avatarPreset: avatarPreset,
-            avatarObjectKey: avatarObjectKey,
-            avatarService: avatarService,
-            borderRadius: avatarRadius,
+          MouseRegion(
+            cursor: SystemMouseCursors.zoomIn,
+            child: Tooltip(
+              message: '查看头像',
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => showUserAvatarPreview(
+                    context,
+                    initial: initial,
+                    seed: seed,
+                    avatarPreset: avatarPreset,
+                    avatarObjectKey: avatarObjectKey,
+                    avatarService: avatarService,
+                  ),
+                  borderRadius: BorderRadius.circular(avatarRadius),
+                  child: Semantics(
+                    button: true,
+                    label: '查看头像',
+                    child: ImUserAvatar(
+                      initial: initial,
+                      seed: seed,
+                      size: _avatarSize,
+                      avatarPreset: avatarPreset,
+                      avatarObjectKey: avatarObjectKey,
+                      avatarService: avatarService,
+                      borderRadius: avatarRadius,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
           if (onAddToGroup != null) ...[
             const SizedBox(width: 12),

@@ -117,6 +117,7 @@ NativeConversation applySelfAvatarToConversation(
     assistantGeneratingStatus: c.assistantGeneratingStatus,
     hasUnreadMention: c.hasUnreadMention,
     hasUnreadAtAll: c.hasUnreadAtAll,
+    peerImStatus: c.peerImStatus,
   );
 }
 
@@ -163,6 +164,7 @@ NativeConversation _mergeKeepingAvatars(
     assistantGeneratingStatus: server.assistantGeneratingStatus,
     hasUnreadMention: false,
     hasUnreadAtAll: false,
+    peerImStatus: server.peerImStatus,
   );
   final withMention = _withStickyMention(prev, merged);
   if (selfAvatar != null && selfAvatar.userId > 0) {
@@ -208,6 +210,7 @@ NativeConversation _withStickyMention(
     assistantGeneratingStatus: server.assistantGeneratingStatus,
     hasUnreadMention: mention,
     hasUnreadAtAll: atAll,
+    peerImStatus: server.peerImStatus,
   );
 }
 

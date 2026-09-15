@@ -1,83 +1,26 @@
-import 'dart:async';
-import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
-import 'package:pasteboard/pasteboard.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:just_screenshot/screenshot.dart';
 
-const _captureChannel = MethodChannel('dev.flutter.screenshot');
+bool _regionCaptureBusy = false;
 
-bool _bytesEqual(Uint8List? a, Uint8List? b) {
-  if (identical(a, b)) return true;
-  if (a == null || b == null) return false;
-  if (a.length != b.length) return false;
-  if (a.isEmpty) return true;
-  final step = (a.length / 64).ceil().clamp(1, a.length);
-  for (var i = 0; i < a.length; i += step) {
-    if (a[i] != b[i]) return false;
-  }
-  return a.first == b.first && a.last == b.last;
-}
-
-/// Windows：走系统截图（Win+Shift+S），再从剪贴板取图。
-/// 不藏窗、不自研框选，双屏/DPI 由系统处理。
+/// Windows：应用内冻屏框选（just_screenshot），对齐微信 PC。
 Future<Uint8List?> captureWindowsRegionScreenshot() async {
-  Uint8List? before;
+  if (_regionCaptureBusy) return null;
+  _regionCaptureBusy = true;
   try {
-    before = await Pasteboard.image;
-  } catch (_) {}
-
-  var launched = false;
-  try {
-    final ok = await _captureChannel.invokeMethod<bool>('triggerSystemSnip');
-    launched = ok == true;
-  } catch (_) {
-    launched = false;
+    final CapturedData? data = await Screenshot.instance.capture(
+      mode: ScreenshotMode.region,
+    );
+    if (data == null || data.bytes.isEmpty) return null;
+    return data.bytes;
+  } on ScreenshotException catch (e) {
+    if (e.code == 'cancelled') return null;
+    rethrow;
+  } finally {
+    _regionCaptureBusy = false;
   }
-  if (!launched) {
-    try {
-      await Process.start(
-        'explorer.exe',
-        const <String>['ms-screenclip:'],
-        mode: ProcessStartMode.detached,
-      );
-    } catch (_) {
-      throw StateError('无法启动系统截图');
-    }
-  }
-
-  await Future<void>.delayed(const Duration(milliseconds: 450));
-
-  final deadline = DateTime.now().add(const Duration(seconds: 90));
-  var sawBlur = false;
-  while (DateTime.now().isBefore(deadline)) {
-    await Future<void>.delayed(const Duration(milliseconds: 280));
-
-    try {
-      final focused = await windowManager.isFocused();
-      if (!focused) {
-        sawBlur = true;
-      } else if (sawBlur) {
-        await Future<void>.delayed(const Duration(milliseconds: 220));
-        final img = await Pasteboard.image;
-        if (img != null && img.isNotEmpty && !_bytesEqual(img, before)) {
-          return img;
-        }
-        return null;
-      }
-    } catch (_) {}
-
-    try {
-      final img = await Pasteboard.image;
-      if (img != null && img.isNotEmpty && !_bytesEqual(img, before)) {
-        return img;
-      }
-    } catch (_) {}
-  }
-  return null;
 }
 
 /// Windows 全局热键 Ctrl+Alt+A。

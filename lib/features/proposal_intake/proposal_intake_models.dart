@@ -1873,37 +1873,57 @@ bool proposalIntakeFinanceLineItemsReviewed(ProposalIntakeRow row) {
   return true;
 }
 
+bool proposalIntakeContractsReviewed(ProposalIntakeRow row) {
+  bool done(String key) => row.review[key] == true;
+  if (proposalIntakeIsPurchase(row.kind)) {
+    return done('purchaseContractCompleted');
+  }
+  return done('purchaseContractCompleted') && done('salesContractCompleted');
+}
+
+/// 财务部负责人二是否已完成合同复核；销售提案还要财务逐条勾完。
+bool proposalIntakeFinance2ReviewDone(ProposalIntakeRow row) {
+  if (proposalIntakeIsPurchase(row.kind)) {
+    return proposalIntakeContractsReviewed(row);
+  }
+  if (row.review['financeCompleted'] == true) return true;
+  return proposalIntakeContractsReviewed(row) &&
+      proposalIntakeFinanceLineItemsReviewed(row);
+}
+
+/// 当前仍待处理、且已经轮到的复核动作。列表文案和审批时间线共用。
+List<String> proposalIntakeActiveReviewActions(ProposalIntakeRow row) {
+  final stage = row.resolvedStage;
+  if (stage != 'reviewing' && stage != 'tech_reviewing') return const [];
+  bool done(String key) => row.review[key] == true;
+  final purchase = proposalIntakeIsPurchase(row.kind);
+  final actions = <String>[];
+  if (!done('marketCompleted')) actions.add('review_market');
+  if (!done('technologyCompleted')) actions.add('review_tech');
+  if (stage == 'tech_reviewing') return actions;
+  if (purchase) {
+    if (!proposalIntakeFinance2ReviewDone(row)) {
+      actions.add('review_contract');
+    }
+    return actions;
+  }
+  if (!proposalIntakeFinance2ReviewDone(row)) {
+    actions.add('review_finance');
+  } else if (!done('financeCompleted')) {
+    actions.add('review_finance_module');
+  }
+  return actions;
+}
+
 /// 列表上给所有人看的待复核对象：有姓名则「待某某复核」，否则保留短状态。
 List<String> proposalIntakePendingReviewLabels(
   ProposalIntakeRow row, {
   List<ProposalPerson> people = const [],
 }) {
-  final stage = row.resolvedStage;
-  if (stage != 'reviewing' && stage != 'tech_reviewing') return const [];
-  final review = row.review;
-  bool done(String key) => review[key] == true;
-  String label(String action) =>
-      proposalIntakeActionLabel(action, row: row, people: people);
-  final labels = <String>[];
-  if (!done('marketCompleted')) {
-    labels.add(label('review_market'));
-  }
-  if (!done('technologyCompleted')) {
-    labels.add(label('review_tech'));
-  }
-  if (stage == 'reviewing' &&
-      !proposalIntakeIsPurchase(row.kind) &&
-      !done('financeCompleted')) {
-    if (!proposalIntakeFinanceLineItemsReviewed(row)) {
-      labels.add(label('review_finance'));
-    } else {
-      labels.add(label('review_finance_module'));
-    }
-  }
   return [
-    for (final item in labels)
-      if (item.isNotEmpty) item,
-  ];
+    for (final action in proposalIntakeActiveReviewActions(row))
+      proposalIntakeActionLabel(action, row: row, people: people),
+  ].where((item) => item.isNotEmpty).toList(growable: false);
 }
 
 String proposalIntakeListActionText(
@@ -2101,6 +2121,20 @@ class ProposalIntakeProgressStep {
   final String statusText;
   final String time;
   final ProposalIntakeProgressState state;
+
+  ProposalIntakeProgressStep copyWith({
+    String? statusText,
+    String? time,
+  }) => ProposalIntakeProgressStep(
+    id: id,
+    title: title,
+    role: role,
+    name: name,
+    action: action,
+    statusText: statusText ?? this.statusText,
+    time: time ?? this.time,
+    state: state,
+  );
 }
 
 int proposalIntakeStageRank(String stage) {
@@ -2279,16 +2313,15 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
     bool techRound = false,
     bool rejected = false,
     bool completed = false,
+    bool active = true,
   }) {
     if (rejected || (reviewRejected && rejectSection == flagKey)) {
       return ProposalIntakeProgressState.rejected;
     }
     if (completed || flag(flagKey)) return ProposalIntakeProgressState.done;
     if (inReview) {
-      if (inTechReview && !techRound) {
-        return flag(flagKey)
-            ? ProposalIntakeProgressState.done
-            : ProposalIntakeProgressState.pending;
+      if ((inTechReview && !techRound) || !active) {
+        return ProposalIntakeProgressState.pending;
       }
       return ProposalIntakeProgressState.current;
     }
@@ -2312,19 +2345,13 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
   final initiateState = finished || !leftFilling
       ? ProposalIntakeProgressState.done
       : ProposalIntakeProgressState.current;
-  final contractsDone = purchase
-      ? flag('purchaseContractCompleted')
-      : flag('purchaseContractCompleted') && flag('salesContractCompleted');
-  final finance2Done = purchase
-      ? contractsDone
-      : flag('financeCompleted') ||
-            (contractsDone && proposalIntakeFinanceLineItemsReviewed(row));
+  final finance2Done = proposalIntakeFinance2ReviewDone(row);
   final contractRejected =
       rejectSection == 'purchaseContractCompleted' ||
       rejectSection == 'salesContractCompleted' ||
       rejectSection.startsWith('contractItem');
 
-  return [
+  final steps = [
     person(
       id: 'initiate',
       role: '提交人',
@@ -2391,6 +2418,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
         'purchaseContractCompleted',
         rejected: contractRejected,
         completed: finance2Done,
+        active: !finance2Done,
       ),
       time: reviewedAt,
     ),
@@ -2400,7 +2428,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
         role: '财务部负责人一',
         name: ownerName('financeOwner1'),
         action: '整板块复核财务',
-        state: reviewerState('financeCompleted'),
+        state: reviewerState('financeCompleted', active: finance2Done),
         time: reviewedAt,
       ),
     person(
@@ -2433,6 +2461,21 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
           ? ProposalIntakeProgressState.done
           : ProposalIntakeProgressState.pending,
     ),
+  ];
+  final parallelReview = [
+    for (final step in steps)
+      if (step.state == ProposalIntakeProgressState.current &&
+          step.id.startsWith('review_'))
+        step,
+  ];
+  if (parallelReview.length <= 1) return steps;
+  return [
+    for (final step in steps)
+      if (step.state == ProposalIntakeProgressState.current &&
+          step.id.startsWith('review_'))
+        step.copyWith(statusText: '待复核', time: '')
+      else
+        step,
   ];
 }
 
@@ -2701,7 +2744,10 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeRemindRecipients({
       final flags = <String>[
         if (!done('marketCompleted')) 'marketCompleted',
         if (!done('technologyCompleted')) 'technologyCompleted',
-        if (!purchase && !done('financeCompleted')) 'financeCompleted',
+        if (!purchase &&
+            !done('financeCompleted') &&
+            proposalIntakeFinance2ReviewDone(row))
+          'financeCompleted',
         if (!done('purchaseContractCompleted')) 'purchaseContractCompleted',
         if (!purchase && !done('salesContractCompleted'))
           'salesContractCompleted',
@@ -2867,6 +2913,12 @@ String proposalIntakeStatusLabel(String status) {
     'filling' => '填写中',
     _ => '草稿',
   };
+}
+
+/// 列表和详情共用的状态标签。粗状态仍用 [status]，子阶段用 [ProposalIntakeRow.resolvedStage]。
+String proposalIntakeStatusChipLabel(ProposalIntakeRow row) {
+  if (row.resolvedStage == 'awaiting_submit') return '待通知最终人';
+  return proposalIntakeStatusLabel(row.status);
 }
 
 /// 把后端 UTC 时间转成本地时间，去掉 `Z` / 毫秒，列表展示用。
@@ -3574,6 +3626,19 @@ String proposalIntakeNormalizeSettleRatio(Object? raw) {
   final n = double.tryParse(cleaned);
   if (n == null) return cleaned;
   return _proposalIntakeFormatDecimalRatio(n / 100);
+}
+
+/// 渠道已有产品的结算比例本身已是小数（如 `0.975`），不要再当成百分数除 100。
+/// 仅兼容旧目录里大于 1 的百分数写法（如 `98.5` → `0.985`）和带 `%` 的值。
+String proposalIntakeSettleRatioFromCatalog(Object? raw) {
+  final text = catalogScalarText(raw);
+  if (text.isEmpty) return '';
+  if (text.contains('%')) return proposalIntakeNormalizeSettleRatio(text);
+  final n = double.tryParse(text);
+  if (n != null && n > 1) {
+    return proposalIntakeNormalizeSettleRatio('$text%');
+  }
+  return proposalIntakeNormalizeSettleRatio(text);
 }
 
 String _proposalIntakeFormatDecimalRatio(double n) {
@@ -4499,9 +4564,7 @@ ProposalFinanceSettleTerms proposalIntakeTermsFromChannelSettlementItem(
       ? item.invoiceTypeCode
       : item.invoiceTypeName;
   final tax = item.taxRateCode.isNotEmpty ? item.taxRateCode : item.taxRateName;
-  final ratio = proposalIntakeNormalizeSettleRatio(
-    catalogScalarText(item.settlementRatio, percent: true),
-  );
+  final ratio = proposalIntakeSettleRatioFromCatalog(item.settlementRatio);
   final unitPrice = catalogScalarText(item.unitPrice);
   return ProposalFinanceSettleTerms(
     billType: billTypeRef?.name ?? '',
@@ -4551,6 +4614,109 @@ List<ProposalSkuSettleRow> proposalIntakeSettlementsFromChannelCatalog(
         ),
       ),
   ];
+}
+
+class ProposalChannelPacketFill {
+  const ProposalChannelPacketFill({
+    required this.parentSettlements,
+    required this.children,
+    required this.childQuantities,
+  });
+
+  final List<ProposalSkuSettleRow> parentSettlements;
+  final List<ProposalSkuDetailRow> children;
+  final Map<String, int> childQuantities;
+
+  bool get hasChildren => children.isNotEmpty;
+}
+
+/// 把资管券包 packet-items 填进主产品结算和子产品基础信息/结算。
+ProposalChannelPacketFill proposalIntakeFillFromChannelPacket(
+  ChannelProductPacket packet, {
+  required String parentSkuId,
+  CatalogRef? parentChannel,
+  List<CatalogRef> parentFormulas = const [],
+  List<CatalogRef> parentBillTypes = const [],
+  CatalogRef? Function(String code)? syncSourceOf,
+  List<CatalogRef> Function(String syncSource)? formulasOf,
+  List<CatalogRef> Function(String syncSource)? billTypesOf,
+  String Function()? newChildId,
+}) {
+  final parentSettlements = proposalIntakeSettlementsFromChannelCatalog(
+    packet.parent,
+    fallbackChannel: parentChannel,
+    formulas: parentFormulas,
+    billTypes: parentBillTypes,
+  );
+  final children = <ProposalSkuDetailRow>[];
+  final quantities = <String, int>{};
+  for (final item in packet.items) {
+    final id = (newChildId ?? proposalIntakeNewChildSkuId)();
+    final sourceCode = item.resolvedSyncSource;
+    final sourceRef = sourceCode.isEmpty
+        ? null
+        : (syncSourceOf?.call(sourceCode) ??
+              CatalogRef(code: sourceCode, name: sourceCode));
+    final childFormulas =
+        formulasOf?.call(sourceCode) ?? const <CatalogRef>[];
+    final childBillTypes =
+        billTypesOf?.call(sourceCode) ?? const <CatalogRef>[];
+    children.add(
+      ProposalSkuDetailRow(
+        id: id,
+        productName: item.product.label,
+        existingBuilt: '是',
+        parentSkuId: parentSkuId,
+        syncSourceRef: sourceRef,
+        channelRef: item.product.channelRef,
+        assetProduct: item.product.isEmpty ? null : item.product,
+        settlements: proposalIntakeSettlementsFromChannelCatalog(
+          item.asSettlement,
+          fallbackChannel: item.product.channelRef,
+          formulas: childFormulas,
+          billTypes: childBillTypes,
+        ),
+      ),
+    );
+    quantities[id] = item.quantity < 1 ? 1 : item.quantity;
+  }
+  return ProposalChannelPacketFill(
+    parentSettlements: parentSettlements,
+    children: children,
+    childQuantities: quantities,
+  );
+}
+
+List<ProposalSkuDetailRow> proposalIntakeReplacePacketChildren({
+  required List<ProposalSkuDetailRow> current,
+  required String parentSkuId,
+  required List<ProposalSkuDetailRow> packetChildren,
+}) {
+  return [
+    for (final child in current)
+      if (child.parentSkuId.isNotEmpty && child.parentSkuId != parentSkuId)
+        child,
+    ...packetChildren,
+  ];
+}
+
+/// 券包子项若没带结算行，用该子产品自己的渠道结算规则补上。
+ChannelProductPacketItem proposalIntakeHydratePacketItemSettlements(
+  ChannelProductPacketItem item,
+  ChannelProductSettlement? data,
+) {
+  if (item.settlementItems.isNotEmpty) return item;
+  if (data == null || data.items.isEmpty) return item;
+  return item.copyWith(
+    product: item.product.isEmpty ? data.product : item.product,
+    settlementItems: data.items,
+  );
+}
+
+bool proposalIntakeSkuHasFilledSettlements(ProposalSkuDetailRow row) {
+  return proposalIntakeSkuSettlements(
+    row,
+  ).any((item) => !item.terms.isBlank);
 }
 
 bool proposalIntakeIsExistingBuilt(Map<String, dynamic> form) {

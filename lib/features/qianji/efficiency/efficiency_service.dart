@@ -17,9 +17,14 @@ class EfficiencyService {
   Future<EfficiencySnapshot> fetchOverview({
     required String scope,
     required String month,
+    String? date,
   }) async {
     final query = Uri(
-      queryParameters: <String, String>{'scope': scope, 'month': month},
+      queryParameters: <String, String>{
+        'scope': scope,
+        if (date != null && date.trim().isNotEmpty) 'date': date.trim(),
+        if (date == null || date.trim().isEmpty) 'month': month,
+      },
     ).query;
     final response = await dunesHttpGet(
       session,
@@ -29,8 +34,19 @@ class EfficiencyService {
     return EfficiencySnapshot.fromJson(_asMap(_unwrap(response)));
   }
 
-  Future<WorkSituationBoard> fetchWorkSituation({required String month}) async {
-    final query = Uri(queryParameters: <String, String>{'month': month}).query;
+  Future<WorkSituationBoard> fetchWorkSituation({
+    String? month,
+    String? date,
+  }) async {
+    final query = Uri(
+      queryParameters: <String, String>{
+        if (date != null && date.trim().isNotEmpty) 'date': date.trim(),
+        if ((date == null || date.trim().isEmpty) &&
+            month != null &&
+            month.trim().isNotEmpty)
+          'month': month.trim(),
+      },
+    ).query;
     final response = await dunesHttpGet(
       session,
       '/efficiency/work-situation?$query',
@@ -40,12 +56,17 @@ class EfficiencyService {
   }
 
   Future<WorkSituationPerson> fetchWorkSituationPerson({
-    required String month,
+    String? month,
+    String? date,
     required int userId,
   }) async {
     final query = Uri(
       queryParameters: <String, String>{
-        'month': month,
+        if (date != null && date.trim().isNotEmpty) 'date': date.trim(),
+        if ((date == null || date.trim().isEmpty) &&
+            month != null &&
+            month.trim().isNotEmpty)
+          'month': month.trim(),
         'userId': '$userId',
       },
     ).query;
@@ -78,9 +99,14 @@ class EfficiencyService {
   Future<String> exportBriefing({
     required String scope,
     required String month,
+    String? date,
   }) async {
     final query = Uri(
-      queryParameters: <String, String>{'scope': scope, 'month': month},
+      queryParameters: <String, String>{
+        'scope': scope,
+        if (date != null && date.trim().isNotEmpty) 'date': date.trim(),
+        if (date == null || date.trim().isEmpty) 'month': month,
+      },
     ).query;
     final response = await dunesHttpGet(
       session,

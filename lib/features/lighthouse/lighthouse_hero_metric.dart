@@ -1409,7 +1409,8 @@ const bool lighthouseHeroFlatCellArrowAlways = true;
 const double lighthouseHeroFlatBandHeight = 26;
 const int lighthouseHeroFlatBandAlpha = 10;
 
-const double lighthouseHeroSummaryTitleFontSize = 13.5;
+/// 卡标题（产品汇总 / 供给方汇总…）走字号阶梯的 16 档，压过分区标题。
+const double lighthouseHeroSummaryTitleFontSize = 16;
 const double lighthouseHeroSummaryIconSize = 20;
 const double lighthouseHeroSummaryIconRadius = 6;
 const double lighthouseHeroSummaryRangeFontSize = 11;

@@ -15734,15 +15734,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             Container(
               width: lighthouseHeroSummaryIconSize,
               height: lighthouseHeroSummaryIconSize,
+              // 卡标题是这一屏层级最高的字：图标片走实心 + 白图标，
+              // 不能比下面「规模 / 成本 / 利润」的实心小片还淡。
               decoration: BoxDecoration(
-                color: summaryAccent.withAlpha(24),
+                color: summaryAccent,
                 borderRadius: BorderRadius.circular(
                   lighthouseHeroSummaryIconRadius,
                 ),
               ),
-              child: Icon(summaryIcon, size: 12, color: summaryAccent),
+              child: Icon(summaryIcon, size: 12, color: LhColors.paper),
             ),
-            const SizedBox(width: 7),
+            const SizedBox(width: 8),
             // 左组：标题 + 真实区间 + 分类筛选；右端挂同步落款。
             Expanded(
               child: Row(
@@ -15755,7 +15757,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       style: LhTypography.sans(
                         size: lighthouseHeroSummaryTitleFontSize,
                         color: LhColors.ink,
-                        weight: FontWeight.w600,
+                        weight: FontWeight.w700,
                         letterSpacing: 0,
                         height: 1.1,
                       ),
@@ -15770,8 +15772,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       style: _tabular(
                         LhTypography.mono(
                           size: lighthouseHeroSummaryRangeFontSize,
-                          color: LhColors.ink2,
-                          weight: FontWeight.w600,
+                          // 日期是标题的注脚：退到灰、减一档字重，别跟标题抢。
+                          color: LhColors.mute,
+                          weight: FontWeight.w500,
                           letterSpacing: 0.2,
                           height: 1.1,
                         ),
@@ -19169,24 +19172,37 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ),
             child: interactive ? IgnorePointer(child: cellBody) : cellBody,
           )
-        // 追溯态：被点的格子填淡紫，来源格描边点亮并挂角标，其余压暗。
-        // 内边距常驻，只切边框和底色，点亮时格子不会跳。
+        // 追溯态：来源格描边点亮并挂角标，其余压暗。
+        // 被点的格子与下方列表账本格同一套「浮起」：白底 + 淡紫细边 + 轻投影，
+        // 不再铺淡紫 + 实心紫边。
+        // 内边距常驻，只切边框、底色和投影，点亮时格子不会跳。
         : AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOut,
             // 上下 3、格间距 0：视觉行距仍是 6，但两格之间不再有 2px 点不中的缝，
             // 每格热区上下各多 1px。
             padding: const EdgeInsets.fromLTRB(4, 3, 2, 3),
             decoration: BoxDecoration(
               color: isTraceOpen || isActive
-                  ? _LhPlum.mist
+                  ? Colors.white
                   : (isTraceSource ? LhColors.paper : Colors.transparent),
               border: Border.all(
-                color: isTraceOpen || isTraceSource || isActive
-                    ? _LhPlum.primary
-                    : Colors.transparent,
+                color: isTraceOpen || isActive
+                    ? _LhPlum.primary.withAlpha(46)
+                    : (isTraceSource ? _LhPlum.primary : Colors.transparent),
+                // 宽度常驻 1：边框会挤内容，切粗细格子会跳半像素。
                 width: 1,
               ),
               borderRadius: BorderRadius.circular(8),
+              boxShadow: isTraceOpen || isActive
+                  ? [
+                      BoxShadow(
+                        color: _LhPlum.deep.withAlpha(28),
+                        blurRadius: 6,
+                        offset: const Offset(0, 1.5),
+                      ),
+                    ]
+                  : null,
             ),
             // 格子里的标签/数字是会横向滚的（LhScrollText 自带横拖手势）。
             // 一格就那么点宽，手指按下时横向蹭出 slop，横拖就赢了手势竞技场，

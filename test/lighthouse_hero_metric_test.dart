@@ -1908,7 +1908,7 @@ void main() {
       '2026.08.28 09:49',
     );
     expect(lighthouseHeroShowsLiveMetadata, isFalse);
-    expect(lighthouseHeroSummaryTitleFontSize, 13.5);
+    expect(lighthouseHeroSummaryTitleFontSize, 16);
     expect(lighthouseHeroSummaryIconSize, 20);
     expect(lighthouseHeroSummaryIconRadius, 6);
     expect(lighthouseHeroSummaryIconKey('产品汇总'), 'product');

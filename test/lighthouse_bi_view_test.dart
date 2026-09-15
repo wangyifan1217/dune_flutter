@@ -17,7 +17,7 @@ LhBiViewPage _page({
   )?
   breakdownFor,
   List<Map<String, dynamic>>? Function(String dim, String window)?
-      windowRowsFor,
+  windowRowsFor,
 }) {
   return LhBiViewPage(
     initialDim: initialDim,
@@ -48,7 +48,7 @@ LhBiViewPage _page({
           },
           rows: const <Map<String, dynamic>>[],
         ),
-        onClose: onClose,
+    onClose: onClose,
     topChrome: topChrome,
     periodBar: periodBar,
     loading: loading,
@@ -67,18 +67,9 @@ void main() {
       lighthouseBiDimToLoad(biDim: 'people', fallback: 'product'),
       'people',
     );
-    expect(
-      lighthouseBiDimToLoad(biDim: 'netTa', fallback: 'product'),
-      'netTa',
-    );
-    expect(
-      lighthouseBiDimToLoad(biDim: null, fallback: 'channel'),
-      'channel',
-    );
-    expect(
-      lighthouseBiDimToLoad(biDim: '  ', fallback: 'supply'),
-      'supply',
-    );
+    expect(lighthouseBiDimToLoad(biDim: 'netTa', fallback: 'product'), 'netTa');
+    expect(lighthouseBiDimToLoad(biDim: null, fallback: 'channel'), 'channel');
+    expect(lighthouseBiDimToLoad(biDim: '  ', fallback: 'supply'), 'supply');
   });
 
   test('构成图把同名未分类合成一片，图例 key 带序号', () {
@@ -104,6 +95,30 @@ void main() {
     expect(slices.fold<double>(0, (s, e) => s + e.value), 13700);
     expect(lhBiSignedTotal(values.map((e) => e.scale)), 12700);
     expect(lhBiParts(12700, isRate: false).text, '1.3');
+  });
+
+  test('点中构成扇区时圆心切到该块的名称和数值', () {
+    const slices = <({String name, double value})>[
+      (name: '中石化现金券', value: 8100),
+      (name: '出行金', value: 5600),
+    ];
+    final idle = lhBiDonutCenter(
+      totalLabel: '净利润',
+      totalValue: 12700,
+      selectedName: null,
+      slices: slices,
+    );
+    expect(idle.label, '净利润');
+    expect(idle.value, 12700);
+
+    final hit = lhBiDonutCenter(
+      totalLabel: '净利润',
+      totalValue: 12700,
+      selectedName: '出行金',
+      slices: slices,
+    );
+    expect(hit.label, '出行金');
+    expect(hit.value, 5600);
   });
 
   test('构成图默认列出全部产品，不折进其他项', () {
@@ -195,10 +210,7 @@ void main() {
             periodBar: Row(
               children: [
                 for (final p in const ['日', '周', '月', '季', '年'])
-                  GestureDetector(
-                    onTap: () => period = p,
-                    child: Text(p),
-                  ),
+                  GestureDetector(onTap: () => period = p, child: Text(p)),
               ],
             ),
           ),
@@ -258,11 +270,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: _page(loading: true),
-        ),
-      ),
+      MaterialApp(home: Scaffold(body: _page(loading: true))),
     );
     await tester.pump();
 

@@ -617,6 +617,39 @@ class ConversationService {
     );
   }
 
+  /// 确保绩效助手只读会话存在。
+  Future<NativeConversation> ensureKpiAssistantSession() async {
+    Future<http.Response> post(String path) =>
+        _client.post(_uri(path), headers: _headers, body: '{}');
+    var resp = await post('/kpi/assistant/sessions/ensure');
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      resp = await post('/conversations/kpi-assistant/ensure');
+    }
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('打开绩效助手失败: HTTP ${resp.statusCode}');
+    }
+    final body = _decode(resp.body);
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '打开绩效助手失败').toString());
+    }
+    final data = body['data'];
+    final map = data is Map<String, dynamic>
+        ? data
+        : data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    final convId = (map['conversationId'] as num?)?.toInt() ?? 0;
+    if (convId <= 0) throw Exception('empty conversationId');
+    return NativeConversation(
+      id: convId,
+      kind: 'KPI_ASSISTANT',
+      title: (map['title'] ?? '绩效助手').toString(),
+      unreadCount: 0,
+      preview: '',
+      updatedAt: DateTime.now(),
+    );
+  }
+
   /// 确保每位用户都有唯一的文件传输助手会话。
   Future<NativeConversation> ensureSelfMemoSession() async {
     final resp = await _client.post(
@@ -2144,7 +2177,9 @@ class ConversationService {
       final preview = content.length > 160
           ? content.substring(0, 160)
           : content;
-      debugPrint('[ConversationService] json decode failed: $e preview=$preview');
+      debugPrint(
+        '[ConversationService] json decode failed: $e preview=$preview',
+      );
       throw Exception('数据解析失败，请稍后重试');
     }
   }
@@ -2322,7 +2357,8 @@ class ConversationService {
     Map<String, dynamic> raw,
     Map<String, dynamic> peerMap,
   ) {
-    final value = raw['peerEnabled'] ?? raw['peer_enabled'] ?? peerMap['enabled'];
+    final value =
+        raw['peerEnabled'] ?? raw['peer_enabled'] ?? peerMap['enabled'];
     if (value == false || value == 0 || value == '0') return false;
     final text = value?.toString().trim().toLowerCase();
     if (text == 'false' || text == 'disabled') return false;
@@ -2453,8 +2489,9 @@ class ConversationService {
                 '')
             .toString()
             .trim();
-    final previewField =
-        (raw['lastMessagePreview'] ?? raw['preview'] ?? '').toString().trim();
+    final previewField = (raw['lastMessagePreview'] ?? raw['preview'] ?? '')
+        .toString()
+        .trim();
     // 服务端 lastMessagePreview 可能已把「测试.jpg」压成「发送了一张图片」，
     // 有消息正文时以正文 + kind 重新摘要。
     final rawText = lastBody.isNotEmpty

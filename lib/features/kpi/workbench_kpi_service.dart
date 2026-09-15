@@ -85,17 +85,17 @@ class WorkbenchKpiTask {
   }
 
   Map<String, dynamic> toInputJson() => {
-        'userId': userId,
-        'name': name.trim(),
-        'content': content.trim(),
-        'province': province.trim(),
-        'taskType': taskType.trim(),
-        'startDate': startDate.trim(),
-        'endDate': endDate.trim(),
-        'tagName': tagName.trim(),
-        'isCounted': isCounted,
-        'isReported': isReported,
-      };
+    'userId': userId,
+    'name': name.trim(),
+    'content': content.trim(),
+    'province': province.trim(),
+    'taskType': taskType.trim(),
+    'startDate': startDate.trim(),
+    'endDate': endDate.trim(),
+    'tagName': tagName.trim(),
+    'isCounted': isCounted,
+    'isReported': isReported,
+  };
 
   WorkbenchKpiTask copyWith({
     int? id,
@@ -144,16 +144,75 @@ class WorkbenchKpiOverrideItem {
   final String remark;
 
   Map<String, dynamic> toJson() => {
-        'taskId': taskId,
-        if (weightPct != null) 'weightPct': weightPct,
-        if (scoreAdj != null) 'scoreAdj': scoreAdj,
-        'remark': remark.trim(),
-      };
+    'taskId': taskId,
+    if (weightPct != null) 'weightPct': weightPct,
+    if (scoreAdj != null) 'scoreAdj': scoreAdj,
+    'remark': remark.trim(),
+  };
+}
+
+class WorkbenchKpiRubricItem {
+  const WorkbenchKpiRubricItem({
+    required this.key,
+    required this.points,
+    this.remark = '',
+  });
+
+  final String key;
+  final double points;
+  final String remark;
+
+  Map<String, dynamic> toJson() => {
+    'key': key,
+    'points': points,
+    'remark': remark.trim(),
+  };
+}
+
+class WorkbenchKpiRubricImportResult {
+  const WorkbenchKpiRubricImportResult({
+    required this.month,
+    this.imported = 0,
+    this.skipped = 0,
+    this.people = const [],
+    this.teamHint = '',
+  });
+
+  final String month;
+  final int imported;
+  final int skipped;
+  final List<String> people;
+  final String teamHint;
+
+  factory WorkbenchKpiRubricImportResult.fromJson(Map<String, dynamic> json) {
+    final rows = json['people'] as List? ?? const [];
+    final team = json['team'];
+    var teamHint = '';
+    if (team is Map) {
+      final name = '${team['departmentName'] ?? ''}';
+      final coef = team['coefficient'];
+      final project = team['projectScore'];
+      if (name.isNotEmpty) {
+        teamHint = '$name 团队系数 $coef（项目 $project）';
+      }
+    }
+    return WorkbenchKpiRubricImportResult(
+      month: '${json['month'] ?? ''}',
+      imported: (json['imported'] as num?)?.toInt() ?? 0,
+      skipped: (json['skipped'] as num?)?.toInt() ?? 0,
+      people: [
+        for (final row in rows)
+          if (row is Map)
+            '${row['userName'] ?? ''} ${row['message'] ?? ''}'.trim(),
+      ],
+      teamHint: teamHint,
+    );
+  }
 }
 
 class WorkbenchKpiService {
   WorkbenchKpiService({required this.session, http.Client? client})
-      : _client = client;
+    : _client = client;
 
   final AuthSession session;
   final http.Client? _client;
@@ -174,13 +233,11 @@ class WorkbenchKpiService {
   }
 
   Future<WorkbenchKpiAccess> fetchAccess() async {
-    final resp = await dunesHttpGet(
-      session,
-      '/kpi/access',
-      client: _client,
-    );
+    final resp = await dunesHttpGet(session, '/kpi/access', client: _client);
     final data = _unwrap(resp);
-    final map = data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
     return WorkbenchKpiAccess(allowed: map['allowed'] == true);
   }
 
@@ -196,7 +253,11 @@ class WorkbenchKpiService {
     final qs = query.isEmpty
         ? ''
         : '?${query.entries.map((e) => '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}').join('&')}';
-    final resp = await dunesHttpGet(session, '/kpi/my-tasks$qs', client: _client);
+    final resp = await dunesHttpGet(
+      session,
+      '/kpi/my-tasks$qs',
+      client: _client,
+    );
     final data = _unwrap(resp);
     final rows = data is List ? data : const [];
     return rows
@@ -294,7 +355,9 @@ class WorkbenchKpiService {
       client: _client,
     );
     final data = _unwrap(resp);
-    final map = data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
     return WorkProfileKpiScore.fromJson(map);
   }
 
@@ -322,12 +385,16 @@ class WorkbenchKpiService {
     final query = <String, String>{'month': month.trim()};
     if (userId > 0) query['userId'] = '$userId';
     final qs = query.entries
-        .map((e) =>
-            '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}')
+        .map(
+          (e) =>
+              '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}',
+        )
         .join('&');
     final resp = await dunesHttpGet(session, '/kpi/score?$qs', client: _client);
     final data = _unwrap(resp);
-    final map = data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
     return WorkProfileKpiScore.fromJson(map);
   }
 
@@ -347,7 +414,72 @@ class WorkbenchKpiService {
       client: _client,
     );
     final data = _unwrap(resp);
-    final map = data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    return WorkProfileKpiScore.fromJson(map);
+  }
+
+  Future<WorkProfileKpiScore> saveRubricScore({
+    required String month,
+    required int userId,
+    required List<WorkbenchKpiRubricItem> items,
+  }) async {
+    final resp = await dunesHttpPut(
+      session,
+      '/kpi/rubric-score',
+      body: jsonEncode({
+        'month': month.trim(),
+        'userId': userId,
+        'items': [for (final item in items) item.toJson()],
+      }),
+      client: _client,
+    );
+    final data = _unwrap(resp);
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    return WorkProfileKpiScore.fromJson(map);
+  }
+
+  Future<WorkbenchKpiRubricImportResult> importRubricScore({
+    required String month,
+    required List<int> bytes,
+    required String fileName,
+  }) async {
+    final req = http.MultipartRequest(
+      'POST',
+      dunesApiUri(
+        session,
+        '/kpi/rubric-score/import',
+      ).replace(queryParameters: {'month': month.trim()}),
+    );
+    req.headers['Authorization'] = 'Bearer ${session.token}';
+    req.headers['Accept'] = 'application/json';
+    req.files.add(
+      http.MultipartFile.fromBytes('file', bytes, filename: fileName),
+    );
+    final c = _client ?? http.Client();
+    final streamed = await c.send(req);
+    final resp = await http.Response.fromStream(streamed);
+    final data = _unwrap(resp);
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    return WorkbenchKpiRubricImportResult.fromJson(map);
+  }
+
+  Future<WorkProfileKpiScore> ackRubricScore({required String month}) async {
+    final q = '?month=${Uri.encodeQueryComponent(month.trim())}';
+    final resp = await dunesHttpPost(
+      session,
+      '/kpi/rubric-ack$q',
+      client: _client,
+    );
+    final data = _unwrap(resp);
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
     return WorkProfileKpiScore.fromJson(map);
   }
 
@@ -363,7 +495,9 @@ class WorkbenchKpiService {
     final rows = data is List ? data : const [];
     return rows
         .whereType<Map>()
-        .map((e) => WorkbenchKpiPersonRef.fromJson(Map<String, dynamic>.from(e)))
+        .map(
+          (e) => WorkbenchKpiPersonRef.fromJson(Map<String, dynamic>.from(e)),
+        )
         .where((e) => e.userId > 0 && e.displayName.isNotEmpty)
         .toList();
   }

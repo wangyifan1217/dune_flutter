@@ -150,7 +150,8 @@ class LhBiReport {
 
   static LhBiReport? fromJson(Map<String, dynamic>? json) {
     if (json == null) return null;
-    final health = (json['health'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final health =
+        (json['health'] as Map?)?.cast<String, dynamic>() ?? const {};
     final rawLines = json['lines'];
     final lines = <String>[];
     if (rawLines is List) {
@@ -169,7 +170,9 @@ class LhBiReport {
       healthScore: (health['score'] as num?)?.toInt() ?? 0,
       lines: lines,
       generatedAt:
-          DateTime.tryParse(json['generated_at']?.toString() ?? '')?.toLocal() ??
+          DateTime.tryParse(
+            json['generated_at']?.toString() ?? '',
+          )?.toLocal() ??
           DateTime.now(),
       dataThrough: json['data_through']?.toString() ?? '',
       degraded: json['degraded'] == true,
@@ -337,6 +340,21 @@ List<({String name, double value})> lhBiBuildCompositionSlices(
   return slices;
 }
 
+/// 构成图圆心：未选扇区时显示合计，点中一块后换成这一块的名称和数值。
+({String label, double value}) lhBiDonutCenter({
+  required String totalLabel,
+  required double totalValue,
+  required String? selectedName,
+  required List<({String name, double value})> slices,
+}) {
+  final name = selectedName?.trim() ?? '';
+  if (name.isEmpty) return (label: totalLabel, value: totalValue);
+  for (final slice in slices) {
+    if (slice.name == name) return (label: slice.name, value: slice.value);
+  }
+  return (label: totalLabel, value: totalValue);
+}
+
 String lhBiValue(double v, {required bool isRate}) {
   final p = lhBiParts(v, isRate: isRate);
   return '${p.text}${p.unit}';
@@ -464,7 +482,10 @@ class LhBiViewPage extends StatefulWidget {
   final List<String> Function(String dim) categoriesFor;
 
   /// 单行某指标的环比。返回 null = 后端没给同期对齐的值，显示「—」而不是编一个。
-  final ({double pct, bool isUp})? Function(Map<String, dynamic> row, String key)
+  final ({double pct, bool isUp})? Function(
+    Map<String, dynamic> row,
+    String key,
+  )
   metricDelta;
 
   /// 某个实体拆到交叉维（产品/供给/渠道）。[breakKey] 是要看的那一维。
@@ -506,7 +527,7 @@ class LhBiViewPage extends StatefulWidget {
   /// 日历「今天 / 本月」的行，用来画构成图例的本日新增、本月新增。
   /// [window] 为 `day` 或 `month`。返回 null = 还没拉到，显示「—」。
   final List<Map<String, dynamic>>? Function(String dim, String window)?
-      windowRowsFor;
+  windowRowsFor;
 
   /// 取这一维（[entity] 为空 = 整体）当前期间的报告。null = 还没有。
   /// 宿主自己留缓存 —— 页面重建不该让报告重新生成一份。
@@ -517,7 +538,7 @@ class LhBiViewPage extends StatefulWidget {
 
   /// 去要一份报告。[force] = 用户点了卡片右下角的刷新，后端绕过缓存重跑模型。
   final Future<void> Function(String dim, String entity, bool force)?
-      requestReport;
+  requestReport;
 
   @override
   State<LhBiViewPage> createState() => _LhBiViewPageState();
@@ -538,7 +559,10 @@ class _LhBiViewPageState extends State<LhBiViewPage>
   List<String> get _dims {
     final given = widget.dims;
     if (given == null || given.isEmpty) return kAllDims;
-    final out = [for (final d in kAllDims) if (given.contains(d)) d];
+    final out = [
+      for (final d in kAllDims)
+        if (given.contains(d)) d,
+    ];
     return out.isEmpty ? kAllDims : out;
   }
 
@@ -674,17 +698,17 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               ? ((r['netTa'] as num?)?.toDouble() ?? value)
               : ((r['profit'] as num?)?.toDouble() ?? 0),
           delta: widget.metricDelta(r, _metric.key)?.pct,
-          profitDelta: widget.metricDelta(r, _isNetTa ? 'netTa' : 'profit')?.pct,
+          profitDelta: widget
+              .metricDelta(r, _isNetTa ? 'netTa' : 'profit')
+              ?.pct,
         ),
       );
     }
     return out;
   }
 
-  /// 点构成图的扇区 → 展开该项的交叉维拆分；再点一次收起。
+  /// 点构成图的扇区 → 圆心切到这一块；有交叉维时同时展开拆分。再点一次收回。
   Future<void> _toggleDrill(String name) async {
-    // 净TA 没有交叉维，点扇区不该进入一个永远空着的下钻面板。
-    if (lhBiCrossDims(_dim).isEmpty) return;
     HapticFeedback.selectionClick();
     if (_drillName == name) {
       setState(() => _drillName = null);
@@ -692,13 +716,15 @@ class _LhBiViewPageState extends State<LhBiViewPage>
       _askReport();
       return;
     }
+    final canBreak = lhBiCrossDims(_dim).isNotEmpty;
     setState(() {
       _drillName = name;
-      _drillBusy = true;
+      _drillBusy = canBreak;
     });
     _replayPenetrate();
     // 点中一片 → 这一片自己的报告。整体那份留在缓存里，点回去还是它。
     _askReport();
+    if (!canBreak) return;
     final req = widget.requestBreakdown;
     if (req != null) {
       try {
@@ -762,27 +788,27 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             ),
             physics: const BouncingScrollPhysics(),
             children: [
-                  _controlCard(),
+              _controlCard(),
+              const SizedBox(height: lighthouseHeroCardGap),
+              if (items.isEmpty)
+                widget.loading ? _loadingCard() : _emptyCard()
+              // 净TA 走自己那套仪表：它问的是「钱怎么流的」，
+              // 不是「谁占多少份额」，套账本那四张图只会越看越糊。
+              else if (_isNetTa) ...[
+                ..._netTaCards(items),
+              ] else ...[
+                _heroCard(items),
+                const SizedBox(height: lighthouseHeroCardGap),
+                _statRow(items),
+                const SizedBox(height: lighthouseHeroCardGap),
+                _compositionCard(items),
+                if (_showTable) ...[
                   const SizedBox(height: lighthouseHeroCardGap),
-                  if (items.isEmpty)
-                    widget.loading ? _loadingCard() : _emptyCard()
-                  // 净TA 走自己那套仪表：它问的是「钱怎么流的」，
-                  // 不是「谁占多少份额」，套账本那四张图只会越看越糊。
-                  else if (_isNetTa) ...[
-                    ..._netTaCards(items),
-                  ] else ...[
-                    _heroCard(items),
-                    const SizedBox(height: lighthouseHeroCardGap),
-                    _statRow(items),
-                    const SizedBox(height: lighthouseHeroCardGap),
-                    _compositionCard(items),
-                    if (_showTable) ...[
-                      const SizedBox(height: lighthouseHeroCardGap),
-                      _tableCard(items),
-                    ],
-                  ],
-                  const SizedBox(height: 14),
-                  _footnote(),
+                  _tableCard(items),
+                ],
+              ],
+              const SizedBox(height: 14),
+              _footnote(),
             ],
           ),
         ),
@@ -831,9 +857,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
       padding: const EdgeInsets.fromLTRB(14, 10, 10, 11),
       decoration: const BoxDecoration(
         color: LhColors.paper,
-        border: Border(
-          bottom: BorderSide(color: LhColors.line2, width: 0.5),
-        ),
+        border: Border(bottom: BorderSide(color: LhColors.line2, width: 0.5)),
       ),
       child: Row(
         children: [
@@ -857,10 +881,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
           ),
           const SizedBox(width: 8),
           Flexible(
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: _rangePill(),
-            ),
+            child: Align(alignment: Alignment.centerRight, child: _rangePill()),
           ),
           const SizedBox(width: 8),
           _roundIcon(
@@ -971,10 +992,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
           Row(
             children: [
               for (final d in _dims) Expanded(child: _dimCell(d)),
-              if (_isNetTa) ...[
-                const SizedBox(width: 4),
-                _tableToggle(),
-              ],
+              if (_isNetTa) ...[const SizedBox(width: 4), _tableToggle()],
             ],
           ),
           // 净TA 之下没有分类条也没有指标条，那条分隔线就没有东西可分隔了。
@@ -1601,6 +1619,12 @@ class _LhBiViewPageState extends State<LhBiViewPage>
     final top = slices.first;
     final topPct = ringTotal > 0 ? top.value / ringTotal * 100 : 0.0;
     final scaleLabel = _metric.isRate ? '销售额' : _metric.label;
+    final center = lhBiDonutCenter(
+      totalLabel: scaleLabel,
+      totalValue: centerTotal,
+      selectedName: _drillName,
+      slices: [for (final s in slices) (name: s.name, value: s.value)],
+    );
 
     return _chartCard(
       sectionKey: 'scale',
@@ -1639,8 +1663,8 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                         slices: slices,
                         total: ringTotal,
                         progress: Curves.easeOutCubic.transform(_anim.value),
-                        centerLabel: scaleLabel,
-                        centerParts: lhBiParts(centerTotal, isRate: false),
+                        centerLabel: center.label,
+                        centerParts: lhBiParts(center.value, isRate: false),
                         selected: _drillName,
                       ),
                       size: Size.infinite,
@@ -1670,8 +1694,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             // 中间不能再隔十几行图例。
             _drillPanel(),
             const SizedBox(height: 10),
-            if (_showsWindowIncrements || slices.isNotEmpty)
-              _legendHeader(),
+            if (_showsWindowIncrements || slices.isNotEmpty) _legendHeader(),
             for (var i = 0; i < slices.length; i++)
               _legendRow(slices[i], ringTotal, i),
             if (lossItems.isNotEmpty)
@@ -1855,7 +1878,9 @@ class _LhBiViewPageState extends State<LhBiViewPage>
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Text(
-          busy ? '正在生成${_reportGrainGuess}…' : '还没有${_reportGrainGuess}，点右下角生成。',
+          busy
+              ? '正在生成${_reportGrainGuess}…'
+              : '还没有${_reportGrainGuess}，点右下角生成。',
           style: _mono(size: 9.5, color: LhColors.mute2, spacing: 0.1),
         ),
       );
@@ -1878,7 +1903,9 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             // 三句错开一点进场。一起亮起来只是一次闪，错开才读得出先后。
             opacity: ((t - i * 0.12) / 0.5).clamp(0.0, 1.0),
             child: Padding(
-              padding: EdgeInsets.only(bottom: i == rep.lines.length - 1 ? 0 : 5),
+              padding: EdgeInsets.only(
+                bottom: i == rep.lines.length - 1 ? 0 : 5,
+              ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -2018,10 +2045,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
     }
     rows.sort((a, c) => c.value.abs().compareTo(a.value.abs()));
     final shown = rows.take(12).toList();
-    final maxAbs = shown.fold<double>(
-      0,
-      (m, e) => math.max(m, e.value.abs()),
-    );
+    final maxAbs = shown.fold<double>(0, (m, e) => math.max(m, e.value.abs()));
 
     Widget body;
     if (_drillBusy && shown.isEmpty) {
@@ -2175,7 +2199,12 @@ class _LhBiViewPageState extends State<LhBiViewPage>
     }
   }
 
-  Widget _legendNumCell(double width, String text, {Color? color, double size = 10}) {
+  Widget _legendNumCell(
+    double width,
+    String text, {
+    Color? color,
+    double size = 10,
+  }) {
     return SizedBox(
       width: width,
       child: Text(
@@ -2280,7 +2309,9 @@ class _LhBiViewPageState extends State<LhBiViewPage>
     final drillable = s.color != LhBiPalette.other;
     final on = drillable && _drillName == s.name;
     final day = _showsWindowIncrements ? _windowMetric(s.name, 'day') : null;
-    final month = _showsWindowIncrements ? _windowMetric(s.name, 'month') : null;
+    final month = _showsWindowIncrements
+        ? _windowMetric(s.name, 'month')
+        : null;
     return GestureDetector(
       key: ValueKey(lhBiLegendKey(s.name, index)),
       behavior: HitTestBehavior.opaque,
@@ -2364,8 +2395,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
       final name = r['name']?.toString().trim() ?? '';
       if (name.isEmpty) continue;
       final net = (r['netTa'] as num?)?.toDouble() ?? 0;
-      final inflow =
-          (r['inflow'] as num?)?.toDouble() ?? (net > 0 ? net : 0.0);
+      final inflow = (r['inflow'] as num?)?.toDouble() ?? (net > 0 ? net : 0.0);
       // outflow 在数据层就是负数（见 lighthousePrepareNetTARows），别再取反。
       final outflow =
           (r['outflow'] as num?)?.toDouble() ?? (net < 0 ? net : 0.0);
@@ -2437,12 +2467,12 @@ class _LhBiViewPageState extends State<LhBiViewPage>
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: _mono(size: 8.5, color: LhBiFlow.mute, spacing: 0.8)),
-        const SizedBox(height: 4),
         Text(
-          value,
-          style: LhTypography.number(size: 15, color: color),
+          label,
+          style: _mono(size: 8.5, color: LhBiFlow.mute, spacing: 0.8),
         ),
+        const SizedBox(height: 4),
+        Text(value, style: LhTypography.number(size: 15, color: color)),
       ],
     );
 
@@ -2597,13 +2627,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
       );
     }
     steps.add(
-      _WaterfallStep(
-        name: '净额',
-        value: cum,
-        start: 0,
-        end: cum,
-        isTotal: true,
-      ),
+      _WaterfallStep(name: '净额', value: cum, start: 0, end: cum, isTotal: true),
     );
     if (hi - lo < 1e-9) {
       return _flowCard(
@@ -2615,9 +2639,9 @@ class _LhBiViewPageState extends State<LhBiViewPage>
 
     final biggest = buckets.isEmpty
         ? null
-        : (List<_FlowBucket>.from(buckets)
-                ..sort((a, b) => b.net.abs().compareTo(a.net.abs())))
-              .first;
+        : (List<_FlowBucket>.from(
+            buckets,
+          )..sort((a, b) => b.net.abs().compareTo(a.net.abs()))).first;
 
     return _flowCard(
       title: '五类资金瀑布',
@@ -2673,10 +2697,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
           profit: e.net,
         ),
     ];
-    final maxAbs = items.fold<double>(
-      0,
-      (m, e) => math.max(m, e.profit.abs()),
-    );
+    final maxAbs = items.fold<double>(0, (m, e) => math.max(m, e.profit.abs()));
     final top = shown.first;
 
     return _flowCard(
@@ -3050,8 +3071,6 @@ class _Slice {
   final Color color;
 }
 
-
-
 // ═══════════════════════════════════════════════════════════════════════════
 // 画笔
 // ═══════════════════════════════════════════════════════════════════════════
@@ -3128,14 +3147,16 @@ class _DonutPainter extends CustomPainter {
 
     // 段几何。动画只缩 sweep；标注按终态角度放，免得引线跟着转一圈。
     final segs =
-        <({
-          double start,
-          double sweep,
-          double full,
-          double mid,
-          Color color,
-          bool isSel,
-        })>[];
+        <
+          ({
+            double start,
+            double sweep,
+            double full,
+            double mid,
+            Color color,
+            bool isSel,
+          })
+        >[];
     var cursor = -math.pi / 2;
     var fullCursor = -math.pi / 2;
     for (final s in slices) {
@@ -3170,7 +3191,9 @@ class _DonutPainter extends CustomPainter {
       final dim = sel != null && !s.isSel;
       final off =
           Offset(0, _depth) +
-          (s.isSel ? Offset(math.cos(s.mid), math.sin(s.mid)) * 6 : Offset.zero);
+          (s.isSel
+              ? Offset(math.cos(s.mid), math.sin(s.mid)) * 6
+              : Offset.zero);
       canvas.drawArc(
         rect.shift(off),
         s.start + gap / 2,
@@ -3213,19 +3236,16 @@ class _DonutPainter extends CustomPainter {
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = w
-          ..shader =
-              LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  _shade(s.color, 0.16).withValues(alpha: a),
-                  s.color.withValues(alpha: a),
-                  _shade(s.color, -0.11).withValues(alpha: a),
-                ],
-                stops: const [0, 0.52, 1],
-              ).createShader(
-                Rect.fromCircle(center: c, radius: r + w / 2),
-              ),
+          ..shader = LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              _shade(s.color, 0.16).withValues(alpha: a),
+              s.color.withValues(alpha: a),
+              _shade(s.color, -0.11).withValues(alpha: a),
+            ],
+            stops: const [0, 0.52, 1],
+          ).createShader(Rect.fromCircle(center: c, radius: r + w / 2)),
       );
       canvas.drawArc(
         Rect.fromCircle(center: c, radius: r + w / 2 - 1),
@@ -3273,9 +3293,7 @@ class _DonutPainter extends CustomPainter {
         center + d * tickR,
         center + d * (tickR + (major ? 5.5 : 2.5)),
         Paint()
-          ..color = major
-              ? LhBiPlum.line
-              : LhBiPlum.line.withValues(alpha: 0.6)
+          ..color = major ? LhBiPlum.line : LhBiPlum.line.withValues(alpha: 0.6)
           ..strokeWidth = major ? 1.1 : 0.7,
       );
     }
@@ -3286,7 +3304,9 @@ class _DonutPainter extends CustomPainter {
       _paintCallouts(canvas, size, center, tickR, segs, fade, sel);
     }
 
-    // ⑧ 圆心读数：与 Hero 同款「大数 + 小单位」
+    // ⑧ 圆心读数：先垫一层底，引线不能穿过来压住数字。
+    final hole = (r - stroke / 2).clamp(16.0, 42.0);
+    canvas.drawCircle(center, hole, Paint()..color = Colors.white);
     final label = _tp(centerLabel, _mono(size: 9, spacing: 0.6));
     final valueTp = _tp(
       centerParts.text,
@@ -3337,8 +3357,7 @@ class _DonutPainter extends CustomPainter {
     }
     if (picked.isEmpty) return;
 
-    final entries =
-        <({int i, bool right, double y, Offset elbow})>[];
+    final entries = <({int i, bool right, double y, Offset elbow})>[];
     for (final i in picked) {
       final d = Offset(math.cos(segs[i].mid), math.sin(segs[i].mid));
       final elbow = center + d * (tickR + 15);
@@ -3353,7 +3372,17 @@ class _DonutPainter extends CustomPainter {
         var y = math.max(e.y, prev + 26);
         y = y.clamp(18.0, size.height - 18);
         prev = y;
-        _paintOneCallout(canvas, size, center, e.i, e.elbow, y, right, fade, sel);
+        _paintOneCallout(
+          canvas,
+          size,
+          center,
+          e.i,
+          e.elbow,
+          y,
+          right,
+          fade,
+          sel,
+        );
       }
     }
   }
@@ -3561,10 +3590,7 @@ class _RankBarPainter extends CustomPainter {
       final t = _tp(lhBiTick(v, isRate: isRate), _mono(size: 8.5, spacing: 0));
       t.paint(
         canvas,
-        Offset(
-          (x - t.width / 2).clamp(0.0, size.width - t.width),
-          bottom + 5,
-        ),
+        Offset((x - t.width / 2).clamp(0.0, size.width - t.width), bottom + 5),
       );
     }
   }
@@ -3666,15 +3692,9 @@ class _DivergingPainter extends CustomPainter {
     }
 
     // 轴脚注：负极 ← 0 → 正极
-    final left = _tp(
-      lossLabel,
-      _mono(size: 8.5, color: loss, spacing: 0.3),
-    );
+    final left = _tp(lossLabel, _mono(size: 8.5, color: loss, spacing: 0.3));
     final mid = _tp('0', _mono(size: 8.5, spacing: 0));
-    final right = _tp(
-      gainLabel,
-      _mono(size: 8.5, color: gain, spacing: 0.3),
-    );
+    final right = _tp(gainLabel, _mono(size: 8.5, color: gain, spacing: 0.3));
     final baseY = bottom + 5;
     left.paint(canvas, Offset(plotLeft, baseY));
     mid.paint(canvas, Offset(zeroX - mid.width / 2, baseY));
@@ -3712,11 +3732,7 @@ abstract final class LhBiFlow {
 
 @immutable
 class _FlowSub {
-  const _FlowSub({
-    required this.name,
-    required this.parent,
-    required this.net,
-  });
+  const _FlowSub({required this.name, required this.parent, required this.net});
   final String name;
   final String parent;
   final double net;
@@ -4018,8 +4034,9 @@ class _FlowTrendPainter extends CustomPainter {
       canvas.drawRRect(
         RRect.fromRectAndRadius(rect, const Radius.circular(2)),
         Paint()
-          ..color = (v >= 0 ? LhBiFlow.inflow : LhBiFlow.outflow)
-              .withAlpha(215),
+          ..color = (v >= 0 ? LhBiFlow.inflow : LhBiFlow.outflow).withAlpha(
+            215,
+          ),
       );
     }
     final barKicker = _tp(

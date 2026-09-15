@@ -111,8 +111,7 @@ abstract final class ConversationInboxRealtime {
       title: _titleForEvent(event, old),
       hasUnreadMention: clearMention
           ? false
-          : (old.hasUnreadMention ||
-                mentionKind == ConversationMentionKind.me),
+          : (old.hasUnreadMention || mentionKind == ConversationMentionKind.me),
       hasUnreadAtAll: clearMention
           ? false
           : (old.hasUnreadAtAll ||
@@ -194,17 +193,16 @@ abstract final class ConversationInboxRealtime {
         return const _PreviewPatch('消息已删除');
       case 'conversation_updated':
         final kind = (event.raw['lastMessageKind'] ?? '').toString();
-        final bodyText =
-            (event.raw['lastMessageBodyText'] ?? '').toString().trim();
+        final bodyText = (event.raw['lastMessageBodyText'] ?? '')
+            .toString()
+            .trim();
         if (bodyText.isNotEmpty) {
           return _PreviewPatch(
             compactMessagePushPreview(kind: kind, body: bodyText),
           );
         }
         final body =
-            (event.raw['lastMessagePreview'] ??
-                    event.raw['preview'] ??
-                    '')
+            (event.raw['lastMessagePreview'] ?? event.raw['preview'] ?? '')
                 .toString()
                 .trim();
         if (body.isEmpty) return null;
@@ -307,6 +305,7 @@ abstract final class ConversationInboxRealtime {
       case 'WEEKLY_SUMMARY':
       case 'APPROVAL_ASSISTANT':
       case 'TASK_ASSISTANT':
+      case 'KPI_ASSISTANT':
         return true;
       default:
         return false;

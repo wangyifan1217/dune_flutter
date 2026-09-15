@@ -57,6 +57,7 @@ class NativeConversationPage extends StatefulWidget {
     this.onOpenRobot,
     this.onOpenApprovalAssistant,
     this.onOpenTaskAssistant,
+    this.onOpenKpiAssistant,
     this.onOpenDriveAssistant,
     this.onOpenXrxsAssistant,
     this.onOpenWeeklySummary,
@@ -88,6 +89,7 @@ class NativeConversationPage extends StatefulWidget {
   final ValueChanged<NativeConversation>? onOpenRobot;
   final ValueChanged<NativeConversation>? onOpenApprovalAssistant;
   final ValueChanged<NativeConversation>? onOpenTaskAssistant;
+  final ValueChanged<NativeConversation>? onOpenKpiAssistant;
   final ValueChanged<NativeConversation>? onOpenDriveAssistant;
   final ValueChanged<NativeConversation>? onOpenXrxsAssistant;
   final ValueChanged<NativeConversation>? onOpenWeeklySummary;
@@ -466,9 +468,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     final idx = _items.indexWhere((c) => c.id == conversationId);
     if (idx < 0) return;
     final old = _items[idx];
-    if (old.unreadCount <= 0 &&
-        !old.hasUnreadMention &&
-        !old.hasUnreadAtAll) {
+    if (old.unreadCount <= 0 && !old.hasUnreadMention && !old.hasUnreadAtAll) {
       return;
     }
     setState(() {
@@ -858,6 +858,29 @@ class _NativeConversationPageState extends State<NativeConversationPage>
               title: '任务助手',
               unreadCount: 0,
               preview: '子任务分配 · 进度跟进',
+              updatedAt: DateTime.now(),
+            ),
+          ];
+        }
+      }
+      if (!widget.session.isExternalUser &&
+          widget.onOpenKpiAssistant != null &&
+          !rows.any((c) => c.isKpiAssistant)) {
+        try {
+          final ensured = await _service.ensureKpiAssistantSession();
+          if (ensured.id > 0 && !rows.any((c) => c.id == ensured.id)) {
+            rows = <NativeConversation>[...rows, ensured];
+          }
+        } catch (e) {
+          debugPrint('[kpi-assistant] ensure failed: $e');
+          rows = <NativeConversation>[
+            ...rows,
+            NativeConversation(
+              id: 0,
+              kind: 'KPI_ASSISTANT',
+              title: '绩效助手',
+              unreadCount: 0,
+              preview: '写分后请确认已知悉',
               updatedAt: DateTime.now(),
             ),
           ];
@@ -1285,6 +1308,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     } else if (c.isTaskAssistant) {
       rowKind = ChatInboxRowKind.taskAssistant;
       onTap = _openWithScrollPersist(() => widget.onOpenTaskAssistant?.call(c));
+    } else if (c.isKpiAssistant) {
+      rowKind = ChatInboxRowKind.kpiAssistant;
+      onTap = _openWithScrollPersist(() => widget.onOpenKpiAssistant?.call(c));
     } else if (c.isDriveAssistant) {
       rowKind = ChatInboxRowKind.driveAssistant;
       onTap = _openWithScrollPersist(
@@ -1335,6 +1361,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
             rowKind == ChatInboxRowKind.robot ||
             rowKind == ChatInboxRowKind.approvalAssistant ||
             rowKind == ChatInboxRowKind.taskAssistant ||
+            rowKind == ChatInboxRowKind.kpiAssistant ||
             rowKind == ChatInboxRowKind.administrativeNotice ||
             rowKind == ChatInboxRowKind.weeklySummary ||
             rowKind == ChatInboxRowKind.reconciliationAssistant ||
@@ -1356,6 +1383,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         ? '审批助手'
         : c.isTaskAssistant
         ? '任务助手'
+        : c.isKpiAssistant
+        ? '绩效助手'
         : c.isDriveAssistant
         ? '企业微盘'
         : c.isXrxsAssistant
@@ -1388,6 +1417,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           ? '待办简报 · 解释 · 催办'
           : c.preview.isEmpty && c.isTaskAssistant
           ? '子任务分配 · 进度跟进'
+          : c.preview.isEmpty && c.isKpiAssistant
+          ? '写分后请确认已知悉'
           : c.preview.isEmpty && c.isDriveAssistant
           ? '共享空间文件动态'
           : c.preview.isEmpty && c.isXrxsAssistant
@@ -1402,6 +1433,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
               c.isRobot ||
               c.isApprovalAssistant ||
               c.isTaskAssistant ||
+              c.isKpiAssistant ||
               c.isDriveAssistant ||
               c.isXrxsAssistant ||
               c.isWeeklySummary ||
@@ -1467,6 +1499,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         ? '审批助手'
         : c.isTaskAssistant
         ? '任务助手'
+        : c.isKpiAssistant
+        ? '绩效助手'
         : c.isDriveAssistant
         ? '企业微盘'
         : c.isXrxsAssistant
@@ -1521,6 +1555,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 c.isRobot ||
                 c.isApprovalAssistant ||
                 c.isTaskAssistant ||
+                c.isKpiAssistant ||
                 c.isDriveAssistant ||
                 c.isXrxsAssistant ||
                 (c.isWeeklySummary && !widget.session.isExternalUser) ||

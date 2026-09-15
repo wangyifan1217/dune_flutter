@@ -48,6 +48,13 @@ String formatKpiNum(double? v) {
   return v.toStringAsFixed(2);
 }
 
+String formatKpiAckedAt(String raw) {
+  final parsed = DateTime.tryParse(raw.trim());
+  if (parsed == null) return '';
+  final t = parsed.toLocal();
+  return '${t.year}年${t.month}月${t.day}日';
+}
+
 class WorkProfileKpiMetric {
   const WorkProfileKpiMetric({
     required this.key,
@@ -97,10 +104,10 @@ class WorkProfileKpiMetric {
   String get line {
     final pts = points == null
         ? (status == 'none'
-            ? '无数'
-            : status == 'manual'
-                ? '未自动'
-                : '—')
+              ? '无数'
+              : status == 'manual'
+              ? '未自动'
+              : '—')
         : points!.toStringAsFixed(1);
     final mom = momPct == null
         ? ''
@@ -135,6 +142,7 @@ class WorkProfileKpiTask {
     this.channelName = '',
     this.channelGroup = '',
     this.supplyGroup = '',
+    this.bucket = '',
     this.metrics = const [],
   });
 
@@ -162,7 +170,17 @@ class WorkProfileKpiTask {
   final String channelName;
   final String channelGroup;
   final String supplyGroup;
+  final String bucket;
   final List<WorkProfileKpiMetric> metrics;
+
+  bool get isRubric => metrics.any((m) => m.kind == 'rubric');
+
+  String get rubricKey {
+    final fromBucket = bucket.trim();
+    if (fromBucket.isNotEmpty) return fromBucket;
+    if (metrics.isEmpty) return '';
+    return metrics.first.key.trim();
+  }
 
   factory WorkProfileKpiTask.fromJson(Map<String, dynamic> json) {
     return WorkProfileKpiTask(
@@ -174,6 +192,7 @@ class WorkProfileKpiTask {
       channelName: '${json['channelName'] ?? ''}',
       channelGroup: '${json['channelGroup'] ?? ''}',
       supplyGroup: '${json['supplyGroup'] ?? ''}',
+      bucket: '${json['bucket'] ?? ''}',
       bucketLabel: '${json['bucketLabel'] ?? json['categoryLabel'] ?? ''}',
       weightPct: (json['weightPct'] as num?)?.toDouble() ?? 0,
       taskTotal: (json['taskTotal'] as num?)?.toDouble() ?? 0,
@@ -192,7 +211,9 @@ class WorkProfileKpiTask {
       matchSummary: '${json['matchSummary'] ?? ''}',
       metrics: (json['metrics'] as List? ?? const [])
           .whereType<Map>()
-          .map((e) => WorkProfileKpiMetric.fromJson(Map<String, dynamic>.from(e)))
+          .map(
+            (e) => WorkProfileKpiMetric.fromJson(Map<String, dynamic>.from(e)),
+          )
           .toList(growable: false),
     );
   }
@@ -242,6 +263,14 @@ class WorkProfileKpiPerson {
     this.grade = '',
     this.gradeLabel = '',
     this.coefficient = 0,
+    this.scoreSource = '',
+    this.scoreStatus = '',
+    this.templateKey = '',
+    this.canWrite = false,
+    this.scoredBy = 0,
+    this.scoredByName = '',
+    this.ackedAt = '',
+    this.canAck = false,
     this.categories = const [],
   });
 
@@ -258,14 +287,28 @@ class WorkProfileKpiPerson {
   final double energyWeight;
   final double telecomScore;
   final double energyScore;
+  final String scoreSource;
+  final String scoreStatus;
+  final String templateKey;
+  final bool canWrite;
+  final int scoredBy;
+  final String scoredByName;
+  final String ackedAt;
+  final bool canAck;
   final List<WorkProfileKpiCategory> categories;
+
+  bool get isRubric => scoreSource == 'rubric';
+  bool get isPending => scoreStatus == 'pending';
+  bool get isAcked => ackedAt.trim().isNotEmpty;
 
   KpiGrade get resolvedGrade {
     if (gradeLabel.trim().isNotEmpty) {
       return KpiGrade(
         code: grade.trim().isEmpty ? kpiGradeOf(mainScore).code : grade.trim(),
         label: gradeLabel.trim(),
-        coefficient: coefficient > 0 ? coefficient : kpiGradeOf(mainScore).coefficient,
+        coefficient: coefficient > 0
+            ? coefficient
+            : kpiGradeOf(mainScore).coefficient,
       );
     }
     return kpiGradeOf(mainScore);
@@ -286,10 +329,50 @@ class WorkProfileKpiPerson {
       energyWeight: (json['energyWeight'] as num?)?.toDouble() ?? 0,
       telecomScore: (json['telecomScore'] as num?)?.toDouble() ?? 0,
       energyScore: (json['energyScore'] as num?)?.toDouble() ?? 0,
+      scoreSource: '${json['scoreSource'] ?? ''}',
+      scoreStatus: '${json['scoreStatus'] ?? ''}',
+      templateKey: '${json['templateKey'] ?? ''}',
+      canWrite: json['canWrite'] == true,
+      scoredBy: (json['scoredBy'] as num?)?.toInt() ?? 0,
+      scoredByName: '${json['scoredByName'] ?? ''}',
+      ackedAt: '${json['ackedAt'] ?? ''}',
+      canAck: json['canAck'] == true,
       categories: (json['categories'] as List? ?? const [])
           .whereType<Map>()
-          .map((e) => WorkProfileKpiCategory.fromJson(Map<String, dynamic>.from(e)))
+          .map(
+            (e) =>
+                WorkProfileKpiCategory.fromJson(Map<String, dynamic>.from(e)),
+          )
           .toList(growable: false),
+    );
+  }
+}
+
+class WorkProfileKpiTeam {
+  const WorkProfileKpiTeam({
+    required this.departmentId,
+    required this.departmentName,
+    required this.projectScore,
+    required this.coefficient,
+    this.memberAvg = 0,
+    this.deptScore = 0,
+  });
+
+  final int departmentId;
+  final String departmentName;
+  final double projectScore;
+  final double coefficient;
+  final double memberAvg;
+  final double deptScore;
+
+  factory WorkProfileKpiTeam.fromJson(Map<String, dynamic> json) {
+    return WorkProfileKpiTeam(
+      departmentId: (json['departmentId'] as num?)?.toInt() ?? 0,
+      departmentName: '${json['departmentName'] ?? ''}',
+      projectScore: (json['projectScore'] as num?)?.toDouble() ?? 0,
+      coefficient: (json['coefficient'] as num?)?.toDouble() ?? 0,
+      memberAvg: (json['memberAvg'] as num?)?.toDouble() ?? 0,
+      deptScore: (json['deptScore'] as num?)?.toDouble() ?? 0,
     );
   }
 }
@@ -299,15 +382,26 @@ class WorkProfileKpiScore {
     required this.month,
     required this.prevMonth,
     this.people = const [],
+    this.teams = const [],
     this.unmapped = const [],
   });
 
   final String month;
   final String prevMonth;
   final List<WorkProfileKpiPerson> people;
+  final List<WorkProfileKpiTeam> teams;
   final List<Map<String, dynamic>> unmapped;
 
   WorkProfileKpiPerson? get me => people.isEmpty ? null : people.first;
+
+  WorkProfileKpiTeam? teamForDept(String name) {
+    final needle = name.trim();
+    if (needle.isEmpty) return null;
+    for (final team in teams) {
+      if (team.departmentName == needle) return team;
+    }
+    return null;
+  }
 
   factory WorkProfileKpiScore.fromJson(Map<String, dynamic> json) {
     return WorkProfileKpiScore(
@@ -315,7 +409,13 @@ class WorkProfileKpiScore {
       prevMonth: '${json['prevMonth'] ?? ''}',
       people: (json['people'] as List? ?? const [])
           .whereType<Map>()
-          .map((e) => WorkProfileKpiPerson.fromJson(Map<String, dynamic>.from(e)))
+          .map(
+            (e) => WorkProfileKpiPerson.fromJson(Map<String, dynamic>.from(e)),
+          )
+          .toList(growable: false),
+      teams: (json['teams'] as List? ?? const [])
+          .whereType<Map>()
+          .map((e) => WorkProfileKpiTeam.fromJson(Map<String, dynamic>.from(e)))
           .toList(growable: false),
       unmapped: (json['unmapped'] as List? ?? const [])
           .whereType<Map>()
@@ -422,10 +522,44 @@ List<WorkProfileKpiPerson> kpiPeopleByScoreDesc(
   List<WorkProfileKpiPerson> people,
 ) {
   return [...people]..sort((a, b) {
-      final byScore = b.mainScore.compareTo(a.mainScore);
-      if (byScore != 0) return byScore;
-      return a.userName.compareTo(b.userName);
+    if (a.isPending != b.isPending) return a.isPending ? 1 : -1;
+    final byScore = b.mainScore.compareTo(a.mainScore);
+    if (byScore != 0) return byScore;
+    return a.userName.compareTo(b.userName);
+  });
+}
+
+/// 研发量表名单按沙丘组织分组的展示顺序。
+const kKpiRdGroupOrder = ['AI研发', '产业研发', '出行', '能源', '大宗电商'];
+
+String kpiCanonicalRdGroup(String departmentName) {
+  final name = departmentName.trim();
+  if (name.isEmpty) return '未分组';
+  if (name == '出行组' || name == '出行部') return '出行';
+  return name;
+}
+
+List<MapEntry<String, List<WorkProfileKpiPerson>>> kpiRdPeopleByGroup(
+  List<WorkProfileKpiPerson> people,
+) {
+  final buckets = <String, List<WorkProfileKpiPerson>>{};
+  for (final person in people) {
+    buckets
+        .putIfAbsent(kpiCanonicalRdGroup(person.departmentName), () => [])
+        .add(person);
+  }
+  final keys = buckets.keys.toList()
+    ..sort((a, b) {
+      final ia = kKpiRdGroupOrder.indexOf(a);
+      final ib = kKpiRdGroupOrder.indexOf(b);
+      final ra = ia < 0 ? kKpiRdGroupOrder.length : ia;
+      final rb = ib < 0 ? kKpiRdGroupOrder.length : ib;
+      if (ra != rb) return ra.compareTo(rb);
+      if (a == '未分组') return 1;
+      if (b == '未分组') return -1;
+      return a.compareTo(b);
     });
+  return [for (final key in keys) MapEntry(key, buckets[key]!)];
 }
 
 /// 列表、汇总、导出统一：人名前面带当前名单里的序号。
@@ -434,20 +568,24 @@ String kpiIndexedPersonName(int index, String name) {
   return '${index + 1}. ${n.isEmpty ? '—' : n}';
 }
 
-/// 全员最终得分与等级的 Markdown，便于页面展示和转发 IM。
-String kpiScoreSummaryMarkdown(WorkProfileKpiScore score) {
-  final people = kpiPeopleByScoreDesc(score.people);
+/// 最终得分与等级的 Markdown，便于页面展示和转发 IM。
+/// [people] 不传时用全员；传入时按当前筛选名单生成，部门切换后汇总与转发一致。
+String kpiScoreSummaryMarkdown(
+  WorkProfileKpiScore score, {
+  List<WorkProfileKpiPerson>? people,
+}) {
+  final list = kpiPeopleByScoreDesc(people ?? score.people);
   final monthTitle = kpiScoreMonthTitle(score.month);
   final title = monthTitle.isEmpty ? '业务绩效汇总' : '$monthTitle 业务绩效汇总';
   final buf = StringBuffer()
     ..writeln('## $title')
     ..writeln()
-    ..writeln('共 **${people.length}** 人')
+    ..writeln('共 **${list.length}** 人')
     ..writeln()
     ..writeln('| 部门 | 姓名 | 岗位 | 绩效得分 | 绩效等级 | 绩效系数 |')
     ..writeln('| --- | --- | --- | ---: | --- | ---: |');
-  for (var i = 0; i < people.length; i++) {
-    final person = people[i];
+  for (var i = 0; i < list.length; i++) {
+    final person = list[i];
     String cell(String raw) {
       final v = raw.trim().replaceAll('|', '\\|');
       return v.isEmpty ? '—' : v;
@@ -476,7 +614,7 @@ class WorkProfileModuleHint {
 
 class WorkProfileKpiService {
   WorkProfileKpiService({required this.session, http.Client? client})
-      : _client = client ?? http.Client();
+    : _client = client ?? http.Client();
 
   final AuthSession session;
   final http.Client _client;
@@ -500,7 +638,9 @@ class WorkProfileKpiService {
       client: _client,
     );
     final data = _unwrap(resp);
-    final map = data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
     final rawModules = map['modules'];
     if (rawModules is! List) return const [];
     return rawModules
@@ -517,14 +657,32 @@ class WorkProfileKpiService {
   }
 
   Future<WorkProfileKpiScore> fetchMyScore({String month = ''}) async {
-    final q = month.trim().isEmpty ? '' : '?month=${Uri.encodeQueryComponent(month.trim())}';
+    final q = month.trim().isEmpty
+        ? ''
+        : '?month=${Uri.encodeQueryComponent(month.trim())}';
     final resp = await dunesHttpGet(
       session,
       '/kpi/my-score$q',
       client: _client,
     );
     final data = _unwrap(resp);
-    final map = data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    return WorkProfileKpiScore.fromJson(map);
+  }
+
+  Future<WorkProfileKpiScore> ackRubricScore({required String month}) async {
+    final q = '?month=${Uri.encodeQueryComponent(month.trim())}';
+    final resp = await dunesHttpPost(
+      session,
+      '/kpi/rubric-ack$q',
+      client: _client,
+    );
+    final data = _unwrap(resp);
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
     return WorkProfileKpiScore.fromJson(map);
   }
 }

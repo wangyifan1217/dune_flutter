@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../profile/work_profile_kpi.dart';
 
-const _accent = Color(0xFF3D7A8C);
+const _accent = DunesColors.brandPurple;
 
 /// 指标明细：一行一个指标，把「本月 / 上月 / 环比 / 得分（满分）」摆开，
 /// 替代原来用「；」拼成一长串、看不出分是怎么来的写法。
@@ -123,8 +123,8 @@ class _MetricRow extends StatelessWidget {
     final mom = m.momPct == null
         ? ''
         : m.kind == 'margin'
-            ? '　环比 ${m.momPct! >= 0 ? '+' : ''}${m.momPct!.toStringAsFixed(1)}pp'
-            : '　环比 ${m.momPct! >= 0 ? '+' : ''}${m.momPct!.toStringAsFixed(1)}%';
+        ? '　环比 ${m.momPct! >= 0 ? '+' : ''}${m.momPct!.toStringAsFixed(1)}pp'
+        : '　环比 ${m.momPct! >= 0 ? '+' : ''}${m.momPct!.toStringAsFixed(1)}%';
     if (cur == '—' && prev == '—') return mom.trim();
     return '本月 $cur · 上月 $prev$mom';
   }

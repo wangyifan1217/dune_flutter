@@ -6,7 +6,7 @@ const kPaymentInvoiceStaticPreview = false;
 List<PaymentInvoiceRow> paymentInvoicePreviewRows() {
   return [
     paymentInvoiceRowFromListJson({
-      'businessId': 2079879674728558593,
+      'businessId': '2079879674728558593',
       'code': '2079879674728558593',
       'businessType': 'FINANCE_ADMIN_PROCUREMENT',
       'templateKey': 'finance-admin-procurement',
@@ -25,7 +25,7 @@ List<PaymentInvoiceRow> paymentInvoicePreviewRows() {
       },
     }),
     paymentInvoiceRowFromListJson({
-      'businessId': 1999371572867100674,
+      'businessId': '1999371572867100674',
       'code': '1999371572867100674',
       'businessType': 'FINANCE_ADMIN_PROCUREMENT',
       'templateKey': 'finance-admin-procurement',
@@ -44,7 +44,7 @@ List<PaymentInvoiceRow> paymentInvoicePreviewRows() {
       },
     }),
     paymentInvoiceRowFromListJson({
-      'businessId': 1981284008486617090,
+      'businessId': '1981284008486617090',
       'code': '1981284008486617090',
       'businessType': 'FINANCE_ADMIN_PROCUREMENT',
       'templateKey': 'finance-admin-procurement',

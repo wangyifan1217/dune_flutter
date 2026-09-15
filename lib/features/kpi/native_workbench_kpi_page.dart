@@ -11,42 +11,15 @@ import '../conversation/conversation_picker_sheet.dart';
 import '../conversation/conversation_service.dart';
 import '../profile/native_work_profile_perf_page.dart';
 import '../profile/work_profile_kpi.dart';
-import '../robots/robot_markdown.dart';
 import '../shell/dunes_toast.dart';
 import '../tasks/native_task_home_pane.dart';
 import 'native_workbench_kpi_detail.dart';
 import 'workbench_kpi_service.dart';
 
-const _accent = Color(0xFF3D7A8C);
-const _kpiPillPadding = EdgeInsets.symmetric(horizontal: 14, vertical: 10);
-
-ButtonStyle _kpiFilledPillStyle() {
-  return FilledButton.styleFrom(
-    backgroundColor: _accent,
-    foregroundColor: Colors.white,
-    disabledBackgroundColor: const Color(0xFF3D7A8C).withValues(alpha: 0.4),
-    elevation: 0,
-    shape: const StadiumBorder(),
-    padding: _kpiPillPadding,
-    minimumSize: const Size(0, 40),
-    visualDensity: VisualDensity.compact,
-    textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-  );
-}
-
-ButtonStyle _kpiOutlinedPillStyle() {
-  return OutlinedButton.styleFrom(
-    foregroundColor: DunesColors.text2,
-    backgroundColor: Colors.white,
-    disabledForegroundColor: DunesColors.text3,
-    shape: const StadiumBorder(),
-    side: const BorderSide(color: Color(0xFFD8DEE6)),
-    padding: _kpiPillPadding,
-    minimumSize: const Size(0, 40),
-    visualDensity: VisualDensity.compact,
-    textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-  );
-}
+const _accent = DunesColors.brandPurple;
+const _pageBg = Color(0xFFF7F4FC);
+const _line = Color(0xFFECE7F3);
+const _tabular = <FontFeature>[FontFeature.tabularFigures()];
 
 class NativeWorkbenchKpiPage extends StatefulWidget {
   const NativeWorkbenchKpiPage({
@@ -55,6 +28,7 @@ class NativeWorkbenchKpiPage extends StatefulWidget {
     this.onChromeChanged,
     this.service,
     this.saveExport,
+    this.pickImportFile,
     this.now,
     this.pickConversation,
     this.sendMarkdown,
@@ -64,9 +38,11 @@ class NativeWorkbenchKpiPage extends StatefulWidget {
   final ValueChanged<TaskShellChrome>? onChromeChanged;
   final WorkbenchKpiService? service;
   final Future<void> Function(Uint8List bytes, String name)? saveExport;
+  final Future<({Uint8List bytes, String name})?> Function()? pickImportFile;
   final DateTime? now;
   final Future<int?> Function()? pickConversation;
-  final Future<void> Function(int conversationId, String markdown)? sendMarkdown;
+  final Future<void> Function(int conversationId, String markdown)?
+  sendMarkdown;
 
   @override
   State<NativeWorkbenchKpiPage> createState() => _NativeWorkbenchKpiPageState();
@@ -81,10 +57,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
 
   bool _loading = true;
   bool _busy = false;
-  // 板块与部门筛选：一次只看一个板块，避免所有人所有规则一次性铺开。
   String _sector = 'all';
-  String _dept = 'all';
-  final Set<int> _expanded = <int>{};
   String? _error;
   WorkProfileKpiScore? _score;
   late DateTime _month;
@@ -293,6 +266,69 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     }
   }
 
+  Future<void> _saveRubricDetail(
+    List<WorkbenchKpiRubricItem> items,
+    String summary,
+  ) async {
+    final ok = await _confirm(
+      title: '确认录入量表分？',
+      content: summary,
+      confirmLabel: '确认录入',
+    );
+    if (!ok || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final score = await _service.saveRubricScore(
+        month: formatKpiMonth(_month),
+        userId: _detailUserId,
+        items: items,
+      );
+      if (!mounted) return;
+      setState(() => _detailScore = score);
+      unawaited(_load());
+      showDunesToast(context, '已保存量表分');
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          friendlyErrorText(e, fallback: '保存失败'),
+          kind: DunesToastKind.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _ackRubricDetail() async {
+    final ok = await _confirm(
+      title: '确认本月绩效？',
+      content: '确认后表示已知悉并接受本月量表结果。改分后需重新确认。',
+      confirmLabel: '确认',
+    );
+    if (!ok || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final score = await _service.ackRubricScore(
+        month: formatKpiMonth(_month),
+      );
+      if (!mounted) return;
+      setState(() => _detailScore = score);
+      unawaited(_load());
+      showDunesToast(context, '已确认本月绩效');
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          friendlyErrorText(e, fallback: '确认失败'),
+          kind: DunesToastKind.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _rerun() async {
     final label = formatKpiMonthLabel(_month);
     final ok = await _confirm(
@@ -306,10 +342,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
       final score = await _service.rerunScore(formatKpiMonth(_month));
       if (!mounted) return;
       setState(() => _score = score);
-      showDunesToast(
-        context,
-        '$label 已计算：${score.people.length} 人',
-      );
+      showDunesToast(context, '$label 已计算：${score.people.length} 人');
       unawaited(_reloadDetail());
     } catch (e) {
       if (mounted) {
@@ -369,13 +402,65 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     }
   }
 
+  Future<void> _importRubric() async {
+    final label = formatKpiMonthLabel(_month);
+    ({Uint8List bytes, String name})? picked;
+    if (widget.pickImportFile != null) {
+      picked = await widget.pickImportFile!();
+    } else {
+      final file = await openFile(
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'Excel', extensions: <String>['xlsx']),
+        ],
+      );
+      if (file == null) return;
+      picked = (bytes: await file.readAsBytes(), name: file.name);
+    }
+    if (picked == null || !mounted) return;
+    final ok = await _confirm(
+      title: '确认导入量表？',
+      content: '将读取个人量表，并把整体绩效评价表写成团队系数（不改个人分）。仍跳过汇总表和统计表。写入 $label。',
+      confirmLabel: '确认导入',
+    );
+    if (!ok || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final result = await _service.importRubricScore(
+        month: formatKpiMonth(_month),
+        bytes: picked.bytes,
+        fileName: picked.name,
+      );
+      if (!mounted) return;
+      unawaited(_load());
+      showDunesToast(
+        context,
+        result.imported > 0
+            ? (result.teamHint.isEmpty
+                  ? '$label 已导入 ${result.imported} 人'
+                  : '$label 已导入 ${result.imported} 人，${result.teamHint}')
+            : (result.people.isEmpty ? '没有导入任何人' : result.people.first),
+      );
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          friendlyErrorText(e, fallback: '导入失败'),
+          kind: DunesToastKind.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _forwardSummary() async {
     final score = _score;
-    if (score == null || score.people.isEmpty) {
+    final people = _filteredPeople;
+    if (score == null || people.isEmpty) {
       showDunesToast(context, '暂无可转发内容');
       return;
     }
-    final markdown = kpiScoreSummaryMarkdown(score);
+    final markdown = kpiScoreSummaryMarkdown(score, people: people);
     final conversationId = widget.pickConversation != null
         ? await widget.pickConversation!()
         : await showConversationPickerSheet(
@@ -415,49 +500,104 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     }
   }
 
-  List<_PersonGroup> get _groups {
+  static const _sectorOrder = ['telecom', 'energy', 'rd'];
+  static const _sectorLabels = {'telecom': '通信', 'energy': '能源', 'rd': '研发'};
+
+  List<WorkProfileKpiPerson> get _filteredPeople {
     final needle = _keywordCtrl.text.trim().toLowerCase();
-    final people = kpiPeopleByScoreDesc(_score?.people ?? const <WorkProfileKpiPerson>[]);
     return [
-      for (final person in people)
+      for (final person in kpiPeopleByScoreDesc(
+        _score?.people ?? const <WorkProfileKpiPerson>[],
+      ))
         if ((needle.isEmpty || _personMatches(person, needle)) &&
-            _personInSector(person) &&
-            _personInDept(person))
-          _PersonGroup(person: person, sector: _sector),
+            _personInSector(person))
+          person,
+    ];
+  }
+
+  String _primarySectorOf(WorkProfileKpiPerson person) {
+    WorkProfileKpiCategory? best;
+    for (final cat in person.categories) {
+      if (cat.tasks.isEmpty) continue;
+      if (!_sectorLabels.containsKey(cat.category)) continue;
+      if (best == null || cat.score > best.score) best = cat;
+    }
+    return best?.category ?? 'none';
+  }
+
+  List<_KpiGroup> get _groups {
+    final people = _filteredPeople;
+    if (people.isEmpty) return const [];
+    if (_sector == 'rd') {
+      return [
+        for (final entry in kpiRdPeopleByGroup(people))
+          _KpiGroup(id: entry.key, title: entry.key, people: entry.value),
+      ];
+    }
+    if (_sector != 'all') {
+      return [
+        _KpiGroup(
+          id: _sector,
+          title: _sectorLabels[_sector] ?? _sector,
+          people: people,
+        ),
+      ];
+    }
+    final buckets = <String, List<WorkProfileKpiPerson>>{
+      for (final id in _sectorOrder) id: <WorkProfileKpiPerson>[],
+      'none': <WorkProfileKpiPerson>[],
+    };
+    for (final person in people) {
+      buckets[_primarySectorOf(person)]!.add(person);
+    }
+    return [
+      for (final id in _sectorOrder)
+        if (buckets[id]!.isNotEmpty)
+          _KpiGroup(id: id, title: _sectorLabels[id]!, people: buckets[id]!),
+      if (buckets['none']!.isNotEmpty)
+        _KpiGroup(id: 'none', title: '未分板块', people: buckets['none']!),
     ];
   }
 
   bool _personInSector(WorkProfileKpiPerson person) {
     if (_sector == 'all') return true;
-    return person.categories.any((c) => c.category == _sector && c.tasks.isNotEmpty);
+    return person.categories.any(
+      (c) => c.category == _sector && c.tasks.isNotEmpty,
+    );
   }
 
-  bool _personInDept(WorkProfileKpiPerson person) {
-    if (_dept == 'all') return true;
-    return _deptNameOf(person) == _dept;
+  String _deptNameOf(WorkProfileKpiPerson person) =>
+      person.departmentName.trim();
+
+  String _statsLine(List<WorkProfileKpiPerson> people) {
+    final scope = _sector == 'all'
+        ? '全部板块'
+        : (_sectorLabels[_sector] ?? _sector);
+    final scored = [
+      for (final p in people)
+        if (!p.isPending) p,
+    ];
+    final pending = people.length - scored.length;
+    final toAck = scored.where((p) => p.isRubric && !p.isAcked).length;
+    final avg = scored.isEmpty
+        ? null
+        : scored.fold<double>(0, (s, p) => s + p.mainScore) / scored.length;
+    return [
+      '$scope · 共 ${people.length} 人',
+      if (avg != null) '均分 ${avg.toStringAsFixed(1)}',
+      if (pending > 0) '待录入 $pending',
+      if (toAck > 0) '待确认 $toAck',
+    ].join(' · ');
   }
 
-  String _deptNameOf(WorkProfileKpiPerson person) {
-    final name = person.departmentName.trim();
-    return name.isEmpty ? '未分配部门' : name;
-  }
-
-  List<String> get _deptOptions {
-    final seen = <String>{};
-    for (final person in _score?.people ?? const <WorkProfileKpiPerson>[]) {
-      if (!_personInSector(person)) continue;
-      seen.add(_deptNameOf(person));
-    }
-    final list = seen.toList()..sort();
-    return list;
+  void _jumpRosterTop() {
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
   }
 
   void _setSector(String value) {
-    setState(() {
-      _sector = value;
-      if (_dept != 'all' && !_deptOptions.contains(_dept)) _dept = 'all';
-      _expanded.clear();
-    });
+    if (_sector == value) return;
+    setState(() => _sector = value);
+    _jumpRosterTop();
   }
 
   bool _personMatches(WorkProfileKpiPerson person, String needle) {
@@ -495,208 +635,444 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
         child: Text('该月暂无绩效明细', style: TextStyle(color: DunesColors.text3)),
       );
     }
+    final person = _detailScore!.people.isEmpty
+        ? null
+        : _detailScore!.people.first;
     return WorkbenchKpiDetailPane(
       personName: _detailName,
       monthLabel: formatKpiMonthLabel(_month),
       score: _detailScore!,
-      canEdit: true,
+      canEdit: person == null || !person.isRubric || person.canWrite,
       busy: _busy,
       onSave: _saveDetail,
+      onSaveRubric: _saveRubricDetail,
+      onAck: person != null && person.canAck ? _ackRubricDetail : null,
     );
   }
 
   Widget _buildListBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: CircularProgressIndicator(strokeWidth: 2, color: _accent),
+      );
     }
     if (_error != null) {
       return _ErrorPane(message: _error!, onRetry: () => unawaited(_load()));
     }
-    return ListView(
-      controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
-      children: [
-        if (_groups.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 48),
-            child: Center(
-              child: Text('该月暂无灯塔数据规则切片', style: TextStyle(color: DunesColors.text3)),
-            ),
-          )
-        else
-          for (var i = 0; i < _groups.length; i++)
-            _PersonRow(
-              group: _groups[i],
-              index: i + 1,
-              deptName: _deptNameOf(_groups[i].person),
-              expanded: _expanded.contains(_groups[i].person.userId),
-              busy: _busy,
-              onToggle: () => setState(() {
-                final id = _groups[i].person.userId;
-                if (!_expanded.remove(id)) _expanded.add(id);
-              }),
-              onOpenDetail: _busy
-                  ? null
-                  : () => unawaited(
-                        _openDetail(
-                          _groups[i].person.userId,
-                          kpiIndexedPersonName(i, _groups[i].person.userName),
-                        ),
-                      ),
-            ),
-      ],
+    final people = _filteredPeople;
+    return _KpiRosterPane(
+      people: people,
+      groups: _groups,
+      showSections: _sector == 'all' || _sector == 'rd',
+      emptyLabel: (_score?.people.isEmpty ?? true) ? '该月暂无绩效人员' : '当前筛选下暂无人员',
+      deptNameOf: _deptNameOf,
+      scrollController: _scrollController,
+      busy: _busy,
+      onOpen: (person) {
+        final index = people.indexWhere((e) => e.userId == person.userId);
+        unawaited(
+          _openDetail(
+            person.userId,
+            kpiIndexedPersonName(index < 0 ? 0 : index, person.userName),
+          ),
+        );
+      },
     );
+  }
+
+  Widget _buildMonthStepper() {
+    final canPrev = !_month.isAtSameMomentAs(_earliestMonth);
+    final canNext = _month.isBefore(_currentMonth);
+    return _KpiMonthStepper(
+      label: formatKpiMonthLabel(_month),
+      onPick: _busy ? null : () => unawaited(_pickMonth()),
+      onPrev: canPrev && !_busy ? () => _shiftMonth(-1) : null,
+      onNext: canNext && !_busy ? () => _shiftMonth(1) : null,
+    );
+  }
+
+  List<_KpiAction> _actions(List<WorkProfileKpiPerson> people) {
+    return [
+      _KpiAction(
+        key: const Key('kpi-rerun'),
+        icon: Icons.refresh_rounded,
+        label: '重跑计算',
+        onTap: _busy || _loading ? null : () => unawaited(_rerun()),
+      ),
+      _KpiAction(
+        key: const Key('kpi-export'),
+        icon: Icons.file_download_outlined,
+        label: '导出 Excel',
+        onTap: _busy || _loading ? null : () => unawaited(_export()),
+      ),
+      _KpiAction(
+        key: const Key('kpi-import'),
+        icon: Icons.file_upload_outlined,
+        label: '导入量表',
+        onTap: _busy || _loading ? null : () => unawaited(_importRubric()),
+      ),
+      _KpiAction(
+        key: const Key('kpi-summary-forward'),
+        icon: Icons.send_outlined,
+        label: '转发到 IM',
+        onTap: _busy || people.isEmpty
+            ? null
+            : () => unawaited(_forwardSummary()),
+      ),
+    ];
   }
 
   @override
   Widget build(BuildContext context) {
-    final canPrev = !_month.isAtSameMomentAs(_earliestMonth);
-    final canNext = _month.isBefore(_currentMonth);
-    return Material(
-      color: const Color(0xFFF7F8FA),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-            child: Column(
-              children: [
-                if (_detailUserId <= 0) ...[
-                  TextField(
-                    controller: _keywordCtrl,
-                    decoration: InputDecoration(
-                      hintText: '搜索姓名 / 产品 / 省份 / 渠道 / 供给',
-                      prefixIcon: const Icon(Icons.search, size: 20),
-                      isDense: true,
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+    final narrow = MediaQuery.sizeOf(context).width < 640;
+    final gutter = narrow ? 12.0 : 20.0;
+    if (_detailUserId > 0) {
+      return Material(
+        color: _pageBg,
+        child: Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(gutter, 6, gutter, 6),
+              child: Row(
+                children: [
+                  _buildMonthStepper(),
+                  if (_busy) ...[
+                    const SizedBox(width: 10),
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: _accent,
                       ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xFFE8EAED)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: _busy ? null : _pickMonth,
-                      style: _kpiOutlinedPillStyle(),
-                      icon: const Icon(Icons.calendar_month_outlined, size: 18),
-                      label: Text(formatKpiMonthLabel(_month)),
-                    ),
-                    IconButton(
-                      tooltip: '上一月',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: !canPrev || _busy
-                          ? null
-                          : () => _shiftMonth(-1),
-                      icon: const Icon(Icons.chevron_left),
-                    ),
-                    IconButton(
-                      tooltip: '下一月',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: !canNext || _busy
-                          ? null
-                          : () => _shiftMonth(1),
-                      icon: const Icon(Icons.chevron_right),
                     ),
                   ],
+                ],
+              ),
+            ),
+            Expanded(child: _buildDetailBody()),
+          ],
+        ),
+      );
+    }
+    final people = _loading || _error != null
+        ? const <WorkProfileKpiPerson>[]
+        : _filteredPeople;
+    return Material(
+      color: _pageBg,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(gutter, 6, gutter, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _KpiSearchField(
+              controller: _keywordCtrl,
+              hint: narrow ? '搜索姓名 / 产品' : '搜索姓名 / 产品 / 省份 / 渠道 / 供给',
+            ),
+            const SizedBox(height: 10),
+            _KpiControlPanel(
+              compact: narrow,
+              month: _buildMonthStepper(),
+              stats: _loading ? '加载中…' : _statsLine(people),
+              busy: _busy,
+              actions: _actions(people),
+            ),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _KpiSectorTabs(
+                key: const Key('kpi-sector-filter'),
+                value: _sector,
+                expand: narrow,
+                onChanged: _busy ? null : _setSector,
+                options: const [
+                  MapEntry('all', '全部'),
+                  MapEntry('telecom', '通信'),
+                  MapEntry('energy', '能源'),
+                  MapEntry('rd', '研发'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Expanded(child: _buildListBody()),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KpiGroup {
+  const _KpiGroup({
+    required this.id,
+    required this.title,
+    required this.people,
+  });
+
+  final String id;
+  final String title;
+  final List<WorkProfileKpiPerson> people;
+}
+
+class _KpiAction {
+  const _KpiAction({
+    required this.key,
+    required this.icon,
+    required this.label,
+    this.onTap,
+  });
+
+  final Key key;
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+}
+
+Color _kpiGradeColor(String code) {
+  switch (code) {
+    case '优':
+      return DunesColors.green;
+    case '良':
+      return DunesColors.brandPurple;
+    case '中':
+      return DunesColors.blue;
+    case '普':
+      return DunesColors.amber;
+    case '改':
+    case '辅':
+      return DunesColors.coral;
+  }
+  return DunesColors.text2;
+}
+
+class _KpiSearchField extends StatelessWidget {
+  const _KpiSearchField({required this.controller, required this.hint});
+
+  final TextEditingController controller;
+  final String hint;
+
+  @override
+  Widget build(BuildContext context) {
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: _line),
+    );
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) => TextField(
+        controller: controller,
+        style: const TextStyle(fontSize: 13.5, color: DunesColors.text),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(fontSize: 13.5, color: DunesColors.text3),
+          prefixIcon: const Icon(
+            Icons.search_rounded,
+            size: 18,
+            color: DunesColors.text3,
+          ),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 38,
+            minHeight: 36,
+          ),
+          suffixIcon: value.text.isEmpty
+              ? null
+              : InkWell(
+                  onTap: controller.clear,
+                  customBorder: const CircleBorder(),
+                  child: const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Icon(
+                      Icons.close_rounded,
+                      size: 16,
+                      color: DunesColors.text3,
+                    ),
+                  ),
                 ),
-                if (_detailUserId <= 0) ...[
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+          suffixIconConstraints: const BoxConstraints(
+            minWidth: 36,
+            minHeight: 36,
+          ),
+          isDense: true,
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          border: border,
+          enabledBorder: border,
+          focusedBorder: border.copyWith(
+            borderSide: const BorderSide(color: DunesColors.brandPurpleLine),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _KpiMonthStepper extends StatelessWidget {
+  const _KpiMonthStepper({
+    required this.label,
+    this.onPick,
+    this.onPrev,
+    this.onNext,
+  });
+
+  final String label;
+  final VoidCallback? onPick;
+  final VoidCallback? onPrev;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 34,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F6FB),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _line),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _arrow(Icons.chevron_left_rounded, '上一月', onPrev),
+          InkWell(
+            key: const Key('kpi-month-pick'),
+            onTap: onPick,
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.calendar_today_outlined,
+                    size: 14,
+                    color: DunesColors.brandPurpleDeep,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.text,
+                      fontFeatures: _tabular,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          _arrow(Icons.chevron_right_rounded, '下一月', onNext),
+        ],
+      ),
+    );
+  }
+
+  Widget _arrow(IconData icon, String tip, VoidCallback? onTap) {
+    return Tooltip(
+      message: tip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: SizedBox(
+          width: 30,
+          height: 32,
+          child: Icon(
+            icon,
+            size: 20,
+            color: onTap == null ? DunesColors.border : DunesColors.text2,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 顶部控制卡：月份 + 统计 + 四个明确带文字的操作（重跑 / 导出 / 导入 / 转发）。
+class _KpiControlPanel extends StatelessWidget {
+  const _KpiControlPanel({
+    required this.compact,
+    required this.month,
+    required this.stats,
+    required this.busy,
+    required this.actions,
+  });
+
+  final bool compact;
+  final Widget month;
+  final String stats;
+  final bool busy;
+  final List<_KpiAction> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final statsText = Text(
+      stats,
+      key: const Key('kpi-scope-hint'),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      textAlign: compact ? TextAlign.right : TextAlign.left,
+      style: const TextStyle(
+        fontSize: 12,
+        color: DunesColors.text3,
+        fontFeatures: _tabular,
+      ),
+    );
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _line),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 2,
+            child: busy
+                ? const LinearProgressIndicator(
+                    minHeight: 2,
+                    color: _accent,
+                    backgroundColor: Colors.transparent,
+                  )
+                : null,
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 6, 12, 10),
+            child: compact
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      for (final entry in const [
-                        MapEntry('all', '全部板块'),
-                        MapEntry('telecom', '通信'),
-                        MapEntry('energy', '能源'),
-                      ])
-                        _KpiPillButton(
-                          key: Key('kpi-sector-${entry.key}'),
-                          label: entry.value,
-                          filled: _sector == entry.key,
-                          onPressed: _busy ? null : () => _setSector(entry.key),
-                        ),
-                      if (_deptOptions.length > 1)
-                        Container(
-                          height: 40,
-                          padding: const EdgeInsets.only(left: 14, right: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: const Color(0xFFD8DEE6)),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              key: const Key('kpi-dept-filter'),
-                              value: _deptOptions.contains(_dept) ? _dept : 'all',
-                              isDense: true,
-                              borderRadius: BorderRadius.circular(12),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: DunesColors.text2,
-                              ),
-                              items: [
-                                const DropdownMenuItem(value: 'all', child: Text('全部部门')),
-                                for (final name in _deptOptions)
-                                  DropdownMenuItem(value: name, child: Text(name)),
-                              ],
-                              onChanged: _busy
-                                  ? null
-                                  : (value) => setState(() {
-                                        _dept = value ?? 'all';
-                                        _expanded.clear();
-                                      }),
-                            ),
-                          ),
-                        ),
-                      FilledButton.icon(
-                        key: const Key('kpi-rerun'),
-                        onPressed: _busy ? null : () => unawaited(_rerun()),
-                        style: _kpiFilledPillStyle(),
-                        icon: const Icon(Icons.replay, size: 18),
-                        label: const Text('重跑绩效'),
+                      Row(
+                        children: [
+                          month,
+                          const SizedBox(width: 10),
+                          Expanded(child: statsText),
+                        ],
                       ),
-                      OutlinedButton.icon(
-                        key: const Key('kpi-export'),
-                        onPressed: _busy ? null : () => unawaited(_export()),
-                        style: _kpiOutlinedPillStyle(),
-                        icon: const Icon(Icons.download_outlined, size: 18),
-                        label: const Text('导出'),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          for (var i = 0; i < actions.length; i++) ...[
+                            if (i > 0) const SizedBox(width: 8),
+                            Expanded(child: _KpiActionTile(action: actions[i])),
+                          ],
+                        ],
                       ),
-                      if (_busy)
-                        const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      month,
+                      const SizedBox(width: 14),
+                      Expanded(child: statsText),
+                      for (final action in actions)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: _KpiActionButton(action: action),
                         ),
                     ],
                   ),
-                  if (_score != null && _score!.people.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    _KpiSummaryPane(
-                      markdown: kpiScoreSummaryMarkdown(_score!),
-                      onForward: _busy ? null : () => unawaited(_forwardSummary()),
-                    ),
-                  ],
-                ],
-              ],
-            ),
-          ),
-          Expanded(
-            child: _detailUserId > 0 ? _buildDetailBody() : _buildListBody(),
           ),
         ],
       ),
@@ -704,116 +1080,142 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
   }
 }
 
-class _PersonGroup {
-  _PersonGroup({required this.person, this.sector = 'all'});
-  final WorkProfileKpiPerson person;
-  final String sector;
+class _KpiActionTile extends StatelessWidget {
+  const _KpiActionTile({required this.action});
 
-  /// 选中某个板块时只给该板块的切片；个人得分仍是跨板块按权重加权的主营得分。
-  double? get sectorScore {
-    if (sector == 'all') return null;
-    for (final cat in person.categories) {
-      if (cat.category == sector) return cat.score;
-    }
-    return null;
-  }
-
-  List<WorkProfileKpiTask> get slices {
-    final list = [
-      for (final cat in person.categories)
-        if (sector == 'all' || cat.category == sector) ...cat.tasks,
-    ];
-    list.sort((a, b) {
-      final byScore = b.taskTotal.compareTo(a.taskTotal);
-      if (byScore != 0) return byScore;
-      return kpiLighthouseSliceTitle(a).compareTo(kpiLighthouseSliceTitle(b));
-    });
-    return list;
-  }
-}
-
-class _SliceCard extends StatelessWidget {
-  const _SliceCard({required this.task, this.onOpen});
-
-  final WorkProfileKpiTask task;
-  final VoidCallback? onOpen;
+  final _KpiAction action;
 
   @override
   Widget build(BuildContext context) {
-    final title = kpiLighthouseSliceTitle(task);
-    final subtitle = kpiLighthouseSliceSubtitle(task);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: Colors.white,
+    final enabled = action.onTap != null;
+    final fg = enabled ? DunesColors.brandPurpleDeep : DunesColors.text3;
+    return Material(
+      color: DunesColors.brandPurpleSoft,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        key: action.key,
+        onTap: action.onTap,
         borderRadius: BorderRadius.circular(10),
+        child: SizedBox(
+          height: 54,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(action.icon, size: 19, color: fg),
+              const SizedBox(height: 4),
+              Text(
+                action.label,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.fade,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                  color: fg,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _KpiActionButton extends StatelessWidget {
+  const _KpiActionButton({required this.action});
+
+  final _KpiAction action;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      key: action.key,
+      onPressed: action.onTap,
+      style: TextButton.styleFrom(
+        foregroundColor: DunesColors.brandPurpleDeep,
+        backgroundColor: DunesColors.brandPurpleSoft,
+        disabledForegroundColor: DunesColors.text3,
+        minimumSize: const Size(0, 34),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        visualDensity: VisualDensity.compact,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+      ),
+      icon: Icon(action.icon, size: 16),
+      label: Text(action.label),
+    );
+  }
+}
+
+class _KpiSectorTabs extends StatelessWidget {
+  const _KpiSectorTabs({
+    super.key,
+    required this.value,
+    required this.options,
+    required this.expand,
+    this.onChanged,
+  });
+
+  final String value;
+  final List<MapEntry<String, String>> options;
+  final bool expand;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFECE7F4),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+        children: [
+          for (final option in options)
+            expand ? Expanded(child: _segment(option)) : _segment(option),
+        ],
+      ),
+    );
+  }
+
+  Widget _segment(MapEntry<String, String> option) {
+    final selected = value == option.key;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      decoration: BoxDecoration(
+        color: selected ? Colors.white : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: selected
+            ? const [
+                BoxShadow(
+                  color: Color(0x1A2B1A4F),
+                  blurRadius: 3,
+                  offset: Offset(0, 1),
+                ),
+              ]
+            : null,
+      ),
+      child: Material(
+        type: MaterialType.transparency,
         child: InkWell(
-          key: Key('kpi-task-${task.taskId}'),
-          borderRadius: BorderRadius.circular(10),
-          onTap: onOpen,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFE8EAED)),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: DunesColors.text,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: DunesColors.text3,
-                        ),
-                      ),
-                    ],
-                  ),
+          key: Key('kpi-sector-${option.key}'),
+          borderRadius: BorderRadius.circular(8),
+          onTap: onChanged == null ? null : () => onChanged!(option.key),
+          child: Align(
+            widthFactor: expand ? null : 1,
+            heightFactor: 1,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+              child: Text(
+                option.value,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  color: selected ? DunesColors.text : DunesColors.text2,
                 ),
-                if (task.bucketLabel.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 10),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF2F4F7),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        task.bucketLabel.replaceAll('板块', ''),
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: DunesColors.text3,
-                        ),
-                      ),
-                    ),
-                  ),
-                Text(
-                  task.taskTotal.toStringAsFixed(1),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: DunesColors.text2,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -822,54 +1224,515 @@ class _SliceCard extends StatelessWidget {
   }
 }
 
-class _KpiSummaryPane extends StatelessWidget {
-  const _KpiSummaryPane({required this.markdown, this.onForward});
+class _KpiRosterPane extends StatelessWidget {
+  const _KpiRosterPane({
+    required this.people,
+    required this.groups,
+    required this.showSections,
+    required this.emptyLabel,
+    required this.deptNameOf,
+    required this.busy,
+    required this.onOpen,
+    this.scrollController,
+  });
 
-  final String markdown;
-  final VoidCallback? onForward;
+  final List<WorkProfileKpiPerson> people;
+  final List<_KpiGroup> groups;
+  final bool showSections;
+  final String emptyLabel;
+  final String Function(WorkProfileKpiPerson person) deptNameOf;
+  final bool busy;
+  final ValueChanged<WorkProfileKpiPerson> onOpen;
+  final ScrollController? scrollController;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 640;
+        final entries = <Widget>[];
+        for (final group in groups) {
+          if (showSections) {
+            entries.add(
+              _KpiSectionHeader(
+                key: Key('kpi-section-${group.id}'),
+                title: group.title,
+                count: group.people.length,
+              ),
+            );
+          }
+          for (var i = 0; i < group.people.length; i++) {
+            final person = group.people[i];
+            final last = i == group.people.length - 1;
+            entries.add(
+              compact
+                  ? _KpiPersonTile(
+                      person: person,
+                      rank: i + 1,
+                      deptName: deptNameOf(person),
+                      last: last,
+                      busy: busy,
+                      onOpen: () => onOpen(person),
+                    )
+                  : _KpiTableRow(
+                      person: person,
+                      rank: i + 1,
+                      deptName: deptNameOf(person),
+                      last: last,
+                      busy: busy,
+                      onOpen: () => onOpen(person),
+                    ),
+            );
+          }
+        }
+        return Container(
+          key: const Key('kpi-summary'),
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _line),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: people.isEmpty
+              ? Center(
+                  child: Text(
+                    emptyLabel,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: DunesColors.text3,
+                    ),
+                  ),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (!compact) const _KpiTableHeader(),
+                    Expanded(
+                      child: ListView(
+                        controller: scrollController,
+                        padding: EdgeInsets.zero,
+                        children: entries,
+                      ),
+                    ),
+                  ],
+                ),
+        );
+      },
+    );
+  }
+}
+
+class _KpiSectionHeader extends StatelessWidget {
+  const _KpiSectionHeader({
+    super.key,
+    required this.title,
+    required this.count,
+  });
+
+  final String title;
+  final int count;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      key: const Key('kpi-summary'),
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+      padding: const EdgeInsets.fromLTRB(14, 9, 14, 7),
+      decoration: const BoxDecoration(
+        color: Color(0xFFFAF8FD),
+        border: Border(bottom: BorderSide(color: _line)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
+          Container(
+            width: 3,
+            height: 12,
+            decoration: BoxDecoration(
+              color: _accent,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: DunesColors.text,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '$count 人',
+            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KpiBadge extends StatelessWidget {
+  const _KpiBadge({required this.label, required this.color, this.fill});
+
+  final String label;
+  final Color color;
+  final Color? fill;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: fill ?? color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 11,
+          height: 1.3,
+          fontWeight: FontWeight.w600,
+          color: color,
+          fontFeatures: _tabular,
+        ),
+      ),
+    );
+  }
+}
+
+Widget _kpiAckText(WorkProfileKpiPerson person) {
+  return Text(
+    person.isAcked ? '已确认' : '待确认',
+    key: Key('kpi-ack-status-${person.userId}'),
+    style: TextStyle(
+      fontSize: 11.5,
+      fontWeight: FontWeight.w500,
+      color: person.isAcked ? DunesColors.text3 : DunesColors.amber,
+    ),
+  );
+}
+
+class _KpiRank extends StatelessWidget {
+  const _KpiRank({required this.rank, required this.highlight});
+
+  final int rank;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      '$rank',
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: highlight ? FontWeight.w700 : FontWeight.w500,
+        color: highlight ? _accent : DunesColors.text3,
+        fontFeatures: _tabular,
+      ),
+    );
+  }
+}
+
+class _KpiPersonTile extends StatelessWidget {
+  const _KpiPersonTile({
+    required this.person,
+    required this.rank,
+    required this.deptName,
+    required this.last,
+    required this.busy,
+    required this.onOpen,
+  });
+
+  final WorkProfileKpiPerson person;
+  final int rank;
+  final String deptName;
+  final bool last;
+  final bool busy;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final grade = person.resolvedGrade;
+    final post = person.position.trim();
+    final subtitle = [
+      if (deptName.isNotEmpty) deptName,
+      if (post.isNotEmpty) post,
+    ].join(' · ');
+    return Material(
+      color: Colors.white,
+      child: InkWell(
+        key: Key('kpi-person-${person.userId}'),
+        onTap: busy ? null : onOpen,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 10, 14, 10),
+          decoration: BoxDecoration(
+            border: last
+                ? null
+                : const Border(bottom: BorderSide(color: _line)),
+          ),
+          child: Row(
             children: [
-              const Expanded(
-                child: Text(
-                  '汇总',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+              SizedBox(
+                width: 26,
+                child: _KpiRank(
+                  rank: rank,
+                  highlight: rank <= 3 && !person.isPending,
                 ),
               ),
-              TextButton.icon(
-                key: const Key('kpi-summary-forward'),
-                onPressed: onForward,
-                icon: const Icon(Icons.ios_share_outlined, size: 16),
-                label: const Text('转发到 IM'),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      person.userName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: DunesColors.text,
+                      ),
+                    ),
+                    if (subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              if (person.isPending)
+                const _KpiBadge(
+                  label: '待录入',
+                  color: DunesColors.amber,
+                  fill: DunesColors.amberSoft,
+                )
+              else
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      person.mainScore.toStringAsFixed(2),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: DunesColors.text,
+                        fontFeatures: _tabular,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (person.isRubric) ...[
+                          _kpiAckText(person),
+                          const SizedBox(width: 6),
+                        ],
+                        _KpiBadge(
+                          label:
+                              '${grade.code} ×${formatKpiCoefficient(grade.coefficient)}',
+                          color: _kpiGradeColor(grade.code),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const _kColRank = 44.0;
+
+class _KpiTableHeader extends StatelessWidget {
+  const _KpiTableHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 9, 18, 9),
+      decoration: const BoxDecoration(
+        color: Color(0xFFFAF8FD),
+        border: Border(bottom: BorderSide(color: _line)),
+      ),
+      child: const Row(
+        children: [
+          SizedBox(width: _kColRank, child: _KpiColLabel('排名')),
+          Expanded(flex: 14, child: _KpiColLabel('部门')),
+          Expanded(flex: 12, child: _KpiColLabel('姓名')),
+          Expanded(flex: 18, child: _KpiColLabel('岗位')),
+          Expanded(flex: 9, child: _KpiColLabel('得分', align: TextAlign.right)),
+          SizedBox(width: 24),
+          Expanded(flex: 15, child: _KpiColLabel('等级')),
+          Expanded(flex: 6, child: _KpiColLabel('系数', align: TextAlign.right)),
+          SizedBox(width: 24),
+          Expanded(flex: 8, child: _KpiColLabel('状态')),
+        ],
+      ),
+    );
+  }
+}
+
+class _KpiColLabel extends StatelessWidget {
+  const _KpiColLabel(this.text, {this.align = TextAlign.left});
+
+  final String text;
+  final TextAlign align;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      textAlign: align,
+      style: const TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+        color: DunesColors.text3,
+      ),
+    );
+  }
+}
+
+class _KpiTableRow extends StatelessWidget {
+  const _KpiTableRow({
+    required this.person,
+    required this.rank,
+    required this.deptName,
+    required this.last,
+    required this.busy,
+    required this.onOpen,
+  });
+
+  final WorkProfileKpiPerson person;
+  final int rank;
+  final String deptName;
+  final bool last;
+  final bool busy;
+  final VoidCallback onOpen;
+
+  static const _cell = TextStyle(fontSize: 13, color: DunesColors.text2);
+
+  @override
+  Widget build(BuildContext context) {
+    final grade = person.resolvedGrade;
+    final post = person.position.trim();
+    return Material(
+      color: Colors.white,
+      child: InkWell(
+        key: Key('kpi-person-${person.userId}'),
+        onTap: busy ? null : onOpen,
+        hoverColor: DunesColors.brandPurpleSoft.withValues(alpha: 0.6),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 11, 18, 11),
+          decoration: BoxDecoration(
+            border: last
+                ? null
+                : const Border(bottom: BorderSide(color: _line)),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: _kColRank,
+                child: _KpiRank(
+                  rank: rank,
+                  highlight: rank <= 3 && !person.isPending,
+                ),
+              ),
+              Expanded(
+                flex: 14,
+                child: Text(
+                  deptName.isEmpty ? '—' : deptName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _cell,
+                ),
+              ),
+              Expanded(
+                flex: 12,
+                child: Text(
+                  person.userName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.text,
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 18,
+                child: Text(
+                  post.isEmpty ? '—' : post,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _cell,
+                ),
+              ),
+              Expanded(
+                flex: 9,
+                child: Text(
+                  person.isPending ? '—' : person.mainScore.toStringAsFixed(2),
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.text,
+                    fontFeatures: _tabular,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 24),
+              Expanded(
+                flex: 15,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: person.isPending
+                      ? const _KpiBadge(
+                          label: '待录入',
+                          color: DunesColors.amber,
+                          fill: DunesColors.amberSoft,
+                        )
+                      : _KpiBadge(
+                          label: grade.label,
+                          color: _kpiGradeColor(grade.code),
+                        ),
+                ),
+              ),
+              Expanded(
+                flex: 6,
+                child: Text(
+                  person.isPending
+                      ? '—'
+                      : formatKpiCoefficient(grade.coefficient),
+                  textAlign: TextAlign.right,
+                  style: _cell.copyWith(fontFeatures: _tabular),
+                ),
+              ),
+              const SizedBox(width: 24),
+              Expanded(
+                flex: 8,
+                child: person.isRubric && !person.isPending
+                    ? _kpiAckText(person)
+                    : const Text('—', style: _cell),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 220),
-            child: SingleChildScrollView(
-              child: RobotMarkdown(
-                markdown: markdown,
-                compact: true,
-                selectable: true,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1215,173 +2078,6 @@ class _KpiUserPickerDialogState extends State<_KpiUserPickerDialog> {
           child: const Text('取消'),
         ),
       ],
-    );
-  }
-}
-
-/// 人员行：默认收起，只显示 部门 / 姓名 / 岗位 / 得分 / 等级 / 系数，
-/// 点开才展开这个人的规则卡，避免下滑找人时所有人的明细一次性铺开。
-class _PersonRow extends StatelessWidget {
-  const _PersonRow({
-    required this.group,
-    required this.index,
-    required this.deptName,
-    required this.expanded,
-    required this.busy,
-    required this.onToggle,
-    this.onOpenDetail,
-  });
-
-  final _PersonGroup group;
-  final int index;
-  final String deptName;
-  final bool expanded;
-  final bool busy;
-  final VoidCallback onToggle;
-  final VoidCallback? onOpenDetail;
-
-  @override
-  Widget build(BuildContext context) {
-    final person = group.person;
-    final grade = person.resolvedGrade;
-    final post = person.position.trim();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFE8EAED)),
-        ),
-        child: Column(
-          children: [
-            InkWell(
-              key: Key('kpi-person-${person.userId}'),
-              borderRadius: BorderRadius.circular(10),
-              onTap: onToggle,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 10, 12, 10),
-                child: Row(
-                  children: [
-                    Icon(
-                      expanded ? Icons.keyboard_arrow_down : Icons.chevron_right,
-                      size: 18,
-                      color: DunesColors.text3,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${kpiIndexedPersonName(index - 1, person.userName)}（${group.slices.length}条规则）',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: DunesColors.text,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            post.isEmpty ? deptName : '$deptName · $post',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          person.mainScore.toStringAsFixed(2),
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: DunesColors.text,
-                          ),
-                        ),
-                        Text(
-                          '${grade.label} · 系数 ${grade.coefficient}',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: _accent,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (expanded) ...[
-              const Divider(height: 1, color: Color(0xFFE8EAED)),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-                child: Column(
-                  children: [
-                    if (group.sectorScore != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            '本板块得分 ${group.sectorScore!.toStringAsFixed(2)}（主营得分按两个板块的收入权重加权）',
-                            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
-                          ),
-                        ),
-                      ),
-                    for (final task in group.slices)
-                      _SliceCard(task: task, onOpen: onOpenDetail),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        key: Key('kpi-detail-${person.userId}'),
-                        onPressed: busy ? null : onOpenDetail,
-                        child: const Text('查看明细'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _KpiPillButton extends StatelessWidget {
-  const _KpiPillButton({
-    super.key,
-    required this.label,
-    required this.filled,
-    this.onPressed,
-  });
-
-  final String label;
-  final bool filled;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    if (filled) {
-      return FilledButton(
-        onPressed: onPressed,
-        style: _kpiFilledPillStyle(),
-        child: Text(label),
-      );
-    }
-    return OutlinedButton(
-      onPressed: onPressed,
-      style: _kpiOutlinedPillStyle(),
-      child: Text(label),
     );
   }
 }

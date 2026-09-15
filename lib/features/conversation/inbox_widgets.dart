@@ -23,6 +23,7 @@ class ChatInboxHeader extends StatelessWidget {
 
   final VoidCallback onOpenContacts;
   final VoidCallback? onNewChat;
+
   /// 外部用户不开放 Nova，传 null 时左上角入口不展示。
   final VoidCallback? onOpenNova;
   final VoidCallback? onOpenAiSummary;
@@ -409,10 +410,7 @@ class ChatInboxSearchBar extends StatelessWidget {
                       controller.clear();
                       onChanged('');
                     },
-                    icon: const Icon(
-                      Icons.close,
-                      color: Color(0xFFB2B2B2),
-                    ),
+                    icon: const Icon(Icons.close, color: Color(0xFFB2B2B2)),
                   );
                 },
               ),
@@ -505,6 +503,7 @@ enum ChatInboxRowKind {
   aiSummary,
   approvalAssistant,
   taskAssistant,
+  kpiAssistant,
   driveAssistant,
   xrxsAssistant,
   weeklySummary,
@@ -574,6 +573,7 @@ class ChatInboxRow extends StatelessWidget {
   final bool previewGenerating;
   final bool selected;
   final Widget? robotAvatar;
+
   /// 群聊未读 @ 提示，如 `[@了你]`，不受后续消息预览覆盖。
   final String? mentionLabel;
 
@@ -592,6 +592,7 @@ class ChatInboxRow extends StatelessWidget {
             kind == ChatInboxRowKind.aiSummary ||
             kind == ChatInboxRowKind.approvalAssistant ||
             kind == ChatInboxRowKind.taskAssistant ||
+            kind == ChatInboxRowKind.kpiAssistant ||
             kind == ChatInboxRowKind.driveAssistant ||
             kind == ChatInboxRowKind.xrxsAssistant ||
             kind == ChatInboxRowKind.weeklySummary ||
@@ -982,6 +983,20 @@ class _Avatar extends StatelessWidget {
           color: Colors.white,
           size: 20,
         );
+      case ChatInboxRowKind.kpiAssistant:
+        decoration = BoxDecoration(
+          borderRadius: borderRadius,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF8C5A91), Color(0xFFC17B7B)],
+          ),
+        );
+        child = const Icon(
+          Icons.insights_outlined,
+          color: Colors.white,
+          size: 20,
+        );
       case ChatInboxRowKind.driveAssistant:
         decoration = BoxDecoration(
           color: const Color(0xFF3B82F6),
@@ -1200,10 +1215,7 @@ class _Avatar extends StatelessWidget {
 }
 
 class _IconBtn extends StatelessWidget {
-  const _IconBtn({
-    required this.icon,
-    required this.onTap,
-  });
+  const _IconBtn({required this.icon, required this.onTap});
 
   final IconData icon;
   final VoidCallback onTap;
@@ -1249,11 +1261,7 @@ class _NovaEyesButton extends StatelessWidget {
                 const Positioned.fill(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _NovaEye(),
-                      SizedBox(width: 4),
-                      _NovaEye(),
-                    ],
+                    children: [_NovaEye(), SizedBox(width: 4), _NovaEye()],
                   ),
                 ),
                 if (unread)

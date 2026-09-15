@@ -9,7 +9,7 @@ import '../profile/work_profile_kpi.dart';
 import 'kpi_metric_list.dart';
 import 'workbench_kpi_service.dart';
 
-const _accent = Color(0xFF3D7A8C);
+const _accent = DunesColors.brandPurple;
 
 class WorkbenchKpiDetailPane extends StatefulWidget {
   const WorkbenchKpiDetailPane({
@@ -20,6 +20,8 @@ class WorkbenchKpiDetailPane extends StatefulWidget {
     required this.canEdit,
     this.busy = false,
     this.onSave,
+    this.onSaveRubric,
+    this.onAck,
   });
 
   final String personName;
@@ -27,8 +29,17 @@ class WorkbenchKpiDetailPane extends StatefulWidget {
   final WorkProfileKpiScore score;
   final bool canEdit;
   final bool busy;
-  final Future<void> Function(List<WorkbenchKpiOverrideItem> items, String summary)?
-      onSave;
+  final Future<void> Function(
+    List<WorkbenchKpiOverrideItem> items,
+    String summary,
+  )?
+  onSave;
+  final Future<void> Function(
+    List<WorkbenchKpiRubricItem> items,
+    String summary,
+  )?
+  onSaveRubric;
+  final Future<void> Function()? onAck;
 
   @override
   State<WorkbenchKpiDetailPane> createState() => _WorkbenchKpiDetailPaneState();
@@ -38,6 +49,8 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
   final Map<int, TextEditingController> _weightCtrls = {};
   final Map<int, TextEditingController> _adjCtrls = {};
   final Map<int, TextEditingController> _remarkCtrls = {};
+  final Map<int, TextEditingController> _pointCtrls = {};
+  String? _rubricError;
 
   WorkProfileKpiPerson? get _person =>
       widget.score.people.isEmpty ? null : widget.score.people.first;
@@ -67,6 +80,9 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
     for (final c in _remarkCtrls.values) {
       c.dispose();
     }
+    for (final c in _pointCtrls.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -74,12 +90,27 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
     final seen = <int>{};
     for (final task in _allTasks()) {
       seen.add(task.taskId);
-      _weightCtrls.putIfAbsent(task.taskId, () => TextEditingController()).text =
-          task.weightPct.toStringAsFixed(2);
+      _weightCtrls
+          .putIfAbsent(task.taskId, () => TextEditingController())
+          .text = task.weightPct.toStringAsFixed(
+        2,
+      );
       _adjCtrls.putIfAbsent(task.taskId, () => TextEditingController()).text =
           task.scoreAdj == 0 ? '0' : formatKpiAdj(task.scoreAdj);
-      _remarkCtrls.putIfAbsent(task.taskId, () => TextEditingController()).text =
+      _remarkCtrls
+              .putIfAbsent(task.taskId, () => TextEditingController())
+              .text =
           task.remark;
+      final scoreMetric = task.metrics.isEmpty ? null : task.metrics.first;
+      final pts =
+          scoreMetric?.points ?? (task.isRubric ? null : task.taskTotal);
+      _pointCtrls
+          .putIfAbsent(task.taskId, () => TextEditingController())
+          .text = pts == null
+          ? ''
+          : (pts == pts.roundToDouble()
+                ? pts.toInt().toString()
+                : pts.toString());
     }
     _weightCtrls.removeWhere((id, ctrl) {
       if (seen.contains(id)) return false;
@@ -92,6 +123,11 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
       return true;
     });
     _remarkCtrls.removeWhere((id, ctrl) {
+      if (seen.contains(id)) return false;
+      ctrl.dispose();
+      return true;
+    });
+    _pointCtrls.removeWhere((id, ctrl) {
       if (seen.contains(id)) return false;
       ctrl.dispose();
       return true;
@@ -127,9 +163,8 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
           : double.tryParse(rawAdj);
       final auto = task.autoWeightPct ?? task.weightPct;
       final canAdjustWeight = (sizes[task.taskId] ?? 0) >= 2;
-      final weightChanged = canAdjustWeight &&
-          parsed != null &&
-          (parsed - auto).abs() > 0.05;
+      final weightChanged =
+          canAdjustWeight && parsed != null && (parsed - auto).abs() > 0.05;
       final adjChanged =
           parsedAdj != null && (parsedAdj - task.scoreAdj).abs() > 0.05;
       final keepAdj = parsedAdj != null && parsedAdj.abs() > 0.05;
@@ -180,6 +215,33 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
     await onSave(items, summary);
   }
 
+  Future<void> _submitRubric() async {
+    final onSave = widget.onSaveRubric;
+    if (onSave == null || widget.busy) return;
+    final items = <WorkbenchKpiRubricItem>[];
+    for (final task in _allTasks()) {
+      final key = task.rubricKey;
+      if (key.isEmpty) continue;
+      final raw = _pointCtrls[task.taskId]?.text.trim() ?? '';
+      final remark = _remarkCtrls[task.taskId]?.text.trim() ?? '';
+      if (raw.isEmpty) continue;
+      final parsed = double.tryParse(raw);
+      if (parsed == null) {
+        setState(() => _rubricError = '${task.taskName} 请填数字');
+        return;
+      }
+      items.add(
+        WorkbenchKpiRubricItem(key: key, points: parsed, remark: remark),
+      );
+    }
+    setState(() => _rubricError = null);
+    final byKey = {for (final t in _allTasks()) t.rubricKey: t};
+    final summary = items.isEmpty
+        ? '${widget.personName} ${widget.monthLabel}\n将清空已录量表分，变回未评分。'
+        : '${widget.personName} ${widget.monthLabel}\n${[for (final e in items) '${byKey[e.key]?.taskName ?? e.key}  ${e.points}${e.remark.isEmpty ? '' : '  ${e.remark}'}'].join('\n')}';
+    await onSave(items, summary);
+  }
+
   @override
   Widget build(BuildContext context) {
     final person = _person;
@@ -201,27 +263,85 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
               color: DunesColors.text,
             ),
           ),
-          const SizedBox(height: 4),
+          if (person.isRubric && person.scoredByName.trim().isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              '考核人 ${person.scoredByName}',
+              key: const Key('kpi-scored-by'),
+              style: const TextStyle(fontSize: 13, color: DunesColors.text2),
+            ),
+          ],
+          if (person.isRubric && person.isAcked) ...[
+            const SizedBox(height: 4),
+            Text(
+              '被考核人已确认 ${formatKpiAckedAt(person.ackedAt)}',
+              key: const Key('kpi-acked'),
+              style: const TextStyle(fontSize: 13, color: DunesColors.text2),
+            ),
+          ],
           const SizedBox(height: 8),
           _ScoreHeader(person: person),
           const SizedBox(height: 12),
-          for (final cat in person.categories) ...[
-            _CategoryEditor(
-              category: cat,
-              canEdit: widget.canEdit,
-              weightCtrls: _weightCtrls,
-              adjCtrls: _adjCtrls,
-              remarkCtrls: _remarkCtrls,
-            ),
-            const SizedBox(height: 12),
+          if (person.isRubric) ...[
+            for (final cat in person.categories) ...[
+              _RubricCategoryEditor(
+                category: cat,
+                canEdit: widget.canEdit,
+                pointCtrls: _pointCtrls,
+                remarkCtrls: _remarkCtrls,
+                onChanged: () => setState(() => _rubricError = null),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (_rubricError != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  _rubricError!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFFB42318),
+                  ),
+                ),
+              ),
+            if (widget.canEdit)
+              FilledButton(
+                key: const Key('kpi-detail-save'),
+                onPressed: widget.busy
+                    ? null
+                    : () => unawaited(_submitRubric()),
+                style: FilledButton.styleFrom(backgroundColor: _accent),
+                child: Text(widget.busy ? '保存中…' : '保存量表分'),
+              ),
+            if (widget.onAck != null) ...[
+              const SizedBox(height: 8),
+              OutlinedButton(
+                key: const Key('kpi-ack'),
+                onPressed: widget.busy
+                    ? null
+                    : () => unawaited(widget.onAck!()),
+                child: const Text('确认本月绩效'),
+              ),
+            ],
+          ] else ...[
+            for (final cat in person.categories) ...[
+              _CategoryEditor(
+                category: cat,
+                canEdit: widget.canEdit,
+                weightCtrls: _weightCtrls,
+                adjCtrls: _adjCtrls,
+                remarkCtrls: _remarkCtrls,
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (widget.canEdit)
+              FilledButton(
+                key: const Key('kpi-detail-save'),
+                onPressed: widget.busy ? null : () => unawaited(_submit()),
+                style: FilledButton.styleFrom(backgroundColor: _accent),
+                child: Text(widget.busy ? '保存中…' : '保存变更'),
+              ),
           ],
-          if (widget.canEdit)
-            FilledButton(
-              key: const Key('kpi-detail-save'),
-              onPressed: widget.busy ? null : () => unawaited(_submit()),
-              style: FilledButton.styleFrom(backgroundColor: _accent),
-              child: Text(widget.busy ? '保存中…' : '保存变更'),
-            ),
         ],
       ),
     );
@@ -260,7 +380,10 @@ class _CategoryEditor extends StatelessWidget {
               Expanded(
                 child: Text(
                   '${category.categoryLabel}板块 · ${category.tasks.length} 条任务',
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
                 ),
               ),
               Text(
@@ -476,9 +599,15 @@ class _TaskEditorState extends State<_TaskEditor> {
                         foregroundColor: Colors.white,
                         elevation: 0,
                         shape: const StadiumBorder(),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         visualDensity: VisualDensity.compact,
-                        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                        textStyle: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       icon: const Icon(Icons.keyboard_arrow_up, size: 16),
                       label: const Text('收起调整'),
@@ -491,9 +620,15 @@ class _TaskEditorState extends State<_TaskEditor> {
                         backgroundColor: Colors.white,
                         side: const BorderSide(color: Color(0xFFD5E3E7)),
                         shape: const StadiumBorder(),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         visualDensity: VisualDensity.compact,
-                        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                        textStyle: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       icon: const Icon(Icons.tune, size: 16),
                       label: const Text('调整权重 / 加减分'),
@@ -523,10 +658,7 @@ class _TaskEditorState extends State<_TaskEditor> {
   }
 }
 
-InputDecoration _kpiAdjustInputDecoration({
-  String? hint,
-  String? suffix,
-}) {
+InputDecoration _kpiAdjustInputDecoration({String? hint, String? suffix}) {
   const radius = BorderRadius.all(Radius.circular(16));
   const idle = BorderSide(color: Color(0xFFE2E8F0));
   return InputDecoration(
@@ -539,7 +671,10 @@ InputDecoration _kpiAdjustInputDecoration({
     suffixStyle: const TextStyle(fontSize: 12, color: DunesColors.text3),
     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     border: const OutlineInputBorder(borderRadius: radius, borderSide: idle),
-    enabledBorder: const OutlineInputBorder(borderRadius: radius, borderSide: idle),
+    enabledBorder: const OutlineInputBorder(
+      borderRadius: radius,
+      borderSide: idle,
+    ),
     disabledBorder: const OutlineInputBorder(
       borderRadius: radius,
       borderSide: BorderSide(color: Color(0xFFEEF1F4)),
@@ -587,12 +722,16 @@ class _KpiAdjustPanel extends StatelessWidget {
               Expanded(
                 child: _KpiAdjustField(
                   label: '权重',
-                  hint: lockWeight ? '该板块仅一项，无法改比例' : '自动 ${autoWeight.toStringAsFixed(2)}%',
+                  hint: lockWeight
+                      ? '该板块仅一项，无法改比例'
+                      : '自动 ${autoWeight.toStringAsFixed(2)}%',
                   suffix: '%',
                   controller: weightCtrl,
                   fieldKey: Key('kpi-weight-$taskId'),
                   enabled: !lockWeight,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                   ],
@@ -714,7 +853,7 @@ class _ScoreHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                person.mainScore.toStringAsFixed(2),
+                person.isPending ? '未评分' : person.mainScore.toStringAsFixed(2),
                 style: const TextStyle(
                   fontSize: 30,
                   fontWeight: FontWeight.w800,
@@ -726,8 +865,11 @@ class _ScoreHeader extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
-                  '主营得分',
-                  style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                  person.isRubric ? '量表得分' : '主营得分',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: DunesColors.text3,
+                  ),
                 ),
               ),
               const Spacer(),
@@ -735,20 +877,21 @@ class _ScoreHeader extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    grade.label,
+                    person.isPending ? '未评分' : grade.label,
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: _accent,
                     ),
                   ),
-                  Text(
-                    '系数 ${grade.coefficient}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: DunesColors.text3,
+                  if (!person.isPending)
+                    Text(
+                      '系数 ${grade.coefficient}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: DunesColors.text3,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ],
@@ -762,13 +905,242 @@ class _ScoreHeader extends StatelessWidget {
           ],
           const SizedBox(height: 10),
           Text(
-            hasTelecom && hasEnergy
+            person.isRubric
+                ? (person.isPending
+                      ? '量表未录完必填项，暂不算绩效等级'
+                      : '主营分 = 量表各档加总（减分项默认为 0）')
+                : hasTelecom && hasEnergy
                 ? '主营分 = 通信 ${person.telecomScore.toStringAsFixed(1)} × ${(person.telecomWeight * 100).toStringAsFixed(0)}% + 能源 ${person.energyScore.toStringAsFixed(1)} × ${(person.energyWeight * 100).toStringAsFixed(0)}%（按两边当月营收占比）'
                 : hasEnergy
-                    ? '只有能源板块任务，主营分就是能源板块分'
-                    : '只有通信板块任务，主营分就是通信板块分',
+                ? '只有能源板块任务，主营分就是能源板块分'
+                : '只有通信板块任务，主营分就是通信板块分',
             style: const TextStyle(fontSize: 12, color: DunesColors.text2),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RubricCategoryEditor extends StatelessWidget {
+  const _RubricCategoryEditor({
+    required this.category,
+    required this.canEdit,
+    required this.pointCtrls,
+    required this.remarkCtrls,
+    this.onChanged,
+  });
+
+  final WorkProfileKpiCategory category;
+  final bool canEdit;
+  final Map<int, TextEditingController> pointCtrls;
+  final Map<int, TextEditingController> remarkCtrls;
+  final VoidCallback? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE8EAED)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  category.categoryLabel,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              Text(
+                category.score.toStringAsFixed(2),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: DunesColors.text,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            '对照档位录入分数；未填完必填项不算等级',
+            style: TextStyle(fontSize: 12, color: DunesColors.text3),
+          ),
+          const SizedBox(height: 10),
+          for (final task in category.tasks)
+            _RubricItemEditor(
+              task: task,
+              canEdit: canEdit,
+              pointCtrl: pointCtrls[task.taskId]!,
+              remarkCtrl: remarkCtrls[task.taskId]!,
+              onChanged: onChanged,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RubricItemEditor extends StatelessWidget {
+  const _RubricItemEditor({
+    required this.task,
+    required this.canEdit,
+    required this.pointCtrl,
+    required this.remarkCtrl,
+    this.onChanged,
+  });
+
+  final WorkProfileKpiTask task;
+  final bool canEdit;
+  final TextEditingController pointCtrl;
+  final TextEditingController remarkCtrl;
+  final VoidCallback? onChanged;
+
+  WorkProfileKpiMetric? get _score =>
+      task.metrics.isEmpty ? null : task.metrics.first;
+
+  List<WorkProfileKpiMetric> get _bands =>
+      task.metrics.length <= 1 ? const [] : task.metrics.sublist(1);
+
+  String get _rangeHint {
+    final m = _score;
+    if (m == null) return '';
+    if (m.maxPoints == 0 && m.base < 0) {
+      return '${m.base.toStringAsFixed(0)}～0';
+    }
+    return '0～${m.maxPoints.toStringAsFixed(0)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  task.bucketLabel.isEmpty
+                      ? task.taskName
+                      : '${task.taskName} · ${task.bucketLabel}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: DunesColors.text,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 88,
+                child: TextField(
+                  key: Key('kpi-rubric-${task.rubricKey}'),
+                  controller: pointCtrl,
+                  enabled: canEdit,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    signed: true,
+                    decimal: true,
+                  ),
+                  onChanged: (_) => onChanged?.call(),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: canEdit ? DunesColors.text : DunesColors.text3,
+                  ),
+                  decoration: _kpiAdjustInputDecoration(
+                    hint: _rangeHint,
+                    suffix: '分',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: pointCtrl,
+            builder: (context, value, _) {
+              final pts = double.tryParse(value.text.trim());
+              return Column(
+                children: [
+                  for (final band in _bands)
+                    _RubricBandRow(
+                      band: band,
+                      selected:
+                          pts != null &&
+                          pts >= band.base &&
+                          pts <= band.maxPoints,
+                    ),
+                ],
+              );
+            },
+          ),
+          if (canEdit) ...[
+            const SizedBox(height: 8),
+            _KpiAdjustField(
+              label: '备注',
+              hint: '可选',
+              controller: remarkCtrl,
+              fieldKey: Key('kpi-rubric-remark-${task.rubricKey}'),
+              maxLines: 2,
+            ),
+          ] else if (task.remark.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              task.remark,
+              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RubricBandRow extends StatelessWidget {
+  const _RubricBandRow({required this.band, required this.selected});
+
+  final WorkProfileKpiMetric band;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      decoration: BoxDecoration(
+        color: selected ? const Color(0xFFE8F3F6) : const Color(0xFFF7F8FA),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: selected ? _accent : const Color(0xFFEDEFF2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            band.label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: selected ? _accent : DunesColors.text2,
+            ),
+          ),
+          if (band.note.trim().isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              band.note,
+              style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+            ),
+          ],
         ],
       ),
     );

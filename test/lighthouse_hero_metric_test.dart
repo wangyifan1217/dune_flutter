@@ -18,7 +18,6 @@ void main() {
     });
   });
 
-
   group('lighthouseHeroSummaryAppliesTo', () {
     test('全部 matches empty or 全部 filterGroup', () {
       expect(
@@ -178,10 +177,7 @@ void main() {
 
   test('tag3 recon: project-count score, reject wins, who to chase', () {
     LighthouseReconStatus st(Map<String, dynamic> extra) =>
-        lighthouseParseReconStatus({
-          'state': 'partial',
-          ...extra,
-        })!;
+        lighthouseParseReconStatus({'state': 'partial', ...extra})!;
 
     // 没有金额 → 退到项目数口径。必须是「9/10」不是「90%」：
     // 这一屏其它百分号全是金额，写 % 会被读成钱。
@@ -211,16 +207,15 @@ void main() {
 
     // 「卡在谁那儿」= 环节 + 人，缺一个也能降级说。
     expect(
-      lighthouseReconPendingWho(st({
-        'pendingStageLabel': '业务',
-        'owner': {'name': '卢笛', 'role': '业务'},
-      })),
+      lighthouseReconPendingWho(
+        st({
+          'pendingStageLabel': '业务',
+          'owner': {'name': '卢笛', 'role': '业务'},
+        }),
+      ),
       '待业务确认 · 卢笛',
     );
-    expect(
-      lighthouseReconPendingWho(st({'pendingStageLabel': '财务'})),
-      '待财务确认',
-    );
+    expect(lighthouseReconPendingWho(st({'pendingStageLabel': '财务'})), '待财务确认');
     expect(lighthouseReconPendingWho(st({})), '');
 
     // 没有分数也没有金额时，仍然是原来那句，不编数字。
@@ -793,13 +788,19 @@ void main() {
   test('ledger rows show four focused metrics in a neutral 2x2 grid', () {
     expect(lighthouseLedgerSummaryColumns, 2);
     expect(lighthouseLedgerNameFontSize, 12.5);
-    expect(lighthouseLedgerLongNameFontSize, 11.0);
+    expect(lighthouseLedgerLongNameFontSize, 12.5);
     expect(lighthouseLedgerProjectNameFontSize, 10.0);
     expect(lighthouseLedgerNameFontSizeForTab('supply'), 12.5);
     expect(lighthouseLedgerNameFontSizeForTab('channel'), 12.5);
-    expect(lighthouseLedgerNameFontSizeForTab('product'), 11.0);
-    expect(lighthouseLedgerNameFontSizeForTab('productName'), 11.0);
+    expect(lighthouseLedgerNameFontSizeForTab('product'), 12.5);
+    expect(lighthouseLedgerNameFontSizeForTab('productName'), 12.5);
     expect(lighthouseLedgerNameFontSizeForTab('project'), 10.0);
+    expect(lighthouseLedgerPinnedNameFontSize('product'), 12.5);
+    expect(
+      lighthouseLedgerNameFontSize,
+      lessThan(lighthouseHeroSummaryTitleFontSize),
+    );
+    expect(lighthouseLedgerIdentityMarkSize, lighthouseHeroSummaryIconSize);
     expect(lighthouseLedgerValueFontSize, 11.5);
     expect(lighthouseLedgerUnitFontSize, 9.0);
     expect(lighthouseLedgerMetricLabelFontSize, 10);
@@ -873,7 +874,10 @@ void main() {
     expect(lighthouseLedgerSoloTrendAfterTap(null, 'profit'), 'profit');
     expect(lighthouseLedgerSoloTrendAfterTap('profit', 'profit'), isNull);
     expect(lighthouseLedgerSoloTrendAfterTap('sales', 'prepaid'), 'prepaid');
-    expect(lighthouseLedgerSoloTrendAfterTap('sales', 'costTotal'), 'costTotal');
+    expect(
+      lighthouseLedgerSoloTrendAfterTap('sales', 'costTotal'),
+      'costTotal',
+    );
     expect(lighthouseLedgerSoloTrendAfterTap('sales', 'gmv'), 'gmv');
     expect(lighthouseHeroMetricIsOverlay('profit'), isTrue);
     expect(lighthouseHeroMetricIsOverlay('costTotal'), isTrue);
@@ -1869,6 +1873,7 @@ void main() {
     expect(lighthouseLedgerShowsDiscountUi, isFalse);
     expect(lighthouseLedgerPrimaryTabHeight, 44);
     expect(lighthouseLedgerFilterRowHeight, 42);
+    expect(lighthouseLedgerFilterKickerWidth, 36);
     expect(lighthouseLedgerFilterChipRadius, 8);
     expect(lighthouseLedgerCentersPrimaryDimensions, isFalse);
     expect(lighthouseLedgerPrimaryDimensionsFillAvailableWidth, isTrue);
@@ -1883,8 +1888,10 @@ void main() {
   test('period selector uses a floating rounded segmented control', () {
     expect(lighthousePeriodUsesFloatingSegment, isTrue);
     expect(lighthousePeriodTrackHeight, 44);
-    expect(lighthousePeriodTrackRadius, 12);
-    expect(lighthousePeriodSelectedRadius, 8);
+    expect(lighthousePeriodTrackRadius, 14);
+    expect(lighthousePeriodSelectedRadius, 10);
+    expect(lighthousePeriodUsesHeroSurface, isTrue);
+    expect(lighthouseHeroSectionUsesHeroSurface, isTrue);
     expect(lighthousePeriodStatusDotSize, 4);
     expect(lighthousePeriodAnimationMs, 180);
   });
@@ -2041,6 +2048,14 @@ void main() {
     expect(lighthouseCompactHeroIsNarrow(600), isFalse);
     expect(lighthouseCompactHeroSparkHeightFor(390), 216);
     expect(lighthouseCompactHeroSparkHeightFor(800), 180);
+    expect(
+      lighthouseCompactHeroSparkHeightFor(800, hasBiButton: true),
+      180 + lighthouseHeroBiButtonReserveHeight,
+    );
+    expect(
+      lighthouseCompactHeroSparkHeightFor(390, hasBiButton: true),
+      216 + lighthouseHeroBiButtonReserveHeight,
+    );
     expect(lighthouseNetTAHeroSparkHeightFor(390), 216);
     expect(lighthouseNetTAHeroSparkHeightFor(800), 180);
     expect(lighthouseNetTABankBalanceExtraHeight, 40);
@@ -2063,7 +2078,7 @@ void main() {
     expect(lighthouseCompactHeroChartMaxHeightFor(800), 84);
     expect(lighthouseCompactHeroBlockHeightFor(390), 216 + 16);
     expect(lighthouseCompactHeroBlockHeightFor(800), 180 + 16);
-    expect(lighthouseCompactHeroMetricGap, 2);
+    expect(lighthouseCompactHeroMetricGap, 0);
     expect(lighthouseHeroUsesCategoryTint, isFalse);
     expect(lighthouseHeroUsesAccentRail, isFalse);
     expect(lighthouseHeroShowsEnglishKicker, isFalse);
@@ -2129,6 +2144,12 @@ void main() {
     expect(lighthouseHeroMetricValueFontSize, 13);
     expect(lighthouseHeroMetricLabelFontSize, 9);
     expect(lighthouseHeroMetricDeltaFontSize, 8);
+    expect(lighthouseHeroCellLabelFontSize, 10);
+    expect(lighthouseHeroCellDeltaFontSize, 9);
+    expect(lighthousePeriodAmbientMotion, isFalse);
+    expect(lighthousePeriodPillShowsInstance, isTrue);
+    expect(lighthouseHeroMastheadShowsFocusExit, isTrue);
+    expect(lighthouseSoftReloadKeepsContent, isTrue);
     expect(
       [
         lighthouseHeroScaleColumnFlex,
@@ -2869,6 +2890,75 @@ void main() {
         ),
         isNull,
       );
+      expect(lighthouseHeroSuppressPointMom, isFalse);
+      expect(lighthouseHeroPointVsLabel('monthly'), 'vs 上月');
+      expect(lighthouseHeroPointVsLabel('daily'), 'vs 上日');
+      expect(lighthouseHeroPointVsLabel('weekly'), 'vs 上周');
+      expect(lighthouseHeroPointVsLabel('quarterly'), 'vs 上季');
+      expect(lighthouseHeroPointVsLabel('yearly'), 'vs 上年');
+      expect(lighthouseHeroPointVsLabel(null, period: 'day'), 'vs 上日');
+      expect(lighthouseHeroPointVsLabel(null, period: 'month'), 'vs 上月');
+      // 点 6 月（下标 3）对 5 月，不要因为 Hero 就关掉环比。
+      expect(
+        lighthouseTrendMomPct(
+          periodDeltaPct: 3.9,
+          partialPeriod: true,
+          selectedIndex: 3,
+          series: const [10, 12, 11, 13, 14, 15, 16],
+          suppressPointMom: lighthouseHeroSuppressPointMom,
+        ),
+        closeTo((13 - 11) / 11 * 100, 1e-6),
+      );
+      expect(
+        lighthouseTrendMomPct(
+          periodDeltaPct: 3.9,
+          partialPeriod: false,
+          selectedIndex: 0,
+          series: const [10, 12, 11],
+        ),
+        isNull,
+      );
+      expect(
+        lighthouseTrendMomPct(
+          periodDeltaPct: 1.2,
+          partialPeriod: false,
+          selectedIndex: 1,
+          series: const [10.0, 12.5],
+          asPercentagePoints: true,
+        ),
+        closeTo(2.5, 1e-6),
+      );
+      // 显式 suppress 仍可关掉（账本以外的调用方）；Hero 不再传 true。
+      expect(
+        lighthouseTrendMomPct(
+          periodDeltaPct: 3.9,
+          partialPeriod: false,
+          selectedIndex: 1,
+          series: const [2.29, 2.4, 3.83],
+          suppressPointMom: true,
+        ),
+        isNull,
+      );
+      expect(
+        lighthouseTrendMomPct(
+          periodDeltaPct: 3.9,
+          partialPeriod: true,
+          selectedIndex: 2,
+          series: const [2.29, 2.4, 3.83],
+          suppressPointMom: true,
+        ),
+        isNull,
+      );
+      expect(
+        lighthouseTrendMomPct(
+          periodDeltaPct: 3.9,
+          partialPeriod: true,
+          selectedIndex: null,
+          series: const [2.29, 2.4, 3.83],
+          suppressPointMom: true,
+        ),
+        3.9,
+      );
     });
   });
 
@@ -3035,6 +3125,216 @@ void main() {
       draft = lighthouseRangeDraftTapDay(draft, d2);
       expect(draft.start, d2);
       expect(draft.end, d8);
+    });
+  });
+
+  // ── 环比可读性门槛 ────────────────────────────────────────────────
+  //
+  // 数字全部取自 2026-09 真机截图的产品账本。屏幕上「0.00万 ↑558%」和
+  // 「1.31万 ↓89%」长得一模一样，但前者是 43 元涨到 283 元，后者是 12 万
+  // 掉到 1.3 万。这组用例钉住的就是「哪一个该画出来」。
+  group('lighthouseDeltaIsReadable', () {
+    test('真机截图：0.00万 ↑558% 不画，1.31万 ↓89% 要画', () {
+      // 民营加油 · 成本合计：显示 0.00万，基数约 43 元
+      expect(lighthouseDeltaIsReadable(558, value: 283), isFalse);
+      // 中石化普惠现金券 · 收入：显示 1.31万，基数约 11.9 万
+      expect(lighthouseDeltaIsReadable(-89, value: 13100), isTrue);
+    });
+
+    test('真机截图：0.10万 ↑117% 不画 —— 461 元涨到 1000 元', () {
+      expect(lighthouseDeltaIsReadable(117, value: 1000), isFalse);
+    });
+
+    test('真机截图：0.03万 ↑25% 不画 —— 变化只有 60 元', () {
+      expect(lighthouseDeltaIsReadable(25, value: 300), isFalse);
+    });
+
+    test('真机截图：−5.81万 ↓107% 要画 —— 基数 83 万', () {
+      expect(lighthouseDeltaIsReadable(-107, value: -58100), isTrue);
+    });
+
+    test('基数刚好卡在门槛两边', () {
+      // 基数 999 元 → 拦；1001 元 → 放
+      expect(lighthouseDeltaIsReadable(100, value: 999 * 2), isFalse);
+      expect(lighthouseDeltaIsReadable(100, value: 1001 * 2), isTrue);
+    });
+
+    test('基数够大但变化太小也不画', () {
+      // 10 万 → 10.03 万：基数过关，但变化 300 元，在两位小数的万里看不见
+      expect(lighthouseDeltaIsReadable(0.3, value: 100300), isFalse);
+      expect(lighthouseDeltaIsReadable(1, value: 101000), isTrue);
+    });
+
+    test('无变化 / 无数据一律不画', () {
+      expect(lighthouseDeltaIsReadable(null, value: 100000), isFalse);
+      expect(lighthouseDeltaIsReadable(0, value: 100000), isFalse);
+      expect(lighthouseDeltaIsReadable(0.04, value: 100000), isFalse);
+    });
+
+    test('↓100% 归零本身就读得懂，不靠基数', () {
+      expect(lighthouseDeltaIsReadable(-100, value: 0), isTrue);
+    });
+
+    test('率的环比是百分点差，不存在小基数放大，一律放行', () {
+      expect(lighthouseDeltaIsReadable(300, value: 12, isRate: true), isTrue);
+    });
+
+    test('拿不到本期金额时不拦 —— 宁可多显示，不可误拦', () {
+      expect(lighthouseDeltaIsReadable(558), isTrue);
+    });
+  });
+
+  // ── 率的环比门槛 ──────────────────────────────────────────────────
+  //
+  // 截图里「中石油积分」：核销额 0.08万 = 800 元，却显示毛利率 0.8%。
+  // 后端 minimumRateBase = 50 元形同虚设，率和它的 pp 变化都是噪声。
+  group('lighthouseRateDeltaIsReadable', () {
+    test('真机截图：核销额 800 元的毛利率环比不画', () {
+      expect(lighthouseRateDeltaIsReadable(-1.2, base: 800), isFalse);
+    });
+
+    test('分母够大就画', () {
+      expect(lighthouseRateDeltaIsReadable(-1.2, base: 1102300), isTrue);
+    });
+
+    test('分母卡在门槛两边', () {
+      expect(lighthouseRateDeltaIsReadable(5, base: 999), isFalse);
+      expect(lighthouseRateDeltaIsReadable(5, base: 1000), isTrue);
+    });
+
+    test('分母取不到就不画 —— 率的分母不在屏幕上，读的人核不了', () {
+      expect(lighthouseRateDeltaIsReadable(5), isFalse);
+    });
+
+    test('没变化不算「可读涨跌」，但分母够时仍应出示持平符', () {
+      expect(lighthouseRateDeltaIsReadable(null, base: 1e6), isFalse);
+      expect(lighthouseRateDeltaIsReadable(0.04, base: 1e6), isFalse);
+      expect(lighthouseRateDeltaShouldShow(null, base: 1e6), isFalse);
+      expect(lighthouseRateDeltaShouldShow(0.04, base: 1e6), isTrue);
+    });
+
+    test('分母为负也按绝对值判断', () {
+      expect(lighthouseRateDeltaIsReadable(3, base: -50000), isTrue);
+    });
+  });
+
+  // 中石油返费：盘子 ↓63%，毛利率仍约 0.9%，|Δ| 收成 0.00pp。
+  // 分母 1464.8 万够格，应画 →，不能藏成「没算」。
+  group('lighthouseRateDeltaShouldShow', () {
+    test('中石油返费：核销 1464.8 万、持平 0.00pp 要画 →', () {
+      expect(lighthouseRateDeltaShouldShow(0, base: 14648000), isTrue);
+      expect(
+        lighthouseRateDeltaText(0, base: 14648000),
+        lighthouseDeltaFlatMark,
+      );
+    });
+
+    test('会员套餐订阅：销售额 0.49 万也要出环比，不能空白', () {
+      expect(lighthouseRateDeltaShouldShow(0, base: 4900), isTrue);
+      expect(lighthouseRateDeltaText(0, base: 4900), lighthouseDeltaFlatMark);
+      expect(lighthouseRateDeltaText(7.3, base: 4900), '↑7.3pp');
+    });
+
+    test('核销额 800 元的噪声，持平也不画', () {
+      expect(lighthouseRateDeltaShouldShow(0.04, base: 800), isFalse);
+      expect(lighthouseRateDeltaText(0.04, base: 800), isNull);
+    });
+
+    test('真变动仍走 ↑↓pp', () {
+      expect(lighthouseRateDeltaText(-0.1, base: 1e6), '↓0.1pp');
+      expect(lighthouseRateDeltaText(1.2, base: 1e6), '↑1.2pp');
+    });
+  });
+
+  group('lighthouseLedgerDeltaText', () {
+    test('持平用 →，不用 ↓0.0pp', () {
+      expect(lighthouseDeltaFlatMark, '→');
+      expect(lighthouseLedgerDeltaText(0, isRate: true), '→');
+      expect(lighthouseLedgerDeltaText(0.04, isRate: true), '→');
+      expect(lighthouseLedgerDeltaText(-0.04, isRate: false), '→');
+    });
+
+    test('有变动走 ↑↓，率用 pp、金额用 %', () {
+      expect(lighthouseLedgerDeltaText(-63, isRate: false), '↓63%');
+      expect(lighthouseLedgerDeltaText(5.1, isRate: false), '↑5.1%');
+      expect(lighthouseLedgerDeltaText(-0.1, isRate: true), '↓0.1pp');
+    });
+  });
+
+  group('趋势图 v16', () {
+    test('小柱层：主线非毛利给毛利，主线是毛利时给规模', () {
+      const all = [true, true, true, true, true, false, false];
+      expect(lighthouseTrendLaneIndex(all, 3), 2);
+      expect(lighthouseTrendLaneIndex(all, 0), 2);
+      expect(lighthouseTrendLaneIndex(all, 2), 3);
+      expect(
+        lighthouseTrendLaneIndex([true, true, true, false, true, false], 2),
+        4,
+      );
+      expect(
+        lighthouseTrendLaneIndex([true, true, false, true, true, false], 3),
+        -1,
+      );
+      expect(
+        lighthouseTrendLaneIndex([false, false, true, false, false, false], 2),
+        -1,
+      );
+    });
+
+    test('画布切分：矮图不分层，高图主图在上、小柱层贴底', () {
+      final short = lighthouseTrendCanvasGeometry(76, wantsLane: true);
+      expect(short.lane, isFalse);
+      expect(short.plotBottom, 66);
+
+      final tall = lighthouseTrendCanvasGeometry(140, wantsLane: true);
+      expect(tall.lane, isTrue);
+      expect(tall.laneBottom, 139);
+      expect(tall.laneBottom - tall.laneTop, closeTo(28, 1e-9));
+      expect(tall.plotBottom, lessThan(tall.laneTop));
+      expect(tall.plotBottom - tall.plotTop, greaterThan(60));
+
+      final noLane = lighthouseTrendCanvasGeometry(140, wantsLane: false);
+      expect(noLane.lane, isFalse);
+      expect(noLane.plotBottom, 130);
+    });
+
+    test('进度胶囊比例夹在 0..1', () {
+      expect(lighthouseTrendPaceRatio(1.75, 3.5), closeTo(0.5, 1e-9));
+      expect(lighthouseTrendPaceRatio(5, 3.5), 1.0);
+      expect(lighthouseTrendPaceRatio(-1, 3.5), 0.0);
+      expect(lighthouseTrendPaceRatio(1, 0), 0.0);
+    });
+
+    test('单调插值：每段 Bezier 控制点不越过两端值（不再画假凹陷）', () {
+      // 03→04 那种形状：先降后升再降。
+      final xs = [0.0, 10.0, 20.0, 30.0, 40.0, 50.0];
+      final ys = [60.0, 70.0, 40.0, 38.0, 20.0, 90.0];
+      final m = lighthouseMonotoneTangents(xs, ys);
+      expect(m.length, xs.length);
+      for (var i = 0; i < xs.length - 1; i++) {
+        final h = (xs[i + 1] - xs[i]) / 3;
+        final c1 = ys[i] + m[i] * h;
+        final c2 = ys[i + 1] - m[i + 1] * h;
+        final lo = ys[i] < ys[i + 1] ? ys[i] : ys[i + 1];
+        final hi = ys[i] < ys[i + 1] ? ys[i + 1] : ys[i];
+        expect(c1, inInclusiveRange(lo - 1e-9, hi + 1e-9));
+        expect(c2, inInclusiveRange(lo - 1e-9, hi + 1e-9));
+      }
+      // 拐点切线归零。
+      expect(m[1], 0);
+    });
+
+    test('单调插值：x 递减（闭合带回程）与正向对称', () {
+      final xs = [0.0, 10.0, 20.0, 30.0];
+      final ys = [5.0, 9.0, 12.0, 30.0];
+      final fwd = lighthouseMonotoneTangents(xs, ys);
+      final rev = lighthouseMonotoneTangents(
+        xs.reversed.toList(),
+        ys.reversed.toList(),
+      );
+      for (var i = 0; i < xs.length; i++) {
+        expect(rev[xs.length - 1 - i], closeTo(fwd[i], 1e-9));
+      }
     });
   });
 }

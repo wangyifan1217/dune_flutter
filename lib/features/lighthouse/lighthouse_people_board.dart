@@ -97,14 +97,10 @@ _Kind _kindOf(String key) {
   }
 }
 
-/// 与 _ledgerFmtDelta 同款：`↑12.3%` / `↓5.1%` / `↑3.2pp`，|Δ| < 0.05 视同无变化。
+/// 与 lighthouseLedgerDeltaText 同款：`↑12.3%` / `↓5.1%` / `↑3.2pp` / `→`。
 String? _fmtDelta(double? pct, {required bool isRate}) {
   if (pct == null || pct.isNaN || !pct.isFinite) return null;
-  if (pct.abs() < 0.05) return null;
-  final a = pct.abs();
-  return '${pct >= 0 ? '↑' : '↓'}'
-      '${a.toStringAsFixed(a >= 10 ? 0 : 1)}'
-      '${isRate ? 'pp' : '%'}';
+  return lighthouseLedgerDeltaText(pct, isRate: isRate);
 }
 
 double? _metricValue(LhPeopleRow r, String key) {

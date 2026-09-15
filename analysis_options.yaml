@@ -9,6 +9,13 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
+# _to_delete/ 是待删归档，不参与分析。
+# dart analyze 扫的是整个包根而不只是 lib/，所以把文件移出 lib/ 还不够，
+# 必须在这里排除，否则 172,648 行历史副本照样进 analyze 和 IDE 索引。
+analyzer:
+  exclude:
+    - "_to_delete/**"
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`

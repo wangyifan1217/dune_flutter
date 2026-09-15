@@ -211,13 +211,19 @@ class _LhBrandMarkPainter extends CustomPainter {
       ..lineTo(u(23), u(2.2))
       ..lineTo(u(23), u(10.4))
       ..close();
-    canvas.drawPath(beam, Paint()..color = Colors.white.withValues(alpha: 0.22));
+    canvas.drawPath(
+      beam,
+      Paint()..color = Colors.white.withValues(alpha: 0.22),
+    );
     final core = Path()
       ..moveTo(lamp.dx, lamp.dy)
       ..lineTo(u(23), u(4.4))
       ..lineTo(u(23), u(7.0))
       ..close();
-    canvas.drawPath(core, Paint()..color = Colors.white.withValues(alpha: 0.34));
+    canvas.drawPath(
+      core,
+      Paint()..color = Colors.white.withValues(alpha: 0.34),
+    );
 
     // ③ 灯：柔光 + 实心点
     canvas.drawCircle(
@@ -1030,8 +1036,7 @@ class _DiscountRow {
   /// 这一档的达成时间。有值 = 这一档已经到了，没值 = 还在爬。
   final String? reachTime;
 
-  bool get isReached =>
-      reachTime != null && reachTime!.trim().isNotEmpty;
+  bool get isReached => reachTime != null && reachTime!.trim().isNotEmpty;
 
   /// 后端算的「过档多赚」（元）。只有全额累进会给，超额累进后端不给。
   final double? profitGain;
@@ -1044,22 +1049,27 @@ class _DiscountRow {
   LighthouseDiscountLadder? get ladder {
     if (isFixed) return null;
     final level = tierLevel ?? 1;
-    final full = LighthouseDiscountLadder.fromApi(tiersRaw, currentLevel: level);
+    final full = LighthouseDiscountLadder.fromApi(
+      tiersRaw,
+      currentLevel: level,
+    );
     if (full != null) return full;
     return LighthouseDiscountLadder.placeholder(
-      tierCount: lighthouseDiscountPlaceholderTierCount(
-        tierCount: tierCount,
-        currentLevel: level,
-        hasNext: nextRate != null || nextThreshold != null,
-      ),
-      currentLevel: level,
-      currentPermille: discountRate != null ? discountRate! * 1000 : contractRate,
-      nextPermille: nextRate,
-      // 当前档门槛后端没单发，用累计基数兜底只为了让指针有个落点，
-      // 不当成门槛显示（占位格一律画「—」）。
-      currentMin: 0,
-      nextThreshold: nextThreshold,
-    ) ??
+          tierCount: lighthouseDiscountPlaceholderTierCount(
+            tierCount: tierCount,
+            currentLevel: level,
+            hasNext: nextRate != null || nextThreshold != null,
+          ),
+          currentLevel: level,
+          currentPermille: discountRate != null
+              ? discountRate! * 1000
+              : contractRate,
+          nextPermille: nextRate,
+          // 当前档门槛后端没单发，用累计基数兜底只为了让指针有个落点，
+          // 不当成门槛显示（占位格一律画「—」）。
+          currentMin: 0,
+          nextThreshold: nextThreshold,
+        ) ??
         // 兜到底：连档位数都推不出来时，至少画出当前档和下一档。
         // 条子可点而卡片返回 null，就是「点了没反应」的根。
         LighthouseDiscountLadder.minimal(
@@ -1102,6 +1112,7 @@ class _DiscountRow {
     }
     return null;
   }
+
   String? get dateRange =>
       lighthouseDiscountDateRange(segmentStartTime, segmentEndTime) ??
       lighthouseDiscountDateRange(periodStartTime, periodEndTime);
@@ -1243,12 +1254,20 @@ _TrendBounds _computeBounds(
     return _SeriesRange(r.min, r.max);
   }
 
+  // v16 · 有月末预测 = 最后一期没走完。那半个月的实际值画成进度胶囊、不上线，
+  //   也就不该参与值域 —— 否则 1.7 亿的半月值会把轴底拉下去，整条线被压扁。
+  List<double> complete(List<double> v) =>
+      scaleForecast != null && v.length >= 2 ? v.sublist(0, v.length - 1) : v;
+  final scaleFull = complete(s.scale);
+  final scaleAltFull = complete(s.scaleAlt);
   var scaleRange = shareScaleRange
       ? computeOne(
-          s.scaleAlt.isEmpty ? s.scale : <double>[...s.scale, ...s.scaleAlt],
+          scaleAltFull.isEmpty
+              ? scaleFull
+              : <double>[...scaleFull, ...scaleAltFull],
         )
-      : computeOne(s.scale);
-  final scaleAltRange = shareScaleRange ? scaleRange : computeOne(s.scaleAlt);
+      : computeOne(scaleFull);
+  final scaleAltRange = shareScaleRange ? scaleRange : computeOne(scaleAltFull);
   if (scaleForecast != null && s.scale.isNotEmpty) {
     if (scaleForecast > scaleRange.max) {
       final pad = (scaleForecast - scaleRange.min).abs() * 0.08;
@@ -1301,62 +1320,53 @@ _TrendBounds _computeBounds(
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 平滑折线 helper (v2.8 · Chart smoothing)
-//   把点序 → cubic bezier path,用 Catmull-Rom → Bezier 换算。tension=1.0 等价
-//   uniform Catmull-Rom;每段控制点 = 邻居的 1/6 位差。端点镜像自身避开端头翘尾。
-//   替换掉此前 `path.lineTo` 的尖角折线,给"编辑体财报"折线一个自然呼吸。
+// 平滑折线 helper (v2.8 · Chart smoothing → v16 单调三次)
+//   全灯塔的趋势线都走这一个入口；切线由 lighthouseMonotoneTangents 算
+//   （纯函数，有单测），这里只负责 Hermite → Bezier 换算。
 // ═════════════════════════════════════════════════════════════════════════════
 void _addSmoothPath(Path path, List<Offset> points, {double tension = 1.0}) {
-  final n = points.length;
-  if (n == 0) return;
+  if (points.isEmpty) return;
   path.moveTo(points[0].dx, points[0].dy);
-  if (n == 1) return;
-  if (n == 2) {
-    path.lineTo(points[1].dx, points[1].dy);
-    return;
-  }
-  final t = tension / 6.0;
-  for (int i = 0; i < n - 1; i++) {
-    final p0 = points[i == 0 ? 0 : i - 1];
-    final p1 = points[i];
-    final p2 = points[i + 1];
-    final p3 = points[i + 2 < n ? i + 2 : n - 1];
-    final c1x = p1.dx + (p2.dx - p0.dx) * t;
-    final c1y = p1.dy + (p2.dy - p0.dy) * t;
-    final c2x = p2.dx - (p3.dx - p1.dx) * t;
-    final c2y = p2.dy - (p3.dy - p1.dy) * t;
-    path.cubicTo(c1x, c1y, c2x, c2y, p2.dx, p2.dy);
-  }
+  _monotoneCubicTo(path, points);
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// appendSmoothPath —— 把点序以同样的 Catmull-Rom 平滑续接到已有 path 上
-//   (_addSmoothPath 会 moveTo 起点, 画闭合带的回程需要 lineTo 起点再续)。
-//   两处必须用同一套控制点算法, 否则带的边缘和画出来的线会错开。
-void appendSmoothPath(Path path, List<Offset> points, {double tension = 1.0}) {
+/// v16 · 平滑从 Catmull-Rom 换成单调三次（Fritsch–Carlson）。
+///   Catmull-Rom 在拐点处会过冲：两点之间画出比两端都低的凹陷，读者会当成
+///   真实数据。单调三次保证每段曲线落在两端值之间，呼吸感还在，假数据没了。
+///   [tension] 参数保留只为兼容旧调用，不再生效。
+void _monotoneCubicTo(Path path, List<Offset> points) {
   final n = points.length;
-  if (n == 0) return;
-  path.lineTo(points[0].dx, points[0].dy);
-  if (n == 1) return;
+  if (n < 2) return;
   if (n == 2) {
     path.lineTo(points[1].dx, points[1].dy);
     return;
   }
-  final t = tension / 6.0;
-  for (int i = 0; i < n - 1; i++) {
-    final p0 = points[i == 0 ? 0 : i - 1];
+  final m = lighthouseMonotoneTangents(
+    [for (final p in points) p.dx],
+    [for (final p in points) p.dy],
+  );
+  for (var i = 0; i < n - 1; i++) {
     final p1 = points[i];
     final p2 = points[i + 1];
-    final p3 = points[i + 2 < n ? i + 2 : n - 1];
+    final h = (p2.dx - p1.dx) / 3;
     path.cubicTo(
-      p1.dx + (p2.dx - p0.dx) * t,
-      p1.dy + (p2.dy - p0.dy) * t,
-      p2.dx - (p3.dx - p1.dx) * t,
-      p2.dy - (p3.dy - p1.dy) * t,
+      p1.dx + h,
+      p1.dy + m[i] * h,
+      p2.dx - h,
+      p2.dy - m[i + 1] * h,
       p2.dx,
       p2.dy,
     );
   }
+}
+
+// appendSmoothPath —— 把点序以同样的单调三次续接到已有 path 上
+//   (_addSmoothPath 会 moveTo 起点, 画闭合带的回程需要 lineTo 起点再续)。
+//   两处必须用同一套控制点算法, 否则带的边缘和画出来的线会错开。
+void appendSmoothPath(Path path, List<Offset> points, {double tension = 1.0}) {
+  if (points.isEmpty) return;
+  path.lineTo(points[0].dx, points[0].dy);
+  _monotoneCubicTo(path, points);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1372,61 +1382,8 @@ void appendSmoothPath(Path path, List<Offset> points, {double tension = 1.0}) {
 //   单调 —— 两点之间既不会高过较高的那点，也不会低过较低的那点。
 //   代价是拐点附近略显生硬，但那正是数据本来的样子。
 // ═════════════════════════════════════════════════════════════════════════════
-void _addMonotonePath(Path path, List<Offset> points) {
-  final n = points.length;
-  if (n == 0) return;
-  path.moveTo(points[0].dx, points[0].dy);
-  if (n == 1) return;
-  if (n == 2) {
-    path.lineTo(points[1].dx, points[1].dy);
-    return;
-  }
-  final dx = List<double>.filled(n - 1, 0);
-  final delta = List<double>.filled(n - 1, 0);
-  for (var i = 0; i < n - 1; i++) {
-    final d = points[i + 1].dx - points[i].dx;
-    // x 严格递增是前提（等间距采样），1e-9 只是防除零的兜底。
-    dx[i] = d.abs() < 1e-9 ? 1e-9 : d;
-    delta[i] = (points[i + 1].dy - points[i].dy) / dx[i];
-  }
-  final m = List<double>.filled(n, 0);
-  m[0] = delta[0];
-  m[n - 1] = delta[n - 2];
-  for (var i = 1; i < n - 1; i++) {
-    // 左右斜率异号 = 这里是拐点，切线必须归 0，否则曲线会从拐点冲出去。
-    m[i] = delta[i - 1] * delta[i] <= 0 ? 0.0 : (delta[i - 1] + delta[i]) / 2;
-  }
-  for (var i = 0; i < n - 1; i++) {
-    if (delta[i].abs() < 1e-12) {
-      // 平段两端切线都归 0，否则平的地方会鼓起来。
-      m[i] = 0;
-      m[i + 1] = 0;
-      continue;
-    }
-    final a = m[i] / delta[i];
-    final b = m[i + 1] / delta[i];
-    final q = a * a + b * b;
-    if (q > 9) {
-      final t = 3 / math.sqrt(q);
-      m[i] = t * a * delta[i];
-      m[i + 1] = t * b * delta[i];
-    }
-  }
-  for (var i = 0; i < n - 1; i++) {
-    final p1 = points[i], p2 = points[i + 1];
-    // Hermite → 三次 Bezier：控制点落在段长的 1/3 处，这是两种表示的等价换算，
-    // 不是可调的手感参数。
-    final h = dx[i] / 3;
-    path.cubicTo(
-      p1.dx + h,
-      p1.dy + m[i] * h,
-      p2.dx - h,
-      p2.dy - m[i + 1] * h,
-      p2.dx,
-      p2.dy,
-    );
-  }
-}
+void _addMonotonePath(Path path, List<Offset> points) =>
+    _addSmoothPath(path, points);
 
 // ═════════════════════════════════════════════════════════════════════════════
 // _niceStep —— 人能心算的刻度步长
@@ -2061,7 +2018,105 @@ class _LhAnimatedNumberState extends State<_LhAnimatedNumber>
   }
 }
 
+// ── Trend canvas shared geometry (v16) ───────────────────────────────────────
+//   Lines / Overlay / 外层 MAX·MIN 标注三处必须用同一套判定，否则标注会挂歪。
+
+/// 主线下标：solo 覆盖优先，否则按固定优先级挑。
+int _trendResolveHero(List<bool> flags, int? override) =>
+    override != null &&
+        override >= 0 &&
+        override < flags.length &&
+        flags[override]
+    ? override
+    : lighthouseTrendHeroIndex(flags);
+
+List<bool> _trendNormalizeFlags(List<bool> available) => available.length >= 6
+    ? available
+    : <bool>[for (var i = 0; i < 6; i++) i < available.length && available[i]];
+
+/// 最后一期没走完（有月末预测、主线是规模）：最后一列画进度胶囊，不上线。
+bool _trendIsPartial({
+  required double? forecast,
+  required List<bool> flags,
+  required int heroIndex,
+  required List<double> heroPts,
+}) => forecast != null && heroIndex == 3 && flags[3] && heroPts.length >= 2;
+
+/// 核销 ↔ 销售共用真轴时才画差额带和第二条规模线。
+bool _trendAltDrawable({
+  required _TrendSeries series,
+  required _TrendBounds bounds,
+  required List<bool> flags,
+  required int heroIndex,
+}) =>
+    bounds.shareScaleRange &&
+    // 主线必须就是规模那条：带子的上下缘共用 heroBounds，主线换成毛利
+    // 或收入之后，197 万的销售规模会被压进 6 万的毛利尺，带子直接铺满全屏。
+    heroIndex == 3 &&
+    flags.length > 4 &&
+    flags[3] &&
+    flags[4] &&
+    series.scale.length >= 2 &&
+    series.scaleAlt.length >= 2;
+
+/// 底部小柱层的值域（含 0，未走完那期不参与）。
+({double lo, double hi}) _trendLaneRange(
+  List<double> pts, {
+  required bool partial,
+}) {
+  var lo = 0.0;
+  var hi = 0.0;
+  final rangeN = partial && pts.length >= 2 ? pts.length - 1 : pts.length;
+  for (var i = 0; i < rangeN; i++) {
+    lo = math.min(lo, pts[i]);
+    hi = math.max(hi, pts[i]);
+  }
+  if ((hi - lo).abs() < 1e-9) hi = lo + 1;
+  return (lo: lo, hi: hi);
+}
+
+/// 进度胶囊的实心顶 y：胶囊从 plotBottom 到预测点，按 已发生/预测 填充。
+double _trendPaceFillTop({
+  required double actual,
+  required double forecast,
+  required double forecastY,
+  required double plotBottom,
+}) =>
+    plotBottom -
+    (plotBottom - forecastY) * lighthouseTrendPaceRatio(actual, forecast);
+
+void _trendDashedLine(
+  Canvas canvas,
+  Offset from,
+  Offset to,
+  Paint paint, {
+  double dash = 4,
+  double gap = 3,
+}) {
+  final dx = to.dx - from.dx;
+  final dy = to.dy - from.dy;
+  final len = math.sqrt(dx * dx + dy * dy);
+  if (len < 1) return;
+  final ux = dx / len;
+  final uy = dy / len;
+  var t = 0.0;
+  while (t < len) {
+    final e = math.min(t + dash, len);
+    canvas.drawLine(
+      Offset(from.dx + ux * t, from.dy + uy * t),
+      Offset(from.dx + ux * e, from.dy + uy * e),
+      paint,
+    );
+    t += dash + gap;
+  }
+}
+
 // ── Lines painter (heavy, but RepaintBoundary'd; only repaints on data change) ─
+//   v16 · 视觉降噪（见 lighthouse_hero_metric.dart 顶部「趋势图 v16」）：
+//     上层主图 —— 只放同一根真轴上的东西：规模主线 + 差额带 + 规模族另一条；
+//     底部小柱 —— 毛利等各自归一的上下文序列，共用横轴、永不交叉；
+//     当月未走完 —— 虚线连到月末预测 + 进度胶囊，不再画半个月的假断崖；
+//     去掉逐点空心圆和整宽 MAX/MIN 虚线，只留三条发丝网格 + 极值小圈。
 class _TrendLinesPainter extends CustomPainter {
   const _TrendLinesPainter({
     required this.series,
@@ -2080,7 +2135,7 @@ class _TrendLinesPainter extends CustomPainter {
   final List<bool> available;
 
   /// 月化预测值（仅「点月 + 当前月 + 规模类指标」给）。
-  /// 非空时在最后一列从实线末端向上画虚线到预测值。
+  /// 非空时最后一列画进度胶囊 + 虚线连到预测点。
   final double? scaleForecast;
 
   /// solo 时强调线跟着被点的那条走，而不是按固定优先级挑。
@@ -2089,30 +2144,25 @@ class _TrendLinesPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const padTop = 12.0; // v3.8 · 上留白多 4px 给 MAX 数字标注
-    const padBottom = 10.0; // v3.8 · 下留白多 4px 给 MIN 数字标注
-    final usableH = size.height - padTop - padBottom;
-    final usableW = size.width - padH * 2;
     final n = series.revenue.length;
+    final flags = _trendNormalizeFlags(available);
+    final heroIndex = _trendResolveHero(flags, heroIndexOverride);
+    final laneIndex = lighthouseTrendLaneIndex(flags, heroIndex);
+    final geo = lighthouseTrendCanvasGeometry(
+      size.height,
+      wantsLane: laneIndex >= 0,
+    );
+    final plotTop = geo.plotTop;
+    final plotBottom = geo.plotBottom;
+    final usableH = plotBottom - plotTop;
+    if (usableH <= 4) return;
+    final usableW = size.width - padH * 2;
     final step = n <= 1 ? 0.0 : usableW / (n - 1);
 
     double xOf(int i) => padH + i * step;
     double yOf(double v, _SeriesRange r) =>
-        padTop + (r.max - v) / r.span * usableH;
+        plotTop + (r.max - v) / r.span * usableH;
 
-    // MAX/MIN / 填充 / 粗线跟「当前可见的主线」走。图例 solo 只留一条时，
-    // 那条就是主线，避免毛利被千万级规模压扁、或收入单独看时没有体积。
-    final flags = available.length >= 6
-        ? available
-        : <bool>[
-            for (var i = 0; i < 6; i++) i < available.length && available[i],
-          ];
-    final override = heroIndexOverride;
-    final heroIndex = override != null && override >= 0 &&
-            override < flags.length &&
-            flags[override]
-        ? override
-        : lighthouseTrendHeroIndex(flags);
     final heroSpec = _trendPaintSpec(
       series: series,
       bounds: bounds,
@@ -2122,78 +2172,45 @@ class _TrendLinesPainter extends CustomPainter {
     final heroPts = heroSpec.pts;
     final heroBounds = heroSpec.range;
     final heroColor = heroSpec.color;
-    final heroDrawable = flags[heroIndex] && heroPts.length >= 2;
-    final altDrawable =
-        bounds.shareScaleRange &&
-        // 主线必须就是规模那条：带子的上下缘共用 heroBounds，主线换成毛利
-        // 或收入之后，197 万的销售规模会被压进 6 万的毛利尺，带子直接铺满全屏。
-        heroIndex == 3 &&
-        flags[3] &&
-        flags[4] &&
-        series.scale.length >= 2 &&
-        series.scaleAlt.length >= 2;
-    final actualMaxProfit = heroPts.isEmpty ? 0.0 : heroPts.reduce(math.max);
-    final actualMinProfit = heroPts.isEmpty ? 0.0 : heroPts.reduce(math.min);
-    // 换算成 y 坐标 (用 hero bounds,跟画线保持一致)
-    final maxY = yOf(actualMaxProfit, heroBounds);
-    final minY = yOf(actualMinProfit, heroBounds);
+    final fc = scaleForecast;
+    final partial = _trendIsPartial(
+      forecast: fc,
+      flags: flags,
+      heroIndex: heroIndex,
+      heroPts: heroPts,
+    );
+    final solidN = partial ? heroPts.length - 1 : heroPts.length;
+    final heroSolid = heroPts.sublist(0, solidN);
+    final heroDrawable = flags[heroIndex] && heroSolid.isNotEmpty;
+    final altDrawable = _trendAltDrawable(
+      series: series,
+      bounds: bounds,
+      flags: flags,
+      heroIndex: heroIndex,
+    );
 
-    final hairPaint = Paint()
-      ..color = _LhPlum.deep.withAlpha(38)
-      ..strokeWidth = 0.6
-      ..style = PaintingStyle.stroke;
-    // 短划线,4px on 3px off
-    void drawDashedH(double y) {
-      double x = 0;
-      while (x < size.width) {
-        canvas.drawLine(
-          Offset(x, y),
-          Offset(math.min(x + 4, size.width), y),
-          hairPaint,
-        );
-        x += 7;
-      }
-    }
+    // ── 1. 网格：三条发丝（顶 / 中 / 底），底线稍重当基线 ─────────────────
+    final gridPaint = Paint()
+      ..color = _LhPlum.deep.withAlpha(16)
+      ..strokeWidth = 0.6;
+    final left = padH;
+    final right = size.width - padH;
+    canvas.drawLine(Offset(left, plotTop), Offset(right, plotTop), gridPaint);
+    final midY = (plotTop + plotBottom) / 2;
+    canvas.drawLine(Offset(left, midY), Offset(right, midY), gridPaint);
+    canvas.drawLine(
+      Offset(left, plotBottom),
+      Offset(right, plotBottom),
+      Paint()
+        ..color = _LhPlum.deep.withAlpha(36)
+        ..strokeWidth = 0.7,
+    );
 
-    // 只在 max ≠ min 时画,防止叠成一根
-    if ((actualMaxProfit - actualMinProfit).abs() > 1e-6) {
-      drawDashedH(maxY);
-      drawDashedH(minY);
-    }
-
-    // v3.8 · 毛利线下方 fill area (原来在收入,现移到毛利 hero series).
-    //   deep α42 → 0, 让主线有"体积感".
-    void drawFillArea(List<double> pts, Color color, _SeriesRange range) {
-      if (pts.length < 2) return;
-      final offsets = <Offset>[
-        for (int i = 0; i < pts.length; i++) Offset(xOf(i), yOf(pts[i], range)),
-      ];
-      final path = Path();
-      _addSmoothPath(path, offsets);
-      final baselineY = padTop + usableH;
-      path.lineTo(offsets.last.dx, baselineY);
-      path.lineTo(offsets.first.dx, baselineY);
-      path.close();
-      final rect = Rect.fromLTWH(0, padTop, size.width, usableH);
-      canvas.drawPath(
-        path,
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            // 单线之后不用再让着四条灰线，填充给足，主线才有体积。
-            colors: [color.withAlpha(64), color.withAlpha(0)],
-          ).createShader(rect)
-          ..style = PaintingStyle.fill,
-      );
-    }
-
-    // v3.8 · 差异化粗细:毛利 (hero) 2.0px, 收入/成本 (secondary) 0.9px + α180.
     void drawLine(
       List<double> pts,
       Color color,
       _SeriesRange range, {
-      double strokeWidth = 0.9,
+      double strokeWidth = 1.0,
       int alpha = 255,
     }) {
       if (pts.length < 2) return;
@@ -2213,153 +2230,227 @@ class _TrendLinesPainter extends CustomPainter {
       );
     }
 
-    // v3.8 · 数据点:副线不画(降噪),主线画小空心圆保留可读性.
-    void drawDataDots(List<double> pts, Color color, _SeriesRange range) {
-      if (pts.length < 2 || pts.length > 10) return;
-      final fillWhite = Paint()..color = Colors.white;
-      final strokePaint = Paint()
-        ..color = color
-        ..strokeWidth = 1.2
-        ..style = PaintingStyle.stroke;
-      for (int i = 0; i < pts.length; i++) {
-        final o = Offset(xOf(i), yOf(pts[i], range));
-        canvas.drawCircle(o, 2.0, fillWhite);
-        canvas.drawCircle(o, 2.0, strokePaint);
-      }
-    }
-
-    // v3.8 · 末端 halo dot —— 主线 halo 大且有双圈(hero 语言),副线仅 3px 小点.
-    void drawEndDot(
-      List<double> pts,
-      Color color,
-      _SeriesRange range, {
-      bool hero = false,
-    }) {
-      if (pts.isEmpty) return;
-      final i = pts.length - 1;
-      final o = Offset(xOf(i), yOf(pts[i], range));
-      if (hero) {
-        // 双圈 halo: 外柔色 α40 + 中柔色 α70 + 白 + 实心 (跟 _LhPulseDot 同族)
-        canvas.drawCircle(o, 7.0, Paint()..color = color.withAlpha(28));
-        canvas.drawCircle(o, 5.0, Paint()..color = color.withAlpha(60));
-        canvas.drawCircle(o, 3.6, Paint()..color = Colors.white);
-        canvas.drawCircle(o, 2.6, Paint()..color = color);
-      } else {
-        // 副线 end dot 简化:白底 + 小实心
-        canvas.drawCircle(o, 2.4, Paint()..color = Colors.white);
-        canvas.drawCircle(o, 1.6, Paint()..color = color.withAlpha(200));
-      }
-    }
-
-    // 绘制顺序:MAX/MIN hairline → 规模带（核销↔销售都在）或主线 fill →
-    //   副线 → 主线 → 末端 dot → 月化预测虚线（仅规模主线）。
+    // ── 2. 主图体积：差额带（核销↔销售）或主线渐变填充 ────────────────────
     if (altDrawable) {
-      // 「销售 − 核销」带：上缘销售、下缘核销（或反之），带宽 = 未核销部分。
-      // 比两条各自 fill-to-baseline 的线更能说明问题 —— 看的是差额。
+      // 「销售 − 核销」带：上缘销售、下缘核销，带宽 = 未核销部分。
       final alt = series.scaleAlt;
-      final n = math.min(heroPts.length, alt.length);
-      final top = <Offset>[
-        for (int i = 0; i < n; i++) Offset(xOf(i), yOf(alt[i], heroBounds)),
+      final bandN = math.min(solidN, alt.length);
+      if (bandN >= 2) {
+        final top = <Offset>[
+          for (int i = 0; i < bandN; i++)
+            Offset(xOf(i), yOf(alt[i], heroBounds)),
+        ];
+        final bottom = <Offset>[
+          for (int i = 0; i < bandN; i++)
+            Offset(xOf(i), yOf(heroPts[i], heroBounds)),
+        ];
+        final band = Path();
+        _addSmoothPath(band, top);
+        appendSmoothPath(band, bottom.reversed.toList(growable: false));
+        band.close();
+        canvas.drawPath(
+          band,
+          Paint()
+            ..color = heroColor.withAlpha(24)
+            ..style = PaintingStyle.fill,
+        );
+        final altSpec = _trendPaintSpec(
+          series: series,
+          bounds: bounds,
+          colors: colors,
+          index: 4,
+        );
+        drawLine(
+          alt.sublist(0, bandN),
+          altSpec.color,
+          altSpec.range,
+          strokeWidth: 1.0,
+          alpha: 130,
+        );
+      }
+    } else if (heroDrawable && heroSolid.length >= 2) {
+      final offsets = <Offset>[
+        for (int i = 0; i < heroSolid.length; i++)
+          Offset(xOf(i), yOf(heroSolid[i], heroBounds)),
       ];
-      final bottom = <Offset>[
-        for (int i = 0; i < n; i++) Offset(xOf(i), yOf(heroPts[i], heroBounds)),
-      ];
-      final band = Path();
-      _addSmoothPath(band, top);
-      appendSmoothPath(band, bottom.reversed.toList(growable: false));
-      band.close();
+      final path = Path();
+      _addSmoothPath(path, offsets);
+      path.lineTo(offsets.last.dx, plotBottom);
+      path.lineTo(offsets.first.dx, plotBottom);
+      path.close();
       canvas.drawPath(
-        band,
+        path,
         Paint()
-          ..color = heroColor.withAlpha(30)
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [heroColor.withAlpha(56), heroColor.withAlpha(0)],
+          ).createShader(Rect.fromLTRB(0, plotTop, size.width, plotBottom))
           ..style = PaintingStyle.fill,
       );
-    } else if (heroDrawable) {
-      drawFillArea(heroPts, heroColor, heroBounds);
-    }
-    // 上下文线只画白名单里的那几条。
-    //
-    //   上面那条「中性阶」的注释已经把道理说透了：上下文线各自归一化，纵轴
-    //   根本不是同一个，所以它们之间不可比 —— 正因如此才不给它们颜色。
-    //   但既然不可比也认不出是哪条，四条就没有意义：实测四条灰线的墨量是
-    //   主线的两倍，背景比主体还响，中段全缠在一起，谁的形状都读不出来。
-    //   收入 / 成本的数就在上面「本期合计」那一排，要看它们的形状，点图例
-    //   把它 solo 成主线 —— 那时它有自己的轴、有 fill、有 MAX/MIN 读数，
-    //   比当一条认不出的灰线有用得多。
-    for (var i = 0; i < flags.length; i++) {
-      if (!flags[i] || i == heroIndex) continue;
-      if (!lighthouseHeroTrendDrawsContextLine(i)) continue;
-      final spec = _trendPaintSpec(
-        series: series,
-        bounds: bounds,
-        colors: colors,
-        index: i,
-      );
-      final besideScale = i == 4 && flags[3];
-      drawLine(
-        spec.pts,
-        spec.color,
-        spec.range,
-        // 上下文线统一收细：颜色已经降成中性，线宽再和主线接近就还是"五条一样重"。
-        strokeWidth: besideScale ? 1.0 : 1.2,
-        alpha: besideScale ? 150 : 255,
-      );
-    }
-    if (heroDrawable) {
-      drawLine(heroPts, heroColor, heroBounds, strokeWidth: 2.0);
-      drawDataDots(heroPts, heroColor, heroBounds);
-    }
-    for (var i = 0; i < flags.length; i++) {
-      if (!flags[i] || i == heroIndex) continue;
-      if (!lighthouseHeroTrendDrawsContextLine(i)) continue;
-      final spec = _trendPaintSpec(
-        series: series,
-        bounds: bounds,
-        colors: colors,
-        index: i,
-      );
-      drawEndDot(spec.pts, spec.color, spec.range);
-    }
-    if (heroDrawable) {
-      drawEndDot(heroPts, heroColor, heroBounds, hero: true);
     }
 
-    // ── 月化预测虚线 ──────────────────────────────────────────────────
-    //   会议要求: 已发生画实线, 月末预测画虚线, 就在当月这一列往上延伸,
-    //   端点一个空心圈 —— "像柱状图似的", 一眼看出还差多少走到月末.
-    final fc = scaleForecast;
-    if (fc != null && heroDrawable && heroIndex == 3) {
-      final lastX = xOf(heroPts.length - 1);
-      final fromY = yOf(heroPts.last, heroBounds);
-      final toY = yOf(fc, heroBounds);
-      final dashPaint = Paint()
-        ..color = heroColor.withAlpha(150)
-        ..strokeWidth = 1.6
-        ..strokeCap = StrokeCap.round;
-      final dy = toY - fromY;
-      final len = dy.abs();
-      if (len > 1) {
-        final dir = dy / len;
-        double t = 0;
-        while (t < len) {
-          final segEnd = math.min(t + 3.5, len);
-          canvas.drawLine(
-            Offset(lastX, fromY + dir * t),
-            Offset(lastX, fromY + dir * segEnd),
-            dashPaint,
+    // ── 3. 主线 ─────────────────────────────────────────────────────────
+    if (heroDrawable) {
+      drawLine(heroSolid, heroColor, heroBounds, strokeWidth: 2.2);
+    }
+
+    // ── 4. 极值小圈（数字由外层 widget 贴 pill）────────────────────────────
+    if (heroDrawable && heroSolid.length >= 3) {
+      var hi = 0;
+      var lo = 0;
+      for (var i = 1; i < heroSolid.length; i++) {
+        if (heroSolid[i] > heroSolid[hi]) hi = i;
+        if (heroSolid[i] < heroSolid[lo]) lo = i;
+      }
+      if ((heroSolid[hi] - heroSolid[lo]).abs() > 1e-6) {
+        for (final i in <int>{hi, lo}) {
+          if (i == heroSolid.length - 1) continue; // 末端有自己的点
+          final o = Offset(xOf(i), yOf(heroSolid[i], heroBounds));
+          canvas.drawCircle(o, 2.6, Paint()..color = Colors.white);
+          canvas.drawCircle(
+            o,
+            2.6,
+            Paint()
+              ..color = heroColor
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1.2,
           );
-          t += 6.0;
         }
       }
-      canvas.drawCircle(Offset(lastX, toY), 3.2, Paint()..color = Colors.white);
+    }
+
+    // ── 5. 末端点：走完的期给 halo；没走完时 halo 让给进度胶囊 ────────────
+    if (heroDrawable) {
+      final i = heroSolid.length - 1;
+      final o = Offset(xOf(i), yOf(heroSolid[i], heroBounds));
+      if (!partial) {
+        canvas.drawCircle(o, 7.0, Paint()..color = heroColor.withAlpha(28));
+        canvas.drawCircle(o, 5.0, Paint()..color = heroColor.withAlpha(60));
+      }
+      canvas.drawCircle(o, 3.6, Paint()..color = Colors.white);
+      canvas.drawCircle(o, 2.6, Paint()..color = heroColor);
+    }
+
+    // ── 6. 当月进度胶囊 ──────────────────────────────────────────────────
+    //   会议要求「已发生实线、月末预测虚线、当月这一列像柱状图」。
+    //   旧版把线连到半个月的实际值再往上画虚线 —— 线先掉下去，看起来像崩盘。
+    //   现在：虚线从上一个完整期直接连到预测点；这一列是一根胶囊，
+    //   胶囊顶 = 月末预测，实心 = 已发生 / 预测 —— 一眼看出走了几成。
+    if (partial) {
+      final lastI = heroPts.length - 1;
+      final lastX = xOf(lastI);
+      final fcY = yOf(fc!, heroBounds).clamp(plotTop, plotBottom).toDouble();
+      if (solidN >= 1) {
+        final prev = Offset(
+          xOf(solidN - 1),
+          yOf(heroPts[solidN - 1], heroBounds),
+        );
+        _trendDashedLine(
+          canvas,
+          prev,
+          Offset(lastX, fcY),
+          Paint()
+            ..color = heroColor.withAlpha(150)
+            ..strokeWidth = 1.4
+            ..strokeCap = StrokeCap.round,
+        );
+      }
+      const capW = 8.0;
+      final capRect = RRect.fromLTRBR(
+        lastX - capW / 2,
+        fcY,
+        lastX + capW / 2,
+        plotBottom,
+        const Radius.circular(capW / 2),
+      );
+      canvas.drawRRect(capRect, Paint()..color = heroColor.withAlpha(22));
+      canvas.drawRRect(
+        capRect,
+        Paint()
+          ..color = heroColor.withAlpha(90)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.8,
+      );
+      final fillTop = _trendPaceFillTop(
+        actual: heroPts[lastI],
+        forecast: fc,
+        forecastY: fcY,
+        plotBottom: plotBottom,
+      );
+      if (plotBottom - fillTop > 0.5) {
+        canvas.save();
+        canvas.clipRRect(capRect);
+        canvas.drawRect(
+          Rect.fromLTRB(
+            lastX - capW / 2,
+            fillTop,
+            lastX + capW / 2,
+            plotBottom,
+          ),
+          Paint()..color = heroColor.withAlpha(200),
+        );
+        canvas.restore();
+      }
+      canvas.drawCircle(Offset(lastX, fcY), 3.2, Paint()..color = Colors.white);
       canvas.drawCircle(
-        Offset(lastX, toY),
+        Offset(lastX, fcY),
         3.2,
         Paint()
           ..color = heroColor
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.3,
       );
+    }
+
+    // ── 7. 底部小柱层（各自归一的上下文序列）──────────────────────────────
+    if (geo.lane && laneIndex >= 0) {
+      final spec = _trendPaintSpec(
+        series: series,
+        bounds: bounds,
+        colors: colors,
+        index: laneIndex,
+      );
+      final lp = spec.pts;
+      final laneN = math.min(lp.length, n);
+      if (laneN > 0) {
+        final r = _trendLaneRange(lp.sublist(0, laneN), partial: partial);
+        final laneTop = geo.laneTop;
+        final laneBottom = geo.laneBottom;
+        final laneH = laneBottom - laneTop;
+        double ly(double v) => (laneTop + (r.hi - v) / (r.hi - r.lo) * laneH)
+            .clamp(laneTop, laneBottom)
+            .toDouble();
+        final zeroY = ly(0);
+        canvas.drawLine(
+          Offset(left, zeroY),
+          Offset(right, zeroY),
+          Paint()
+            ..color = _LhPlum.deep.withAlpha(26)
+            ..strokeWidth = 0.6,
+        );
+        final barW = n <= 1 ? 4.0 : (step * 0.42).clamp(2.0, 9.0).toDouble();
+        for (var i = 0; i < laneN; i++) {
+          final v = lp[i];
+          if (v.abs() < 1e-9) continue;
+          final y = ly(v);
+          final x = xOf(i);
+          final t = math.min(y, zeroY);
+          final b = math.max(math.max(y, zeroY), t + 1.0);
+          final unfinished = partial && i == laneN - 1;
+          final base = v < 0 ? LhColors.pos : spec.color;
+          canvas.drawRRect(
+            RRect.fromLTRBR(
+              x - barW / 2,
+              t,
+              x + barW / 2,
+              b,
+              const Radius.circular(1.5),
+            ),
+            Paint()..color = base.withAlpha(unfinished ? 56 : 130),
+          );
+        }
+      }
     }
   }
 
@@ -2384,6 +2475,7 @@ class _TrendOverlayPainter extends CustomPainter {
     required this.selectedIndex,
     this.available = const [true, true, true, false, false, false],
     this.heroIndexOverride,
+    this.scaleForecast,
   });
   final _TrendSeries series;
   final _TrendBounds bounds;
@@ -2395,6 +2487,9 @@ class _TrendOverlayPainter extends CustomPainter {
   /// 与 lines painter 同一个口径：solo 时游标的实心大点跟着 solo 那条走。
   final int? heroIndexOverride;
 
+  /// 与 lines painter 同一个口径：没走完那期的游标点落在进度胶囊的实心顶。
+  final double? scaleForecast;
+
   @override
   void paint(Canvas canvas, Size size) {
     final si = selectedIndex;
@@ -2402,38 +2497,34 @@ class _TrendOverlayPainter extends CustomPainter {
     final n = series.revenue.length;
     if (si < 0 || si >= n) return;
 
-    const padTop = 12.0; // 跟 lines painter 同步 (v3.8)
-    const padBottom = 10.0;
-    final usableH = size.height - padTop - padBottom;
+    final flags = _trendNormalizeFlags(available);
+    final heroIndex = _trendResolveHero(flags, heroIndexOverride);
+    final laneIndex = lighthouseTrendLaneIndex(flags, heroIndex);
+    final geo = lighthouseTrendCanvasGeometry(
+      size.height,
+      wantsLane: laneIndex >= 0,
+    );
+    final plotTop = geo.plotTop;
+    final plotBottom = geo.plotBottom;
+    final usableH = plotBottom - plotTop;
+    if (usableH <= 4) return;
     final usableW = size.width - padH * 2;
     final step = n <= 1 ? 0.0 : usableW / (n - 1);
 
     final x = padH + si * step;
     double yOf(double v, _SeriesRange r) =>
-        padTop + (r.max - v) / r.span * usableH;
+        plotTop + (r.max - v) / r.span * usableH;
 
-    // v3.8 · 竖 crosshair 保留,颜色微降 α 免抢线
-    final dashPaint = Paint()
-      ..color = _LhPlum.deep.withAlpha(120)
-      ..strokeWidth = 0.8
-      ..style = PaintingStyle.stroke;
-    const dashH = 3.0;
-    const dashGap = 2.0;
-    final yEnd = padTop + usableH;
-    double y = padTop;
-    while (y < yEnd) {
-      canvas.drawLine(
-        Offset(x, y),
-        Offset(x, math.min(y + dashH, yEnd)),
-        dashPaint,
-      );
-      y += dashH + dashGap;
-    }
+    // 竖游标：实线发丝，贯穿主图和小柱层
+    canvas.drawLine(
+      Offset(x, plotTop - 4),
+      Offset(x, geo.lane ? geo.laneBottom : plotBottom),
+      Paint()
+        ..color = _LhPlum.deep.withAlpha(64)
+        ..strokeWidth = 0.8,
+    );
 
-    // v3.8 · marker 主副分层:副线 (收入/成本) = 白底+色描边小圆 3px,
-    //   主线 (毛利) = 三层 halo+描边+实心,焦点全在毛利.
-    void softMarker(double v, Color color, _SeriesRange range) {
-      final cy = yOf(v, range);
+    void softMarker(double cy, Color color) {
       canvas.drawCircle(Offset(x, cy), 3.0, Paint()..color = Colors.white);
       canvas.drawCircle(
         Offset(x, cy),
@@ -2445,8 +2536,7 @@ class _TrendOverlayPainter extends CustomPainter {
       );
     }
 
-    void heroMarker(double v, Color color, _SeriesRange range) {
-      final cy = yOf(v, range);
+    void heroMarker(double cy, Color color) {
       canvas.drawCircle(
         Offset(x, cy),
         7.0,
@@ -2464,30 +2554,94 @@ class _TrendOverlayPainter extends CustomPainter {
       canvas.drawCircle(Offset(x, cy), 2.2, Paint()..color = color);
     }
 
-    final flags = available.length >= 6
-        ? available
-        : <bool>[
-            for (var i = 0; i < 6; i++) i < available.length && available[i],
-          ];
-    final override = heroIndexOverride;
-    final heroIndex = override != null && override >= 0 &&
-            override < flags.length &&
-            flags[override]
-        ? override
-        : lighthouseTrendHeroIndex(flags);
-    for (var i = 0; i < flags.length; i++) {
-      if (!flags[i]) continue;
+    final heroSpec = _trendPaintSpec(
+      series: series,
+      bounds: bounds,
+      colors: colors,
+      index: heroIndex,
+    );
+    final heroPts = heroSpec.pts;
+    final fc = scaleForecast;
+    final partial = _trendIsPartial(
+      forecast: fc,
+      flags: flags,
+      heroIndex: heroIndex,
+      heroPts: heroPts,
+    );
+    final onUnfinished = partial && si == heroPts.length - 1;
+
+    // 小柱层：选中那根换成强调色
+    if (geo.lane && laneIndex >= 0) {
       final spec = _trendPaintSpec(
         series: series,
         bounds: bounds,
         colors: colors,
-        index: i,
+        index: laneIndex,
       );
-      if (si >= spec.pts.length) continue;
-      if (i == heroIndex) {
-        heroMarker(spec.pts[si], spec.color, spec.range);
+      final lp = spec.pts;
+      final laneN = math.min(lp.length, n);
+      if (si < laneN && lp[si].abs() >= 1e-9) {
+        final r = _trendLaneRange(lp.sublist(0, laneN), partial: partial);
+        final laneH = geo.laneBottom - geo.laneTop;
+        double ly(double v) =>
+            (geo.laneTop + (r.hi - v) / (r.hi - r.lo) * laneH)
+                .clamp(geo.laneTop, geo.laneBottom)
+                .toDouble();
+        final zeroY = ly(0);
+        final y = ly(lp[si]);
+        final barW = n <= 1 ? 4.0 : (step * 0.42).clamp(2.0, 9.0).toDouble();
+        final t = math.min(y, zeroY);
+        final b = math.max(math.max(y, zeroY), t + 1.0);
+        canvas.drawRRect(
+          RRect.fromLTRBR(
+            x - barW / 2,
+            t,
+            x + barW / 2,
+            b,
+            const Radius.circular(1.5),
+          ),
+          Paint()
+            ..color = lp[si] < 0
+                ? LhColors.pos
+                : _LhPlum.deep.withAlpha(onUnfinished ? 120 : 220),
+        );
+      }
+    }
+
+    if (_trendAltDrawable(
+          series: series,
+          bounds: bounds,
+          flags: flags,
+          heroIndex: heroIndex,
+        ) &&
+        !onUnfinished &&
+        si < series.scaleAlt.length) {
+      final altSpec = _trendPaintSpec(
+        series: series,
+        bounds: bounds,
+        colors: colors,
+        index: 4,
+      );
+      softMarker(yOf(series.scaleAlt[si], altSpec.range), altSpec.color);
+    }
+
+    if (flags[heroIndex] && si < heroPts.length) {
+      if (onUnfinished) {
+        final fcY = yOf(
+          fc!,
+          heroSpec.range,
+        ).clamp(plotTop, plotBottom).toDouble();
+        heroMarker(
+          _trendPaceFillTop(
+            actual: heroPts[si],
+            forecast: fc,
+            forecastY: fcY,
+            plotBottom: plotBottom,
+          ),
+          heroSpec.color,
+        );
       } else {
-        softMarker(spec.pts[si], spec.color, spec.range);
+        heroMarker(yOf(heroPts[si], heroSpec.range), heroSpec.color);
       }
     }
   }
@@ -2496,6 +2650,7 @@ class _TrendOverlayPainter extends CustomPainter {
   bool shouldRepaint(_TrendOverlayPainter old) =>
       old.selectedIndex != selectedIndex ||
       old.heroIndexOverride != heroIndexOverride ||
+      old.scaleForecast != scaleForecast ||
       !identical(old.series, series) ||
       !identical(old.bounds, bounds) ||
       old.padH != padH ||
@@ -5219,8 +5374,12 @@ class _LhBigTrendPainter extends CustomPainter {
     );
 
     // ─── 2. 值域计算 (含 expected / 对比线) ────
-    double minV = data.first, maxV = data.first;
-    for (final v in data) {
+    // v16 · 有月末预测 = 最后一期没走完：它画成进度胶囊，不上线、不进值域。
+    final partial = forecast != null && data.length >= 3;
+    final solidN = partial ? data.length - 1 : data.length;
+    final solid = data.sublist(0, solidN);
+    double minV = solid.first, maxV = solid.first;
+    for (final v in solid) {
       if (v < minV) minV = v;
       if (v > maxV) maxV = v;
     }
@@ -5365,17 +5524,32 @@ class _LhBigTrendPainter extends CustomPainter {
       }
     }
 
-    // ─── 6. 主折线 (v2.8 · Catmull-Rom 平滑, 1.6px 更 hero 感) ─
+    // ─── 6. 主折线 (v16 · 单调三次, 2px + 淡渐变填充给体积) ─
     final mainOffsets = <Offset>[
-      for (int i = 0; i < data.length; i++) Offset(xOf(i), yOf(data[i])),
+      for (int i = 0; i < solid.length; i++) Offset(xOf(i), yOf(solid[i])),
     ];
     final path = Path();
     _addSmoothPath(path, mainOffsets);
+    if (mainOffsets.length >= 2) {
+      final area = Path.from(path)
+        ..lineTo(mainOffsets.last.dx, baselineY)
+        ..lineTo(mainOffsets.first.dx, baselineY)
+        ..close();
+      canvas.drawPath(
+        area,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [lineColor.withAlpha(40), lineColor.withAlpha(0)],
+          ).createShader(Rect.fromLTRB(0, padTop, size.width, baselineY)),
+      );
+    }
     canvas.drawPath(
       path,
       Paint()
         ..color = lineColor
-        ..strokeWidth = 1.6
+        ..strokeWidth = 2.0
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round,
@@ -5401,14 +5575,14 @@ class _LhBigTrendPainter extends CustomPainter {
       }
     }
 
-    // ─── 7. 每个数据点小空心圆 (科研风 marker) ────
-    // 违背天用实心 neg, 关注天用实心 copper, 其他用白填 + 主色描边.
-    for (int i = 0; i < data.length; i++) {
+    // ─── 7. 数据点 (v16 · 只标有话要说的点) ────
+    // 逐点空心圆删掉 —— 三十个一样的圈只是纹理。只留违背 / 关注的实心点和末端点。
+    for (int i = 0; i < solid.length; i++) {
       final cx = xOf(i);
       final cy = yOf(data[i]);
       Color dotStroke = lineColor;
       Color dotFill = paperWhite;
-      bool solid = false;
+      bool solidDot = false;
       double radius = 2.2;
 
       if (expected != null) {
@@ -5417,34 +5591,26 @@ class _LhBigTrendPainter extends CustomPainter {
         if (absDev > breachPct) {
           dotStroke = negMain;
           dotFill = negMain;
-          solid = true;
+          solidDot = true;
           radius = 2.6;
         } else if (absDev > warnPct) {
           dotStroke = plumMain;
           dotFill = plumMain;
-          solid = true;
+          solidDot = true;
           radius = 2.3;
         }
       }
 
       // 末端 today 突出 (仅未选中时)
-      if (i == data.length - 1 && selectedIndex == null) {
+      if (i == solid.length - 1 && selectedIndex == null) {
         canvas.drawCircle(Offset(cx, cy), 3.6, Paint()..color = paperWhite);
         canvas.drawCircle(Offset(cx, cy), 3.0, Paint()..color = lineColor);
         continue;
       }
 
+      if (!solidDot) continue;
       canvas.drawCircle(Offset(cx, cy), radius, Paint()..color = dotFill);
-      if (!solid) {
-        canvas.drawCircle(
-          Offset(cx, cy),
-          radius,
-          Paint()
-            ..color = dotStroke
-            ..strokeWidth = 1.0
-            ..style = PaintingStyle.stroke,
-        );
-      }
+      canvas.drawCircle(Offset(cx, cy), radius, Paint()..color = dotStroke);
     }
 
     // ─── 7.5 月化预测虚线 (仅点月 · 当前月 · 规模/金额类) ──────────
@@ -5452,22 +5618,56 @@ class _LhBigTrendPainter extends CustomPainter {
     //   就有一个预测……像柱状图似的"。所以预测不另起一格，就在当月这一列
     //   从实线末端往上虚线延伸，端点空心圈 + 数字，一眼看出还差多少到月末。
     final fc = forecast;
-    if (fc != null) {
+    double? paceFillTop;
+    if (fc != null && partial) {
       final lastX = xOf(data.length - 1);
-      final fromY = yOf(data.last);
-      final toY = yOf(fc);
+      final toY = yOf(fc).clamp(padTop, baselineY).toDouble();
       final fColor = forecastColor ?? lineColor;
+      // 虚线从上一个完整期直接连到预测点 —— 不再先掉到半个月的实际值上。
       _drawDashedLine(
         canvas,
-        Offset(lastX, fromY),
+        Offset(xOf(solidN - 1), yOf(data[solidN - 1])),
         Offset(lastX, toY),
         Paint()
           ..color = fColor.withAlpha(165)
           ..strokeWidth = 1.5
           ..strokeCap = StrokeCap.round,
-        dashW: 3.5,
-        gapW: 2.5,
+        dashW: 4,
+        gapW: 3,
       );
+      // 进度胶囊：顶 = 月末预测，实心 = 已发生 / 预测。
+      const capW = 9.0;
+      final cap = RRect.fromLTRBR(
+        lastX - capW / 2,
+        toY,
+        lastX + capW / 2,
+        baselineY,
+        const Radius.circular(capW / 2),
+      );
+      canvas.drawRRect(cap, Paint()..color = fColor.withAlpha(22));
+      canvas.drawRRect(
+        cap,
+        Paint()
+          ..color = fColor.withAlpha(90)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.8,
+      );
+      final fillTop = _trendPaceFillTop(
+        actual: data.last,
+        forecast: fc,
+        forecastY: toY,
+        plotBottom: baselineY,
+      );
+      paceFillTop = fillTop;
+      if (baselineY - fillTop > 0.5) {
+        canvas.save();
+        canvas.clipRRect(cap);
+        canvas.drawRect(
+          Rect.fromLTRB(lastX - capW / 2, fillTop, lastX + capW / 2, baselineY),
+          Paint()..color = fColor.withAlpha(200),
+        );
+        canvas.restore();
+      }
       canvas.drawCircle(Offset(lastX, toY), 3.4, Paint()..color = paperWhite);
       canvas.drawCircle(
         Offset(lastX, toY),
@@ -5477,9 +5677,10 @@ class _LhBigTrendPainter extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.3,
       );
+      final pct = (lighthouseTrendPaceRatio(data.last, fc) * 100).round();
       final fTp = TextPainter(
         text: TextSpan(
-          text: '预测 ${_formatAxisValue(fc)}',
+          text: '预测 ${_formatAxisValue(fc)} · 已走 $pct%',
           style: TextStyle(
             color: fColor,
             fontSize: 7.5,
@@ -5492,7 +5693,7 @@ class _LhBigTrendPainter extends CustomPainter {
       // 标签放预测点的左上方 —— 右侧只剩 padRight，放不下。
       // 窄画布下 upper 可能小于 lower，clamp 会抛，所以先取 max 兜底。
       final fxMax = math.max(padLeft, size.width - fTp.width - 1);
-      final fx = (lastX - fTp.width - 5).clamp(padLeft, fxMax);
+      final fx = (lastX - fTp.width - 7).clamp(padLeft, fxMax);
       final fyMax = math.max(0.0, size.height - fTp.height);
       final fy = (toY - fTp.height - 2).clamp(0.0, fyMax);
       fTp.paint(canvas, Offset(fx, fy));
@@ -5502,9 +5703,11 @@ class _LhBigTrendPainter extends CustomPainter {
     final si = selectedIndex;
     if (si != null && si >= 0 && si < data.length) {
       final cx = xOf(si);
-      final cy = yOf(data[si]);
+      // 没走完那期的读数在胶囊实心顶上；它不在轴上，所以不画横向读数线。
+      final onPace = partial && si == data.length - 1 && paceFillTop != null;
+      final cy = onPace ? paceFillTop! : yOf(data[si]);
       final chPaint = Paint()
-        ..color = axisInk.withAlpha(140)
+        ..color = axisInk.withAlpha(90)
         ..strokeWidth = 0.6;
       // 竖直虚线 (baseline → point)
       _drawDashedLine(
@@ -5516,32 +5719,25 @@ class _LhBigTrendPainter extends CustomPainter {
         gapW: 3,
       );
       // 水平虚线 (Y 轴 → point)
-      _drawDashedLine(
-        canvas,
-        Offset(padLeft, cy),
-        Offset(cx, cy),
-        chPaint,
-        dashW: 2,
-        gapW: 3,
-      );
+      if (!onPace) {
+        _drawDashedLine(
+          canvas,
+          Offset(padLeft, cy),
+          Offset(cx, cy),
+          chPaint,
+          dashW: 2,
+          gapW: 3,
+        );
+      }
       // 选中点大圆 (双层: 白 halo + 主色实心)
       canvas.drawCircle(Offset(cx, cy), 4.5, Paint()..color = paperWhite);
       canvas.drawCircle(Offset(cx, cy), 3.4, Paint()..color = lineColor);
     }
 
-    // ─── 9. Y 轴主轴 + tick 短线 ──────────────────
+    // ─── 9. 坐标轴 (v16 · 去掉 Y 轴竖线和 tick 短线，刻度值 + 发丝网格够用) ─
     final axisPaint = Paint()
-      ..color = axisInk.withAlpha(200)
-      ..strokeWidth = 0.7;
-    canvas.drawLine(
-      Offset(padLeft, padTop),
-      Offset(padLeft, baselineY),
-      axisPaint,
-    );
-    for (int i = 0; i < yTicks.length; i++) {
-      final y = yOf(yTicks[i]);
-      canvas.drawLine(Offset(padLeft - 3, y), Offset(padLeft, y), axisPaint);
-    }
+      ..color = gridSoft
+      ..strokeWidth = 0.8;
 
     // ─── 10. X 轴主轴 + 每周 tick ─────────────────
     canvas.drawLine(
@@ -6536,6 +6732,9 @@ class _TrendChart extends StatefulWidget {
     this.fitHeight = false,
     this.chartHeight = 76,
     this.onInteractionChanged,
+    this.onSelectedIndexChanged,
+    this.selectedIndex,
+    this.suppressPointMom = false,
 
     /// 当前周期真实合计（与列表行 profit/revenue/totalCost 同口径）。
     /// 走势序列覆盖近 N 期，未选中点时禁止对序列求和冒充「本期合计」。
@@ -6656,6 +6855,20 @@ class _TrendChart extends StatefulWidget {
   /// 手指在图上按下/拖动时为 true，抬起为 false；用于外层 sheet 暂时锁滚动。
   final ValueChanged<bool>? onInteractionChanged;
 
+  /// 点选 / 拖动到某一点时回传序号，松手不清；null = 回到整期。
+  /// 主 Hero 用它把大数和指标栏整体切到那一天。账本行内图不传。
+  ///
+  /// 注意：外层拿到序号后**不要**把那一点的值回灌成本图的 period* 入参 ——
+  /// didUpdateWidget 会判成「数据换了」而清掉选中点，一点就弹回去。
+  final ValueChanged<int?>? onSelectedIndexChanged;
+
+  /// 外层持有的选中点。主 Hero 必须传：否则「回本期」只清大数、图还亮着。
+  /// 账本行内图不传，选中态留在图自己手里。
+  final int? selectedIndex;
+
+  /// Hero 点选某一期时图例仍算相邻点环比。
+  final bool suppressPointMom;
+
   @override
   State<_TrendChart> createState() => _TrendChartState();
 }
@@ -6728,17 +6941,6 @@ class _TrendChartState extends State<_TrendChart> {
             ? _accentForSlot(k)
             : (k == 5 ? _kColors[5] : _kContextColors[k]),
     ];
-  }
-
-  /// 图上真正画出来的线数（主线 + 白名单里的上下文线）。
-  /// 「各线自归一」那句提示只在两条以上时才有必要出现。
-  int _drawnLineCount(List<bool> vis, int heroIndex) {
-    var n = 0;
-    for (var i = 0; i < vis.length; i++) {
-      if (!vis[i]) continue;
-      if (i == heroIndex || lighthouseHeroTrendDrawsContextLine(i)) n++;
-    }
-    return n;
   }
 
   /// 强调线的序列下标：solo 时是被点的那条，否则按固定优先级挑。
@@ -6863,6 +7065,9 @@ class _TrendChartState extends State<_TrendChart> {
   void initState() {
     super.initState();
     _soloKey = widget.soloKey;
+    if (widget.onSelectedIndexChanged != null) {
+      _selectedIndex = widget.selectedIndex;
+    }
     _recompute();
   }
 
@@ -6896,7 +7101,21 @@ class _TrendChartState extends State<_TrendChart> {
         old.periodProfitDeltaPct != widget.periodProfitDeltaPct;
     if (dataChanged) {
       _recompute();
-      _selectedIndex = null;
+      if (_selectedIndex != null) {
+        _selectedIndex = null;
+        final notify = widget.onSelectedIndexChanged;
+        // didUpdateWidget 跑在父级 build 期间，直接回调会撞上
+        // 「setState() called during build」；推到下一帧。
+        if (notify != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) notify(null);
+          });
+        }
+      }
+    } else if (widget.onSelectedIndexChanged != null &&
+        widget.selectedIndex != _selectedIndex) {
+      // 外层「回本期」清掉序号时，图必须跟着灭高亮。
+      _selectedIndex = widget.selectedIndex;
     }
     if (dataChanged || old.soloKey != widget.soloKey) {
       _applyExternalSolo(widget.soloKey);
@@ -6930,8 +7149,7 @@ class _TrendChartState extends State<_TrendChart> {
         widget.scaleAltLabel.isNotEmpty && _seriesHasData(widget.scaleAlt);
     _hasCostAlt =
         widget.costAltLabel.isNotEmpty && _seriesHasData(widget.costAlt);
-    _hasStock =
-        widget.stockLabel.isNotEmpty && _seriesHasData(widget.stock);
+    _hasStock = widget.stockLabel.isNotEmpty && _seriesHasData(widget.stock);
 
     final n = [
       widget.revenue.length,
@@ -6996,30 +7214,85 @@ class _TrendChartState extends State<_TrendChart> {
     final i = n <= 1 ? 0 : ((relX / usable) * (n - 1)).round().clamp(0, n - 1);
     if (_selectedIndex != i) {
       setState(() => _selectedIndex = i);
+      widget.onSelectedIndexChanged?.call(i);
     }
   }
 
   void _clearSelection() {
-    if (_selectedIndex != null) setState(() => _selectedIndex = null);
+    if (_selectedIndex != null) {
+      setState(() => _selectedIndex = null);
+      widget.onSelectedIndexChanged?.call(null);
+    }
   }
 
   void _notifyInteraction(bool active) {
     widget.onInteractionChanged?.call(active);
   }
 
+  /// v16 · 极值读数 pill：白底发丝边，压在线上也读得清。
+  Widget _extremePill(String tag, double value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 3.5, vertical: 1),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(235),
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: _LhPlum.deep.withAlpha(34), width: 0.6),
+      ),
+      child: RichText(
+        text: TextSpan(
+          children: [
+            TextSpan(
+              text: '$tag ',
+              style: LhTypography.mono(
+                size: 6.8,
+                color: LhColors.mute2,
+                weight: FontWeight.w700,
+                letterSpacing: 0.8,
+              ),
+            ),
+            TextSpan(
+              text: _fmtHeroShort(value),
+              style: LhTypography.mono(
+                size: 8,
+                color: _LhPlum.deep,
+                weight: FontWeight.w700,
+                letterSpacing: 0.1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _laneLabelFor(int seriesIndex) => switch (seriesIndex) {
+    0 => widget.revenueLabel,
+    1 => widget.costLabel,
+    2 => widget.profitLabel,
+    3 => widget.scaleLabel,
+    4 => widget.scaleAltLabel,
+    5 => widget.costAltLabel,
+    _ => widget.stockLabel,
+  };
+
   Widget _trendCanvas() {
     return LayoutBuilder(
       builder: (ctx, c) {
         final w = c.maxWidth;
-        const padTop = 12.0;
-        const padBottom = 10.0;
         final chartH = c.maxHeight.isFinite && c.maxHeight < 4000
             ? c.maxHeight
             : widget.chartHeight;
-        final usableH = chartH - padTop - padBottom;
-        if (usableH <= 0) return const SizedBox.shrink();
         final vis = _visibleFlags;
         final heroIndex = _heroIndexFor(vis);
+        final laneIndex = lighthouseTrendLaneIndex(vis, heroIndex);
+        final geo = lighthouseTrendCanvasGeometry(
+          chartH,
+          wantsLane: laneIndex >= 0,
+        );
+        final padTop = geo.plotTop;
+        final usableH = geo.plotBottom - geo.plotTop;
+        if (usableH <= 4) return const SizedBox.shrink();
+        final forecast = vis[3] ? widget.scaleForecast?.forecast : null;
         final extremeSpec = _trendPaintSpec(
           series: _series,
           bounds: _bounds,
@@ -7027,7 +7300,16 @@ class _TrendChartState extends State<_TrendChart> {
           index: heroIndex,
         );
         final profitBounds = extremeSpec.range;
-        final extremePts = extremeSpec.pts;
+        // 没走完的那期是进度胶囊，不算主线极值 —— 否则 MIN 永远钉在当月。
+        final partial = _trendIsPartial(
+          forecast: forecast,
+          flags: vis,
+          heroIndex: heroIndex,
+          heroPts: extremeSpec.pts,
+        );
+        final extremePts = partial
+            ? extremeSpec.pts.sublist(0, extremeSpec.pts.length - 1)
+            : extremeSpec.pts;
         final hasProfit = vis[heroIndex] && extremePts.isNotEmpty;
         final actualMaxP = hasProfit ? extremePts.reduce(math.max) : 0.0;
         final actualMinP = hasProfit ? extremePts.reduce(math.min) : 0.0;
@@ -7035,29 +7317,28 @@ class _TrendChartState extends State<_TrendChart> {
             padTop + (profitBounds.max - v) / profitBounds.span * usableH;
         final maxY = yOf(actualMaxP);
         final minY = yOf(actualMinP);
-        // MAX/MIN 说的是主线的极值，原来却钉在图的右边缘 —— 离它最近的往往
-        // 是另一条线，读数就挂到了错的线上。改成跟着极值点的横坐标走。
-        final extremeN = extremePts.length;
-        final extremeStep = extremeN <= 1
-            ? 0.0
-            : (w - _kChartPadH * 2) / (extremeN - 1);
-        double extremeX(bool wantMax) {
-          if (!hasProfit || extremeN == 0) return w - 40;
+        // MAX/MIN 跟着极值点的横坐标走（旧版钉在右边缘，读数挂到了别的线上）。
+        final n = _n;
+        final extremeStep = n <= 1 ? 0.0 : (w - _kChartPadH * 2) / (n - 1);
+        double extremeLeft(bool wantMax) {
+          if (!hasProfit) return w - 56;
           var best = 0;
-          for (var i = 1; i < extremeN; i++) {
+          for (var i = 1; i < extremePts.length; i++) {
             final better = wantMax
                 ? extremePts[i] > extremePts[best]
                 : extremePts[i] < extremePts[best];
             if (better) best = i;
           }
-          // 标注挂在点的右边；靠近右沿时翻到左边，别被裁掉。
+          // pill 以点为中心，靠边时夹回画布内。
           final px = _kChartPadH + best * extremeStep;
-          return (px + 6).clamp(2.0, math.max(2.0, w - 46));
+          return (px - 26).clamp(0.0, math.max(0.0, w - 58));
         }
+
         final showExtremes =
             hasProfit &&
+            extremePts.length >= 3 &&
             (actualMaxP - actualMinP).abs() > 1e-6 &&
-            (minY - maxY) > 22;
+            (minY - maxY) > 26;
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapDown: (d) {
@@ -7093,9 +7374,7 @@ class _TrendChartState extends State<_TrendChart> {
                         padH: _kChartPadH,
                         available: vis,
                         heroIndexOverride: heroIndex,
-                        scaleForecast: vis[3]
-                            ? widget.scaleForecast?.forecast
-                            : null,
+                        scaleForecast: forecast,
                       ),
                     ),
                   ),
@@ -7110,80 +7389,36 @@ class _TrendChartState extends State<_TrendChart> {
                       selectedIndex: _selectedIndex,
                       available: vis,
                       heroIndexOverride: heroIndex,
+                      scaleForecast: forecast,
                     ),
                   ),
                 ),
-                if (showExtremes)
+                // 选中某一点时极值 pill 让位给游标，免得两套读数叠在一起。
+                if (showExtremes && _selectedIndex == null)
                   Positioned(
-                    left: extremeX(true),
-                    top: (maxY - 11).clamp(-2.0, chartH - 12),
-                    child: RichText(
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: 'MAX ',
-                            style: LhTypography.mono(
-                              size: 6.8,
-                              color: LhColors.mute2,
-                              weight: FontWeight.w700,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                          TextSpan(
-                            text: _fmtHeroShort(actualMaxP),
-                            style: LhTypography.mono(
-                              size: 8,
-                              color: _LhPlum.deep,
-                              weight: FontWeight.w700,
-                              letterSpacing: 0.1,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    left: extremeLeft(true),
+                    top: (maxY - 17).clamp(-4.0, chartH - 14),
+                    child: _extremePill('MAX', actualMaxP),
                   ),
-                if (showExtremes)
+                if (showExtremes && _selectedIndex == null)
                   Positioned(
-                    left: extremeX(false),
-                    top: (minY + 3).clamp(0.0, chartH - 10),
-                    child: RichText(
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: 'MIN ',
-                            style: LhTypography.mono(
-                              size: 6.8,
-                              color: LhColors.mute2,
-                              weight: FontWeight.w700,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                          TextSpan(
-                            text: _fmtHeroShort(actualMinP),
-                            style: LhTypography.mono(
-                              size: 8,
-                              color: _LhPlum.deep,
-                              weight: FontWeight.w700,
-                              letterSpacing: 0.1,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    left: extremeLeft(false),
+                    top: (minY + 5).clamp(0.0, geo.plotBottom - 2),
+                    child: _extremePill('MIN', actualMinP),
                   ),
-                // 两条以上的线同时在图上时，必须说一句：它们各有各的纵轴。
-                // 不说的话，"成本线在毛利线上面""它们在 9.08 交叉"都会被当成
-                // 信息读，而这些在各自归一化的图里什么都不是。
-                if (_drawnLineCount(vis, heroIndex) > 1)
+                // 小柱层的名字就写在缝里 —— 它有自己的尺，不和上面的线比高低，
+                // 所以不再需要「各线自归一」那句解释。
+                if (geo.lane && laneIndex >= 0)
                   Positioned(
                     left: _kChartPadH,
-                    top: 0,
+                    top: geo.laneTop - 11,
                     child: Text(
-                      '各线自归一',
+                      _laneLabelFor(laneIndex),
                       style: LhTypography.mono(
                         size: 7,
-                        color: LhColors.mute2.withAlpha(150),
-                        letterSpacing: 0.3,
+                        color: LhColors.mute2.withAlpha(170),
+                        weight: FontWeight.w600,
+                        letterSpacing: 0.4,
                       ),
                     ),
                   ),
@@ -7360,6 +7595,10 @@ class _TrendChartState extends State<_TrendChart> {
     );
   }
 
+  /// v16 · 图例格：一行一格 ——「标记 · 名称 …… 数值 环比」。
+  ///   旧版每格两行、各带底色、宽窄不一还自由换行，五格排出来参差不齐，
+  ///   名称 / 数值 / 环比三种字号互相打架。现在固定两列网格、同一行高，
+  ///   数值和环比都右对齐成列，眼睛可以竖着扫。
   Widget _trendLegendChip({
     required String label,
     required Color color,
@@ -7368,7 +7607,6 @@ class _TrendChartState extends State<_TrendChart> {
     required String unitFmt,
     String? seriesKey,
     double? momPct,
-    bool expandLabel = true,
   }) {
     final soloing = _soloKey != null;
     final active = seriesKey != null && _soloKey == seriesKey;
@@ -7381,100 +7619,99 @@ class _TrendChartState extends State<_TrendChart> {
         ? LhColors.mute2
         : (lighthouseDeltaIsLoud(momPct)
               ? (momUp ? LhColors.neg : LhColors.pos)
-              : LhColors.mute);
-    final valueStyle = LhTypography.mono(
-      size: 9,
-      color: negative
-          ? LhColors.pos
-          : (drawn || seriesKey == null ? color : LhColors.ink2),
-      weight: drawn ? FontWeight.w700 : FontWeight.w600,
-      height: 1.0,
-    );
-    final chip = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisSize: expandLabel ? MainAxisSize.max : MainAxisSize.min,
-          children: [
-            // 色块只给真画在图上的那条。没画的线还挂个色块，等于骗人说
-            // 「它在图里，你自己找」—— 那正是五条线时代最费眼的地方。
-            if (drawn) ...[
-              Container(
-                width: 12,
-                height: 2.5,
-                decoration: BoxDecoration(
-                  color: dimmed ? color.withAlpha(90) : color,
-                  borderRadius: BorderRadius.circular(1),
-                ),
-              ),
-              const SizedBox(width: 4),
-            ],
-            if (expandLabel)
-              Flexible(
-                child: LhScrollText(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: LhTypography.mono(
-                    size: 7.5,
-                    color: active || drawn ? LhColors.ink2 : LhColors.mute2,
-                    weight: drawn ? FontWeight.w700 : FontWeight.w600,
-                    height: 1.0,
-                  ),
-                ),
-              )
-            else
-              Text(
-                label,
-                maxLines: 1,
-                style: LhTypography.mono(
-                  size: 7.5,
-                  color: active || drawn ? LhColors.ink2 : LhColors.mute2,
-                  weight: drawn ? FontWeight.w700 : FontWeight.w600,
-                  height: 1.0,
-                ),
-              ),
-            const SizedBox(width: 3),
-            if (negative) Text('-', style: valueStyle),
-            Text('$absFmt$unitFmt', maxLines: 1, style: valueStyle),
-          ],
-        ),
-        if (lighthouseTrendLegendMomOnSecondLine && momPct != null) ...[
-          const SizedBox(height: 2),
-          Padding(
-            padding: EdgeInsets.only(left: drawn ? 16 : 0),
-            child: Text(
-              lighthouseTrendMomLabel(momPct),
+              : LhColors.mute2);
+    const tabular = [FontFeature.tabularFigures()];
+    final cell = SizedBox(
+      height: 20,
+      child: Row(
+        children: [
+          // 标记：画在图上的是一小段线（和图里的线同形），没画的只是一个灰点。
+          SizedBox(
+            width: 12,
+            child: Center(
+              child: drawn
+                  ? Container(
+                      width: 10,
+                      height: 2.5,
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    )
+                  : Container(
+                      width: 4,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: LhColors.mute2.withAlpha(110),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: LhScrollText(
+              label,
               maxLines: 1,
-              overflow: TextOverflow.visible,
-              style: LhTypography.mono(
-                size: 7.5,
-                color: momColor,
-                weight: FontWeight.w700,
-                letterSpacing: 0.1,
+              overflow: TextOverflow.ellipsis,
+              style: LhTypography.sans(
+                size: 9,
+                color: drawn || active ? LhColors.ink2 : LhColors.mute,
+                weight: FontWeight.w500,
                 height: 1.0,
               ),
             ),
           ),
+          const SizedBox(width: 4),
+          Text(
+            '${negative ? '−' : ''}$absFmt$unitFmt',
+            maxLines: 1,
+            softWrap: false,
+            style: LhTypography.mono(
+              size: 9.5,
+              color: negative
+                  ? LhColors.pos
+                  : (drawn ? _LhPlum.deep : LhColors.ink2),
+              weight: FontWeight.w700,
+              height: 1.0,
+            ).copyWith(fontFeatures: tabular),
+          ),
+          // 环比压成短写（≥10% 不留小数，与大数下面那行同规则），给名称让宽度。
+          SizedBox(
+            width: 32,
+            child: Text(
+              momPct == null
+                  ? ''
+                  : '${momUp ? '↑' : '↓'}'
+                        '${momPct.abs().toStringAsFixed(momPct.abs() >= 10 ? 0 : 1)}%',
+              maxLines: 1,
+              softWrap: false,
+              textAlign: TextAlign.right,
+              style: LhTypography.mono(
+                size: 7.5,
+                color: momColor,
+                weight: FontWeight.w600,
+                height: 1.0,
+              ).copyWith(fontFeatures: tabular),
+            ),
+          ),
         ],
-      ],
+      ),
     );
-    if (seriesKey == null) return chip;
+    if (seriesKey == null) return cell;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _toggleSolo(seriesKey),
       child: Opacity(
-        opacity: dimmed ? 0.38 : 1,
+        opacity: dimmed ? 0.4 : 1,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            // 当前画在图上的那条挂一层极淡的底：五个 chip 排在一起时，
-            // 「哪条是图里那条」要一眼看出来，不能只靠色块的有无。
-            color: drawn ? _LhPlum.mist : Colors.transparent,
-            borderRadius: BorderRadius.circular(5),
+            // 只有 solo 选中的那格挂底色；平时整块图例没有任何框。
+            color: active ? _LhPlum.mist : Colors.transparent,
+            borderRadius: BorderRadius.circular(4),
           ),
-          child: chip,
+          child: cell,
         ),
       ),
     );
@@ -7547,10 +7784,32 @@ class _TrendChartState extends State<_TrendChart> {
               ),
             ),
             const Spacer(),
+            // 「看全部」只在 solo 了某一条时出现 —— 平时它是一个点不动的词。
+            if (_soloKey != null && pnlLegendKeys.length > 1)
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _clearSolo,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 2,
+                  ),
+                  child: Text(
+                    '看全部',
+                    style: LhTypography.mono(
+                      size: 8,
+                      color: _LhPlum.primary,
+                      weight: FontWeight.w700,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
+              ),
             if (isSelected)
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: _clearSelection,
+
                 child: const Padding(
                   padding: EdgeInsets.all(2),
                   child: Icon(
@@ -7566,11 +7825,6 @@ class _TrendChartState extends State<_TrendChart> {
           const SizedBox(height: 6),
           LayoutBuilder(
             builder: (context, legendBox) {
-              final wrap = lighthouseTrendLegendShouldWrap(
-                width: legendBox.maxWidth,
-                metricCount: pnlLegendKeys.length,
-                showAll: pnlLegendKeys.length > 1,
-              );
               Widget chipFor(String key) => switch (key) {
                 'scale' => _trendLegendChip(
                   label: widget.scaleLabel,
@@ -7579,11 +7833,11 @@ class _TrendChartState extends State<_TrendChart> {
                   absFmt: sAbsFmt,
                   unitFmt: sUnitFmt,
                   seriesKey: 'scale',
-                  expandLabel: !wrap,
                   momPct: lighthouseTrendMomPct(
                     periodDeltaPct: widget.periodScaleDeltaPct,
                     partialPeriod: widget.partialPeriod,
                     selectedIndex: _selectedIndex,
+                    suppressPointMom: widget.suppressPointMom,
                     series: _series.scale,
                   ),
                 ),
@@ -7594,11 +7848,11 @@ class _TrendChartState extends State<_TrendChart> {
                   absFmt: stAbsFmt,
                   unitFmt: stUnitFmt,
                   seriesKey: 'stock',
-                  expandLabel: !wrap,
                   momPct: lighthouseTrendMomPct(
                     periodDeltaPct: widget.periodStockDeltaPct,
                     partialPeriod: widget.partialPeriod,
                     selectedIndex: _selectedIndex,
+                    suppressPointMom: widget.suppressPointMom,
                     series: _series.stock,
                   ),
                 ),
@@ -7609,11 +7863,11 @@ class _TrendChartState extends State<_TrendChart> {
                   absFmt: pAbsFmt,
                   unitFmt: pUnitFmt,
                   seriesKey: 'profit',
-                  expandLabel: !wrap,
                   momPct: lighthouseTrendMomPct(
                     periodDeltaPct: widget.periodProfitDeltaPct,
                     partialPeriod: widget.partialPeriod,
                     selectedIndex: _selectedIndex,
+                    suppressPointMom: widget.suppressPointMom,
                     series: _series.profit,
                   ),
                 ),
@@ -7624,11 +7878,11 @@ class _TrendChartState extends State<_TrendChart> {
                   absFmt: caAbsFmt,
                   unitFmt: caUnitFmt,
                   seriesKey: 'costAlt',
-                  expandLabel: !wrap,
                   momPct: lighthouseTrendMomPct(
                     periodDeltaPct: widget.periodCostAltDeltaPct,
                     partialPeriod: widget.partialPeriod,
                     selectedIndex: _selectedIndex,
+                    suppressPointMom: widget.suppressPointMom,
                     series: _series.costAlt,
                   ),
                 ),
@@ -7639,11 +7893,11 @@ class _TrendChartState extends State<_TrendChart> {
                   absFmt: rAbsFmt,
                   unitFmt: rUnitFmt,
                   seriesKey: 'revenue',
-                  expandLabel: !wrap,
                   momPct: lighthouseTrendMomPct(
                     periodDeltaPct: widget.periodRevenueDeltaPct,
                     partialPeriod: widget.partialPeriod,
                     selectedIndex: _selectedIndex,
+                    suppressPointMom: widget.suppressPointMom,
                     series: _series.revenue,
                   ),
                 ),
@@ -7654,11 +7908,11 @@ class _TrendChartState extends State<_TrendChart> {
                   absFmt: cAbsFmt,
                   unitFmt: cUnitFmt,
                   seriesKey: 'cost',
-                  expandLabel: !wrap,
                   momPct: lighthouseTrendMomPct(
                     periodDeltaPct: widget.periodCostDeltaPct,
                     partialPeriod: widget.partialPeriod,
                     selectedIndex: _selectedIndex,
+                    suppressPointMom: widget.suppressPointMom,
                     series: _series.cost,
                   ),
                 ),
@@ -7669,58 +7923,46 @@ class _TrendChartState extends State<_TrendChart> {
                   absFmt: sAltAbsFmt,
                   unitFmt: sAltUnitFmt,
                   seriesKey: 'scaleAlt',
-                  expandLabel: !wrap,
                   momPct: lighthouseTrendMomPct(
                     periodDeltaPct: widget.periodScaleAltDeltaPct,
                     partialPeriod: widget.partialPeriod,
                     selectedIndex: _selectedIndex,
+                    suppressPointMom: widget.suppressPointMom,
                     series: _series.scaleAlt,
                   ),
                 ),
                 _ => const SizedBox.shrink(),
               };
-              final allChip = pnlLegendKeys.length > 1
-                  ? GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: _clearSolo,
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 8, top: 2),
-                        child: Text(
-                          '全部',
-                          style: LhTypography.mono(
-                            size: 7.5,
-                            color: _soloKey == null
-                                ? _LhPlum.deep
-                                : LhColors.mute2,
-                            weight: FontWeight.w700,
-                            letterSpacing: 0.6,
-                          ),
-                        ),
-                      ),
-                    )
-                  : null;
-              final metricChips = [
-                for (final key in pnlLegendKeys)
-                  wrap
-                      ? ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            minWidth: lighthouseTrendLegendMinChipWidth,
-                          ),
-                          child: chipFor(key),
-                        )
-                      : Expanded(child: chipFor(key)),
+              // 规模一对（核销 / 销售）排在一起打头，其余按原顺序。
+              final keys = <String>[
+                for (final k in pnlLegendKeys)
+                  if (k == 'scale' || k == 'scaleAlt') k,
+                for (final k in pnlLegendKeys)
+                  if (k != 'scale' && k != 'scaleAlt') k,
               ];
-              if (wrap) {
-                return Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.start,
-                  children: [if (allChip != null) allChip, ...metricChips],
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [if (allChip != null) allChip, ...metricChips],
+              final cols = keys.length <= 1
+                  ? 1
+                  : (legendBox.maxWidth >= 460 ? 3 : 2);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < keys.length; i += cols)
+                    Padding(
+                      padding: EdgeInsets.only(top: i == 0 ? 0 : 2),
+                      child: Row(
+                        children: [
+                          for (var c = 0; c < cols; c++) ...[
+                            if (c > 0) const SizedBox(width: 10),
+                            Expanded(
+                              child: i + c < keys.length
+                                  ? chipFor(keys[i + c])
+                                  : const SizedBox.shrink(),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                ],
               );
             },
           ),
@@ -7788,6 +8030,8 @@ class _TrendChartState extends State<_TrendChart> {
               final labelSize = labelCount > 12
                   ? 7.0
                   : (labelCount > 8 ? 7.5 : 8.5);
+              bool currentAnchor(int i) =>
+                  widget.partialPeriod && n > 0 && _xAnchors[i] == n - 1;
               return Stack(
                 children: [
                   for (int i = 0; i < _xAnchors.length; i++)
@@ -7807,11 +8051,17 @@ class _TrendChartState extends State<_TrendChart> {
                         child: Text(
                           _xLabels[i],
                           maxLines: 1,
-                          overflow: TextOverflow.visible,
+                          overflow: TextOverflow.ellipsis,
+                          // v16 · 本期（没走完的那一列）标签用主色加粗，
+                          // 和进度胶囊呼应，一眼找到「现在」在哪。
                           style: LhTypography.mono(
                             size: labelSize,
-                            color: LhColors.mute2,
-                            weight: FontWeight.w500,
+                            color: currentAnchor(i)
+                                ? _LhPlum.deep
+                                : LhColors.mute2,
+                            weight: currentAnchor(i)
+                                ? FontWeight.w700
+                                : FontWeight.w500,
                             letterSpacing: 0.1,
                           ),
                         ),
@@ -9065,11 +9315,7 @@ class _TrendStats {
 
 /// 仅在手指几乎未移动时触发点击，避免列表滑动/拖动误触进入指标页。
 class _LhScrollSafeTap extends StatefulWidget {
-  const _LhScrollSafeTap({
-    super.key,
-    required this.onTap,
-    required this.child,
-  });
+  const _LhScrollSafeTap({super.key, required this.onTap, required this.child});
 
   final VoidCallback onTap;
   final Widget child;
@@ -9195,11 +9441,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   String? _loadError;
   final Set<String> _loadedTabs = {};
   final Set<String> _loadingTabs = {};
+
   /// tab → 这次 in-flight 请求的 cacheKey。旧请求 finally 对不上就不摘加载标记。
   final Map<String, String> _tabLoadKeys = {};
   final Map<String, String> _tabErrors = {};
+
   /// BI 当前视角。切日周月要拉这一维，不能只拉主列表 `_tab`。
   String? _biDim;
+
   /// `$dim|day` / `$dim|month` → 日历今天、本月的行，给构成图例「本日/本月新增」。
   final Map<String, List<Map<String, dynamic>>> _biWindowRows = {};
   final Set<String> _biWindowLoading = {};
@@ -9257,6 +9506,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   // 算式追溯：行 key → 正在追溯的结果格（totalAssets / systemDifference）。
   // 点结果格旁边的箭头，把这条式子的加数格用小方框点亮。
   final Map<String, String> _fundPoolTraces = {};
+
   /// 账本列表横向滚动联动组 —— 表头与所有行共用一个 offset
   String? _metaHighlightKey; // 跨行"列聚焦"：点某个 meta 指标 → 所有行同一指标高亮成色块，便于纵向比较
   bool _discountExpanded = false;
@@ -9422,9 +9672,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   bool get _isPageBusy => _loading || _cubeLoading;
 
+  /// 切期间 / 切区间时手上已经有一份数据：不再整页盖白，
+  /// 旧内容压淡、不可点，期间条下面走一条细进度条。
+  ///
+  /// 整页遮罩的问题是把用户刚点的那个期间条也盖住了 —— 手指刚离开，
+  /// 眼前就是一整块白和一个大 logo，既看不到「点中了哪个」，也点不了下一个。
+  /// 首次进入（没有旧数据）和二级页仍走原来的整页遮罩。
+  bool get _softReloading =>
+      lighthouseSoftReloadKeepsContent &&
+      _loading &&
+      _bundle != null &&
+      _detailKey == null &&
+      _metricPageKey == null &&
+      !_biViewOpen;
+
   /// 详情 / 指标分析 / BI 不因 analysis cube 加载而遮罩。
   bool get _showPageBusyOverlay =>
       !_biViewOpen &&
+      !_softReloading &&
       (_loading ||
           (_cubeLoading && _detailKey == null && _metricPageKey == null));
 
@@ -10030,6 +10295,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     _clearBackInterceptor();
     _ddEntry?.remove();
     _detailSkuSearchCtrl.dispose();
+    _ledgerSearchCtl.dispose();
+    _ledgerSearchFocus.dispose();
     _discountFocusTimer?.cancel();
     _mainListScrollCtrl.dispose();
     _service.dispose();
@@ -11575,6 +11842,60 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return List<Map<String, dynamic>>.from(rows);
   }
 
+  // ══ 列表内查找 ════════════════════════════════════════════════════
+  //
+  //  一行 151pt，一屏只看得到四行 —— 30 个产品要找某一个就是一路翻。
+  //  查找只过**列表**，不动 Hero：Hero 回答「这一段整体怎么样」，
+  //  输入框回答「那一行在哪」，两件事不该互相改写。分类筛选才该改 Hero。
+  bool _ledgerSearchOpen = false;
+  String _ledgerSearch = '';
+
+  /// 这条查询是在哪个维度输入的。换了维度就不再沿用 —— 「出行」在产品维
+  /// 有意义，切到供给维只会得到一个空列表，而用户根本没意识到还开着筛。
+  String _ledgerSearchTab = '';
+  final TextEditingController _ledgerSearchCtl = TextEditingController();
+  final FocusNode _ledgerSearchFocus = FocusNode();
+
+  bool get _ledgerSearchActive =>
+      _detailKey == null &&
+      _ledgerSearchTab == _tab &&
+      _ledgerSearch.trim().isNotEmpty;
+
+  List<Map<String, dynamic>> _ledgerSearchFiltered(
+    List<Map<String, dynamic>> rows,
+  ) {
+    if (!_ledgerSearchActive) return rows;
+    final q = _ledgerSearch.trim().toLowerCase();
+    return rows.where((r) {
+      final name = (r['name']?.toString() ?? '').toLowerCase();
+      final group = (r['group']?.toString() ?? '').toLowerCase();
+      return name.contains(q) || group.contains(q);
+    }).toList();
+  }
+
+  String get _ledgerSearchHint {
+    switch (_tab) {
+      case 'supply':
+        return '找省份 / 集团';
+      case 'channel':
+        return '找渠道 / 分类';
+      case 'people':
+        return '找姓名';
+      default:
+        return '找产品 / 分类';
+    }
+  }
+
+  void _closeLedgerSearch() {
+    _ledgerSearchCtl.clear();
+    _ledgerSearchFocus.unfocus();
+    setState(() {
+      _ledgerSearch = '';
+      _ledgerSearchOpen = false;
+      _listLimit = _listPageSize;
+    });
+  }
+
   // Cached sorted/filtered rows — re-computed only when the source state changes.
   String _rowsCacheKey = '';
   List<Map<String, dynamic>>? _rowsCache;
@@ -11758,7 +12079,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   void _restoreSharedHeroMetrics() {
-
     final shared = _sharedHeroMetrics;
     final base = _bundle;
     if (shared == null || base == null) return;
@@ -13315,6 +13635,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       _detailType = _tab;
       _detailSubTab = '';
       _detailPage = 1;
+      _heroPointIndex = null;
       _resetDetailSkuSearch();
       _resetDetailDrill();
       _detailDrillReloadAttempted = false;
@@ -13835,32 +14156,33 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(22, 2, 22, 10),
+          padding: EdgeInsets.fromLTRB(
+            22,
+            2,
+            22,
+            lighthouseSoftReloadKeepsContent ? 0 : 10,
+          ),
           child: _buildPeriodBar(),
         ),
+        // 原来 10pt 的留白里放进度条：不占新高度，刷新前后页面不跳。
+        if (lighthouseSoftReloadKeepsContent) _buildSoftReloadLine(),
         // Hero：始终展示；L1 分类只筛列表，不在 Hero 上贴「能源」等标签
-        _buildHeroShell(
-          child: _buildHero(),
-        ),
+        _softReloadDim(_buildHeroShell(child: _buildHero())),
         // Hero 与账本之间的边界。
-        // 卡片版靠雾紫底自己收口；拍平版 Hero 就是白面，和下面的账本白卡
-        // 之间没有色差，收口改用一条双线灰带 —— 账本表里「合计线」的写法，
-        // 一条线是分隔，两条线是「上面这一段结束了」。
-        if (lighthouseHeroUsesFlatLayout)
-          Container(
-            height: 7,
-            margin: const EdgeInsets.only(top: 14, bottom: 16),
-            decoration: BoxDecoration(
-              color: LhColors.ink.withAlpha(lighthouseHeroFlatBandAlpha),
-              border: const Border(
-                top: BorderSide(color: LhColors.line, width: 0.7),
-                bottom: BorderSide(color: LhColors.line, width: 0.7),
-              ),
-            ),
-          )
-        else
+        //
+        // v20 · 旧版是一条 7pt 的双线灰带，上下再各留 14 / 16pt 空白：
+        // 三段留白夹一条带子，Hero 像停在半空，账本卡又像另起一页 —— 那道
+        // 「衔接」其实是一整块 37pt 的空地。改回一条通栏细线贴着 Hero 收口，
+        // 线到卡只留 10pt：线说「上面这段完了」，紧接着的卡自己说「这段开始」，
+        // 一句话说一遍。同步落款已经上提到标题行，Hero 末行就是指标栏，
+        // 收口落在内容上而不是落在一行小字上。
+        if (lighthouseHeroUsesFlatLayout) ...[
+          const SizedBox(height: 12),
+          Container(height: 0.7, color: LhColors.line),
+          const SizedBox(height: 10),
+        ] else
           const SizedBox(height: 16),
-        Container(
+        _softReloadDim(Container(
           margin: const EdgeInsets.fromLTRB(22, 0, 22, 18),
           decoration: BoxDecoration(
             color: Colors.white,
@@ -13895,8 +14217,56 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ],
             ],
           ),
-        ),
+        )),
       ],
+    );
+  }
+
+  /// 期间条下方 10pt 槽位里的细进度条。不刷新时是透明留白。
+  Widget _buildSoftReloadLine() {
+    final on = _softReloading;
+    return SizedBox(
+      height: 10,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 34),
+        child: Center(
+          child: AnimatedOpacity(
+            opacity: on ? 1 : 0,
+            duration: const Duration(milliseconds: 160),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: SizedBox(
+                height: 2,
+                child: on
+                    ? const LinearProgressIndicator(
+                        minHeight: 2,
+                        backgroundColor: _LhPlum.heroEdge,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          _LhPlum.primary,
+                        ),
+                      )
+                    : null,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 软刷新期间旧内容压淡且不可点：看得出「这是上一期的数，新的在路上」，
+  /// 又不会点进一个马上要被换掉的行。
+  Widget _softReloadDim(Widget child) {
+    if (!lighthouseSoftReloadKeepsContent) return child;
+    final on = _softReloading;
+    return IgnorePointer(
+      ignoring: on,
+      child: AnimatedOpacity(
+        opacity: on ? 0.42 : 1,
+        duration: Duration(milliseconds: on ? 120 : 220),
+        curve: Curves.easeOut,
+        child: child,
+      ),
     );
   }
 
@@ -14601,6 +14971,96 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return out;
   }
 
+  /// 走势图回传选中点。松手不清；点图例 / 换周期 / 换分类导致数据变化时
+  /// 由图自己回传 null，Hero 跟着回到整期 —— 不必在每个切 tab 的地方补一行。
+  void _onHeroPointSelected(int? i) {
+    if (_heroPointIndex == i) return;
+    if (!mounted) return;
+    setState(() => _heroPointIndex = i);
+  }
+
+  /// 「回本期」和外层日期胶囊刷新：清掉点选。图通过 selectedIndex 跟着灭高亮。
+  void _clearHeroPointSelection() {
+    if (_heroPointIndex == null) return;
+    HapticFeedback.selectionClick();
+    setState(() => _heroPointIndex = null);
+  }
+
+  /// 主 Hero 走势图上被点住的那一点（null = 看整期合计）。
+  /// 图通过 selectedIndex 和外层共用这一份，避免「回本期」只清大数、图还亮着。
+  int? _heroPointIndex;
+
+  /// 把整期 totals 换成第 i 点（日/周/月…粒度随当前区间）的值。
+  ///
+  /// 金额直接取日序列；比率**必须**拿换完的金额重算 —— 直接取率序列会让
+  /// 分子分母不同源，日粒度下基数常常小到让率失去意义。基数不够时
+  /// lighthouseValidRateBase 会返回 0，率就归 0，不硬凑一个好看的百分比。
+  /// 一个金额都取不到（序列没下发 / 长度不够）时返回 null，调用方退回整期。
+  Map<String, double>? _heroTotalsAtPoint(int i, Map<String, double> base) {
+    if (i < 0) return null;
+    double? at(String key) {
+      final s = _seriesForMetric(key);
+      if (i >= s.length) return null;
+      return s[i];
+    }
+
+    final out = Map<String, double>.from(base);
+    var hit = 0;
+    for (final key in const <String>[
+      'sales',
+      'verifiedSales',
+      'prepaid',
+      'gmv',
+      'cost',
+      'projectCost',
+      'totalCost',
+      'spread',
+      'profit',
+      'netProfit',
+      'revenue',
+      'netTa',
+      'netTaOperating',
+      'netTaFinancing',
+      'netTaOpCost',
+      'netTaProjectCost',
+      'netTaBizCost',
+      'netTaProjectBiz',
+      'handlingFee',
+      'platformServiceFee',
+    ]) {
+      final v = at(key);
+      if (v == null) continue;
+      out[key] = v;
+      hit++;
+    }
+    if (hit == 0) return null;
+    out['costTotal'] = out['totalCost'] ?? 0;
+    out['businessCost'] = out['cost'] ?? 0;
+    final verified = out['verifiedSales'] ?? 0;
+    final sales = out['sales'] ?? 0;
+    final anchorTotal = _anchor == _LhAnchor.verified && verified > 0
+        ? verified
+        : sales;
+    final profit = out['profit'] ?? 0;
+    final roiBase = lighthouseValidRateBase(
+      out['totalCost'] ?? 0,
+      minimumBase: _kRoiAnchorMinYuan,
+    );
+    out['rate'] = roiBase > 0 ? profit / roiBase * 100 : 0.0;
+    final gmRaw = lighthouseGrossMarginUsesSales(_grossMarginContextGroup)
+        ? sales
+        : verified;
+    final gmBase = lighthouseValidRateBase(
+      gmRaw,
+      minimumBase: _kRoiAnchorMinYuan,
+    );
+    out['grossMargin'] = gmBase > 0 ? profit / gmBase * 100 : 0.0;
+    out['spreadRate'] = anchorTotal > 0
+        ? (out['revenue'] ?? 0) / anchorTotal * 100
+        : 0.0;
+    return out;
+  }
+
   Widget _buildHeroUnifiedTrendChart({
     required Map<String, double> totals,
     required List<double> profitSeries,
@@ -14647,10 +15107,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ? bankSeries
               : const <double>[];
           final bankChange = _netTABankBalanceChange();
-          final periodStock =
-              (_bundle?.metrics['netTaBankBalance'] as num?)?.toDouble();
+          final periodStock = (_bundle?.metrics['netTaBankBalance'] as num?)
+              ?.toDouble();
           return _TrendChart(
             key: const ValueKey('hero-overview-netTa'),
+            onSelectedIndexChanged: _onHeroPointSelected,
+            selectedIndex: _heroPointIndex,
+            suppressPointMom: lighthouseHeroSuppressPointMom,
             labels: chartLabels,
             scale: netTa,
             scaleLabel: '净TA',
@@ -14693,8 +15156,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               setState(() {
                 final key = lighthouseNetTAHeroMetricFromSlot(slot);
                 _expandedTrendKey = key;
-                _heroTraceKey =
-                    key != null && _heroFormula(key) != null
+                _heroTraceKey = key != null && _heroFormula(key) != null
                     ? key
                     : null;
               });
@@ -14766,6 +15228,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         }
         return _TrendChart(
           key: const ValueKey('hero-overview'),
+          onSelectedIndexChanged: _onHeroPointSelected,
+          selectedIndex: _heroPointIndex,
+          suppressPointMom: lighthouseHeroSuppressPointMom,
           labels: labels,
           revenue: _seriesForMetric('revenue'),
           cost: _seriesForMetric('totalCost'),
@@ -14797,7 +15262,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           periodProfit: totals['profit'],
           periodProfitDeltaPct: _deltaForMetric('profit')?.pct,
           soloKey: overlaySlot,
-          formulaExpression: !lighthouseHeroShowsFormulaBar ||
+          formulaExpression:
+              !lighthouseHeroShowsFormulaBar ||
                   overlaySlot == null ||
                   focus == null
               ? null
@@ -14818,8 +15284,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 _ => _expandedTrendKey,
               };
               _expandedTrendKey = key;
-              _heroTraceKey =
-                  key != null && _heroFormula(key) != null
+              _heroTraceKey = key != null && _heroFormula(key) != null
                   ? key
                   : null;
             });
@@ -14849,19 +15314,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         : lighthouseHeroMastheadKey(_expandedTrendKey);
     final mastheadIsRate = lighthouseHeroMetricIsRate(mastheadKey);
 
+    // totals = 整期合计，走势图永远吃这一份；
+    // heroTotals = 大数与指标栏实际显示的那一份，选中某一点时换成那点的值。
     late final Map<String, double> totals;
-    late final double heroProfit;
+    late final Map<String, double> heroTotals;
+    var heroPointActive = false;
     late final List<double> profitSeries;
     late final double heroMastheadValue;
     late final bool mastheadIsNeg;
 
     if (totalsOverride != null) {
       totals = totalsOverride;
-      heroProfit = totals['profit'] ?? 0;
-      heroMastheadValue =
-          _mastheadValueForKey(totals, mastheadKey);
-      mastheadIsNeg = !lighthouseHeroMetricDisplaysMagnitude(mastheadKey) &&
-          heroMastheadValue < 0;
       // 实体走势优先；无走势则空（勿回退一级全量序列，避免 L2/L3 串档）。
       final overrideSeries = profitSeriesOverride ?? const <double>[];
       profitSeries = overrideSeries.length >= 2
@@ -14925,7 +15388,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         keys: const ['verifiedSales'],
         rowSum: sumVerifiedSales,
       );
-      heroProfit = _heroAmountFrom(
+      final periodProfit = _heroAmountFrom(
         metrics: metrics,
         useRowAmounts: useRowAmounts,
         metricsMatch: metricsMatch,
@@ -15002,7 +15465,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         heroTotalCost,
         minimumBase: _kRoiAnchorMinYuan,
       );
-      final sumRate = roiBase > 0 ? heroProfit / roiBase * 100 : 0.0;
+      final sumRate = roiBase > 0 ? periodProfit / roiBase * 100 : 0.0;
       final gmRaw = lighthouseGrossMarginUsesSales(_grossMarginContextGroup)
           ? heroSales
           : heroVerified;
@@ -15010,7 +15473,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         gmRaw,
         minimumBase: _kRoiAnchorMinYuan,
       );
-      final grossMargin = gmBase > 0 ? heroProfit / gmBase * 100 : 0.0;
+      final grossMargin = gmBase > 0 ? periodProfit / gmBase * 100 : 0.0;
       final spreadRate = anchorTotal > 0
           ? heroRevenue / anchorTotal * 100
           : 0.0;
@@ -15048,7 +15511,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         'businessCost': heroCost,
         'handlingFee': heroHandling,
         'platformServiceFee': heroPlatform,
-        'profit': heroProfit,
+        'profit': periodProfit,
         'netProfit': heroNetProfit,
         'revenue': heroRevenue,
         'grossMargin': grossMargin,
@@ -15063,17 +15526,37 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           if (value != null) totals[key] = value;
         }
       }
-      heroMastheadValue =
-          _mastheadValueForKey(totals, mastheadKey);
-      mastheadIsNeg = !lighthouseHeroMetricDisplaysMagnitude(mastheadKey) &&
-          heroMastheadValue < 0;
       profitSeries = _tab == 'netTa'
           ? _seriesForMetric('netTa')
           : _seriesForMetric('profit');
     }
 
+    // 一级 / 二级共用：点住某一天 → 大数、环比、指标栏切到那一天，并出「回本期」。
+    final pointTotals = _heroPointIndex == null
+        ? null
+        : _heroTotalsAtPoint(_heroPointIndex!, totals);
+    heroPointActive = pointTotals != null;
+    heroTotals = pointTotals ?? totals;
+    heroMastheadValue = _mastheadValueForKey(heroTotals, mastheadKey);
+    mastheadIsNeg =
+        !lighthouseHeroMetricDisplaysMagnitude(mastheadKey) &&
+        heroMastheadValue < 0;
+
+    // 点选某一期：大数、环比、指标栏都切到那一点；环比用该点对前一点。
+    final rawDelta = heroPointActive
+        ? _deltaAtHeroPoint(mastheadKey)
+        : (profitDeltaOverride ?? _mastheadDeltaForKey(mastheadKey));
+    // 大数用和账本格子同一把尺：筛到某个小分类、或者点到某一天时，Hero 一样
+    // 会冒出「0.02万 ↑300%」这种没法核对的数（见 lighthouseDeltaIsReadable）。
     final profitDelta =
-        profitDeltaOverride ?? _mastheadDeltaForKey(mastheadKey);
+        rawDelta != null &&
+            lighthouseDeltaIsReadable(
+              rawDelta.isUp ? rawDelta.pct.abs() : -rawDelta.pct.abs(),
+              value: heroMastheadValue,
+              isRate: mastheadIsRate,
+            )
+        ? rawDelta
+        : null;
 
     final profitLabels =
         (profitLabelsOverride != null && profitLabelsOverride.isNotEmpty)
@@ -15083,8 +15566,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     // 主 Hero 与账本展开共用 _TrendChart：叠线 + 图例，点图例只留一条。
     final heroTrendLines = _buildHeroTrendLines(totals, profitSeries);
     final hasMultiTrend = heroTrendLines.length >= 2;
-    final hasHeroTrend =
-        _tab == 'netTa' || hasMultiTrend || hasProfitTrend;
+    final hasHeroTrend = _tab == 'netTa' || hasMultiTrend || hasProfitTrend;
     final heroTrendPointCount = heroTrendLines.fold<int>(
       0,
       (acc, l) => math.max(acc, l.values.length),
@@ -15094,6 +15576,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             profitLabelsOverride.length == heroTrendPointCount)
         ? profitLabelsOverride
         : _heroTrendLabels(heroTrendPointCount);
+    // 选中点的日期，画进大数上方那颗标签胶囊里 —— 大数换了口径，
+    // 标签必须当场说清楚换成了哪一天，否则就是一个没有出处的数字。
+    final heroPointIdx = _heroPointIndex;
+    final heroPointLabel =
+        (heroPointActive &&
+            heroPointIdx != null &&
+            heroPointIdx >= 0 &&
+            heroPointIdx < heroTrendLabels.length)
+        ? heroTrendLabels[heroPointIdx]
+        : null;
     final title = summaryTitle ?? _l1SummaryTitle;
     final rangeLabel = _selectedRangeLabel;
     // 产品 / 供给 / 渠道的汇总 Hero 共用同一视觉身份；只替换标题和数据。
@@ -15151,7 +15643,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               child: Icon(summaryIcon, size: 12, color: summaryAccent),
             ),
             const SizedBox(width: 7),
-            // 左组：标题 + 真实区间 + 分类筛选。
+            // 左组：标题 + 真实区间 + 分类筛选；右端挂同步落款。
             Expanded(
               child: Row(
                 children: [
@@ -15193,6 +15685,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ],
               ),
             ),
+            // 「已同步 · 09:41」上提到标题行右端：它是这张卡的出处说明，
+            // 留在卡底时正好卡在 Hero 与账本之间，把那道衔接撑成一条空带。
+            if (totalsOverride == null) ...[
+              const SizedBox(width: 8),
+              _buildHeroSyncStamp(inline: true),
+            ],
           ],
         ),
         // 拍平版的结构全靠线：标题行下这条是「汇总从这里开始」。
@@ -15217,7 +15715,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       hasBankBalance: hasBankBalance,
                       hasBiButton: totalsOverride == null,
                     )
-                  : lighthouseCompactHeroSparkHeightFor(heroW);
+                  : lighthouseCompactHeroSparkHeightFor(
+                      heroW,
+                      hasBiButton: totalsOverride == null,
+                    );
               final chartMaxH = lighthouseCompactHeroChartMaxHeightFor(heroW);
               final trendSectionH = sparkH + lighthouseHeroChartCardPadding * 2;
 
@@ -15229,10 +15730,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     ? null
                     : BoxDecoration(
                         color: const Color(0xFFFFFDFF),
-                        border: Border.all(
-                          color: _LhPlum.heroEdge,
-                          width: 0.7,
-                        ),
+                        border: Border.all(color: _LhPlum.heroEdge, width: 0.7),
                         borderRadius: BorderRadius.circular(
                           lighthouseHeroCardRadius,
                         ),
@@ -15252,123 +15750,233 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             ? const EdgeInsets.fromLTRB(0, 2, 8, 0)
                             : EdgeInsets.all(lighthouseHeroCardPadding),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           // 银行余额钉在顶上；标签+大数+环比在剩余高度里垂直居中。
                           // 产品汇总没有银行余额时，整块内容就会落在卡正中。
                           children: [
-                    if (_tab == 'netTa') _buildNetTABankBalanceLine(),
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                    if (lighthouseHeroMastheadLabelAboveNumber) ...[
-                      Container(
-                        padding: const EdgeInsets.fromLTRB(5, 4, 7, 4),
-                        decoration: BoxDecoration(
-                          // 大数那块钉在主题紫上，不跟利润分区色走 ——
-                          // 分区色是给下面四张卡做分组的，大数是页面的锚，
-                          // 让它跟着分组色改会把整页的重心也改掉。
-                          color: _LhPlum.primary.withAlpha(12),
-                          borderRadius: BorderRadius.circular(
-                            lighthouseHeroMastheadLabelRadius,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: lighthouseHeroMastheadLabelIconSize,
-                              height: lighthouseHeroMastheadLabelIconSize,
-                              decoration: BoxDecoration(
-                                color: _LhPlum.primary.withAlpha(24),
-                                borderRadius: BorderRadius.circular(5),
-                              ),
-                              child: const Icon(
-                                Icons.trending_up_rounded,
-                                size: 11,
-                                color: _LhPlum.primary,
+                            if (_tab == 'netTa') _buildNetTABankBalanceLine(),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (lighthouseHeroMastheadLabelAboveNumber) ...[
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Container(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          5,
+                                          4,
+                                          7,
+                                          4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          // 大数那块钉在主题紫上，不跟利润分区色走 ——
+                                          // 分区色是给下面四张卡做分组的，大数是页面的锚，
+                                          // 让它跟着分组色改会把整页的重心也改掉。
+                                          color: _LhPlum.primary.withAlpha(12),
+                                          borderRadius: BorderRadius.circular(
+                                            lighthouseHeroMastheadLabelRadius,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              width:
+                                                  lighthouseHeroMastheadLabelIconSize,
+                                              height:
+                                                  lighthouseHeroMastheadLabelIconSize,
+                                              decoration: BoxDecoration(
+                                                color: _LhPlum.primary
+                                                    .withAlpha(24),
+                                                borderRadius:
+                                                    BorderRadius.circular(5),
+                                              ),
+                                              child: const Icon(
+                                                Icons.trending_up_rounded,
+                                                size: 11,
+                                                color: _LhPlum.primary,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 5),
+                                            // 选中某一天时，日期**替换**掉口径名而不是排在它
+                                            // 后面 —— 追加的写法会把「本月毛利」挤成「本日…」，
+                                            // 而日期本来就是更具体的那一个，该它站在前面。
+                                            if (heroPointLabel != null) ...[
+                                              Text(
+                                                heroPointLabel,
+                                                style: _tabular(
+                                                  LhTypography.mono(
+                                                    size:
+                                                        lighthouseHeroMastheadLabelFontSize,
+                                                    color: _LhPlum.primary,
+                                                    weight: FontWeight.w700,
+                                                    letterSpacing: 0.2,
+                                                    height: 1.0,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Flexible(
+                                                child: Text(
+                                                  _metricPageLabel(mastheadKey),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: LhTypography.sans(
+                                                    size:
+                                                        lighthouseHeroMastheadLabelFontSize,
+                                                    color: LhColors.ink2,
+                                                    weight: FontWeight.w600,
+                                                    letterSpacing: 0.1,
+                                                    height: 1.0,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 3),
+                                              GestureDetector(
+                                                behavior:
+                                                    HitTestBehavior.opaque,
+                                                onTap: _clearHeroPointSelection,
+                                                child: const Padding(
+                                                  padding: EdgeInsets.symmetric(
+                                                    horizontal: 2,
+                                                    vertical: 3,
+                                                  ),
+                                                  child: Icon(
+                                                    Icons.refresh_rounded,
+                                                    size: 11,
+                                                    color: _LhPlum.primary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ] else ...[
+                                              Flexible(
+                                                child: Text(
+                                                  lighthouseHeroMetricPeriodLabel(
+                                                    _period,
+                                                    mastheadKey,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: LhTypography.sans(
+                                                    size:
+                                                        lighthouseHeroMastheadLabelFontSize,
+                                                    color: LhColors.ink,
+                                                    weight: FontWeight.w600,
+                                                    letterSpacing: 0.1,
+                                                    height: 1.0,
+                                                  ),
+                                                ),
+                                              ),
+                                              // 点了下面某个指标后，大数和走势都换成它；
+                                              // 原来只能再点一次那格才回得去，很多人不知道。
+                                              // 这里给一个明面上的 ×，一点回到默认口径。
+                                              if (lighthouseHeroMastheadShowsFocusExit &&
+                                                  _expandedTrendKey != null) ...[
+                                                const SizedBox(width: 3),
+                                                GestureDetector(
+                                                  behavior:
+                                                      HitTestBehavior.opaque,
+                                                  onTap: () {
+                                                    HapticFeedback.selectionClick();
+                                                    setState(() {
+                                                      _expandedTrendKey = null;
+                                                      _heroTraceKey = null;
+                                                    });
+                                                  },
+                                                  child: const Padding(
+                                                    padding:
+                                                        EdgeInsets.symmetric(
+                                                          horizontal: 4,
+                                                          vertical: 3,
+                                                        ),
+                                                    child: Icon(
+                                                      Icons.close_rounded,
+                                                      size: 12,
+                                                      color: _LhPlum.primary,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                  ],
+                                  _LhAnimatedNumber(
+                                    value: mastheadIsRate
+                                        ? heroMastheadValue
+                                        : heroMastheadValue.abs(),
+                                    duration: const Duration(milliseconds: 800),
+                                    immediate: heroPointActive,
+                                    builder: (context, v) => LhScrollRichText(
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      text: TextSpan(
+                                        children: [
+                                          if (mastheadIsNeg)
+                                            TextSpan(
+                                              text: '−',
+                                              style: LhTypography.number(
+                                                size:
+                                                    lighthouseHeroMastheadFontSize,
+                                                color: LhColors.pos,
+                                              ),
+                                            ),
+                                          TextSpan(
+                                            text: mastheadIsRate
+                                                ? v.toStringAsFixed(2)
+                                                : (lighthouseHeroMetricPlainNumber(
+                                                        mastheadKey,
+                                                        v,
+                                                      ) ??
+                                                      _fmtMoney(v)),
+                                            style: LhTypography.number(
+                                              size:
+                                                  lighthouseHeroMastheadFontSize,
+                                              color: mastheadIsNeg
+                                                  ? LhColors.pos
+                                                  : _LhPlum.heroNum,
+                                            ),
+                                          ),
+                                          TextSpan(
+                                            text: mastheadIsRate
+                                                ? '%'
+                                                : (lighthouseHeroMetricPlainUnit(
+                                                            mastheadKey,
+                                                          ) !=
+                                                          null
+                                                      ? ' ${lighthouseHeroMetricPlainUnit(mastheadKey)}'
+                                                      : ' ${_unitMoney(v)}'),
+                                            style: LhTypography.sans(
+                                              size: 10.5,
+                                              color: LhColors.mute,
+                                              weight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 5),
+                                  _heroDeltaLine(
+                                    profitDelta,
+                                    pointMode: heroPointActive,
+                                    isRate: mastheadIsRate,
+                                    vsLabel: _heroDeltaVsLabel(
+                                      pointMode: heroPointActive,
+                                      series: mastheadKey == 'netTaBankBalance'
+                                          ? _netTABankBalanceSeries()
+                                          : _seriesForMetric(mastheadKey),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(width: 5),
-                            Text(
-                              lighthouseHeroMetricPeriodLabel(
-                                _period,
-                                mastheadKey,
-                              ),
-                              style: LhTypography.sans(
-                                size: lighthouseHeroMastheadLabelFontSize,
-                                color: LhColors.ink,
-                                weight: FontWeight.w600,
-                                letterSpacing: 0.1,
-                                height: 1.0,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                    ],
-                    _LhAnimatedNumber(
-                      value: mastheadIsRate
-                          ? heroMastheadValue
-                          : heroMastheadValue.abs(),
-                      duration: const Duration(milliseconds: 800),
-                      builder: (context, v) => LhScrollRichText(
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        text: TextSpan(
-                          children: [
-                            if (mastheadIsNeg)
-                              TextSpan(
-                                text: '−',
-                                style: LhTypography.number(
-                                  size: lighthouseHeroMastheadFontSize,
-                                  color: LhColors.pos,
-                                ),
-                              ),
-                            TextSpan(
-                              text: mastheadIsRate
-                                  ? v.toStringAsFixed(2)
-                                  : (lighthouseHeroMetricPlainNumber(
-                                          mastheadKey,
-                                          v,
-                                        ) ??
-                                        _fmtMoney(v)),
-                              style: LhTypography.number(
-                                size: lighthouseHeroMastheadFontSize,
-                                color: mastheadIsNeg
-                                    ? LhColors.pos
-                                    : _LhPlum.heroNum,
-                              ),
-                            ),
-                            TextSpan(
-                              text: mastheadIsRate
-                                  ? '%'
-                                  : (lighthouseHeroMetricPlainUnit(
-                                              mastheadKey,
-                                            ) !=
-                                            null
-                                        ? ' ${lighthouseHeroMetricPlainUnit(mastheadKey)}'
-                                        : ' ${_unitMoney(v)}'),
-                              style: LhTypography.sans(
-                                size: 10.5,
-                                color: LhColors.mute,
-                                weight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    _heroDeltaLine(profitDelta),
-                          ],
-                        ),
-                      ),
-                    ),
                           ],
                         ),
                       ),
@@ -15453,12 +16061,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         // 已经是一条足够强的界线，再加线就成了两道。
         if (lighthouseHeroUsesFlatLayout && totalsOverride == null)
           const SizedBox(height: 14),
-        _buildHeroStatRail(
-          totals,
-          whiteBackground: totalsOverride != null,
-        ),
+        _buildHeroStatRail(heroTotals),
         // 同步落款 —— 整张卡的出处说明，放在最后一行，读完数字才需要它。
-        if (totalsOverride == null) _buildHeroSyncStamp(),
       ],
     );
   }
@@ -15472,66 +16076,68 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   ///
   /// 顺手接上刷新：点它就重拉，同步中原地转 —— 状态和动作合成一个东西，
   /// 比「顶栏显示状态、另一颗按钮负责刷新」少一次视线往返。
-  Widget _buildHeroSyncStamp() {
+  Widget _buildHeroSyncStamp({bool inline = false}) {
     final busy = _refreshing || _loading;
+    final stamp = _buildHeroSyncStampChip(busy);
+    // 行内形态挂在标题行右端，自带宽度，外面不能再包 Align（在 Row 里会撑满）。
+    if (inline) return stamp;
     return Container(
       padding: const EdgeInsets.only(top: 8),
       decoration: lighthouseHeroUsesFlatLayout
           // 拍平版：Hero 没有卡边，落款靠一条顶线跟上面的分区表断开 ——
           // 表格的表尾就是这么收的。
           ? const BoxDecoration(
-              border: Border(
-                top: BorderSide(color: LhColors.line, width: 0.7),
-              ),
+              border: Border(top: BorderSide(color: LhColors.line, width: 0.7)),
             )
           : null,
       margin: EdgeInsets.only(top: lighthouseHeroUsesFlatLayout ? 10 : 1),
-      child: Align(
-        alignment: Alignment.centerRight,
-        child: _LhScrollSafeTap(
-          onTap: () {
-            if (busy) return;
-            HapticFeedback.selectionClick();
-            unawaited(_refresh());
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (busy)
-                  const _LhBrandLoader(size: 8)
-                else
-                  const _LhPulseDot(color: LhColors.pos, size: 4.5),
-                const SizedBox(width: 5),
-                Text(
-                  busy ? '同步中' : '已同步',
-                  style: LhTypography.sans(
-                    size: 8.5,
-                    color: LhColors.mute,
-                    weight: FontWeight.w600,
-                    letterSpacing: 0.2,
-                    height: 1.0,
-                  ),
-                ),
-                if (!busy) ...[
-                  const SizedBox(width: 5),
-                  Container(width: 0.7, height: 8, color: LhColors.line2),
-                  const SizedBox(width: 5),
-                  Text(
-                    _syncedAtLabelCompact(),
-                    style: LhTypography.mono(
-                      size: 8.5,
-                      color: LhColors.mute2,
-                      weight: FontWeight.w600,
-                      letterSpacing: 0.3,
-                      height: 1.0,
-                    ),
-                  ),
-                ],
-              ],
+      child: Align(alignment: Alignment.centerRight, child: stamp),
+    );
+  }
+
+  Widget _buildHeroSyncStampChip(bool busy) {
+    return _LhScrollSafeTap(
+      onTap: () {
+        if (busy) return;
+        HapticFeedback.selectionClick();
+        unawaited(_refresh());
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (busy)
+              const _LhBrandLoader(size: 8)
+            else
+              const _LhPulseDot(color: LhColors.pos, size: 4.5),
+            const SizedBox(width: 5),
+            Text(
+              busy ? '同步中' : '已同步',
+              style: LhTypography.sans(
+                size: 8.5,
+                color: LhColors.mute,
+                weight: FontWeight.w600,
+                letterSpacing: 0.2,
+                height: 1.0,
+              ),
             ),
-          ),
+            if (!busy) ...[
+              const SizedBox(width: 5),
+              Container(width: 0.7, height: 8, color: LhColors.line2),
+              const SizedBox(width: 5),
+              Text(
+                _syncedAtLabelCompact(),
+                style: LhTypography.mono(
+                  size: 8.5,
+                  color: LhColors.mute2,
+                  weight: FontWeight.w600,
+                  letterSpacing: 0.3,
+                  height: 1.0,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -15664,6 +16270,48 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return _deltaForMetric(mastheadKey);
   }
 
+  /// 点选走势图某一期：该点对前一点。率用 pp，金额用相对涨幅。
+  ({double pct, bool isUp})? _deltaAtHeroPoint(String key) {
+    final i = _heroPointIndex;
+    if (i == null) return null;
+    final series = key == 'netTaBankBalance'
+        ? _netTABankBalanceSeries()
+        : _seriesForMetric(key);
+    final period = key == 'netTaBankBalance'
+        ? _netTABankBalanceChange()?.pct
+        : _deltaForMetric(key)?.pct;
+    final pct = lighthouseTrendMomPct(
+      periodDeltaPct: period,
+      partialPeriod: _periodInProgress,
+      series: series,
+      selectedIndex: i,
+      suppressPointMom: lighthouseHeroSuppressPointMom,
+      asPercentagePoints: lighthouseHeroMetricIsRate(key),
+    );
+    if (pct == null) return null;
+    return (pct: pct, isUp: pct >= 0);
+  }
+
+  /// 点选时对照文案跟序列粒度走；未走完的最后一点仍用后端同期窗口文案。
+  String _heroDeltaVsLabel({
+    required bool pointMode,
+    required List<double> series,
+  }) {
+    final i = _heroPointIndex;
+    if (!pointMode || i == null) return _periodVsLabel;
+    if (lighthouseHeroPointUsesAlignedPeriodDelta(
+      partialPeriod: _periodInProgress,
+      selectedIndex: i,
+      seriesLength: series.length,
+    )) {
+      return _periodVsLabel;
+    }
+    return lighthouseHeroPointVsLabel(
+      _bundle?.metrics['heroSeriesGranularity']?.toString(),
+      period: _period,
+    );
+  }
+
   /// 左侧大数取值：银行余额不在 totals 里，走 metrics 存量。
   double _mastheadValueForKey(Map<String, double> totals, String mastheadKey) {
     if (mastheadKey == 'netTaBankBalance') {
@@ -15676,41 +16324,110 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return 0;
   }
 
-  Widget _heroDeltaLine(({double pct, bool isUp})? d) {
-
+  /// [pointMode] = 正看走势图上的某一个点。环比是该点对前一点；
+  /// 没有前一点时写「暂无对比」，并留「回本期」退出点选。
+  Widget _heroDeltaLine(
+    ({double pct, bool isUp})? d, {
+    bool pointMode = false,
+    bool isRate = false,
+    String? vsLabel,
+  }) {
+    final vs = (vsLabel == null || vsLabel.isEmpty) ? _periodVsLabel : vsLabel;
     final color = d == null
         ? LhColors.mute2
         : (d.isUp ? LhColors.neg : LhColors.pos);
     final a = d == null ? 0.0 : d.pct.abs();
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
-      children: [
-        Text(
-          d == null
-              ? '暂无对比'
-              : '${d.isUp ? '↑' : '↓'}${a.toStringAsFixed(a >= 10 ? 0 : 1)}%',
-          style: _tabular(
-            LhTypography.mono(
-              size: d == null ? 9.5 : 11.5,
-              color: color,
-              weight: FontWeight.w600,
-              letterSpacing: 0.2,
+    final unit = isRate ? 'pp' : '%';
+    final pctText = Text(
+      d == null
+          ? '暂无对比'
+          : '${d.isUp ? '↑' : '↓'}${a.toStringAsFixed(a >= 10 ? 0 : 1)}$unit',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: _tabular(
+        LhTypography.mono(
+          size: d == null ? 9.5 : 11.5,
+          color: color,
+          weight: FontWeight.w600,
+          letterSpacing: 0.2,
+        ),
+      ),
+    );
+    final vsText = LhScrollText(
+      vs,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: LhTypography.mono(
+        size: 9.5,
+        color: LhColors.mute,
+        weight: FontWeight.w500,
+        letterSpacing: 0.3,
+      ),
+    );
+    if (!pointMode) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          pctText,
+          const SizedBox(width: 7),
+          Flexible(child: vsText),
+        ],
+      );
+    }
+    // 「回本期」是退出点选的唯一文字入口，绝不能被裁。
+    //   旧版和环比、对照文案挤在一行，窄卡（手机上的产品汇总）里总被右沿吃掉。
+    //   做成不收缩的小胶囊：放得下就跟在同一行，放不下就单独起一行。
+    final backChip = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _clearHeroPointSelection,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+          color: _LhPlum.primary.withAlpha(20),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _LhPlum.primary.withAlpha(60), width: 0.6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.refresh_rounded, size: 10, color: _LhPlum.primary),
+            const SizedBox(width: 3),
+            Text(
+              '回本期',
+              maxLines: 1,
+              softWrap: false,
+              style: LhTypography.mono(
+                size: 9.5,
+                color: _LhPlum.primary,
+                weight: FontWeight.w700,
+                letterSpacing: 0.3,
+                height: 1.0,
+              ),
             ),
-          ),
+          ],
         ),
-        const SizedBox(width: 7),
-        Text(
-          _periodVsLabel,
-          style: LhTypography.mono(
-            size: 9.5,
-            color: LhColors.mute,
-            weight: FontWeight.w500,
-            letterSpacing: 0.3,
-          ),
-        ),
-      ],
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, c) {
+        // 环比 ~48 + 对照文案至少 ~40 + 胶囊 ~62 + 间距；低于这个宽度就换行。
+        final oneLine = !c.maxWidth.isFinite || c.maxWidth >= 190;
+        final deltaRow = Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            pctText,
+            const SizedBox(width: 7),
+            Flexible(child: vsText),
+            if (oneLine) ...[const SizedBox(width: 8), backChip],
+          ],
+        );
+        if (oneLine) return deltaRow;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [deltaRow, const SizedBox(height: 6), backChip],
+        );
+      },
     );
   }
 
@@ -16106,6 +16823,39 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         return '${a.year}';
       default:
         return '';
+    }
+  }
+
+  /// 期间条选中胶囊上的短名 —— 必须 ≤ 4 个字宽，胶囊里还要放圆点和 ▾。
+  /// 近两期用口语（本月 / 上月），再往前用最短的绝对值（7月 / 9.13 / Q1）。
+  String _periodPillLabel(String period, int offset) {
+    final a = _periodAnchor(period, offset);
+    final nowYear = _nowCST().year;
+    String yy(int y) => _two(y % 100);
+    switch (period) {
+      case 'day':
+        if (offset == 0) return '今日';
+        if (offset == -1) return '昨日';
+        return '${a.month}.${a.day}';
+      case 'week':
+        if (offset == 0) return '本周';
+        if (offset == -1) return '上周';
+        return '${-offset}周前';
+      case 'month':
+        if (offset == 0) return '本月';
+        if (offset == -1) return '上月';
+        return a.year == nowYear ? '${a.month}月' : '${yy(a.year)}.${_two(a.month)}';
+      case 'quarter':
+        final q = (a.month - 1) ~/ 3 + 1;
+        if (offset == 0) return '本季';
+        if (offset == -1) return '上季';
+        return a.year == nowYear ? 'Q$q' : '${yy(a.year)}Q$q';
+      case 'year':
+        if (offset == 0) return '今年';
+        if (offset == -1) return '去年';
+        return '${a.year}';
+      default:
+        return _kPeriodShort[period] ?? '';
     }
   }
 
@@ -16756,9 +17506,36 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           dotSize: lighthousePeriodStatusDotSize,
           primary: _LhPlum.primary,
           deep: _LhPlum.deep,
-          trackColor: LhColors.paper,
-          trackBorder: LhColors.line2,
+          // Hero 框架：轨道 = 雾紫壳，胶囊 = 白紫内容卡，字走 hero 大数深紫。
+          trackColor: lighthousePeriodUsesHeroSurface
+              ? _LhPlum.heroFill
+              : LhColors.paper,
+          trackBorder: lighthousePeriodUsesHeroSurface
+              ? _LhPlum.heroEdge
+              : LhColors.line2,
+          trackShadowColor: lighthousePeriodUsesHeroSurface
+              ? _LhPlum.deep.withAlpha(15)
+              : Colors.black.withAlpha(8),
+          pillGradient: lighthousePeriodUsesHeroSurface
+              ? const [Color(0xFFFFFFFF), Color(0xFFFFFDFF), Color(0xFFFBF8FE)]
+              : const [Color(0xFFF6F1FD), Color(0xFFE3D9F7), Color(0xFFEFE9FB)],
+          pillEdgeColor: lighthousePeriodUsesHeroSurface
+              ? _LhPlum.heroEdge
+              : null,
+          pillShadowColor: lighthousePeriodUsesHeroSurface
+              ? _LhPlum.deep.withAlpha(22)
+              : null,
+          shimmerColor: lighthousePeriodUsesHeroSurface
+              ? _LhPlum.lavender
+              : Colors.white,
           idleTextColor: LhColors.ink2,
+          selectedTextColor: lighthousePeriodUsesHeroSurface
+              ? _LhPlum.heroNum
+              : null,
+          selectedLabel: (_isCustomRange || !lighthousePeriodPillShowsInstance)
+              ? null
+              : _periodPillLabel(_period, _periodOffset),
+          ambientMotion: lighthousePeriodAmbientMotion,
           baseTextStyle: LhTypography.sans(
             size: 12,
             color: LhColors.ink2,
@@ -16767,6 +17544,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             height: 1.0,
           ),
           onTap: (i) {
+            HapticFeedback.selectionClick();
             final k = _kPeriodKeys[i];
             // v12.7 · 自定义区间生效时, 点任何 period tab 都先清区间
             //   然后按 tab 意图继续: 同 tab 就切到 offset=0, 不同 tab 切粒度.
@@ -17231,6 +18009,56 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     Widget sectionHeader(String key, String title) {
       final accent = sectionAccent(key);
+      if (lighthouseHeroSectionUsesHeroSurface) {
+        // 和大数卡「2026.07」标签同一个胶囊形状；卡面统一白紫纸，
+        // 分组感收进这颗胶囊：胶囊吃分区淡色、图标片实心分区色。
+        // 三张白卡长得一样时，扫一眼找「利润」靠的就是这块颜色。
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(3, 3, 7, 3),
+            decoration: BoxDecoration(
+              color: Color(lighthouseHeroSectionChipValues[key]!),
+              borderRadius: BorderRadius.circular(
+                lighthouseHeroMastheadLabelRadius,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: lighthouseHeroSectionIconSize,
+                  height: lighthouseHeroSectionIconSize,
+                  decoration: BoxDecoration(
+                    color: accent,
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Icon(
+                    sectionIcon(key),
+                    size: 11,
+                    color: LhColors.paper,
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: LhScrollText(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: LhTypography.sans(
+                      size: lighthouseHeroGroupTitleFontSize + 1,
+                      color: Color(lighthouseHeroSectionTitleValues[key]!),
+                      weight: FontWeight.w600,
+                      letterSpacing: 0.1,
+                      height: 1.0,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
       return Row(
         children: [
           Container(
@@ -17274,10 +18102,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     // 分区靠整张卡的淡色底区分。查表取固定值，不用 accent.withAlpha ——
     // 透明度叠色压在白底上掉彩度，四张卡会一起发灰。
-    Color sectionTint(String key) =>
-        Color(lighthouseHeroSectionTintValues[key]!);
-    Color sectionEdge(String key) =>
-        Color(lighthouseHeroSectionEdgeValues[key]!);
+    // Hero 框架版：和大数卡 / 走势卡同一张白紫纸、同一根轻紫边。
+    final heroSurface = whiteBackground || lighthouseHeroSectionUsesHeroSurface;
+    Color sectionTint(String key) => heroSurface
+        ? const Color(0xFFFFFDFF)
+        : Color(lighthouseHeroSectionTintValues[key]!);
+    Color sectionEdge(String key) => heroSurface
+        ? _LhPlum.heroEdge
+        : Color(lighthouseHeroSectionEdgeValues[key]!);
+    final sectionEdgeWidth = heroSurface ? 0.7 : 0.8;
 
     Widget strip({
       required String sectionKey,
@@ -17288,12 +18121,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       return Container(
         padding: const EdgeInsets.all(lighthouseHeroCardPadding),
         decoration: BoxDecoration(
-          color: whiteBackground
-              ? const Color(0xFFFFFDFF)
-              : sectionTint(sectionKey),
+          color: sectionTint(sectionKey),
           border: Border.all(
-            color: whiteBackground ? _LhPlum.heroEdge : sectionEdge(sectionKey),
-            width: 0.8,
+            color: sectionEdge(sectionKey),
+            width: sectionEdgeWidth,
           ),
           borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
           boxShadow: lighthouseHeroUsesCardShadow
@@ -17310,7 +18141,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             sectionHeader(sectionKey, title),
-            const SizedBox(height: 8),
+            // 胶囊比裸标题高 6，间距收 2，正文起点基本不动。
+            SizedBox(height: lighthouseHeroSectionUsesHeroSurface ? 6 : 8),
             child,
             if (footer != null) ...[
               const Spacer(),
@@ -17340,12 +18172,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           7,
         ),
         decoration: BoxDecoration(
-          color: whiteBackground
-              ? const Color(0xFFFFFDFF)
-              : sectionTint('cash'),
+          color: sectionTint('cash'),
           border: Border.all(
-            color: whiteBackground ? _LhPlum.heroEdge : sectionEdge('cash'),
-            width: 0.8,
+            color: sectionEdge('cash'),
+            width: sectionEdgeWidth,
           ),
           borderRadius: BorderRadius.circular(lighthouseHeroCardRadius),
           boxShadow: lighthouseHeroUsesCardShadow
@@ -17407,12 +18237,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         child: child,
       );
 
-      Widget tri(
-        Widget a,
-        Widget b,
-        Widget c, {
-        required Color sep,
-      }) => Row(
+      Widget tri(Widget a, Widget b, Widget c, {required Color sep}) => Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(flex: lighthouseHeroScaleColumnFlex, child: a),
@@ -17552,12 +18377,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               cell('netProfit', '净利润', netProfit.toDouble()),
               cell('revenue', '收入', revenue.toDouble()),
               cell('spread', '利差', spread.toDouble()),
-              cell(
-                'grossMargin',
-                '毛利率',
-                grossMargin.toDouble(),
-                isRate: true,
-              ),
+              cell('grossMargin', '毛利率', grossMargin.toDouble(), isRate: true),
               cell('rate', 'ROI', rate.toDouble(), isRate: true, last: true),
             ],
           ),
@@ -17904,15 +18724,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       keyId,
       group: _grossMarginContextGroup,
     );
+    // 点选某一期时，七格环比也切到该点对前一点，不再挂整段 vs 上月。
+    final delta = entityRow == null
+        ? (_heroPointIndex != null
+              ? _deltaAtHeroPoint(keyId)
+              : _deltaForMetric(keyId))
+        : _deltaFromEntityRow(entityRow, keyId);
     // v15 · 和走势图同一条规则：选中一个指标时，其余格子不消失也不换色，
     //   只降到统一的淡化度（lighthouseHeroContextOpacity）。
     //   图上「非焦点 = 中性淡线」，格子上「非焦点 = 同色淡一档」，
     //   两处是同一种语言，读者不用为每个区域重学一遍。
     final isFocusDimmed =
         interactive && activeKey != null && !isActive && !isTraceSource;
-    final delta = entityRow == null
-        ? _deltaForMetric(keyId)
-        : _deltaFromEntityRow(entityRow, keyId);
     // 底板是浅的（玻璃压在雾紫星空上），字色一律走墨色那套 ——
     // 白字在这里没有底可压。
     final numberColor = LhColors.ink;
@@ -17937,14 +18760,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       overflow: TextOverflow.ellipsis,
       style: lighthouseHeroMetricUsesSansLabel
           ? LhTypography.sans(
-              size: lighthouseHeroMetricLabelFontSize,
+              size: lighthouseHeroCellLabelFontSize,
               color: labelColor,
               weight: FontWeight.w500,
               letterSpacing: 0,
               height: 1.1,
             )
           : LhTypography.mono(
-              size: lighthouseHeroMetricLabelFontSize,
+              size: lighthouseHeroCellLabelFontSize,
               color: labelColor,
               weight: FontWeight.w600,
               letterSpacing: 0.2,
@@ -17966,7 +18789,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           const SizedBox(width: 2),
           Icon(
             Icons.arrow_forward_rounded,
-            size: lighthouseHeroMetricLabelFontSize + 1,
+            size: lighthouseHeroCellLabelFontSize + 1,
             color: isTraceOpen
                 ? _LhPlum.primary
                 : (formula != null
@@ -17999,6 +18822,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final numberBlock = _LhAnimatedNumber(
       value: displayValue,
       duration: const Duration(milliseconds: 700),
+      // 在走势图上拖着选点时数字要跟着手指走：700ms 的 tween 会变成
+      // 一串永远在追赶的中间值，读不到任何一天的真实数。
+      immediate: _heroPointIndex != null,
       builder: (context, v) => LhScrollRichText(
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -18007,8 +18833,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             TextSpan(
               text: isRate
                   ? v.toStringAsFixed(2)
-                  : (lighthouseHeroMetricPlainNumber(keyId, v) ??
-                        _fmtMoney(v)),
+                  : (lighthouseHeroMetricPlainNumber(keyId, v) ?? _fmtMoney(v)),
               style: LhTypography.number(
                 size: lighthouseHeroMetricValueFontSize,
                 color: numberColor,
@@ -18017,8 +18842,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             TextSpan(
               text: isRate
                   ? '%'
-                  : (lighthouseHeroMetricPlainUnit(keyId) ??
-                        _unitMoney(v)),
+                  : (lighthouseHeroMetricPlainUnit(keyId) ?? _unitMoney(v)),
               style: LhTypography.sans(
                 size: 7.5,
                 color: unitColor,
@@ -18038,7 +18862,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 '${isRate ? 'pp' : '%'}',
       style: _tabular(
         LhTypography.mono(
-          size: lighthouseHeroMetricDeltaFontSize,
+          size: lighthouseHeroCellDeltaFontSize,
           color: deltaColor,
           weight: FontWeight.w600,
           height: 1.0,
@@ -18107,25 +18931,27 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         // 追溯态：被点的格子填淡紫，来源格描边点亮并挂角标，其余压暗。
         // 内边距常驻，只切边框和底色，点亮时格子不会跳。
         : AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          padding: const EdgeInsets.fromLTRB(4, 2, 2, 2),
-          decoration: BoxDecoration(
-            color: isTraceOpen || isActive
-                ? _LhPlum.mist
-                : (isTraceSource ? LhColors.paper : Colors.transparent),
-            border: Border.all(
-              color: isTraceOpen || isTraceSource || isActive
-                  ? _LhPlum.primary
-                  : Colors.transparent,
-              width: 1,
+            duration: const Duration(milliseconds: 140),
+            // 上下 3、格间距 0：视觉行距仍是 6，但两格之间不再有 2px 点不中的缝，
+            // 每格热区上下各多 1px。
+            padding: const EdgeInsets.fromLTRB(4, 3, 2, 3),
+            decoration: BoxDecoration(
+              color: isTraceOpen || isActive
+                  ? _LhPlum.mist
+                  : (isTraceSource ? LhColors.paper : Colors.transparent),
+              border: Border.all(
+                color: isTraceOpen || isTraceSource || isActive
+                    ? _LhPlum.primary
+                    : Colors.transparent,
+                width: 1,
+              ),
+              borderRadius: BorderRadius.circular(8),
             ),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          // 格子里的标签/数字是会横向滚的（LhScrollText 自带横拖手势）。
-          // 一格就那么点宽，手指按下时横向蹭出 slop，横拖就赢了手势竞技场，
-          // 外层的 onTap 被取消 —— 表现正是「点了没反应」。
-          // 可点态下让内容整体不吃指针：整格只有一个热区，交给外层 GestureDetector。
-          child: interactive ? IgnorePointer(child: cellBody) : cellBody,
+            // 格子里的标签/数字是会横向滚的（LhScrollText 自带横拖手势）。
+            // 一格就那么点宽，手指按下时横向蹭出 slop，横拖就赢了手势竞技场，
+            // 外层的 onTap 被取消 —— 表现正是「点了没反应」。
+            // 可点态下让内容整体不吃指针：整格只有一个热区，交给外层 GestureDetector。
+            child: interactive ? IgnorePointer(child: cellBody) : cellBody,
           );
     if (isTraceDimmed || isFocusDimmed) {
       framed = AnimatedOpacity(
@@ -18139,6 +18965,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       behavior: HitTestBehavior.opaque,
       onTap: interactive
           ? () {
+              HapticFeedback.selectionClick();
               final next = lighthouseHeroMetricActivateAfterTap(
                 activeKey,
                 keyId,
@@ -18838,6 +19665,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       final bankChange = _netTABankBalanceChange();
       return _TrendChart(
         key: const ValueKey('hero-swap-netTaBankBalance'),
+        onSelectedIndexChanged: _onHeroPointSelected,
+        selectedIndex: _heroPointIndex,
+        suppressPointMom: lighthouseHeroSuppressPointMom,
         labels: labels,
         revenue: const <double>[],
         cost: const <double>[],
@@ -18917,6 +19747,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     return _TrendChart(
       key: ValueKey('hero-swap-$metricKey'),
+      onSelectedIndexChanged: _onHeroPointSelected,
+      selectedIndex: _heroPointIndex,
+      suppressPointMom: lighthouseHeroSuppressPointMom,
       labels: labels,
       revenue: slot == 'revenue' ? series : ctxRevenue,
       cost: slot == 'cost' ? series : ctxCost,
@@ -18976,6 +19809,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final labels = _heroTrendLabels(n);
     return _TrendChart(
       key: const ValueKey('hero-swap-projectCost-l3'),
+      onSelectedIndexChanged: _onHeroPointSelected,
+      selectedIndex: _heroPointIndex,
+      suppressPointMom: lighthouseHeroSuppressPointMom,
       labels: labels,
       cost: at(0),
       costLabel: lab(0),
@@ -20099,7 +20935,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       (key: 'totalCost', text: '成本合计 = 项目成本 + 业务成本'),
       (key: 'profit', text: '毛利润 = 收入 − 成本合计'),
       (key: 'netProfit', text: '净利润 = 毛利润 − 业务成本'),
-      (key: 'grossMargin', text: '毛利率 = ${lighthouseGrossMarginFormulaText(_grossMarginContextGroup)}'),
+      (
+        key: 'grossMargin',
+        text:
+            '毛利率 = ${lighthouseGrossMarginFormulaText(_grossMarginContextGroup)}',
+      ),
       (key: 'rate', text: 'ROI = 毛利润 ÷ 成本合计'),
     ];
 
@@ -21673,13 +22513,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ? Icons.expand_less_rounded
             : Icons.expand_more_rounded;
       }
-      return _segmentCell(
+      return _dimTab(
         label: label,
         isOn: isOn,
-        tone: _SegmentTone.dim,
-        accent: _LhPlum.primary,
         trailing: trailing,
-        size: _SegmentSize.large,
         onTap: () {
           if (key == 'analysis') {
             if (key == _tab) return;
@@ -21805,11 +22642,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 )
               : null,
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
         child: Row(
           children: [
             SizedBox(
-              width: 28,
+              width: lighthouseLedgerFilterKickerWidth,
               child: Text(
                 kicker,
                 textAlign: TextAlign.left,
@@ -21828,7 +22665,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 padding: EdgeInsets.zero,
                 physics: const ClampingScrollPhysics(),
                 itemCount: cells.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 6),
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
                 itemBuilder: (_, i) => Center(child: cells[i]),
               ),
             ),
@@ -21873,15 +22710,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               divider: true,
               cells: groups
                   .map(
-                    (g) => _segmentCell(
+                    (g) => _filterPill(
                       label: g,
                       isOn: _groupFilter == g,
-                      tone: _SegmentTone.group,
-                      leading: _categoryChipIcon(
-                        g,
-                        selected: _groupFilter == g,
-                      ),
-                      size: _SegmentSize.medium,
                       onTap: () => _setGroupFilter(g),
                     ),
                   )
@@ -21893,11 +22724,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               divider: true,
               cells: hunOpts
                   .map(
-                    (v) => _segmentCell(
+                    (v) => _filterPill(
                       label: _hunLabelFor(v),
                       isOn: _hunFilter == v,
-                      tone: _SegmentTone.subgroup,
-                      size: _SegmentSize.medium,
+                      strong: false,
                       onTap: () => setState(() {
                         _hunFilter = _hunFilter == v ? '全部' : v;
                         _listLimit = _listPageSize;
@@ -21974,12 +22804,143 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
-  Widget _categoryChipIcon(String label, {required bool selected}) =>
-      _categoryLeadingIcon(
-        label,
-        size: lighthouseCategoryLogoSize,
-        selected: selected,
-      );
+  // ───── v16 · 维度 Tab / 筛选胶囊 ─────────────────────────────────────────
+  //   旧版三层（维度 / 分类 / HUN）用的是同一套「淡紫底 + 描边的圆角框」，
+  //   只差一点大小，选中态也都是淡紫 —— 分不出层级，框线一多就乱。
+  //   现在每层只用一种语言：
+  //     维度 —— 纯文字 + 底部紫色指示条（最高层级，最安静）；
+  //     分类 —— 实心胶囊：未选浅灰底、选中深紫底白字（对比最强，一眼找到当前筛选）；
+  //     HUN  —— 描边小胶囊，比分类再轻一档。
+  //   通用的 Material 图标（闪电 / 九宫格 / 问号 / 信号塔）全部去掉，它们不带
+  //   信息只添噪；只保留真品牌 logo（中石油 / 平安 / 移动…），那是认得出的。
+  Widget _dimTab({
+    required String label,
+    required bool isOn,
+    required VoidCallback onTap,
+    IconData? trailing,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: LhScrollText(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: LhTypography.sans(
+                        size: 13.5,
+                        color: isOn ? _LhPlum.deep : LhColors.mute,
+                        weight: isOn ? FontWeight.w700 : FontWeight.w500,
+                        letterSpacing: 0.2,
+                        height: 1.0,
+                      ),
+                    ),
+                  ),
+                  if (trailing != null) ...[
+                    const SizedBox(width: 4),
+                    Icon(
+                      trailing,
+                      size: 13,
+                      color: _LhPlum.primary.withAlpha(160),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: lighthousePeriodAnimationMs),
+            curve: Curves.easeOutCubic,
+            margin: const EdgeInsets.only(bottom: 5),
+            width: isOn ? 22 : 0,
+            height: 3,
+            decoration: BoxDecoration(
+              color: _LhPlum.primary,
+              borderRadius: BorderRadius.circular(1.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// [strong] = 分类行（实心胶囊）；false = HUN 行（描边小胶囊）。
+  Widget _filterPill({
+    required String label,
+    required bool isOn,
+    required VoidCallback onTap,
+    bool strong = true,
+  }) {
+    // 「(未分类)」这类括号是后端值的写法，展示时去掉 —— 胶囊本身已经是边界。
+    final m = RegExp(r'^[(（](.+)[)）]$').firstMatch(label.trim());
+    final display = m?.group(1) ?? label;
+    final asset = lighthouseCategoryBrandAsset(label);
+    final height = strong ? 28.0 : 26.0;
+    final bg = strong
+        ? (isOn ? _LhPlum.deep : const Color(0xFFF2F0F6))
+        : (isOn ? _LhPlum.primary.withAlpha(22) : Colors.transparent);
+    final fg = strong
+        ? (isOn ? Colors.white : LhColors.ink2)
+        : (isOn ? _LhPlum.deep : LhColors.mute);
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        height: height,
+        padding: EdgeInsets.only(left: asset != null ? 5 : 12, right: 12),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(height / 2),
+          border: strong
+              ? null
+              : Border.all(
+                  color: isOn ? _LhPlum.primary.withAlpha(120) : LhColors.line2,
+                  width: 0.8,
+                ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (asset != null) ...[
+              // 品牌 logo 垫一个白圆：选中后底色变深紫，logo 原色不会被吃掉。
+              Container(
+                width: height - 8,
+                height: height - 8,
+                padding: const EdgeInsets.all(2.5),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: SvgPicture.asset(asset, fit: BoxFit.contain),
+              ),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              display,
+              maxLines: 1,
+              softWrap: false,
+              style: LhTypography.sans(
+                size: strong ? 12 : 11.5,
+                color: fg,
+                weight: isOn ? FontWeight.w600 : FontWeight.w500,
+                letterSpacing: 0.1,
+                height: 1.0,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   /// 三级导航：主维度与日周月季年同一套圆角选中框，分类用胶囊，HUN 用轻量分段。
   Widget _segmentCell({
@@ -22120,7 +23081,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   //          【视角控制段】kicker + dropdown 按钮 (原样保留, 只是加了 kicker 分组)
   //          "全部" chip 拿掉, 变成右上角"复位/显示全部"文字
   Widget _buildSortbar() {
-    return Padding(
+    return Container(
+      // 「09.14 选区间 · 指标 12」是账本的表头行，不是又一块白面板 ——
+      // 给它一层极浅的底，上面的维度条和下面的表体就各自站住了，
+      // 三条白面孔连在一起时那种「不知道哪块管哪块」也就没了。
+      color: LhColors.mist,
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       child: _buildViewControlsBar(),
     );
@@ -22289,9 +23254,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       if (key.isEmpty || skip.contains(key)) continue;
       if (key.startsWith(lighthouseCostBillMetricPrefix)) continue;
       final label = (d['short'] ?? d['label'] ?? key).toString();
-      out.add(
-        LhBiMetric(key: key, label: label, isRate: d['isRate'] == true),
-      );
+      out.add(LhBiMetric(key: key, label: label, isRate: d['isRate'] == true));
       if (out.length >= 10) break;
     }
     if (out.isEmpty) {
@@ -22321,14 +23284,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   bool get _biDimLoading {
-    final dim = lighthouseBiDimToLoad(
-      biDim: _biDim,
-      fallback: _biInitialDim(),
-    );
+    final dim = lighthouseBiDimToLoad(biDim: _biDim, fallback: _biInitialDim());
     if (_tabErrors.containsKey(dim)) return false;
-    return _loading ||
-        _loadingTabs.contains(dim) ||
-        !_loadedTabs.contains(dim);
+    return _loading || _loadingTabs.contains(dim) || !_loadedTabs.contains(dim);
   }
 
   /// 顶部出哪几个视角 —— 按权限裁。没有净TA权限的人不该在 BI 里看见净TA，
@@ -22634,10 +23592,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 原来 `_biInitialDim()` 跟主列表 `_tab` 走。人已经在 BI 里切到渠道 / 人效 /
   /// 净TA 后再改粒度，主列表可能还停在产品，于是只重拉产品，当前视角空着。
   Future<void> _ensureBiLedgerDims() async {
-    final dim = lighthouseBiDimToLoad(
-      biDim: _biDim,
-      fallback: _biInitialDim(),
-    );
+    final dim = lighthouseBiDimToLoad(biDim: _biDim, fallback: _biInitialDim());
     await _loadTab(dim);
     unawaited(_loadBiWindowRows(dim));
   }
@@ -22702,10 +23657,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             else
               Future<Map<String, dynamic>?>.value(null),
           ]);
-          dayRows ??=
-              fetched[0] == null ? null : _netTaRowsFromPayload(fetched[0]!);
-          monthRows ??=
-              fetched[1] == null ? null : _netTaRowsFromPayload(fetched[1]!);
+          dayRows ??= fetched[0] == null
+              ? null
+              : _netTaRowsFromPayload(fetched[0]!);
+          monthRows ??= fetched[1] == null
+              ? null
+              : _netTaRowsFromPayload(fetched[1]!);
         } else {
           final fetched = await Future.wait([
             if (dayRows == null)
@@ -22750,10 +23707,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _buildEditorialBackButton(
-            label: '退出',
-            onTap: _closeBiView,
-          ),
+          _buildEditorialBackButton(label: '退出', onTap: _closeBiView),
           const SizedBox(width: 10),
           Text(
             '灯塔',
@@ -22842,14 +23796,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ),
         child: Row(
           children: [
-            const Icon(
-              Icons.insights_rounded,
-              size: 13,
-              color: Colors.white,
-            ),
+            const Icon(Icons.insights_rounded, size: 13, color: Colors.white),
             const SizedBox(width: 6),
             Expanded(
-              child: Text(
+              child: LhScrollText(
                 'BI 视图',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -22883,14 +23833,121 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
-  /// 视角控制段：左选区间 · 右指标（分类改由上方分类条筛选，不再挂重复下拉）
+  /// 视角控制段：左选区间 · 中放大镜 · 右指标
+  /// （分类改由上方分类条筛选，不再挂重复下拉）
   Widget _buildViewControlsBar() {
+    // 输入态直接顶掉整条 —— 查找的时候「选区间 / 指标」都不是当下要做的事，
+    // 让它们留在旁边只会把输入框挤成一条缝。
+    if (_ledgerSearchOpen && _detailKey == null) {
+      return _buildLedgerSearchField();
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Flexible(child: _buildDateRangeControl()),
         const SizedBox(width: 8),
+        if (_detailKey == null) ...[
+          Semantics(
+            button: true,
+            label: '查找',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setState(() {
+                _ledgerSearchOpen = true;
+                _ledgerSearchTab = _tab;
+              }),
+              child: Container(
+                width: 26,
+                height: 26,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _LhPlum.primary.withAlpha(16),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _LhPlum.primary.withAlpha(30),
+                    width: 0.7,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.search_rounded,
+                  size: 15,
+                  color: _LhPlum.primary,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
         _buildDropdownActions(showCategory: false, showMetric: true),
+      ],
+    );
+  }
+
+  Widget _buildLedgerSearchField() {
+    final all = _currentRows;
+    final matched = _ledgerSearchFiltered(all).length;
+    final typing = _ledgerSearch.trim().isNotEmpty;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const Icon(Icons.search_rounded, size: 15, color: _LhPlum.primary),
+        const SizedBox(width: 7),
+        Expanded(
+          child: TextField(
+            controller: _ledgerSearchCtl,
+            focusNode: _ledgerSearchFocus,
+            autofocus: true,
+            textInputAction: TextInputAction.search,
+            cursorColor: _LhPlum.primary,
+            cursorWidth: 1.4,
+            style: LhTypography.sans(
+              size: 12.5,
+              color: LhColors.ink,
+              weight: FontWeight.w600,
+            ),
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: EdgeInsets.zero,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              hintText: _ledgerSearchHint,
+              hintStyle: LhTypography.sans(
+                size: 12.5,
+                color: LhColors.mute2,
+                weight: FontWeight.w500,
+              ),
+            ),
+            onChanged: (v) => setState(() {
+              _ledgerSearch = v;
+              _ledgerSearchTab = _tab;
+              // 命中变少了还停在上一次的分页位置，会看起来像「搜出来是空的」。
+              _listLimit = _listPageSize;
+            }),
+          ),
+        ),
+        if (typing) ...[
+          Text(
+            '$matched / ${all.length}',
+            style: _tabular(
+              LhTypography.mono(
+                size: 10,
+                color: matched == 0 ? LhColors.neg : LhColors.mute2,
+                weight: FontWeight.w700,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+          const SizedBox(width: 9),
+        ],
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _closeLedgerSearch,
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+            child: Icon(Icons.close_rounded, size: 15, color: LhColors.mute2),
+          ),
+        ),
       ],
     );
   }
@@ -23552,7 +24609,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   // ───── List ───────────────────────────────────────────────────────────────
 
   Widget _buildList({bool embedded = false}) {
-    if (_loading) {
+    // 软刷新时保留旧行（外层已压淡），列表不塌成 240 高的空白，页面不跳。
+    if (_loading && !_softReloading) {
       return const SizedBox(height: 240);
     }
     if (_loadError != null) {
@@ -23666,15 +24724,39 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ),
       );
     }
-    final rows = _currentRows;
+    final rows = _ledgerSearchFiltered(_currentRows);
     if (rows.isEmpty) {
+      // 空列表要说清楚是「没有数据」还是「筛没了」—— 后者用户自己能修。
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 40),
         child: Center(
-          child: Text(
-            '暂无数据',
-            style: LhTypography.sans(size: 12, color: LhColors.mute),
-          ),
+          child: _ledgerSearchActive
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '没有匹配「${_ledgerSearch.trim()}」的行',
+                      style: LhTypography.sans(size: 12, color: LhColors.mute),
+                    ),
+                    const SizedBox(height: 10),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _closeLedgerSearch,
+                      child: Text(
+                        '清除查找',
+                        style: LhTypography.sans(
+                          size: 12,
+                          color: _LhPlum.primary,
+                          weight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : Text(
+                  '暂无数据',
+                  style: LhTypography.sans(size: 12, color: LhColors.mute),
+                ),
         ),
       );
     }
@@ -26533,10 +27615,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 全局 _fmtSignedMomPct 会输出「↓ -85.0%」：箭头已经表达方向，负号是重复编码，
   /// 还要多占 12px。账本里改成「↓85.0%」，语义不变、更紧、更干净。
   String _ledgerFmtDelta(double d, {required bool isRate}) {
-    final a = d.abs();
-    return '${d >= 0 ? '↑' : '↓'}'
-        '${a.toStringAsFixed(a >= 10 ? 0 : 1)}'
-        '${isRate ? 'pp' : '%'}';
+    return lighthouseLedgerDeltaText(d, isRate: isRate);
   }
 
   /// 环比 —— 兼容后端 num 与 {pct: num} 两种形状。
@@ -26915,7 +27994,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
 
     final delta = missing ? null : _ledgerDelta(r, c.key);
-    final hasDelta = delta != null && delta.abs() >= 0.05;
+    final deltaText = delta == null
+        ? '·'
+        : lighthouseLedgerDeltaText(delta, isRate: c.isRate);
     // 环比颜色统一表达方向：中国金融色，上涨红、下跌绿；不因成本类反转。
     final deltaIsUp = lighthouseLedgerDeltaIsUp(delta);
     final dColor = deltaIsUp == null
@@ -26983,7 +28064,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           child: SizedBox(
             width: _ledgerDeltaW,
             child: Text(
-              hasDelta ? _ledgerFmtDelta(delta, isRate: c.isRate) : '·',
+              deltaText,
               maxLines: 1,
               textAlign: TextAlign.right,
               style: _tabular(
@@ -27125,7 +28206,24 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         : null;
     final nameFontSize = lighthouseLedgerNameFontSizeForTab(nameTab);
 
+    final nameStyle = LhTypography.sans(
+      size: _fs(nameFontSize) - (r['isChild'] == true ? 1 : 0),
+      weight: r['isChild'] == true ? FontWeight.w500 : FontWeight.w600,
+      color: r['isChild'] == true ? LhColors.ink2 : LhColors.ink,
+      // 净TA 用过 1.0，汉字底部横笔（业 / 本 / 资）会被 LhScrollText 裁掉。
+      height: tab == 'netTa' ? 1.3 : 1.15,
+      letterSpacing: -0.1,
+    );
+    final canOpenDetail = canDetail && onOpenDetail != null;
+
     // 收起态只保留名称和分类；占比、走势、毛利率进入展开区。
+    //
+    // v20 · 名字被挡住的原因不是字号，是这一行的零件太多：
+    //   390 宽的屏上冻结列 = clamp(390×0.35, 112, 164) = 136.5pt，
+    //   扣掉 padding 17 + 序号 28 + 间隔 6 只剩 85.5pt；再被展开圆钮 27
+    //   和「›」那个 24+4 的固定列各切一刀，留给名字的净宽只有 24.5pt ——
+    //   两个汉字。所以「›」不再独占一列：名字整块变成进详情的热区，箭头
+    //   改成跟在最后一个字后面的内联字符，跟着文字走。名字 24.5 → 52.5pt。
     final nameRow = Row(
       crossAxisAlignment: tab == 'netTa'
           ? CrossAxisAlignment.center
@@ -27134,44 +28232,35 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         Expanded(
           child: Padding(
             padding: EdgeInsets.only(left: r['isChild'] == true ? _fs(14) : 0),
-            child: LhScrollText(
-              name,
-              maxLines: tab == 'netTa' ? 1 : 2,
-              overflow: TextOverflow.ellipsis,
-              style: LhTypography.sans(
-                size: _fs(nameFontSize) - (r['isChild'] == true ? 1 : 0),
-                weight: r['isChild'] == true
-                    ? FontWeight.w500
-                    : FontWeight.w600,
-                color: r['isChild'] == true ? LhColors.ink2 : LhColors.ink,
-                // 净TA 用过 1.0，汉字底部横笔（业 / 本 / 资）会被 LhScrollText 裁掉。
-                height: tab == 'netTa' ? 1.3 : 1.15,
-                letterSpacing: -0.1,
-              ),
-            ),
-          ),
-        ),
-        if (canDetail && onOpenDetail != null)
-          Semantics(
-            button: true,
-            label: '进入$name详情',
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onOpenDetail,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 4),
-                child: SizedBox(
-                  width: _fs(24),
-                  height: _fs(24),
-                  child: Icon(
-                    Icons.chevron_right_rounded,
-                    size: _fs(16),
-                    color: _LhPlum.primary,
+            child: Semantics(
+              button: canOpenDetail,
+              label: canOpenDetail ? '进入$name详情' : null,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: canOpenDetail ? onOpenDetail : null,
+                child: LhScrollRichText(
+                  maxLines: tab == 'netTa' ? 1 : 2,
+                  overflow: TextOverflow.ellipsis,
+                  text: TextSpan(
+                    children: [
+                      TextSpan(text: name, style: nameStyle),
+                      if (canOpenDetail)
+                        TextSpan(
+                          text: ' \u203A',
+                          style: LhTypography.sans(
+                            size: _fs(nameFontSize) + 1,
+                            weight: FontWeight.w600,
+                            color: _LhPlum.primary,
+                            height: tab == 'netTa' ? 1.3 : 1.15,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
             ),
           ),
+        ),
       ],
     );
 
@@ -27213,6 +28302,267 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ),
             ),
     );
+
+    // ══ v21 · 冻结列重做（产品 / 供给 / 渠道 / 人效）═══════════════════════
+    //
+    //  390 屏宽下这一列只有 115pt：clamp(328 × 0.35, 112, 164)。扣掉内边距 17、
+    //  序号圆徽 26+6、展开圆钮 25+6，留给名字的净宽 34pt —— 12pt 字号下刚好
+    //  三个汉字。而名字用的是可横拖的 LhScrollText：它不在这 34pt 里截断，
+    //  一路画到冻结列边缘才被 ClipRect 裁掉。所以「中石化现金券」压在展开钮
+    //  底下，跟在文字后面的「›」被推出可视区 —— 三个字的「出行金」有箭头、
+    //  六个字的没有，就是这一条。
+    //
+    //  改法不是继续在横向抠像素，是换个方向：这格高 150pt，两行名字加一行
+    //  毛利率才 60pt —— 横向在为三个汉字打架，竖向却空着一半。
+    //    · 序号 26pt 圆徽 → 名字前的 mono 小号（序号是坐标，不是内容）  +20pt
+    //    · 展开钮下沉到毛利率那一行（那行只有「23.4%」，空得很）       +31pt
+    //    · 名字独占第一行，允许换到两行                    34 → 82pt × 2 行
+    //    · 「进二级」= 第二行右端一颗实心紫方钮。位置固定，长名字推不走它；
+    //      实心 = 主动作，空心圆 = 就地展开，两颗长得不一样，不会点错。
+    //      整条名字仍然可点进二级 —— 紫钮只是那块热区看得见的把手。
+    //
+    //  毛利率不写标签：表头冻结列已经是「产品 / 毛利率」两行，这里再写三个字
+    //  会连同两颗钮一起超出 97.8pt 的可用宽。
+    if (tab != 'netTa') {
+      // 账本行名比 Hero 标题小一档，长名称才折得住。
+      final pinnedNameSize = lighthouseLedgerPinnedNameFontSize(nameTab);
+      final pinnedNameStyle = LhTypography.sans(
+        size: _fs(pinnedNameSize) - (r['isChild'] == true ? 1 : 0),
+        weight: r['isChild'] == true ? FontWeight.w500 : FontWeight.w600,
+        color: r['isChild'] == true ? LhColors.ink2 : LhColors.ink,
+        height: 1.26,
+        letterSpacing: 0,
+      );
+
+      // 排位牌。上一版把序号缩成第二行一个 9pt 的灰数字 —— 它确实不再跟毛利率
+      // 连读了，但也就此看不见了。序号回到名字前面：品牌标撤掉之后那一列是空的，
+      // 它在那里可以做得足够重，而不跟任何数字抢。
+      // 前三名实心深紫白字，其余浅灰底 —— 一列扫下来，先看见的是谁在前面。
+      final rankChip = Container(
+        constraints: BoxConstraints(minWidth: _fs(19)),
+        height: _fs(15),
+        alignment: Alignment.center,
+        padding: EdgeInsets.symmetric(horizontal: _fs(3.5)),
+        decoration: BoxDecoration(
+          color: isTop3 ? _LhPlum.deep : const Color(0xFFF1EFF6),
+          borderRadius: BorderRadius.circular(_fs(4.5)),
+        ),
+        child: Text(
+          rank,
+          style: _tabular(
+            LhTypography.mono(
+              size: _fs(9.5),
+              color: isTop3 ? LhColors.paper : LhColors.mute2,
+              weight: FontWeight.w700,
+              height: 1.0,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+      );
+
+      // 毛利率的环比是**百分点差**（后端 deltas['grossMargin'] 下发的就是 pp），
+      // 不是百分比 ——「毛利率 +15%」读不出是涨了 15 个点还是涨了 15%。
+      //
+      // 门槛卡在分母上：核销额 0.08 万（800 元）算出来的 0.8% 和它的 pp 变化
+      // 都是噪声。见 lighthouseRateDeltaMinBaseYuan。
+      // 分母够、|Δ| < 0.05pp：算过了只是没动，画 →，不藏成「没环比」。
+      final gmBaseAmount = _rowMetricValueOrNull(
+        r,
+        lighthouseGrossMarginUsesSales(group) ? 'sales' : 'verifiedSales',
+      );
+      final rawGmDelta = grossMargin == null
+          ? null
+          : _ledgerDelta(r, 'grossMargin');
+      final gmDelta =
+          lighthouseRateDeltaShouldShow(rawGmDelta, base: gmBaseAmount)
+          ? rawGmDelta
+          : null;
+      final gmUp = lighthouseLedgerDeltaIsUp(gmDelta);
+
+      final nameBlock = Semantics(
+        button: canOpenDetail,
+        label: canOpenDetail ? '进入$name详情' : null,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: canOpenDetail ? onOpenDetail : null,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (r['isChild'] != true) ...[
+                Padding(
+                  padding: EdgeInsets.only(top: _fs(1.5)),
+                  child: rankChip,
+                ),
+                SizedBox(width: _fs(5)),
+              ] else
+                SizedBox(width: _fs(12)),
+              Expanded(
+                // 这里必须是会换行的 Text：LhScrollText 走单行可横拖的渲染
+                // 路径，maxLines 对它无效 —— 正是它把名字画到列外去的。
+                child: Text(
+                  name,
+                  maxLines: 2,
+                  softWrap: true,
+                  overflow: TextOverflow.ellipsis,
+                  style: pinnedNameStyle,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final detailButton = canOpenDetail
+          ? Semantics(
+              button: true,
+              label: '进入$name详情',
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onOpenDetail,
+                child: Container(
+                  width: _fs(22),
+                  height: _fs(22),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _LhPlum.primary,
+                    borderRadius: BorderRadius.circular(_fs(7)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _LhPlum.primary.withAlpha(40),
+                        blurRadius: 2,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    size: _fs(16),
+                    color: LhColors.paper,
+                  ),
+                ),
+              ),
+            )
+          : null;
+
+      final rowExpandButton = GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onToggle,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          width: _fs(22),
+          height: _fs(22),
+          decoration: BoxDecoration(
+            color: isExpanded
+                ? _LhPlum.primary.withAlpha(30)
+                : const Color(0xFFF4F1FA),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: _LhPlum.primary.withAlpha(isExpanded ? 70 : 30),
+              width: 0.7,
+            ),
+          ),
+          child: Icon(
+            isExpanded
+                ? Icons.keyboard_arrow_up_rounded
+                : Icons.keyboard_arrow_down_rounded,
+            size: _fs(16),
+            color: isExpanded ? _LhPlum.deep : _LhPlum.primary.withAlpha(185),
+          ),
+        ),
+      );
+
+      // 左边那条品牌色带撤掉：品牌标已经在名字前面把「这是谁」说完了，
+      // 再在行首铺一条同色的竖条是把同一件事说两遍，而且它顶着卡的圆角，
+      // 一列下来像给每行都描了个边。
+      return Padding(
+        padding: const EdgeInsets.only(left: 11, right: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            nameBlock,
+            // 对账状态单独占一行 —— 塞进毛利率那行会跟两颗钮抢宽度。
+            if (reconStatus != null) ...[
+              SizedBox(height: _fs(6)),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _buildReconChip(reconStatus, name),
+              ),
+            ],
+            SizedBox(height: _fs(reconStatus != null ? 6 : 8)),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // 序号已经搬到名字那一行的排位牌里，这一行只剩「毛利率 + 环比」。
+                Expanded(
+                  child: lighthouseLedgerCollapsedShowsGrossMargin
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                lighthouseLedgerPinnedGrossMarginText(
+                                  grossMargin,
+                                ),
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.clip,
+                                style: _tabular(
+                                  LhTypography.mono(
+                                    size: _fs(
+                                      lighthouseLedgerPinnedGrossMarginValueSize,
+                                    ),
+                                    color:
+                                        grossMargin != null && grossMargin < 0
+                                        ? LhColors.pos
+                                        : LhColors.ink,
+                                    weight: FontWeight.w700,
+                                    height: 1.0,
+                                    letterSpacing: -0.2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (gmDelta != null) ...[
+                              SizedBox(width: _fs(4)),
+                              Text(
+                                _ledgerFmtDelta(gmDelta, isRate: true),
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.visible,
+                                style: _tabular(
+                                  LhTypography.mono(
+                                    size: _fs(9.5),
+                                    color: gmUp == null
+                                        ? LhColors.mute
+                                        : (gmUp ? LhColors.neg : LhColors.pos),
+                                    weight: FontWeight.w600,
+                                    height: 1.0,
+                                    letterSpacing: -0.2,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                if (detailButton != null) ...[
+                  detailButton,
+                  SizedBox(width: _fs(5)),
+                ],
+                rowExpandButton,
+              ],
+            ),
+            // 折扣进度：只有供给一级行才有。
+            if (discountStrip != null) discountStrip,
+          ],
+        ),
+      );
+    }
 
     return Padding(
       padding: EdgeInsets.only(left: 11, right: tab == 'netTa' ? 8 : 6),
@@ -27465,7 +28815,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       );
     }
 
-    final ladder = d.ladder ??
+    final ladder =
+        d.ladder ??
         LighthouseDiscountLadder.minimal(
           currentLevel: d.tierLevel ?? 1,
           currentPermille: d.discountRate != null
@@ -27527,9 +28878,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           padding: const EdgeInsets.fromLTRB(4, 6, 4, 7),
           color: isCur
               ? LhColors.purpleSoft
-              : (t.reached
-                    ? LhColors.pos.withAlpha(16)
-                    : LhColors.paper),
+              : (t.reached ? LhColors.pos.withAlpha(16) : LhColors.paper),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -27696,7 +29045,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     for (final t in ladder.tiers)
                       if (!t.isPlaceholder && t.minValue > 0)
                         Positioned(
-                          left: (w * ladder.fracOf(t.minValue)).clamp(0.0, w - 1),
+                          left: (w * ladder.fracOf(t.minValue)).clamp(
+                            0.0,
+                            w - 1,
+                          ),
                           top: 0,
                           bottom: 0,
                           width: 1,
@@ -27720,10 +29072,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 height: 11,
                 child: Stack(
                   children: [
-                    Positioned(
-                      left: 0,
-                      child: Text('0', style: metaStyle()),
-                    ),
+                    Positioned(left: 0, child: Text('0', style: metaStyle())),
                     for (final t in ladder.tiers)
                       if (!t.isPlaceholder && t.minValue > 0)
                         Positioned(
@@ -27817,7 +29166,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           TextSpan(text: ' 到${next.label}'),
           if (!next.isPlaceholder && d.contractRate != null) ...[
             const TextSpan(text: '，费率 '),
-            strong('${_lhTrimZero(d.contractRate!)}‰ → ${_lhTrimZero(next.permille)}‰'),
+            strong(
+              '${_lhTrimZero(d.contractRate!)}‰ → ${_lhTrimZero(next.permille)}‰',
+            ),
           ],
         ]),
       );
@@ -27855,7 +29206,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     } else if (localGain != null && localGain > 0) {
       verdicts.add(
         verdict('估计赚', [
-          strong('+${lighthouseDiscountCompactWan(localGain)}', c: LhColors.pos),
+          strong(
+            '+${lighthouseDiscountCompactWan(localGain)}',
+            c: LhColors.pos,
+          ),
           const TextSpan(text: ' 返点（按当前速度到期末算）'),
         ]),
       );
@@ -27929,8 +29283,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ),
               ),
               const Spacer(),
-              if (ruleMeta.isNotEmpty)
-                Text(ruleMeta, style: metaStyle()),
+              if (ruleMeta.isNotEmpty) Text(ruleMeta, style: metaStyle()),
             ],
           ),
           if (periodLabel != null || pace != null) ...[
@@ -27963,10 +29316,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ),
             ),
           ),
-          if (ladder.axisMax > 0) ...[
-            const SizedBox(height: 9),
-            track(),
-          ],
+          if (ladder.axisMax > 0) ...[const SizedBox(height: 9), track()],
           if (verdicts.isNotEmpty) ...[
             const SizedBox(height: 11),
             Container(height: 0.5, color: LhColors.line2),
@@ -28036,8 +29386,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   /// 冻结列折扣条与展开区折扣卡共用这一份取数，避免两处各查一次、口径漂开。
   _DiscountRow? _discountRecordFor(Map<String, dynamic> r, String name) {
-    if (kDebugMode &&
-        lighthouseDiscountMapUsesDebugFixture(_discountsByName)) {
+    if (kDebugMode && lighthouseDiscountMapUsesDebugFixture(_discountsByName)) {
       final group = r['group']?.toString() ?? '';
       final rowIndex = _currentRows.indexWhere(
         (row) =>
@@ -28066,9 +29415,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       rowGroup: r['group']?.toString() ?? '',
       attached: r['discount'],
     );
-    if (raw == null &&
-        kDebugMode &&
-        lighthouseDiscountAllowsLocalPreview(-1)) {
+    if (raw == null && kDebugMode && lighthouseDiscountAllowsLocalPreview(-1)) {
       raw = lighthouseDiscountPreviewForRow(
         rowName: name,
         sales: (r['sales'] as num?)?.toDouble() ?? 0,
@@ -29098,6 +30445,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         _detailType = tab;
         _detailSubTab = '';
         _detailPage = 1;
+        _heroPointIndex = null;
         _resetDetailSkuSearch();
         _resetDetailDrill();
         _detailDrillReloadAttempted = false;
@@ -29152,10 +30500,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   idx,
                   canDetail: showChevron,
                   isExpanded: isExpanded,
-                  onOpenDetail: rowTap,
+                  onOpenDetail: rowTap == null
+                      ? null
+                      : () {
+                          HapticFeedback.selectionClick();
+                          rowTap();
+                        },
                   metricsTab: tab,
                   trendKey: trendKey,
                   onToggle: () {
+                    HapticFeedback.selectionClick();
                     setState(() {
                       final wasOpen =
                           _expandedTrends.contains(trendKey) ||
@@ -30057,7 +31411,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 评论与资管入口紧跟状态；正文进入弹层，不再常驻资金池展开区。
   Widget _buildReconChip(LighthouseReconStatus status, String rowName) {
     final (dot, _) = _reconColors(status);
-    final bad = status.hasReject || status.state == LighthouseReconState.overdue;
+    final bad =
+        status.hasReject || status.state == LighthouseReconState.overdue;
     // 已对账是常态，文字退成中性墨色只留绿点 —— 一屏绿字和一屏红字一样吵。
     final fg = status.state == LighthouseReconState.done ? LhColors.mute : dot;
     final label = lighthouseReconChipLabel(status);
@@ -30263,7 +31618,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     ),
                   ),
                   SizedBox(width: _fs(6)),
-                  Expanded(child: Container(height: 0.7, color: LhColors.line2)),
+                  Expanded(
+                    child: Container(height: 0.7, color: LhColors.line2),
+                  ),
                   SizedBox(width: _fs(6)),
                   Text(
                     '${comments.length} 条',
@@ -31719,7 +33076,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               const SizedBox(height: 4),
               // ── Hero：与一级同壳同版式；数值取详情 payload ──────────────
               _buildHeroShell(
-                whiteBackground: true,
                 child: _buildHero(
                   totalsOverride: _heroTotalsFromRow(summaryEntity),
                   profitDeltaOverride: _profitDeltaFromRow(summaryEntity),

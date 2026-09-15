@@ -106,6 +106,14 @@ void main() {
     expect(md.indexOf('李四'), lessThan(md.indexOf('何佳伟')));
     expect(md, contains('| — | 1. 李四 | — | 88.00 | 良（达到预期） | 1.0 |'));
     expect(md, contains('| — | 2. 何佳伟 | — | 47.36 | 辅（专项改进） | 0.6 |'));
+
+    final filtered = kpiScoreSummaryMarkdown(
+      score,
+      people: score.people.where((p) => p.userName == '李四').toList(),
+    );
+    expect(filtered, contains('共 **1** 人'));
+    expect(filtered, contains('1. 李四'));
+    expect(filtered, isNot(contains('何佳伟')));
   });
 
   const session = AuthSession(
@@ -195,14 +203,20 @@ void main() {
         },
       ],
     });
-    final telecom = score.me!.categories.firstWhere((c) => c.category == 'telecom');
-    final energy = score.me!.categories.firstWhere((c) => c.category == 'energy');
+    final telecom = score.me!.categories.firstWhere(
+      (c) => c.category == 'telecom',
+    );
+    final energy = score.me!.categories.firstWhere(
+      (c) => c.category == 'energy',
+    );
     expect(telecom.tasks.map((t) => t.weightPct).toList(), [70, 30]);
     expect(energy.tasks.single.weightPct, 100);
     expect(energy.tasks.single.curRevenue, 200);
   });
 
-  testWidgets('shows telecom and energy lists with auto weights', (tester) async {
+  testWidgets('shows telecom and energy lists with auto weights', (
+    tester,
+  ) async {
     final score = WorkProfileKpiScore.fromJson({
       'month': '2026-08',
       'prevMonth': '2026-07',
@@ -365,7 +379,7 @@ void main() {
     expect(find.text('自动权重 100.00%'), findsOneWidget);
     expect(find.text('备注 下调中石油占比'), findsOneWidget);
     expect(find.text('加减分 +5'), findsOneWidget);
-    expect(find.textContaining('得分 75.0（自动 70.0）'), findsOneWidget);
+    expect(find.textContaining('任务分 75.0（自动 70.0）'), findsOneWidget);
   });
 
   testWidgets('defaults to previous month and can step to current month', (
@@ -389,7 +403,11 @@ void main() {
     expect(find.text('2026年8月'), findsOneWidget);
     expect(seen, ['2026-08']);
     expect(
-      tester.widget<IconButton>(find.byKey(const Key('work-profile-perf-month-next'))).onPressed,
+      tester
+          .widget<IconButton>(
+            find.byKey(const Key('work-profile-perf-month-next')),
+          )
+          .onPressed,
       isNotNull,
     );
 
@@ -423,10 +441,7 @@ void main() {
   });
 
   testWidgets('empty month shows a quiet empty state', (tester) async {
-    const score = WorkProfileKpiScore(
-      month: '2026-08',
-      prevMonth: '2026-07',
-    );
+    const score = WorkProfileKpiScore(month: '2026-08', prevMonth: '2026-07');
     await tester.pumpWidget(
       MaterialApp(
         home: NativeWorkProfilePerfPage(
@@ -469,5 +484,98 @@ void main() {
     expect(find.byKey(const Key('work-profile-perf-add')), findsNothing);
     expect(find.byTooltip('删除'), findsNothing);
     expect(find.text('新增任务'), findsNothing);
+  });
+
+  testWidgets('subject confirms rubric score on 绩效发展', (tester) async {
+    var ackCount = 0;
+    const scored = WorkProfileKpiPerson(
+      userId: 1,
+      userName: '王奕凡',
+      departmentName: 'AI研发',
+      mainScore: 95,
+      bonus: 0,
+      telecomWeight: 0,
+      energyWeight: 0,
+      telecomScore: 0,
+      energyScore: 0,
+      grade: '优',
+      gradeLabel: '优（优秀）',
+      coefficient: 1.1,
+      scoreSource: 'rubric',
+      scoreStatus: 'scored',
+      canAck: true,
+      categories: [
+        WorkProfileKpiCategory(
+          category: 'rd',
+          categoryLabel: 'AI研发',
+          categoryWeight: 1,
+          score: 95,
+          tasks: [
+            WorkProfileKpiTask(
+              taskId: -11,
+              taskName: '目标完成度',
+              province: '',
+              bucketLabel: '业绩产出',
+              weightPct: 30,
+              taskTotal: 30,
+              curRevenue: 0,
+              prevRevenue: 0,
+              curProfit: 0,
+              prevProfit: 0,
+            ),
+          ],
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeWorkProfilePerfPage(
+          session: session,
+          onBack: () {},
+          now: DateTime(2026, 9, 3),
+          score: const WorkProfileKpiScore(
+            month: '2026-08',
+            prevMonth: '2026-07',
+            people: [scored],
+          ),
+          ackScore: (month) async {
+            ackCount++;
+            return WorkProfileKpiScore(
+              month: month,
+              prevMonth: '2026-07',
+              people: [
+                WorkProfileKpiPerson(
+                  userId: 1,
+                  userName: '王奕凡',
+                  departmentName: 'AI研发',
+                  mainScore: 95,
+                  bonus: 0,
+                  telecomWeight: 0,
+                  energyWeight: 0,
+                  telecomScore: 0,
+                  energyScore: 0,
+                  grade: '优',
+                  gradeLabel: '优（优秀）',
+                  coefficient: 1.1,
+                  scoreSource: 'rubric',
+                  scoreStatus: 'scored',
+                  ackedAt: '2026-09-15T03:00:00Z',
+                  categories: scored.categories,
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+    expect(find.byKey(const Key('work-profile-perf-ack')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('work-profile-perf-ack')));
+    await tester.pumpAndSettle();
+    expect(find.text('确认本月绩效？'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('work-profile-perf-ack-ok')));
+    await tester.pumpAndSettle();
+    expect(ackCount, 1);
+    expect(find.byKey(const Key('work-profile-perf-acked')), findsOneWidget);
+    expect(find.byKey(const Key('work-profile-perf-ack')), findsNothing);
   });
 }

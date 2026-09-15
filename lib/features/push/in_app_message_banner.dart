@@ -175,6 +175,25 @@ class _InAppMessageBannerOverlayState extends State<_InAppMessageBannerOverlay>
         ),
       );
     }
+    if (conv?.isKpiAssistant == true || title == '绩效助手') {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(size * .18),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF8C5A91), Color(0xFFC17B7B)],
+          ),
+        ),
+        child: const Icon(
+          Icons.insights_outlined,
+          color: Colors.white,
+          size: 17,
+        ),
+      );
+    }
     if (conv != null &&
         (conv.isGroup || conv.isWorkgroupApproval) &&
         conv.avatarMembers.isNotEmpty) {

@@ -1,6 +1,8 @@
 /// Hero masthead metric resolution (shared by page + unit tests).
 library;
 
+import 'dart:math' as math;
+
 /// Whether [key] should render as a percentage in the Hero masthead.
 bool lighthouseHeroMetricIsRate(String key) =>
     key == 'rate' ||
@@ -45,10 +47,14 @@ const double lighthouseCompactHeroNarrowBreakpoint = 600;
 bool lighthouseCompactHeroIsNarrow(double width) =>
     width < lighthouseCompactHeroNarrowBreakpoint;
 
-double lighthouseCompactHeroSparkHeightFor(double width) =>
-    lighthouseCompactHeroIsNarrow(width)
+double lighthouseCompactHeroSparkHeightFor(
+  double width, {
+  bool hasBiButton = false,
+}) =>
+    (lighthouseCompactHeroIsNarrow(width)
         ? lighthouseCompactHeroSparkHeightNarrow
-        : lighthouseCompactHeroSparkHeight;
+        : lighthouseCompactHeroSparkHeight) +
+    (hasBiButton ? lighthouseHeroBiButtonReserveHeight : 0);
 
 /// 净TA 与产品 Hero 同一高度：项目 / 业务成本叠进总览图，不再垫分图。
 /// 左侧再叠银行余额存量块时加高一截。块里有迷你走势和「vs 上月末」时，
@@ -71,8 +77,8 @@ double lighthouseNetTAHeroSparkHeightFor(
 
 double lighthouseCompactHeroChartMaxHeightFor(double width) =>
     lighthouseCompactHeroIsNarrow(width)
-        ? lighthouseCompactHeroChartMaxHeightNarrow
-        : lighthouseCompactHeroChartMaxHeightWide;
+    ? lighthouseCompactHeroChartMaxHeightNarrow
+    : lighthouseCompactHeroChartMaxHeightWide;
 
 /// Hero §02 区块总高度（含走势卡 padding）。窄宽都是左右并排。
 double lighthouseCompactHeroBlockHeightFor(double width) =>
@@ -81,7 +87,8 @@ double lighthouseCompactHeroBlockHeightFor(double width) =>
 
 // 指标格自己带了 2 的上下内边距（追溯方框用），格间距相应从 6 收到 2，
 // 视觉上的行距还是 6。
-const double lighthouseCompactHeroMetricGap = 2;
+// v2 · 格间距归 0、格子上下内边距 2→3：行距不变，去掉格与格之间点不中的缝。
+const double lighthouseCompactHeroMetricGap = 0;
 const bool lighthouseHeroUsesCategoryTint = false;
 const bool lighthouseHeroUsesAccentRail = false;
 const bool lighthouseHeroShowsEnglishKicker = false;
@@ -221,27 +228,88 @@ bool lighthouseTrendLegendShouldWrap({
   return width + 1e-6 < need;
 }
 
+/// Hero 点选月份 / 日时仍然算环比：该点对前一点（6 月对 5 月，当天对昨天）。
+/// 只有显式打开 [suppressPointMom] 才关掉——默认关上。
+const bool lighthouseHeroSuppressPointMom = false;
+
+/// 点选某一期时的对照文案，跟走势粒度走。
+String lighthouseHeroPointVsLabel(String? granularity, {String? period}) {
+  switch ((granularity ?? '').trim().toLowerCase()) {
+    case 'daily':
+      return 'vs 上日';
+    case 'weekly':
+      return 'vs 上周';
+    case 'quarterly':
+      return 'vs 上季';
+    case 'yearly':
+      return 'vs 上年';
+    case 'monthly':
+    case 'mom':
+      return 'vs 上月';
+  }
+  switch ((period ?? '').trim().toLowerCase()) {
+    case 'day':
+    case 'custom':
+      return 'vs 上日';
+    case 'week':
+      return 'vs 上周';
+    case 'quarter':
+      return 'vs 上季';
+    case 'year':
+      return 'vs 上年';
+    default:
+      return 'vs 上月';
+  }
+}
+
+/// 未走完的最后一点仍用后端同期窗口，不要拿 MTD 去对上期整期。
+bool lighthouseHeroPointUsesAlignedPeriodDelta({
+  required bool partialPeriod,
+  required int selectedIndex,
+  required int seriesLength,
+}) => partialPeriod && seriesLength > 0 && selectedIndex == seriesLength - 1;
+
 /// 环比：未点选用后端本期值；点选某一期用该点对前一点（2月对1月）。
 /// 点在未走完的最后一期时仍用后端同期值，避免 MTD 去对上期整期。
+///
+/// [asPercentagePoints]：毛利率 / ROI 这类率，相邻点差是 pp，不是相对涨幅。
 double? lighthouseTrendMomPct({
   required double? periodDeltaPct,
   required bool partialPeriod,
   required List<double> series,
   int? selectedIndex,
+  bool suppressPointMom = false,
+  bool asPercentagePoints = false,
 }) {
   if (selectedIndex != null) {
-    if (partialPeriod && selectedIndex == series.length - 1) {
+    if (suppressPointMom) return null;
+    if (lighthouseHeroPointUsesAlignedPeriodDelta(
+      partialPeriod: partialPeriod,
+      selectedIndex: selectedIndex,
+      seriesLength: series.length,
+    )) {
       return periodDeltaPct;
     }
     if (selectedIndex <= 0 || selectedIndex >= series.length) return null;
     final prev = series[selectedIndex - 1];
+    final cur = series[selectedIndex];
+    if (asPercentagePoints) {
+      final pp = cur - prev;
+      if (pp.abs() <= 1e-9) return null;
+      return pp;
+    }
     if (prev.abs() <= 1e-6) return null;
-    return (series[selectedIndex] - prev) / prev.abs() * 100;
+    return (cur - prev) / prev.abs() * 100;
   }
   if (periodDeltaPct != null) return periodDeltaPct;
   if (partialPeriod || series.length < 2) return null;
   final prev = series[series.length - 2];
   if (prev.abs() <= 1e-6) return null;
+  if (asPercentagePoints) {
+    final pp = series.last - prev;
+    if (pp.abs() <= 1e-9) return null;
+    return pp;
+  }
   return (series.last - prev) / prev.abs() * 100;
 }
 
@@ -314,11 +382,11 @@ List<bool> lighthouseTrendBaseFlags({
   bool hasCostAlt = false,
   bool hasStock = false,
 }) => <bool>[
-    hasRevenue,
-    hasCost,
-    hasProfit,
-    hasScale,
-    hasScaleAlt,
+  hasRevenue,
+  hasCost,
+  hasProfit,
+  hasScale,
+  hasScaleAlt,
   hasCostAlt,
   hasStock,
 ];
@@ -385,6 +453,9 @@ bool lighthouseDeltaIsLoud(double pct) =>
     pct.abs() >= lighthouseDeltaLoudThreshold;
 
 /// 上下文线白名单：主线之外还画哪几条。
+///
+/// v16 起主 Hero 图不再把上下文线画在主图里（毛利下沉到小柱层，见
+/// [lighthouseTrendLaneIndex]），这个函数只留作口径说明和回退开关。
 ///
 /// 序列下标同 lighthouseTrendSeriesKeys：0 收入 / 1 成本 / 2 毛利 /
 /// 3 规模 / 4 规模族另一条 / 5 成本另一条 / 6 存量。
@@ -498,6 +569,15 @@ const lighthouseHeroSectionTitleValues = <String, int>{
 };
 
 const bool lighthouseHeroShowsSectionAccentDash = false;
+
+/// 规模 / 成本 / 利润 / 经营性净现金流 四块分区卡，和上面大数卡、走势卡
+/// 用同一张白紫纸（0xFFFFFDFF + heroEdge 发丝边）。
+///
+/// 四种淡色底 + 四种色边放在雾紫 Hero 壳里，上半截是一套「紫框白卡」，
+/// 下半截突然变成四块彩纸，读起来像两个页面拼在一起。分组不再靠底色，
+/// 交给标题胶囊里那颗分区色图标 —— 和大数卡「2026.07」胶囊同一个写法。
+/// 关掉即回到淡色底版。
+const bool lighthouseHeroSectionUsesHeroSurface = true;
 const bool lighthouseHeroMastheadLabelAboveNumber = true;
 const double lighthouseHeroMastheadLabelFontSize = 11;
 const double lighthouseHeroMastheadLabelIconSize = 18;
@@ -507,6 +587,24 @@ const double lighthouseHeroMastheadFontSize = 29;
 const double lighthouseHeroMetricValueFontSize = 13;
 const double lighthouseHeroMetricLabelFontSize = 9;
 const double lighthouseHeroMetricDeltaFontSize = 8;
+
+/// 主 Hero 指标格自己的标签 / 环比字号（BI 视图仍用上面两档）。
+/// 9px 标签、8px 环比在手机上要凑近才读得清，各抬 1 档；
+/// 数字仍是 13，格子宽度不变，长数字靠 LhScrollText 兜底。
+const double lighthouseHeroCellLabelFontSize = 10;
+const double lighthouseHeroCellDeltaFontSize = 9;
+
+/// 期间条关掉常驻氛围动效，只留有反馈意义的滑块 / 涟漪 / 切换流光。
+const bool lighthousePeriodAmbientMotion = false;
+
+/// 期间条选中胶囊写具体期（本月 / 上周 / 7月），不只写粒度「月」。
+const bool lighthousePeriodPillShowsInstance = true;
+
+/// 主 Hero 大数标签在「聚焦某个指标」时挂一个 ×，一点回到默认口径。
+const bool lighthouseHeroMastheadShowsFocusExit = true;
+
+/// 切期间时已有数据：不整页盖白，旧内容压淡 + 期间条下细进度条。
+const bool lighthouseSoftReloadKeepsContent = true;
 const int lighthouseHeroScaleColumnFlex = 10;
 const int lighthouseHeroCostColumnFlex = 14;
 const int lighthouseHeroResultColumnFlex = 15;
@@ -843,11 +941,11 @@ bool lighthouseHeroTrendChartIsRate(String key) =>
 
 const int lighthouseLedgerSummaryColumns = 2;
 
-/// 名称略大于右侧核心数字，数字不压过业务名称。
+/// 账本行名比 Hero「产品汇总」小一档，长名称才折得住；仍大于右侧数字。
 const double lighthouseLedgerNameFontSize = 12.5;
 
-/// 产品等偏长名称：列表冻结列用更小字号，少截断。
-const double lighthouseLedgerLongNameFontSize = 11.0;
+/// 产品名与供给/渠道同一档，不再跟 Hero 标题抢字号。
+const double lighthouseLedgerLongNameFontSize = 12.5;
 
 /// 二级「项目」名称更长，再降一档。
 const double lighthouseLedgerProjectNameFontSize = 10.0;
@@ -858,7 +956,10 @@ const double lighthouseLedgerUnitFontSize = 9.0;
 const double lighthouseLedgerMetricLabelFontSize = 10;
 const double lighthouseLedgerDeltaFontSize = 9;
 
-/// 供给/渠道用标准名称字号；产品用长名字号；项目更小。
+/// 账本行品牌标和 Hero 标题旁那颗标同一尺寸。
+const double lighthouseLedgerIdentityMarkSize = lighthouseHeroSummaryIconSize;
+
+/// 供给/渠道/产品用身份字号；项目更小。
 double lighthouseLedgerNameFontSizeForTab(String tab) {
   switch (tab) {
     case 'project':
@@ -869,6 +970,20 @@ double lighthouseLedgerNameFontSizeForTab(String tab) {
     default:
       return lighthouseLedgerNameFontSize;
   }
+}
+
+/// 冻结列里看见的业务名：比 Hero 标题小一档；项目名仍更小。
+/// 冻结列名字字号。
+///
+/// v22 · 12.5 上机太大：Hero 的分区标题和指标标签都落在 10–11，账本行名字
+/// 顶到 12.5，一屏四行滚下来像每行都在喊，跟上面不是一套字阶。落到 12 ——
+/// 比原来的长名 11.0 仍高一档，而「醒目」这件事现在由名字前面那枚品牌标
+/// 承担，不必再靠字号和字重去争。
+const double lighthouseLedgerPinnedNameSize = 12.0;
+
+double lighthouseLedgerPinnedNameFontSize(String tab) {
+  if (tab == 'project') return lighthouseLedgerProjectNameFontSize;
+  return lighthouseLedgerPinnedNameSize;
 }
 
 /// 「越低越好」的指标 —— 成本类。其余（规模 / 利润 / 现金流 / 率）越高越好。
@@ -890,6 +1005,92 @@ bool? lighthouseLedgerDeltaIsFavorable(String key, double? delta) {
   return lighthouseLedgerLowerIsBetterKeys.contains(key)
       ? delta < 0
       : delta > 0;
+}
+
+// ══ 环比可读性门槛 ═══════════════════════════════════════════════════════
+//
+//  百分比 = 变化 ÷ 上期基数。基数越小，同样的绝对变化就被放得越大：成本合计
+//  从 43 元涨到 283 元就是「+558%」—— 数学没错，但它跟真实的「收入 ↓89%」在
+//  屏幕上长得一模一样，读的人分不出哪个在真的动；而且两个数都显示成「0.00万」，
+//  连回头核对都无从下手。一个人被这种数骗过一次，整块板子的数字都会被打折看。
+//
+//  门槛按**绝对金额**卡，不按周期缩放。账本是按行读的，单行量级比公司总量小
+//  两三个数量级，套简报那套（日 5 万 / 月 50 万）会把真信号一起抹掉 ——
+//  截图里「收入 1.31万 ↓89%」的基数约 12 万，那一条是真的。
+
+/// 基数低于这个数，分母在两位小数的「万」里根本显示不出来，百分比无法被核对。
+const double lighthouseDeltaMinBaseYuan = 1000;
+
+/// 变化低于这个数，分子显示不出来 —— 屏幕上两期都是同一个「0.00万」。
+const double lighthouseDeltaMinChangeYuan = 500;
+
+/// 率（毛利率 / ROI / 利差率）另立一道门槛，卡的是**分母**。
+///
+/// 率本身不存在小基数放大 —— 百分点差是减法。但它的分母有：核销额 800 元
+/// 算出来的「毛利率 0.8%」和它的 pp 变化都是噪声，一笔几十块的尾差就能让它
+/// 跳几个点。后端的 minimumRateBase = 50 元形同虚设，前端另立一道。
+///
+/// 跟金额环比同一条 0.10 万线：账本格子里核销额 0.10万已经能画 ↓70%，
+/// 旁边的毛利率却因 1 万门槛空白，看起来像没算环比。800 元那档仍视为噪声。
+const double lighthouseRateDeltaMinBaseYuan = lighthouseDeltaMinBaseYuan;
+
+/// 环比持平符。和 ↑↓ 同一套箭头，表示「算过了，效率没动」。
+/// 不用 —（那是缺数），也不用 ↓0.0pp（没信息量还占位）。
+const String lighthouseDeltaFlatMark = '→';
+
+/// 率的环比有没有资格出现在屏幕上（含持平）。
+///
+/// 分母不够 = 噪声，不画；算出没动（|Δ| < 0.05pp）= 画 [lighthouseDeltaFlatMark]。
+/// [base] 是率的分母（毛利率 = 核销额或销售额，ROI = 成本合计）。取不到就不画 ——
+/// 率的分母不在屏幕上，核不了，所以宁可不画。
+bool lighthouseRateDeltaShouldShow(double? pp, {double? base}) {
+  if (pp == null || !pp.isFinite) return false;
+  if (base == null || !base.isFinite) return false;
+  return base.abs() >= lighthouseRateDeltaMinBaseYuan;
+}
+
+/// 率的环比是不是一次「真变动」：够分母、且 |Δ| ≥ 0.05pp。
+///
+/// 持平不算 readable —— 颜色走中性，文案走 →，见 [lighthouseRateDeltaText]。
+bool lighthouseRateDeltaIsReadable(double? pp, {double? base}) {
+  if (pp == null || !pp.isFinite || pp.abs() < 0.05) return false;
+  return lighthouseRateDeltaShouldShow(pp, base: base);
+}
+
+/// 账本环比文案。有变动走 ↑↓；算出没动走 →。
+String lighthouseLedgerDeltaText(double d, {required bool isRate}) {
+  if (!d.isFinite || d.abs() < 0.05) return lighthouseDeltaFlatMark;
+  final a = d.abs();
+  return '${d >= 0 ? '↑' : '↓'}'
+      '${a.toStringAsFixed(a >= 10 ? 0 : 1)}'
+      '${isRate ? 'pp' : '%'}';
+}
+
+/// 毛利率等率环比的最终文案：不该画返回 null，持平返回 →，否则 ↑/↓pp。
+String? lighthouseRateDeltaText(double? pp, {double? base}) {
+  if (!lighthouseRateDeltaShouldShow(pp, base: base)) return null;
+  return lighthouseLedgerDeltaText(pp!, isRate: true);
+}
+
+/// 这个环比百分比值不值得画出来。
+///
+/// [value] 是本期金额（元）。取不到就不拦 —— 宁可多显示，不可误拦。
+/// [isRate] 的环比是百分点差，不存在小基数放大，一律放行。
+bool lighthouseDeltaIsReadable(
+  double? pct, {
+  double? value,
+  bool isRate = false,
+}) {
+  if (pct == null || pct.abs() < 0.05) return false;
+  if (isRate) return true;
+  if (value == null) return true;
+  final factor = 1 + pct / 100;
+  // pct == −100：本期归零。「↓100%」本身就是完整的一句话，不靠基数也读得懂。
+  if (factor.abs() < 1e-9) return true;
+  final base = value / factor;
+  if (base.abs() < lighthouseDeltaMinBaseYuan) return false;
+  if ((value - base).abs() < lighthouseDeltaMinChangeYuan) return false;
+  return true;
 }
 
 /// 环比颜色只表达方向：中国金融色，上涨红、下跌绿。
@@ -936,7 +1137,9 @@ const bool lighthouseLedgerCollapsedShowsGrossMargin = true;
 
 /// 冻结列「毛利率」字号：要比 mute 灰字大一档，跟右侧核心数字齐平。
 const double lighthouseLedgerPinnedGrossMarginLabelSize = 10.5;
-const double lighthouseLedgerPinnedGrossMarginValueSize = 12.0;
+// v22: 12 → 11.5。毛利率和名字挨着，两个都按「最大」调就没有最大的了；
+// 名字是这一列的主角，毛利率退半档，读起来才有先后。
+const double lighthouseLedgerPinnedGrossMarginValueSize = 11.5;
 
 /// 毛利率不得与展开按钮同一行。
 /// 同行时按钮占约 33px，窄冻结列里「毛利率 68.6%」会溢出到右侧网格下方，
@@ -1025,10 +1228,7 @@ const lighthouseLedgerPrimaryTabLabels = <String, String>{
 /// 人效也吃分类 chip：行上的板块是「这个人毛利最大的那块」，
 /// 与产品维的 product_line_group 同一套取值，筛选语义一致。
 bool lighthouseLedgerTabShowsCategoryChips(String tab) =>
-    tab == 'product' ||
-    tab == 'supply' ||
-    tab == 'channel' ||
-    tab == 'people';
+    tab == 'product' || tab == 'supply' || tab == 'channel' || tab == 'people';
 
 const lighthouseLedgerNavigationLevels = <String>[
   'primaryTab',
@@ -1037,6 +1237,7 @@ const lighthouseLedgerNavigationLevels = <String>[
 ];
 const double lighthouseLedgerPrimaryTabHeight = 44;
 const double lighthouseLedgerFilterRowHeight = 42;
+const double lighthouseLedgerFilterKickerWidth = 36;
 const double lighthouseLedgerFilterChipRadius = 8;
 const bool lighthouseLedgerCentersPrimaryDimensions = false;
 const bool lighthouseLedgerPrimaryDimensionsFillAvailableWidth = true;
@@ -1055,8 +1256,11 @@ const double lighthouseLedgerPanelRadius = 12;
 const double lighthouseLedgerPanelShadowBlur = 12;
 const bool lighthousePeriodUsesFloatingSegment = true;
 const double lighthousePeriodTrackHeight = 44;
-const double lighthousePeriodTrackRadius = 12;
-const double lighthousePeriodSelectedRadius = 8;
+// 期间条是主 Hero 框架的一部分：轨道 = 缩小的 Hero 壳（雾紫底 + 轻紫边），
+// 选中胶囊 = 缩小的内容卡（白紫纸 + 轻紫边）。半径 14 / 10 与 4 的内边距同心。
+const double lighthousePeriodTrackRadius = 14;
+const double lighthousePeriodSelectedRadius = 10;
+const bool lighthousePeriodUsesHeroSurface = true;
 const double lighthousePeriodStatusDotSize = 4;
 const int lighthousePeriodAnimationMs = 180;
 const double lighthouseAppBarTitleFontSize = 18;
@@ -1078,7 +1282,8 @@ const bool lighthouseHeroShowsLiveMetadata = false;
 String lighthouseSyncedAtCompact(DateTime t, {required DateTime now}) {
   final hh = t.hour.toString().padLeft(2, '0');
   final mm = t.minute.toString().padLeft(2, '0');
-  final sameDay = t.year == now.year && t.month == now.month && t.day == now.day;
+  final sameDay =
+      t.year == now.year && t.month == now.month && t.day == now.day;
   if (sameDay) return '$hh:$mm';
   final mo = t.month.toString().padLeft(2, '0');
   final dd = t.day.toString().padLeft(2, '0');
@@ -1211,7 +1416,9 @@ LighthouseRangeDraft lighthouseRangeDraftTapDay(
     return LighthouseRangeDraft(
       start: start,
       end: end,
-      focus: end == null ? LighthouseRangeFocus.end : LighthouseRangeFocus.start,
+      focus: end == null
+          ? LighthouseRangeFocus.end
+          : LighthouseRangeFocus.start,
     );
   }
 
@@ -1574,10 +1781,10 @@ List<Map<String, dynamic>> lighthouseNetTACardMetrics(
   if (items.length <= maxCells) return items;
   final ranked = [...items]
     ..sort((a, b) {
-    final aa = ((a['netTa'] as num?)?.toDouble() ?? 0).abs();
-    final bb = ((b['netTa'] as num?)?.toDouble() ?? 0).abs();
-    return bb.compareTo(aa);
-  });
+      final aa = ((a['netTa'] as num?)?.toDouble() ?? 0).abs();
+      final bb = ((b['netTa'] as num?)?.toDouble() ?? 0).abs();
+      return bb.compareTo(aa);
+    });
   final head = ranked.take(maxCells - 1).toList();
   final rest = ranked.skip(maxCells - 1).toList();
   var restSum = 0.0;
@@ -2436,10 +2643,7 @@ const lighthouseGrossMarginFormulaSales = LighthouseHeroFormula(
   result: '毛利率',
   expression: '毛利润 ÷ 销售额',
   sources: [
-    LighthouseHeroFormulaSource(
-      'profit',
-      LighthouseHeroFormulaRole.numerator,
-    ),
+    LighthouseHeroFormulaSource('profit', LighthouseHeroFormulaRole.numerator),
     LighthouseHeroFormulaSource('sales', LighthouseHeroFormulaRole.denominator),
   ],
 );
@@ -4245,4 +4449,111 @@ String? lighthouseResolveDrillKey({
   ];
   if (matches.length == 1) return matches.first;
   return null;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 趋势图 v16 · 视觉降噪（2026-09）
+//
+//   旧图的问题不是颜色，是 100 多 px 里叠了六层：核销线、销售线、差额带、
+//   灰色毛利线、当月竖虚线、MAX/MIN。改成：
+//     · 上层主图只放「同一根真轴」上的线（规模 + 规模族另一条 + 差额带）；
+//     · 毛利这类各自归一的上下文线下沉到底部小柱层，共用横轴、永不交叉，
+//       「各线自归一」那句解释也就不需要了；
+//     · 当月没走完时，最后一列不再连到半个月的实际值（那是一道假断崖），
+//       改成进度胶囊：胶囊顶 = 月末预测，实心部分 = 已发生 / 预测；
+//     · 曲线用单调三次插值，不再在两点之间画出数据里没有的凹陷。
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// 底部小柱层画哪条序列；-1 = 不画。
+///
+/// 序列下标同 lighthouseTrendSeriesKeys：0 收入 / 1 成本 / 2 毛利 / 3 规模 /
+/// 4 规模族另一条 / 5 成本另一条 / 6 存量。主线不是毛利时给毛利；主线就是
+/// 毛利（solo）时反过来给规模做参照。
+int lighthouseTrendLaneIndex(List<bool> flags, int heroIndex) {
+  bool on(int i) => i >= 0 && i < flags.length && flags[i];
+  if (heroIndex != 2) return on(2) ? 2 : -1;
+  if (on(3)) return 3;
+  if (on(4)) return 4;
+  return -1;
+}
+
+/// 画布矮于这个高度（账本行内的小图）就不分层，只画主图。
+const double lighthouseTrendLaneMinCanvasHeight = 96;
+
+/// 主图 / 小柱层的纵向切分。[lane] 为 false 时 laneTop == laneBottom == height。
+({
+  double plotTop,
+  double plotBottom,
+  double laneTop,
+  double laneBottom,
+  bool lane,
+})
+lighthouseTrendCanvasGeometry(double height, {required bool wantsLane}) {
+  const plotTop = 12.0;
+  final lane = wantsLane && height >= lighthouseTrendLaneMinCanvasHeight;
+  if (!lane) {
+    return (
+      plotTop: plotTop,
+      plotBottom: height - 10.0,
+      laneTop: height,
+      laneBottom: height,
+      lane: false,
+    );
+  }
+  final laneH = (height * 0.22).clamp(16.0, 28.0).toDouble();
+  final laneBottom = height - 1.0;
+  final laneTop = laneBottom - laneH;
+  return (
+    plotTop: plotTop,
+    // 12px 缝里放小柱层的名字。
+    plotBottom: laneTop - 12.0,
+    laneTop: laneTop,
+    laneBottom: laneBottom,
+    lane: true,
+  );
+}
+
+/// 当月进度胶囊的实心比例：已发生 / 月末预测，夹在 0..1。
+double lighthouseTrendPaceRatio(double actual, double forecast) {
+  if (forecast.abs() < 1e-9) return 0;
+  final r = actual / forecast;
+  if (r.isNaN) return 0;
+  return r.clamp(0.0, 1.0);
+}
+
+/// 单调三次插值（Fritsch–Carlson）在每个点上的切线斜率。
+///
+/// 与 Catmull-Rom 不同，它保证相邻两点之间的曲线不会超出这两点的值 ——
+/// 03→04 那种「线先往下掏一截再上来」的假凹陷就是 Catmull-Rom 过冲画出来的。
+/// [xs] 单调（递增或递减都行，闭合带的回程是递减的）。
+List<double> lighthouseMonotoneTangents(List<double> xs, List<double> ys) {
+  final n = math.min(xs.length, ys.length);
+  if (n < 2) return List<double>.filled(n, 0.0);
+  final d = List<double>.filled(n - 1, 0.0);
+  for (var i = 0; i < n - 1; i++) {
+    final h = xs[i + 1] - xs[i];
+    d[i] = h.abs() < 1e-9 ? 0.0 : (ys[i + 1] - ys[i]) / h;
+  }
+  final m = List<double>.filled(n, 0.0);
+  m[0] = d[0];
+  m[n - 1] = d[n - 2];
+  for (var i = 1; i < n - 1; i++) {
+    m[i] = d[i - 1] * d[i] <= 0 ? 0.0 : (d[i - 1] + d[i]) / 2;
+  }
+  for (var i = 0; i < n - 1; i++) {
+    if (d[i].abs() < 1e-12) {
+      m[i] = 0.0;
+      m[i + 1] = 0.0;
+      continue;
+    }
+    final a = m[i] / d[i];
+    final b = m[i + 1] / d[i];
+    final s = a * a + b * b;
+    if (s > 9) {
+      final t = 3 / math.sqrt(s);
+      m[i] = t * a * d[i];
+      m[i + 1] = t * b * d[i];
+    }
+  }
+  return m;
 }

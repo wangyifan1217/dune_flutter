@@ -36,6 +36,7 @@ bool isDesktopAllowedCommScreen(String screenId) {
     'AA2',
     'AA3',
     'TA1',
+    'KA1',
     'DA1',
     'XA1',
     'WS1',

@@ -76,3 +76,6 @@ macos_developer_id.p12
 # Sparkle EdDSA 私钥（公钥可提交；私钥仅本机 / GitHub Secret）
 .sparkle/eddsa_priv.key
 .sparkle/*.pem
+
+# 待删归档（历史副本等），不进版本库
+_to_delete/

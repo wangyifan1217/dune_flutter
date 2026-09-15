@@ -35,6 +35,7 @@ class NativeConversation {
   final DateTime? updatedAt;
   final int? peerUserId;
   final String? peerDisplayName;
+
   /// 对端账号是否仍启用。停用/离职的私聊在列表里展示为「姓名-离职」。
   final bool peerEnabled;
   final int memberCount;
@@ -51,8 +52,10 @@ class NativeConversation {
   final String? membershipStatus;
   final bool assistantGenerating;
   final String assistantGeneratingStatus;
+
   /// 群聊未读 @我：后续消息只更新预览，进会话才清除。
   final bool hasUnreadMention;
+
   /// 群聊未读 @所有人。有 @我 时优先展示 [@了你]。
   final bool hasUnreadAtAll;
 
@@ -65,6 +68,7 @@ class NativeConversation {
   bool get isRobot => kind == 'ROBOT';
   bool get isApprovalAssistant => kind == 'APPROVAL_ASSISTANT';
   bool get isTaskAssistant => kind == 'TASK_ASSISTANT';
+  bool get isKpiAssistant => kind == 'KPI_ASSISTANT';
   bool get isDriveAssistant => kind == 'DRIVE_ASSISTANT';
   bool get isXrxsAssistant => kind == 'XRXS_ASSISTANT';
   bool get isWeeklySummary => kind == 'WEEKLY_SUMMARY';

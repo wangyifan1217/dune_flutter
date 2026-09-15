@@ -8,18 +8,15 @@ import 'package:http/testing.dart';
 
 void main() {
   AuthSession session() => const AuthSession(
-        phone: '13800000000',
-        userId: 1,
-        token: 'test',
-        apiBase: 'http://127.0.0.1/api/v1',
-        roles: <String>[],
-      );
+    phone: '13800000000',
+    userId: 1,
+    token: 'test',
+    apiBase: 'http://127.0.0.1/api/v1',
+    roles: <String>[],
+  );
 
   Map<String, dynamic> okPayload(List<Map<String, dynamic>> rows) =>
-      <String, dynamic>{
-        'success': true,
-        'data': rows,
-      };
+      <String, dynamic>{'success': true, 'data': rows};
 
   Map<String, dynamic> conv({
     required int id,
@@ -33,10 +30,7 @@ void main() {
       'unreadCount': 0,
       'preview': 'hello',
       'updatedAt': '2026-08-27T02:00:00.000Z',
-      'peer': <String, dynamic>{
-        'userId': 2,
-        'displayName': title,
-      },
+      'peer': <String, dynamic>{'userId': 2, 'displayName': title},
     };
   }
 
@@ -108,6 +102,30 @@ void main() {
         ),
       ),
     );
+    service.close();
+  });
+
+  test('确保绩效助手会话走 /kpi/assistant/sessions/ensure', () async {
+    final client = MockClient((request) async {
+      expect(request.url.path, endsWith('/kpi/assistant/sessions/ensure'));
+      return http.Response(
+        jsonEncode(<String, dynamic>{
+          'success': true,
+          'data': <String, dynamic>{
+            'conversationId': 77,
+            'kind': 'KPI_ASSISTANT',
+            'title': '绩效助手',
+          },
+        }),
+        200,
+        headers: const {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final service = ConversationService(session: session(), client: client);
+    final conv = await service.ensureKpiAssistantSession();
+    expect(conv.id, 77);
+    expect(conv.isKpiAssistant, isTrue);
+    expect(conv.title, '绩效助手');
     service.close();
   });
 }

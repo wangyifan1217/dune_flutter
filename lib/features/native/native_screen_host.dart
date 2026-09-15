@@ -21,6 +21,7 @@ import '../approval_assistant/native_approval_assistant_pending_page.dart';
 import '../approval_assistant/native_approval_assistant_proposal_page.dart';
 import '../proposal_intake/proposal_intake_overlay.dart';
 import '../task_assistant/native_task_assistant_page.dart';
+import '../kpi_assistant/native_kpi_assistant_page.dart';
 import '../reconciliation/native_reconciliation_assistant_page.dart';
 import '../auth/auth_session.dart';
 import '../auth/invite_qr_page.dart';
@@ -178,6 +179,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   NativeConversation? _selectedRobot;
   NativeConversation? _selectedApprovalAssistant;
   NativeConversation? _selectedTaskAssistant;
+  NativeConversation? _selectedKpiAssistant;
   NativeConversation? _selectedDriveAssistant;
   NativeConversation? _selectedXrxsAssistant;
   NativeConversation? _selectedWeeklySummary;
@@ -384,6 +386,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'TA1') {
       final id = _selectedTaskAssistant?.id ?? 0;
+      return id > 0 ? id : null;
+    }
+    if (screen == 'KA1') {
+      final id = _selectedKpiAssistant?.id ?? 0;
       return id > 0 ? id : null;
     }
     if (screen == 'DA1') {
@@ -661,6 +667,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     } else if (resolvedConversation.isTaskAssistant) {
       await _openTaskAssistant(resolvedConversation);
       routed = mounted && widget.navigation.currentScreen == 'TA1';
+    } else if (resolvedConversation.isKpiAssistant) {
+      await _openKpiAssistant(resolvedConversation);
+      routed = mounted && widget.navigation.currentScreen == 'KA1';
     } else if (resolvedConversation.isDriveAssistant) {
       await _openDriveAssistant(resolvedConversation);
       routed = mounted && widget.navigation.currentScreen == 'DA1';
@@ -967,6 +976,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           title = '任务助手';
           body = _taskAssistantPushBody(msg, preview);
         }
+        final isKpiAssistant =
+            cachedConversation?.isKpiAssistant == true ||
+            conversationKind == 'KPI_ASSISTANT' ||
+            kind.toUpperCase() == 'KPI_ASSISTANT';
+        if (isKpiAssistant) {
+          title = '绩效助手';
+          body = preview.trim().isEmpty ? '本月绩效已更新，请确认' : preview;
+        }
       }
     }
     final desktopFocused = isDesktopCommOnly && !windowsTrayIsWindowInactive();
@@ -990,6 +1007,29 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         conversation: conv,
         session: widget.session,
         onTap: () => unawaited(_openTaskAssistant(conv)),
+      );
+      return;
+    }
+    final isKpiNotice = title == '绩效助手';
+    if (desktopFocused && isKpiNotice && mounted && convId > 0) {
+      final conv =
+          _commBadgeConversations[convId] ??
+          NativeConversation(
+            id: convId,
+            kind: 'KPI_ASSISTANT',
+            title: '绩效助手',
+            unreadCount: 0,
+            preview: body,
+            updatedAt: null,
+          );
+      showInAppMessageBanner(
+        context: context,
+        conversationId: convId,
+        title: title,
+        body: body,
+        conversation: conv,
+        session: widget.session,
+        onTap: () => unawaited(_openKpiAssistant(conv)),
       );
       return;
     }
@@ -1237,6 +1277,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         s == 'C10' ||
         s == 'AA1' ||
         s == 'TA1' ||
+        s == 'KA1' ||
         s == 'DA1' ||
         s == 'XA1' ||
         s == 'WS1' ||
@@ -1263,6 +1304,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       return true;
     }
     if (screen == 'TA1' && _selectedTaskAssistant?.id == convId) return true;
+    if (screen == 'KA1' && _selectedKpiAssistant?.id == convId) return true;
     if (screen == 'DA1' && _selectedDriveAssistant?.id == convId) return true;
     if (screen == 'XA1' && _selectedXrxsAssistant?.id == convId) return true;
     if (screen == 'WS1' && _selectedWeeklySummary?.id == convId) return true;
@@ -1302,6 +1344,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'TA1') {
       final id = _selectedTaskAssistant?.id ?? 0;
+      return id > 0 ? id : null;
+    }
+    if (screen == 'KA1') {
+      final id = _selectedKpiAssistant?.id ?? 0;
       return id > 0 ? id : null;
     }
     if (screen == 'DA1') {
@@ -1516,6 +1562,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         current == 'CR' ||
         current == 'AA1' ||
         current == 'TA1' ||
+        current == 'KA1' ||
         current == 'DA1' ||
         current == 'XA1' ||
         current == 'WS1' ||
@@ -1536,6 +1583,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
+      _selectedKpiAssistant = null;
       _selectedDriveAssistant = null;
       _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
@@ -1562,6 +1610,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedGroup = null;
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
+      _selectedKpiAssistant = null;
       _selectedDriveAssistant = null;
       _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
@@ -1626,6 +1675,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
+      _selectedKpiAssistant = null;
       _selectedDriveAssistant = null;
       _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
@@ -1653,6 +1703,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
+      _selectedKpiAssistant = null;
       _selectedDriveAssistant = null;
       _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
@@ -1718,6 +1769,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         _selectedRobot = null;
         _selectedApprovalAssistant = null;
         _selectedTaskAssistant = null;
+        _selectedKpiAssistant = null;
         _selectedDriveAssistant = null;
         _selectedXrxsAssistant = null;
         _selectedWeeklySummary = null;
@@ -1778,6 +1830,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (chatScreen == 'TA1') {
       return _selectedTaskAssistant?.id;
     }
+    if (chatScreen == 'KA1') {
+      return _selectedKpiAssistant?.id;
+    }
     if (chatScreen == 'DA1') {
       return _selectedDriveAssistant?.id;
     }
@@ -1804,6 +1859,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'AS1' || screen == 'AS2' || screen == 'AS3') return screen;
     if (screen == 'AA1' || screen == 'AA2' || screen == 'AA3') return screen;
     if (screen == 'TA1') return screen;
+    if (screen == 'KA1') return screen;
     if (screen == 'DA1') return screen;
     if (screen == 'XA1') return screen;
     if (screen == 'WS1') return screen;
@@ -1819,6 +1875,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (_selectedRobot != null) return 'CR';
     if (_selectedApprovalAssistant != null) return 'AA1';
     if (_selectedTaskAssistant != null) return 'TA1';
+    if (_selectedKpiAssistant != null) return 'KA1';
     if (_selectedDriveAssistant != null) return 'DA1';
     if (_selectedXrxsAssistant != null) return 'XA1';
     if (_selectedWeeklySummary != null) return 'WS1';
@@ -1860,6 +1917,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'AA3' ||
         screen == 'RA1' ||
         screen == 'TA1' ||
+        screen == 'KA1' ||
         screen == 'DA1' ||
         screen == 'XA1' ||
         screen == 'WS1' ||
@@ -2206,6 +2264,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       onOpenFavorites: () => widget.navigation.go('CF'),
       onOpenApprovalAssistant: _openApprovalAssistant,
       onOpenTaskAssistant: _openTaskAssistant,
+      onOpenKpiAssistant: _openKpiAssistant,
       onOpenDriveAssistant: _openDriveAssistant,
       onOpenXrxsAssistant: widget.session.isExternalUser
           ? null
@@ -2226,6 +2285,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
+      _selectedKpiAssistant = null;
       _selectedDriveAssistant = null;
       _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
@@ -2256,6 +2316,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
+      _selectedKpiAssistant = null;
       _selectedDriveAssistant = null;
       _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
@@ -2286,6 +2347,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedGroup = null;
       _selectedRobot = null;
       _selectedTaskAssistant = null;
+      _selectedKpiAssistant = null;
       _selectedDriveAssistant = null;
       _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
@@ -2346,6 +2408,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedGroup = null;
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
+      _selectedKpiAssistant = null;
       _selectedDriveAssistant = null;
       _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
@@ -2400,6 +2463,68 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     );
   }
 
+  Future<void> _openKpiAssistant([NativeConversation? hint]) async {
+    setState(() {
+      _selectedPrivate = null;
+      _selectedPrivatePeerUserId = null;
+      _selectedGroup = null;
+      _selectedRobot = null;
+      _selectedApprovalAssistant = null;
+      _selectedTaskAssistant = null;
+      _selectedDriveAssistant = null;
+      _selectedXrxsAssistant = null;
+      _selectedWeeklySummary = null;
+      _selectedReconciliation = null;
+      _selectedAdministrativeNotice = null;
+      _administrativeNoticeTargetId = null;
+      if (hint != null && hint.id > 0) _selectedKpiAssistant = hint;
+    });
+    if ((_selectedKpiAssistant?.id ?? 0) > 0) {
+      _markUserEnteredChat();
+      _goChatScreen('KA1');
+      _conversationReadSignal.notifyRead(_selectedKpiAssistant!.id);
+    }
+    try {
+      final conv = await ConversationService(
+        session: widget.session,
+      ).ensureKpiAssistantSession();
+      if (!mounted) return;
+      setState(() => _selectedKpiAssistant = conv);
+      _conversationReadSignal.notifyRead(conv.id);
+      if (widget.navigation.currentScreen != 'KA1') {
+        _markUserEnteredChat();
+        _goChatScreen('KA1');
+      }
+    } catch (_) {
+      if (mounted && (_selectedKpiAssistant?.id ?? 0) <= 0) {
+        showDunesToast(context, '绩效助手会话同步失败', kind: DunesToastKind.error);
+      }
+    }
+  }
+
+  Widget _buildKpiAssistantPage({bool showBackButton = true}) {
+    final hint =
+        _selectedKpiAssistant ??
+        const NativeConversation(
+          id: 0,
+          kind: 'KPI_ASSISTANT',
+          title: '绩效助手',
+          unreadCount: 0,
+          preview: '',
+          updatedAt: null,
+        );
+    return NativeKpiAssistantPage(
+      key: ValueKey<int>(hint.id),
+      session: widget.session,
+      conversationHint: hint,
+      navigation: widget.navigation,
+      showBackButton: showBackButton,
+      onBack: () => _leaveChatToInbox(clearSelection: true),
+      onConversationRead: _handleConversationRead,
+      autoMarkRead: _userActivelyInChat,
+    );
+  }
+
   Future<void> _openDriveAssistant([NativeConversation? hint]) async {
     setState(() {
       _selectedPrivate = null;
@@ -2408,6 +2533,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
+      _selectedKpiAssistant = null;
       _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
@@ -2453,6 +2579,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
+      _selectedKpiAssistant = null;
       _selectedDriveAssistant = null;
       _selectedXrxsAssistant = null;
       _selectedReconciliation = null;
@@ -2497,6 +2624,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
+      _selectedKpiAssistant = null;
       _selectedDriveAssistant = null;
       _selectedXrxsAssistant = null;
       _selectedWeeklySummary = null;
@@ -2567,6 +2695,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedRobot = null;
       _selectedApprovalAssistant = null;
       _selectedTaskAssistant = null;
+      _selectedKpiAssistant = null;
       _selectedDriveAssistant = null;
       _selectedWeeklySummary = null;
       _selectedReconciliation = null;
@@ -2727,6 +2856,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (screen == 'TA1' || dual == 'TA1') {
       return 'ta';
     }
+    if (screen == 'KA1' || dual == 'KA1') {
+      return 'ka';
+    }
     if (screen == 'DA1' || dual == 'DA1') {
       return 'da';
     }
@@ -2787,6 +2919,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     if (screen == 'TA1' || dual == 'TA1') {
       return _DualChatSlot.task(_selectedTaskAssistant);
+    }
+    if (screen == 'KA1' || dual == 'KA1') {
+      return _DualChatSlot.kpi(_selectedKpiAssistant);
     }
     if (screen == 'DA1' || dual == 'DA1') {
       return _DualChatSlot.drive(_selectedDriveAssistant);
@@ -2894,6 +3029,28 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                   id: 0,
                   kind: 'TASK_ASSISTANT',
                   title: '任务助手',
+                  unreadCount: 0,
+                  preview: '',
+                  updatedAt: null,
+                ),
+            navigation: widget.navigation,
+            showBackButton: false,
+            autoMarkRead: autoMark,
+            onBack: () => _leaveChatToInbox(clearSelection: true),
+            onConversationRead: _handleConversationRead,
+          ),
+        );
+      case _DualChatKind.kpi:
+        return KeyedSubtree(
+          key: key,
+          child: NativeKpiAssistantPage(
+            session: widget.session,
+            conversationHint:
+                slot.conversation ??
+                const NativeConversation(
+                  id: 0,
+                  kind: 'KPI_ASSISTANT',
+                  title: '绩效助手',
                   unreadCount: 0,
                   preview: '',
                   updatedAt: null,
@@ -3948,6 +4105,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return _buildApprovalAssistantProposalPage();
       case 'TA1':
         return _buildTaskAssistantPage();
+      case 'KA1':
+        return _buildKpiAssistantPage();
       case 'DA1':
         return _buildDriveAssistantPage();
       case 'XA1':
@@ -4822,6 +4981,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'CR',
       'CF',
       'TA1',
+      'KA1',
       'DA1',
       'XA1',
       'AN1',
@@ -7704,6 +7864,7 @@ enum _DualChatKind {
   group,
   approval,
   task,
+  kpi,
   drive,
   xrxs,
   weeklySummary,
@@ -7755,6 +7916,10 @@ class _DualChatSlot {
       kind: _DualChatKind.task,
       conversation: conversation,
     );
+  }
+
+  factory _DualChatSlot.kpi(NativeConversation? conversation) {
+    return _DualChatSlot._(kind: _DualChatKind.kpi, conversation: conversation);
   }
 
   factory _DualChatSlot.drive(NativeConversation? conversation) {

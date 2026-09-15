@@ -69,4 +69,37 @@ void main() {
     await tester.pump();
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('BI 底座在窄 KPI 列里不 RIGHT overflow', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 87,
+              height: 32,
+              child: Row(
+                children: [
+                  Icon(Icons.insights_rounded, size: 13),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: LhScrollText(
+                      'BI 视图',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11.5, letterSpacing: 0.3),
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  SizedBox(width: 17, height: 17),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
 }

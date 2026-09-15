@@ -51,16 +51,20 @@
 </head>
 <body spellcheck="false">
   <script type="module">
-    import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.mjs';
-    // pdfx 通过 globalThis.pdfjsLib 检测；ESM 不会自动挂全局，需显式赋值
-    globalThis.pdfjsLib = pdfjsLib;
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-        'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.worker.mjs';
-    globalThis.pdfRenderOptions = {
-      cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/cmaps/',
-      cMapPacked: true,
-    };
-    await import('./flutter_bootstrap.js');
+    // Flutter 必须先启动。pdf.js 走 CDN，代理/外网失败时不能挡住整页。
+    const boot = import('./flutter_bootstrap.js');
+    import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.mjs')
+      .then((pdfjsLib) => {
+        globalThis.pdfjsLib = pdfjsLib;
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+            'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.worker.mjs';
+        globalThis.pdfRenderOptions = {
+          cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/cmaps/',
+          cMapPacked: true,
+        };
+      })
+      .catch(() => {});
+    await boot;
   </script>
 </body>
 </html>

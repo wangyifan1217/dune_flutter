@@ -49,6 +49,7 @@ class NativeWorkProfilePerfPage extends StatefulWidget {
     this.initialMonth,
     this.now,
     this.loadScore,
+    this.ackScore,
   });
 
   final AuthSession session;
@@ -57,6 +58,7 @@ class NativeWorkProfilePerfPage extends StatefulWidget {
   final DateTime? initialMonth;
   final DateTime? now;
   final Future<WorkProfileKpiScore> Function(String month)? loadScore;
+  final Future<WorkProfileKpiScore> Function(String month)? ackScore;
 
   @override
   State<NativeWorkProfilePerfPage> createState() =>
@@ -142,6 +144,41 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
     unawaited(_load());
   }
 
+  Future<void> _ack() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认本月绩效？'),
+        content: const Text('确认后表示已知悉并接受本月量表结果。改分后需重新确认。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            key: const Key('work-profile-perf-ack-ok'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('确认'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      final month = formatKpiMonth(_month);
+      final score = widget.ackScore != null
+          ? await widget.ackScore!(month)
+          : await WorkProfileKpiService(
+              session: widget.session,
+            ).ackRubricScore(month: month);
+      if (!mounted) return;
+      setState(() => _score = score);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final person = _score?.me;
@@ -182,6 +219,30 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
                   else ...[
                     if (person != null) ...[
                       _SummaryCard(person: person),
+                      if (person.isRubric && person.isAcked) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          '已确认 ${formatKpiAckedAt(person.ackedAt)}',
+                          key: const Key('work-profile-perf-acked'),
+                          style: DunesTypography.sans(
+                            fontSize: 13,
+                            color: DunesColors.text2,
+                          ),
+                        ),
+                      ],
+                      if (person.canAck) ...[
+                        const SizedBox(height: 10),
+                        FilledButton(
+                          key: const Key('work-profile-perf-ack'),
+                          onPressed: _loading
+                              ? null
+                              : () => unawaited(_ack()),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: _perfAccent,
+                          ),
+                          child: const Text('确认本月绩效'),
+                        ),
+                      ],
                       const SizedBox(height: 14),
                     ],
                     if (hasScore)

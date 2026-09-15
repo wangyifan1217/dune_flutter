@@ -40,6 +40,18 @@ class LhPeriodBar extends StatefulWidget {
     this.trackColor = const Color(0xFFFFFFFF),
     this.trackBorder = const Color(0xFFE5E1D3),
     this.idleTextColor = const Color(0xFF5A5C56),
+    this.trackShadowColor = const Color(0x08000000),
+    this.pillGradient = const [
+      Color(0xFFF6F1FD),
+      Color(0xFFE3D9F7),
+      Color(0xFFEFE9FB),
+    ],
+    this.pillEdgeColor,
+    this.pillShadowColor,
+    this.shimmerColor = const Color(0xFFFFFFFF),
+    this.ambientMotion = true,
+    this.selectedTextColor,
+    this.selectedLabel,
   });
 
   /// 短标签，如 ['日','周','月','季','年']
@@ -69,6 +81,33 @@ class LhPeriodBar extends StatefulWidget {
   final Color trackColor;
   final Color trackBorder;
   final Color idleTextColor;
+
+  /// 轨道投影色。主 Hero 壳用的是深紫低透明的软投影，这里跟着它走。
+  final Color trackShadowColor;
+
+  /// 选中胶囊底色（左上 → 右下三段）。
+  /// 默认是雾紫胶囊；Hero 框架里改成和内容卡同一张白紫纸。
+  final List<Color> pillGradient;
+
+  /// 胶囊描边。null = 旧版随呼吸明暗的紫边；给值 = 和内容卡一样的固定发丝边。
+  final Color? pillEdgeColor;
+
+  /// 胶囊落在轨道上的投影。null = 不画（旧版只有外辉光）。
+  final Color? pillShadowColor;
+
+  /// 流光颜色。白胶囊上白光看不见，要换成淡紫。
+  final Color shimmerColor;
+
+  /// 常驻氛围动效（呼吸辉光 / 定时流光 / 巡游光点）。
+  /// 关掉后只保留「有反馈的」动效：滑块滑行、点击涟漪、切换瞬间扫一道流光。
+  /// 看板是拿来读数的，余光里一直有东西在动，会把视线从数字上拽走。
+  final bool ambientMotion;
+
+  /// 选中项文字色。null = [deep]。
+  final Color? selectedTextColor;
+
+  /// 选中项显示的具体期（如「本月」「上周」「7月」）。null = 用 [labels] 里的短标签。
+  final String? selectedLabel;
 
   @override
   State<LhPeriodBar> createState() => _LhPeriodBarState();
@@ -144,6 +183,14 @@ class _LhPeriodBarState extends State<LhPeriodBar>
   }
 
   void _syncAmbient() {
+    if (!_reduced && !widget.ambientMotion) {
+      _glow.stop();
+      _comet.stop();
+      _glow.value = 0.35;
+      // 流光停在扫完的位置，只在切换时 forward 一次。
+      if (!_shimmer.isAnimating) _shimmer.value = 1.0;
+      return;
+    }
     if (_reduced) {
       _glow.stop();
       _shimmer.stop();
@@ -170,7 +217,11 @@ class _LhPeriodBarState extends State<LhPeriodBar>
         } else {
           _slide.forward(from: 0);
           // 切换瞬间立刻补一道流光，让点击有回响
-          _shimmer.repeat();
+          if (widget.ambientMotion) {
+            _shimmer.repeat();
+          } else {
+            _shimmer.forward(from: 0);
+          }
         }
         _fade.forward();
       } else {
@@ -215,9 +266,10 @@ class _LhPeriodBarState extends State<LhPeriodBar>
                 borderRadius: BorderRadius.circular(widget.trackRadius),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withAlpha(8),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+                    color: widget.trackShadowColor,
+                    blurRadius: 14,
+                    spreadRadius: -6,
+                    offset: const Offset(0, 4),
                   ),
                 ],
               )
@@ -268,10 +320,17 @@ class _LhPeriodBarState extends State<LhPeriodBar>
                           trackRadius: widget.trackRadius - 4,
                           glow: glow,
                           shimmer: shimmerT,
-                          comet: (_reduced || fade < 0.02) ? null : _comet.value,
+                          comet:
+                              (_reduced || !widget.ambientMotion || fade < 0.02)
+                              ? null
+                              : _comet.value,
                           ripple: _ripple.isAnimating ? _ripple.value : null,
                           rippleX: _rippleX,
                           primary: widget.primary,
+                          pillGradient: widget.pillGradient,
+                          pillEdgeColor: widget.pillEdgeColor,
+                          pillShadowColor: widget.pillShadowColor,
+                          shimmerColor: widget.shimmerColor,
                         ),
                       ),
                     ),
@@ -302,8 +361,17 @@ class _LhPeriodBarState extends State<LhPeriodBar>
   Widget _cell(int i, double cellW, double t, double glow, double settle) {
     final aux = (t * settle).clamp(0.0, 1.0);
     final style = widget.baseTextStyle.copyWith(
-      color: Color.lerp(widget.idleTextColor, widget.deep, t),
-      fontWeight: FontWeight.lerp(FontWeight.w500, FontWeight.w600, t),
+      color: Color.lerp(
+        widget.idleTextColor,
+        widget.selectedTextColor ?? widget.deep,
+        t,
+      ),
+      // 选中项到 w700：白胶囊压在淡紫轨道上对比度不高，靠字重把「选的是哪个」说清楚。
+      fontWeight: FontWeight.lerp(
+        FontWeight.w500,
+        widget.ambientMotion ? FontWeight.w600 : FontWeight.w700,
+        t,
+      ),
       shadows: t > 0.05
           ? [
               Shadow(
@@ -316,62 +384,89 @@ class _LhPeriodBarState extends State<LhPeriodBar>
           : null,
     );
 
+    // 选中项不只写「月」，直接写正在看的是哪一期（本月 / 上月 / 7月）——
+    // 不用再去 Hero 右上角对日期。
+    final selLabel = widget.selectedLabel;
+    final label = (i == widget.selectedIndex && selLabel != null && selLabel.isNotEmpty)
+        ? selLabel
+        : widget.labels[i];
+
+    final dotD = widget.dotSize * (0.85 + 0.35 * glow) * (0.4 + 0.6 * aux);
+    final dotSlot = widget.dotSize + 5;
+    const arrowSlot = 15.0;
+
+    // 圆点 / ▾ 不再按格子百分比定位（标签一长就撞上），改成和标签排成一行，
+    // 槽宽随落位动画从 0 张开；整行 scaleDown，窄屏也不会溢出。
+    Widget slot({
+      required double width,
+      required Alignment alignment,
+      required Widget child,
+    }) => ClipRect(
+      child: SizedBox(
+        width: width * aux,
+        height: 16,
+        child: aux <= 0.02
+            ? null
+            : OverflowBox(
+                minWidth: 0,
+                maxWidth: width,
+                alignment: alignment,
+                child: Opacity(opacity: aux, child: child),
+              ),
+      ),
+    );
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTapDown: (d) => _rippleX = i * cellW + d.localPosition.dx,
       onTap: () => _handleTap(i),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Center(
-            child: Text(
-              widget.labels[i],
-              textAlign: TextAlign.center,
-              style: style,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                slot(
+                  width: dotSlot,
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    width: dotD,
+                    height: dotD,
+                    decoration: BoxDecoration(
+                      color: widget.primary,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: widget.primary.withValues(
+                            alpha: 0.35 + 0.35 * glow,
+                          ),
+                          blurRadius: 4 + 3 * glow,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Text(label, textAlign: TextAlign.center, style: style),
+                slot(
+                  width: arrowSlot,
+                  alignment: Alignment.centerRight,
+                  child: AnimatedRotation(
+                    turns: widget.pickerOpen ? 0.5 : 0.0,
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 14,
+                      color: widget.primary,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          if (aux > 0.02)
-            Align(
-              alignment: const Alignment(-0.5, 0),
-              child: Opacity(
-                opacity: aux,
-                child: Container(
-                  width: widget.dotSize * (0.85 + 0.35 * glow) * (0.4 + 0.6 * aux),
-                  height:
-                      widget.dotSize * (0.85 + 0.35 * glow) * (0.4 + 0.6 * aux),
-                  decoration: BoxDecoration(
-                    color: widget.primary,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: widget.primary.withValues(
-                          alpha: 0.35 + 0.35 * glow,
-                        ),
-                        blurRadius: 4 + 3 * glow,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          if (aux > 0.02)
-            Align(
-              alignment: const Alignment(0.62, 0),
-              child: Opacity(
-                opacity: aux,
-                child: AnimatedRotation(
-                  turns: widget.pickerOpen ? 0.5 : 0.0,
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOutCubic,
-                  child: Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    size: 13,
-                    color: widget.primary,
-                  ),
-                ),
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }
@@ -393,6 +488,10 @@ class _LhPeriodFxPainter extends CustomPainter {
     required this.ripple,
     required this.rippleX,
     required this.primary,
+    required this.pillGradient,
+    required this.pillEdgeColor,
+    required this.pillShadowColor,
+    required this.shimmerColor,
   });
 
   final double pillLeft;
@@ -406,6 +505,10 @@ class _LhPeriodFxPainter extends CustomPainter {
   final double? ripple;
   final double rippleX;
   final Color primary;
+  final List<Color> pillGradient;
+  final Color? pillEdgeColor;
+  final Color? pillShadowColor;
+  final Color shimmerColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -424,6 +527,17 @@ class _LhPeriodFxPainter extends CustomPainter {
           ..maskFilter = MaskFilter.blur(BlurStyle.normal, 5 + 4.5 * glow),
       );
 
+      // ①' 落位投影 —— 胶囊像一张内容卡压在雾紫轨道上
+      final shadow = pillShadowColor;
+      if (shadow != null) {
+        canvas.drawRRect(
+          rr.shift(const Offset(0, 1.5)),
+          Paint()
+            ..color = shadow.withValues(alpha: shadow.a * o)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.5),
+        );
+      }
+
       // ② 胶囊底 —— 上浅下深的雾紫，顶部再压一层高光
       canvas.drawRRect(
         rr,
@@ -432,9 +546,8 @@ class _LhPeriodFxPainter extends CustomPainter {
             Offset(rect.left, rect.top),
             Offset(rect.right, rect.bottom),
             [
-              const Color(0xFFF6F1FD).withValues(alpha: o),
-              const Color(0xFFE3D9F7).withValues(alpha: o),
-              const Color(0xFFEFE9FB).withValues(alpha: o),
+              for (final c in pillGradient.take(3))
+                c.withValues(alpha: c.a * o),
             ],
             const [0.0, 0.55, 1.0],
           ),
@@ -459,7 +572,9 @@ class _LhPeriodFxPainter extends CustomPainter {
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 0.7
-          ..color = primary.withValues(alpha: (0.20 + 0.16 * glow) * o),
+          ..color = pillEdgeColor != null
+              ? pillEdgeColor!.withValues(alpha: pillEdgeColor!.a * o)
+              : primary.withValues(alpha: (0.20 + 0.16 * glow) * o),
       );
 
       // ④ 流光扫过
@@ -487,11 +602,11 @@ class _LhPeriodFxPainter extends CustomPainter {
               Offset(cx - band, 0),
               Offset(cx + band + skew, 0),
               [
-                Colors.white.withValues(alpha: 0.0),
-                Colors.white.withValues(alpha: 0.98 * env * o),
-                Colors.white.withValues(alpha: 0.55 * env * o),
+                shimmerColor.withValues(alpha: 0.0),
+                shimmerColor.withValues(alpha: 0.98 * env * o),
+                shimmerColor.withValues(alpha: 0.55 * env * o),
                 primary.withValues(alpha: 0.10 * env * o),
-                Colors.white.withValues(alpha: 0.0),
+                shimmerColor.withValues(alpha: 0.0),
               ],
               const [0.0, 0.40, 0.52, 0.66, 1.0],
             ),
@@ -584,5 +699,8 @@ class _LhPeriodFxPainter extends CustomPainter {
       old.ripple != ripple ||
       old.rippleX != rippleX ||
       old.radius != radius ||
-      old.primary != primary;
+      old.primary != primary ||
+      old.pillEdgeColor != pillEdgeColor ||
+      old.pillShadowColor != pillShadowColor ||
+      old.shimmerColor != shimmerColor;
 }

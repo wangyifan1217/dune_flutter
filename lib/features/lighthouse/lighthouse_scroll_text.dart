@@ -295,6 +295,12 @@ class _RenderLhPanPlainText extends RenderBox {
   }
 
   @override
+  double? computeDistanceToActualBaseline(TextBaseline baseline) {
+    _syncPainter();
+    return _painter.computeDistanceToActualBaseline(baseline);
+  }
+
+  @override
   Size computeDryLayout(BoxConstraints constraints) {
     _syncPainter();
     return constraints.constrain(Size(_painter.width, _painter.height));

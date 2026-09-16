@@ -15,6 +15,7 @@ import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../conversation/comm_unread_notifier.dart';
+import '../shell/dunes_main_tab_bar.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'lighthouse_bi_view.dart';
 import 'lighthouse_data.dart';
@@ -13164,7 +13165,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       },
       child: ListView(
         controller: _mainListScrollCtrl,
-        padding: const EdgeInsets.only(bottom: 16),
+        padding: EdgeInsets.only(
+          bottom: dunesAppBottomNavContentPadding(context, fallback: 16),
+        ),
         children: [
           _buildPanel(),
           if (_tab == 'analysis') _buildAnalysisView(),

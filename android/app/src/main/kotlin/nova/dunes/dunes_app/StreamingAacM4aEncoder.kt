@@ -45,6 +45,7 @@ class StreamingAacM4aEncoder(
         muxer = MediaMuxer(outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
     }
 
+    @Synchronized
     fun writePcm(data: ByteArray, offset: Int, length: Int) {
         if (inputClosed || length <= 0) return
         var index = offset
@@ -72,6 +73,7 @@ class StreamingAacM4aEncoder(
         drainEncoder(endOfStream = false)
     }
 
+    @Synchronized
     fun finish(): Boolean {
         if (inputClosed) return outputLooksValid()
         inputClosed = true
@@ -102,6 +104,7 @@ class StreamingAacM4aEncoder(
         }
     }
 
+    @Synchronized
     fun abort() {
         inputClosed = true
         releaseInternal(deleteOutput = true)

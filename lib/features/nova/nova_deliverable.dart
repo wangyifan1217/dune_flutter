@@ -518,6 +518,15 @@ String normalizeNovaMarkdownLayout(String text) {
     ),
     (m) => '${m.group(1)}\n- ',
   );
+  // 「小雨-气温：」「）-风力：」这类贴在词尾的标签也拆成列表。
+  s = s.replaceAllMapped(
+    RegExp(r'([^\s\n])([-－—])(?=[\u4e00-\u9fff]{1,8}[：:])'),
+    (m) => '${m.group(1)}\n- ',
+  );
+  s = s.replaceAllMapped(
+    RegExp(r'([^\n])([•●])\s*'),
+    (m) => '${m.group(1)}\n${m.group(2)} ',
+  );
   // Generic heading normalization: if "## " appears mid-line, split it into a new block.
   // Do not split on consecutive '#' (e.g. "## 标题" must not become "#\n\n## 标题").
   s = s.replaceAllMapped(

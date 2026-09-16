@@ -686,16 +686,9 @@ bool reconRoleIsL1(String role) =>
 bool reconRoleIsFinance(String role) =>
     reconChainStepFromRole(role) == reconChainFinance;
 
-/// 一层只看一层；财务看一层+财务；二层/最终人看三层。
+/// 一层、财务、二层同时可见全部审核记录。
 List<String> reconVisibleAuditSteps(String myRole) {
-  switch (reconChainStepFromRole(myRole)) {
-    case reconChainL1:
-      return const [reconChainL1];
-    case reconChainFinance:
-      return const [reconChainL1, reconChainFinance];
-    default:
-      return reconAuditChainSteps;
-  }
+  return reconAuditChainSteps;
 }
 
 List<ReconRowReviewer> reconFilterReviewersForSteps(
@@ -1166,6 +1159,8 @@ String reconCardTitle(String cardType) {
       return '标签三-运营商';
     case 'TRAVEL':
       return '标签三-出行金';
+    case 'TAG3_DAILY':
+      return '业财一体-日清';
     default:
       return cardType;
   }

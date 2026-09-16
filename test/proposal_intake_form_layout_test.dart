@@ -3199,6 +3199,58 @@ void main() {
     );
   });
 
+  testWidgets('finance owner 2 can edit supply settle fields during reviewing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'reviewing',
+          'version': 3,
+          'createdBy': 99,
+          'form': {
+            'financeOwner2': '王奕凡',
+            'financeOwner2UserId': 11,
+            'supplySettleCycle': '现金 D+2',
+            'supplyPayAccount': '旧账户',
+            'rollback': '不回滚',
+          },
+          'review': {
+            'stage': 'reviewing',
+            'marketCompleted': true,
+            'financeCompleted': false,
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '供给侧');
+
+    expect(
+      tester
+          .widget<ProposalSelectField<String>>(
+            find
+                .descendant(
+                  of: _fieldOf('结算周期').first,
+                  matching: find.byWidgetPredicate(
+                    (widget) => widget is ProposalSelectField<String>,
+                  ),
+                )
+                .first,
+          )
+          .onSelected,
+      isNotNull,
+    );
+  });
+
   testWidgets('view-all can edit others unreviewed fields during reviewing', (
     tester,
   ) async {

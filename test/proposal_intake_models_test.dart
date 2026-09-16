@@ -2703,6 +2703,14 @@ void main() {
     );
     expect(shouldSave(row(status: 'draft', title: '')), isFalse);
     expect(proposalIntakeIsWriteDeniedMessage('当前用户不是该提案填写人'), isTrue);
+    expect(
+      proposalIntakeIsConflictMessage('提案已被其他协作者更新，请刷新后重试'),
+      isTrue,
+    );
+    expect(
+      proposalIntakeShouldLeaveDespiteSaveError('提案已被其他协作者更新，请刷新后重试'),
+      isTrue,
+    );
     expect(proposalIntakeShowDraftSavedToast(row(status: 'draft')), isTrue);
     expect(proposalIntakeShowDraftSavedToast(row(status: 'filling')), isTrue);
     expect(proposalIntakeShowDraftSavedToast(row(status: 'done')), isFalse);

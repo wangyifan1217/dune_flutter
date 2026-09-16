@@ -6,6 +6,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mime/mime.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -27,6 +28,7 @@ import '../meeting/native_meeting_service.dart';
 import '../kb/native_kb_models.dart';
 import '../kb/native_kb_service.dart';
 import '../conversation/conversation_service.dart';
+import '../qianji/digital_auto/digital_employee_service.dart';
 import '../shell/dunes_toast.dart';
 import 'native_nova_service.dart';
 import 'nova_background_coordinator.dart';
@@ -35,12 +37,15 @@ import 'nova_file_utils.dart';
 import 'nova_generating_storage.dart';
 import 'nova_history_utils.dart';
 import 'nova_image_utils.dart';
+import 'nova_mcp_services_view.dart';
 import 'nova_media.dart';
 import 'nova_meeting_prd.dart';
 import 'nova_model_utils.dart';
 import 'nova_models_service.dart';
-import 'nova_web_storage.dart';
+import 'nova_side_drawer.dart';
 import 'nova_stream_parser.dart';
+import 'nova_web_storage.dart';
+import 'nova_welcome_view.dart';
 import 'nova_widgets.dart';
 import 'voice_call/tau_voice_call_page.dart';
 
@@ -52,6 +57,7 @@ class NativeNovaPage extends StatefulWidget {
     this.onHistory,
     this.onOpenKb,
     this.onOpenMeeting,
+    this.onOpenDigitalEmployee,
     this.focusConversationId,
     this.focusMessageId,
     this.onClearHistoryFocus,
@@ -62,6 +68,7 @@ class NativeNovaPage extends StatefulWidget {
   final VoidCallback? onHistory;
   final VoidCallback? onOpenKb;
   final VoidCallback? onOpenMeeting;
+  final ValueChanged<DigitalEmployeeItem>? onOpenDigitalEmployee;
   final int? focusConversationId;
   final int? focusMessageId;
   final VoidCallback? onClearHistoryFocus;
@@ -71,16 +78,20 @@ class NativeNovaPage extends StatefulWidget {
 }
 
 class _NativeNovaPageState extends State<NativeNovaPage>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   late final NativeNovaService _service;
   late final NativeKbService _kbService;
   late final ConversationService _avatarService;
   late final NovaMediaResolver _mediaResolver;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ImagePicker _imagePicker = ImagePicker();
   final TextEditingController _inputController = TextEditingController();
   final FocusNode _inputFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
   final Map<int, GlobalKey> _messageKeys = <int, GlobalKey>{};
+  late final TabController _tabController;
+
+  static const _novaChatTabIndex = 1;
 
   bool _loading = true;
   bool _sending = false;
@@ -88,6 +99,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   bool _novaReady = true;
   bool _voiceMode = false;
   bool _quickActionsOpen = false;
+  bool _stickToBottom = true;
+  bool _showJumpToLatest = false;
   bool _recording = false;
   VoiceHoldAction _recordAction = VoiceHoldAction.none;
   Offset? _recordFocalPoint;
@@ -136,7 +149,14 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     _kbService = NativeKbService(session: widget.session);
     _avatarService = ConversationService(session: widget.session);
     _mediaResolver = NovaMediaResolver(widget.session, service: _service);
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: _novaChatTabIndex,
+    );
+    _tabController.addListener(_onNovaTabChanged);
     _inputFocusNode.addListener(_onInputFocusChanged);
+    _scrollController.addListener(_onChatScroll);
     userAvatarRefresh.addListener(_onSelfAvatarUpdated);
     _load();
     MeetingLiveController.instance.active.addListener(
@@ -169,6 +189,22 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     setState(() => _voiceMode = false);
   }
 
+  void _onNovaTabChanged() {
+    if (!mounted || _tabController.indexIsChanging) return;
+    if (_tabController.index != _novaChatTabIndex) {
+      FocusScope.of(context).unfocus();
+    }
+    setState(() {});
+  }
+
+  bool get _isNovaChatTab => _tabController.index == _novaChatTabIndex;
+
+  void _showNovaChatTab() {
+    if (_tabController.index != _novaChatTabIndex) {
+      _tabController.animateTo(_novaChatTabIndex);
+    }
+  }
+
   @override
   void didUpdateWidget(covariant NativeNovaPage oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -176,7 +212,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     final newConv = widget.focusConversationId ?? 0;
     final oldMsg = oldWidget.focusMessageId ?? 0;
     final newMsg = widget.focusMessageId ?? 0;
-    if (oldConv != newConv || oldMsg != newMsg) {
+    if (newConv > 0 && (oldConv != newConv || oldMsg != newMsg)) {
       unawaited(_load());
     }
   }
@@ -197,6 +233,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       _onMeetingLiveActiveChanged,
     );
     NovaBackgroundCoordinator.instance.removeListener(_onNovaBackgroundUpdate);
+    _tabController.removeListener(_onNovaTabChanged);
+    _tabController.dispose();
     _streamDraftTimer?.cancel();
     _genPollTimer?.cancel();
     _recordTicker?.cancel();
@@ -206,6 +244,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       unawaited(NativeAudioRecorder.instance.cancel());
     }
     _inputFocusNode.removeListener(_onInputFocusChanged);
+    _scrollController.removeListener(_onChatScroll);
     _inputFocusNode.dispose();
     _inputController.dispose();
     _scrollController.dispose();
@@ -652,7 +691,11 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           (_) => _focusMessage(focusId),
         );
       } else {
-        _scrollBottom();
+        if (_isEmptyConversation) {
+          _scrollTop();
+        } else {
+          _scrollBottom();
+        }
       }
     } catch (e) {
       if (!mounted || loadToken != _loadToken) return;
@@ -735,10 +778,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
   List<NativeNovaMessage> _finalizeMergedMessages(
     List<NativeNovaMessage> rows, {
-    bool repair = false,
+    bool repair = true,
   }) {
-    final deduped = sortNovaMessages(dedupeNovaHistoryMessages(rows));
-    return repair ? repairNovaConversationMessages(deduped) : deduped;
+    final deduped = dedupeNovaHistoryMessages(rows);
+    return repairNovaConversationMessages(deduped);
   }
 
   List<NativeNovaMessage> _mergeGeneratingAndDraft({
@@ -983,10 +1026,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
                         m.text.contains(reply.substring(0, 24)))),
           );
           if (syncHasReply) {
-            rows = canonicalRows;
+            rows = repairNovaConversationMessages(canonicalRows);
             if (mounted) {
               setState(() {
-                _messages = _withWelcome(canonicalRows);
+                _messages = _withWelcome(rows);
               });
             }
           } else {
@@ -1594,15 +1637,20 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         final idx = _messages.indexWhere((m) => m.id == assistantMsgId);
         if (idx >= 0) {
           final copy = [..._messages];
-          copy[idx] = copy[idx].copyWith(
-            streaming: false,
-            text: err,
-            thinkStatus: '',
-          );
-          _messages = copy;
+          final cur = copy[idx];
+          final keepReply = cur.text.trim().isNotEmpty &&
+              !cur.streaming &&
+              !isNovaTransientErrorReply(cur.text);
+          if (keepReply) {
+            copy[idx] = cur.copyWith(streaming: false, thinkStatus: '');
+          } else {
+            copy.removeAt(idx);
+          }
+          _messages = repairNovaConversationMessages(copy);
         }
         _banner = err;
       });
+      _toast(err);
     }
     await _clearGeneratingMarkers();
     if (_conversationId > 0) {
@@ -1740,6 +1788,13 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     );
   }
 
+  void _handlePromptCardTapped(String prompt) {
+    if (!_novaReady || _sending) return;
+    HapticFeedback.selectionClick();
+    _inputController.text = prompt;
+    unawaited(_submitInput());
+  }
+
   Future<void> _submitInput() async {
     if (_sending) {
       _stopGeneration();
@@ -1752,8 +1807,14 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     final drafts = [..._drafts];
     if (!_ensureVisionModelForDrafts(drafts)) return;
 
+    HapticFeedback.lightImpact();
     _inputController.clear();
-    setState(() => _drafts = const <NovaDraftAttachment>[]);
+    setState(() {
+      _drafts = const <NovaDraftAttachment>[];
+      _quickActionsOpen = false;
+      _stickToBottom = true;
+      _showJumpToLatest = false;
+    });
     await _sendMessage(text: text, drafts: drafts);
   }
 
@@ -1850,12 +1911,25 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     _scrollToLatestAfterKeyboard();
   }
 
+  void _onChatScroll() {
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    if (!pos.hasContentDimensions) return;
+    final nearBottom = (pos.maxScrollExtent - pos.pixels) <= 96;
+    final showJump = !nearBottom && !_isEmptyConversation;
+    if (nearBottom == _stickToBottom && showJump == _showJumpToLatest) return;
+    setState(() {
+      _stickToBottom = nearBottom;
+      _showJumpToLatest = showJump;
+    });
+  }
+
   void _scrollToLatestAfterKeyboard() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _scrollBottom();
+      _scrollBottom(force: true, animate: true);
       Future<void>.delayed(const Duration(milliseconds: 280), () {
-        if (mounted) _scrollBottom();
+        if (mounted) _scrollBottom(force: true, animate: true);
       });
     });
   }
@@ -2456,7 +2530,68 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     });
   }
 
+  Future<void> _openConversationFromDrawer(int targetConvId) async {
+    _showNovaChatTab();
+    if (targetConvId <= 0) return;
+    if (targetConvId == _conversationId &&
+        _messages.any((m) => !m.isWelcome)) {
+      return;
+    }
+    _loadToken += 1;
+    final token = _loadToken;
+    _stopGeneratingPoll();
+    final prevConvId = _conversationId;
+    if (prevConvId > 0 && _messages.isNotEmpty) {
+      await _service.flushConvToLocalHistory(prevConvId, _messages);
+    }
+    setState(() {
+      _loading = true;
+      _conversationId = targetConvId;
+      _messages = const [];
+      _banner = null;
+      _busyHint = '';
+      _sending = false;
+      _serverGenerating = false;
+      _quickActionsOpen = false;
+      _stickToBottom = true;
+      _showJumpToLatest = false;
+    });
+    try {
+      var convId = targetConvId;
+      try {
+        final ensured = await _service.sessionEnsure(
+          legacyConversationId: targetConvId,
+        );
+        if (ensured.conversationId > 0) convId = ensured.conversationId;
+      } catch (_) {}
+      final history = await _service.fetchFullHistory(
+        convId,
+        restoreFromHistory: true,
+        applyViewSinceFilter: false,
+      );
+      if (!mounted || _loadToken != token) return;
+      setState(() {
+        _conversationId = convId;
+        _messages = repairNovaConversationMessages(_withWelcome(history.messages));
+        _loading = false;
+      });
+      if (_isEmptyConversation) {
+        _scrollTop();
+      } else {
+        _scrollBottom(force: true);
+      }
+    } catch (e) {
+      if (!mounted || _loadToken != token) return;
+      setState(() {
+        _loading = false;
+        _banner = NativeNovaService.friendlyError(e);
+      });
+      _toast(_banner ?? '无法打开历史会话');
+    }
+  }
+
   Future<void> _startNewChat() async {
+    _showNovaChatTab();
     if (_isGenerating) return;
     // 取消尚未完成的 `_load`，避免旧请求完成后覆盖新会话 ID 和消息列表。
     _loadToken += 1;
@@ -2484,8 +2619,12 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       _conversationId = 0;
       _genAfterMessageId = 0;
       _messages = [_welcomeMessage()];
+      _quickActionsOpen = false;
+      _stickToBottom = true;
+      _showJumpToLatest = false;
     });
-    _scrollBottom();
+    // 新建会话默认展示最顶部（完整呈现大头像与问候语）
+    _scrollTop();
 
     final convId = await _service.createNovaServerConversation(forceNew: true);
     if (!mounted) return;
@@ -2719,7 +2858,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     });
   }
 
-  void _scrollBottom() {
+  void _scrollTop() {
     void jump() {
       if (!mounted || !_scrollController.hasClients) return;
       final phase = SchedulerBinding.instance.schedulerPhase;
@@ -2730,17 +2869,57 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       }
       final position = _scrollController.position;
       if (!position.hasContentDimensions || !position.hasPixels) return;
+      if (position.pixels > 0) {
+        position.jumpTo(0.0);
+      }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => jump());
+    for (final ms in const [60, 120, 240, 480]) {
+      Future.delayed(Duration(milliseconds: ms), jump);
+    }
+  }
+
+  void _scrollBottom({bool force = false, bool animate = false}) {
+    if (!force && !_stickToBottom) return;
+    if (force) {
+      _stickToBottom = true;
+      if (_showJumpToLatest && mounted) {
+        _showJumpToLatest = false;
+      }
+    }
+
+    void jump() {
+      if (!mounted || !_scrollController.hasClients) return;
+      if (!force && !_stickToBottom) return;
+      final phase = SchedulerBinding.instance.schedulerPhase;
+      if (phase == SchedulerPhase.persistentCallbacks ||
+          phase == SchedulerPhase.midFrameMicrotasks) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => jump());
+        return;
+      }
+      final position = _scrollController.position;
+      if (!position.hasContentDimensions || !position.hasPixels) return;
       final max = position.maxScrollExtent;
-      if ((position.pixels - max).abs() > 2) {
+      if ((position.pixels - max).abs() <= 2) return;
+      if (animate) {
+        position.animateTo(
+          max,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
+      } else {
         position.jumpTo(max);
       }
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) => jump());
     // 历史里的图片/富文本异步撑高后高度才稳定，单次跳转会停在中间；
-    // 入场后再做几次兜底贴底，确保展示到最底部（用户已主动上滑则不打扰）。
-    for (final ms in const [60, 120, 240, 480, 800, 1200]) {
-      Future.delayed(Duration(milliseconds: ms), jump);
+    // 用户已主动上滑阅读时不再强行贴底。
+    if (force || _stickToBottom) {
+      for (final ms in const [60, 120, 240, 480, 800, 1200]) {
+        Future.delayed(Duration(milliseconds: ms), jump);
+      }
     }
   }
 
@@ -3410,7 +3589,32 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         _handleBack();
       },
       child: Scaffold(
-        backgroundColor: Colors.white,
+        key: _scaffoldKey,
+        backgroundColor: const Color(0xFFF6F8FC),
+        drawer: SizedBox(
+          width: MediaQuery.sizeOf(context).width < 450
+              ? MediaQuery.sizeOf(context).width * 0.82
+              : 360,
+          child: NovaSideDrawer(
+            session: widget.session,
+            userName: _userName,
+            userAvatarUrl: _userAvatarUrl,
+            currentConversationId: _conversationId,
+            onNewChat: () {
+              if (_novaReady) _startNewChat();
+            },
+            onOpenConversation: (cid, mid, title, preview) {
+              _openConversationFromDrawer(cid);
+            },
+            onOpenHistoryAll: () {
+              widget.onHistory?.call();
+            },
+            onOpenKb: widget.onOpenKb,
+            onCurrentConversationDeleted: () {
+              if (_novaReady) _startNewChat();
+            },
+          ),
+        ),
         body: SafeArea(
           bottom: false,
           child: GestureDetector(
@@ -3426,142 +3630,108 @@ class _NativeNovaPageState extends State<NativeNovaPage>
                       valueListenable: MeetingLiveController.instance.active,
                       builder: (context, meetingLive, _) {
                         return NovaPageHeader(
+                          tabController: _tabController,
                           onBack: _handleBack,
                           onNewChat: _novaReady ? _startNewChat : null,
                           onHistory: widget.onHistory,
                           onOpenKb: widget.onOpenKb,
                           onVoiceCall: _novaReady ? _openTauVoiceCall : null,
+                          onOpenDrawer: () =>
+                              _scaffoldKey.currentState?.openDrawer(),
                           actionsEnabled: !_isGenerating,
                           voiceCallBlocked: meetingLive,
                         );
                       },
                     ),
-                    if (_loading)
-                      const Expanded(
-                        child: Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    else
-                      Expanded(
-                        child: NovaC4MessageStream(
-                          child: Builder(
-                            builder: (context) {
-                              if (_isEmptyConversation) {
-                                return ListView(
-                                  controller: _scrollController,
-                                  keyboardDismissBehavior:
-                                      ScrollViewKeyboardDismissBehavior.onDrag,
-                                  padding: const EdgeInsets.fromLTRB(
-                                    14,
-                                    12,
-                                    14,
-                                    28,
-                                  ),
-                                  children: [
-                                    if (_banner != null)
-                                      NovaStatusBanner(
-                                        message: _banner!,
-                                        onRetry: _load,
-                                      ),
-                                    const SizedBox(
-                                      height: 360,
-                                      child: NovaC4EmptyState(),
+                    Expanded(
+                      child: TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _NovaTabKeepAlive(
+                            child: NovaMcpServicesView(
+                              session: widget.session,
+                              onOpenDigitalEmployee:
+                                  widget.onOpenDigitalEmployee,
+                            ),
+                          ),
+                          _NovaTabKeepAlive(
+                            child: _loading
+                                ? const Center(
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
                                     ),
-                                  ],
-                                );
-                              }
-                              final items = _messageListItems();
-                              final bannerOffset = _banner != null ? 1 : 0;
-                              return ListView.builder(
-                                controller: _scrollController,
-                                keyboardDismissBehavior:
-                                    ScrollViewKeyboardDismissBehavior.onDrag,
-                                padding: const EdgeInsets.fromLTRB(
-                                  14,
-                                  12,
-                                  14,
-                                  28,
-                                ),
-                                addAutomaticKeepAlives: false,
-                                itemCount: bannerOffset + items.length,
-                                itemBuilder: (context, index) {
-                                  if (_banner != null && index == 0) {
-                                    return NovaStatusBanner(
-                                      message: _banner!,
-                                      onRetry: _load,
-                                    );
+                                  )
+                                : _buildNovaChatPane(),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_isNovaChatTab) ...[
+                      NovaC4BusyHint(text: _busyHint),
+                      NovaDraftTray(items: _drafts, onRemove: _removeDraft),
+                      ValueListenableBuilder<bool>(
+                        valueListenable: MeetingLiveController.instance.active,
+                        builder: (context, meetingLive, _) {
+                          final voiceBlocked = !inputEnabled || meetingLive;
+                          final effectiveVoiceMode = voiceBlocked
+                              ? false
+                              : _voiceMode;
+                          return NovaC4InputBar(
+                            controller: _inputController,
+                            focusNode: _inputFocusNode,
+                            onInputFocused: _scrollToLatestAfterKeyboard,
+                            voiceMode: effectiveVoiceMode,
+                            sending: _sending,
+                            enabled: inputEnabled,
+                            hintText: inputHint,
+                            onToggleVoice: voiceBlocked
+                                ? () {
+                                    if (meetingLive) {
+                                      _toast('会议录音进行中，暂无法发送语音');
+                                    }
                                   }
-                                  final item = items[index - bannerOffset];
-                                  if (item.dividerLabel != null) {
-                                    return NovaMsgDateDivider(
-                                      label: item.dividerLabel!,
-                                    );
-                                  }
-                                  return _buildMessageRow(item.message!);
-                                },
+                                : () =>
+                                      setState(() => _voiceMode = !_voiceMode),
+                            onSend: _submitInput,
+                            onPickModel: _pickModel,
+                            modelLabel: novaModelDisplayName(_selectedModel),
+                            quickActionsOpen: _quickActionsOpen,
+                            onToggleQuickActions: () {
+                              setState(
+                                () => _quickActionsOpen = !_quickActionsOpen,
                               );
                             },
-                          ),
-                        ),
+                            onStop: _stopGeneration,
+                            onCamera: _pickCamera,
+                            onAlbum: _pickAlbum,
+                            onOpenMeeting: widget.onOpenMeeting,
+                            onMeetingPrd: _openMeetingPrdFlow,
+                            onOpenKb: widget.onOpenKb,
+                            onVoiceCall: _novaReady ? _openTauVoiceCall : null,
+                            onNewChat: _novaReady ? _startNewChat : null,
+                            onHistory: widget.onHistory,
+                            voiceCallBlocked: meetingLive,
+                            onAttach:
+                                inputEnabled &&
+                                    NovaConfig.fileUploadInChatEnabled
+                                ? _pickFile
+                                : null,
+                            recording: _recording,
+                            recordWillCancel:
+                                _recordAction == VoiceHoldAction.cancel,
+                            recordDurationMs: _recordDurationMs,
+                            onVoiceHoldStart: voiceBlocked
+                                ? null
+                                : (details) =>
+                                      _startHoldRecord(details.globalPosition),
+                            onVoiceHoldMove: _onRecordMove,
+                            onVoiceHoldEnd: (_) => _finishHoldRecord(),
+                            onVoiceHoldCancel: () =>
+                                _cancelHoldRecord(showHint: false),
+                          );
+                        },
                       ),
-                    NovaC4BusyHint(text: _busyHint),
-                    NovaDraftTray(items: _drafts, onRemove: _removeDraft),
-                    ValueListenableBuilder<bool>(
-                      valueListenable: MeetingLiveController.instance.active,
-                      builder: (context, meetingLive, _) {
-                        final voiceBlocked = !inputEnabled || meetingLive;
-                        final effectiveVoiceMode = voiceBlocked
-                            ? false
-                            : _voiceMode;
-                        return NovaC4InputBar(
-                          controller: _inputController,
-                          focusNode: _inputFocusNode,
-                          onInputFocused: _scrollToLatestAfterKeyboard,
-                          voiceMode: effectiveVoiceMode,
-                          sending: _sending,
-                          enabled: inputEnabled,
-                          hintText: inputHint,
-                          onToggleVoice: voiceBlocked
-                              ? () {
-                                  if (meetingLive) {
-                                    _toast('会议录音进行中，暂无法发送语音');
-                                  }
-                                }
-                              : () => setState(() => _voiceMode = !_voiceMode),
-                          onSend: _submitInput,
-                          onPickModel: _pickModel,
-                          modelLabel: novaModelDisplayName(_selectedModel),
-                          quickActionsOpen: _quickActionsOpen,
-                          onToggleQuickActions: () {
-                            setState(
-                              () => _quickActionsOpen = !_quickActionsOpen,
-                            );
-                          },
-                          onStop: _stopGeneration,
-                          onCamera: _pickCamera,
-                          onAlbum: _pickAlbum,
-                          onOpenMeeting: widget.onOpenMeeting,
-                          onMeetingPrd: _openMeetingPrdFlow,
-                          onAttach:
-                              inputEnabled && NovaConfig.fileUploadInChatEnabled
-                              ? _pickFile
-                              : null,
-                          recording: _recording,
-                          recordWillCancel:
-                              _recordAction == VoiceHoldAction.cancel,
-                          recordDurationMs: _recordDurationMs,
-                          onVoiceHoldStart: voiceBlocked
-                              ? null
-                              : (details) =>
-                                    _startHoldRecord(details.globalPosition),
-                          onVoiceHoldMove: _onRecordMove,
-                          onVoiceHoldEnd: (_) => _finishHoldRecord(),
-                          onVoiceHoldCancel: () =>
-                              _cancelHoldRecord(showHint: false),
-                        );
-                      },
-                    ),
+                    ],
                   ],
                 ),
                 if (_recording)
@@ -3576,6 +3746,79 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildNovaChatPane() {
+    return NovaC4MessageStream(
+      child: Stack(
+        children: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 240),
+            switchInCurve: Curves.easeOutCubic,
+            layoutBuilder: (currentChild, _) =>
+                currentChild ?? const SizedBox.shrink(),
+            child: _isEmptyConversation
+                ? _buildWelcomeList()
+                : _buildMessageList(),
+          ),
+          if (_showJumpToLatest)
+            Positioned(
+              right: 16,
+              bottom: 12,
+              child: _NovaJumpToLatestButton(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  _scrollBottom(force: true, animate: true);
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWelcomeList() {
+    return ListView(
+      key: const ValueKey('nova-welcome'),
+      controller: _scrollController,
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.fromLTRB(0, 6, 0, 24),
+      children: [
+        if (_banner != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: NovaStatusBanner(message: _banner!, onRetry: _load),
+          ),
+        NovaAiPartnerWelcomeView(
+          name: '小饕',
+          subtitle: '你在沙丘上的AI全能伙伴',
+          onSelectPrompt: _handlePromptCardTapped,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMessageList() {
+    final items = _messageListItems();
+    final bannerOffset = _banner != null ? 1 : 0;
+    return ListView.builder(
+      key: const ValueKey('nova-messages'),
+      controller: _scrollController,
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
+      addAutomaticKeepAlives: false,
+      itemCount: bannerOffset + items.length,
+      itemBuilder: (context, index) {
+        if (_banner != null && index == 0) {
+          return NovaStatusBanner(message: _banner!, onRetry: _load);
+        }
+        final item = items[index - bannerOffset];
+        if (item.dividerLabel != null) {
+          return NovaMsgDateDivider(label: item.dividerLabel!);
+        }
+        return _buildMessageRow(item.message!);
+      },
     );
   }
 
@@ -3597,6 +3840,28 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
   bool get _isEmptyConversation =>
       _messages.isEmpty || _messages.every((message) => message.isWelcome);
+
+  bool _canResendUserMessage(NativeNovaMessage m) {
+    if (m.role != 'user') return false;
+    if (_sending || _serverGenerating || _hasActiveAssistantStream()) {
+      return false;
+    }
+    final idx = _messages.indexWhere((x) => x.id == m.id);
+    if (idx < 0) return false;
+    for (var i = idx + 1; i < _messages.length; i++) {
+      final n = _messages[i];
+      if (n.isWelcome) continue;
+      if (n.role == 'user') return true;
+      if (n.role == 'assistant') {
+        final hasBody = n.text.trim().isNotEmpty ||
+            n.thinkText.trim().isNotEmpty ||
+            n.streaming ||
+            n.attachments.isNotEmpty;
+        if (hasBody) return false;
+      }
+    }
+    return true;
+  }
 
   Widget _buildMessageRow(NativeNovaMessage m) {
     final mine = m.role == 'user';
@@ -3636,7 +3901,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           mediaResolver: _mediaResolver,
           highlighted: m.id > 0 && m.id == _highlightMessageId,
           ragUsed: m.ragUsed,
-          onResend: mine && !_sending && !_serverGenerating
+          onResend: _canResendUserMessage(m)
               ? () => unawaited(_resendUserMessage(m))
               : null,
         ),
@@ -3656,4 +3921,63 @@ class _NovaTimelineItem {
 
   final String? dividerLabel;
   final NativeNovaMessage? message;
+}
+
+class _NovaJumpToLatestButton extends StatelessWidget {
+  const _NovaJumpToLatestButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      elevation: 3,
+      shadowColor: const Color(0x3318274B),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.arrow_downward_rounded, size: 15, color: Color(0xFF6B3FE2)),
+              SizedBox(width: 4),
+              Text(
+                '回到最新',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF6B3FE2),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NovaTabKeepAlive extends StatefulWidget {
+  const _NovaTabKeepAlive({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_NovaTabKeepAlive> createState() => _NovaTabKeepAliveState();
+}
+
+class _NovaTabKeepAliveState extends State<_NovaTabKeepAlive>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
 }

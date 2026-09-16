@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../auth/auth_session.dart';
 import '../xflow/proposal_import_template.dart';
 import 'reconciliation_shucai_models.dart';
+import 'tag3_daily_models.dart';
 
 const _assetBaseOverride = String.fromEnvironment(
   'SHUCAI_ASSET_BASE',
@@ -304,6 +305,118 @@ class ReconciliationShucaiService {
       }
     } catch (_) {}
     return '$fallback(${resp.statusCode})';
+  }
+
+  Future<Tag3DailySnapshot> fetchTag3Daily({required String asOfDate}) async {
+    final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
+    final uri = Uri.parse('$base/reconciliation/tag3-daily').replace(
+      queryParameters: {'asOfDate': asOfDate.trim()},
+    );
+    final resp = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 30));
+    final data = _decodeEnvelope(resp, fallback: '日清加载失败');
+    return Tag3DailySnapshot.fromJson(data);
+  }
+
+  Future<Tag3DailyDrilldown> fetchTag3DailyDrilldown({
+    required String asOfDate,
+    required String rowKey,
+    required String metricKey,
+    String? period,
+    String? statDate,
+    String? sourceTab,
+  }) async {
+    final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
+    final query = <String, String>{
+      'asOfDate': asOfDate.trim(),
+      'rowKey': rowKey.trim(),
+      'metricKey': metricKey.trim(),
+    };
+    if ((period ?? '').trim().isNotEmpty) query['period'] = period!.trim();
+    if ((statDate ?? '').trim().isNotEmpty) query['statDate'] = statDate!.trim();
+    if ((sourceTab ?? '').trim().isNotEmpty) {
+      query['sourceTab'] = sourceTab!.trim();
+    }
+    final uri = Uri.parse('$base/reconciliation/tag3-daily/drilldown').replace(
+      queryParameters: query,
+    );
+    final resp = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 25));
+    final data = _decodeEnvelope(resp, fallback: '下钻加载失败');
+    return Tag3DailyDrilldown.fromJson(data);
+  }
+
+  Future<void> confirmTag3Daily({
+    required String asOfDate,
+    required List<String> rowKeys,
+    required String stage,
+    String expectedStatus = '',
+    String remark = '',
+    String period = '',
+    String statDate = '',
+    String periodLabel = '',
+    String projectName = '',
+  }) async {
+    final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
+    final uri = Uri.parse('$base/reconciliation/tag3-daily/operate');
+    final body = <String, dynamic>{
+      'asOfDate': asOfDate.trim(),
+      'rowKeys': [
+        for (final key in rowKeys)
+          if (key.trim().isNotEmpty) key.trim(),
+      ],
+      'action': 'CONFIRM',
+      'stage': stage.trim().toUpperCase(),
+    };
+    if (expectedStatus.trim().isNotEmpty) {
+      body['expectedStatus'] = expectedStatus.trim().toUpperCase();
+    }
+    if (remark.trim().isNotEmpty) body['remark'] = remark.trim();
+    if (period.trim().isNotEmpty) body['period'] = period.trim().toUpperCase();
+    if (statDate.trim().isNotEmpty) body['statDate'] = statDate.trim();
+    if (periodLabel.trim().isNotEmpty) body['periodLabel'] = periodLabel.trim();
+    if (projectName.trim().isNotEmpty) body['projectName'] = projectName.trim();
+    final resp = await _client
+        .post(
+          uri,
+          headers: {
+            ..._headers,
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 25));
+    _decodeEnvelope(resp, fallback: '确认失败');
+  }
+
+  Future<void> commentTag3Daily({
+    required String asOfDate,
+    required Tag3DailyRow row,
+    required String body,
+  }) async {
+    final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
+    final uri = Uri.parse('$base/reconciliation/tag3-daily/comments');
+    final resp = await _client
+        .post(
+          uri,
+          headers: {
+            ..._headers,
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'asOfDate': asOfDate.trim(),
+            'rowKey': row.rowKey,
+            'period': row.period,
+            'statDate': row.statDateDay,
+            'periodLabel': row.periodLabel,
+            'projectName': row.projectName,
+            'body': body.trim(),
+          }),
+        )
+        .timeout(const Duration(seconds: 25));
+    _decodeEnvelope(resp, fallback: '提交意见失败');
   }
 
   Future<ShucaiSnapshot> _fetchFromDunes(

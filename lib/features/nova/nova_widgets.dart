@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
 import 'native_nova_service.dart';
@@ -12,11 +13,11 @@ import 'nova_media.dart';
 import 'nova_file_utils.dart';
 import 'nova_models_service.dart';
 
-const kNovaName = '韬管理';
-const kNovaIdentityReply = '我是韬';
-const kNovaIntro = '你好，我是你的NOVA助手。可以帮你查审批、找合同、对账单、读文档；直接问我即可。';
-const kNovaInputPlaceholder = '问NOVA';
-const kNovaInputBusyHint = 'NOVA正在生成中，请稍候…';
+const kNovaName = '小饕';
+const kNovaIdentityReply = '我是小饕';
+const kNovaIntro = '你好，我是你的小饕AI助手。可以帮你检索知识库、读文档、整理会议纪要；直接问我即可。';
+const kNovaInputPlaceholder = '问小饕...';
+const kNovaInputBusyHint = '小饕正在生成中，请稍候…';
 
 String novaModelDisplayName(String id) => id.trim().toUpperCase();
 
@@ -60,112 +61,165 @@ class NovaPageHeader extends StatelessWidget {
   const NovaPageHeader({
     super.key,
     required this.onBack,
+    required this.tabController,
     this.onNewChat,
     this.onHistory,
     this.onOpenKb,
     this.onVoiceCall,
+    this.onOpenDrawer,
     this.actionsEnabled = true,
     this.voiceCallBlocked = false,
   });
 
   final VoidCallback onBack;
+  final TabController tabController;
   final VoidCallback? onNewChat;
   final VoidCallback? onHistory;
   final VoidCallback? onOpenKb;
   final VoidCallback? onVoiceCall;
+  final VoidCallback? onOpenDrawer;
   final bool actionsEnabled;
   final bool voiceCallBlocked;
 
+  static const tabLabels = ['服务', '小饕'];
+
   @override
   Widget build(BuildContext context) {
-    final actionOpacity = actionsEnabled ? 1.0 : 0.38;
+    final actionOpacity = actionsEnabled ? 1.0 : 0.40;
     return Container(
       height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: Color(0xFFF0F1F5), width: 0.8),
+        ),
+      ),
       child: Row(
         children: [
-          SizedBox(
-            width: 36,
-            height: 36,
-            child: IconButton(
-              padding: EdgeInsets.zero,
-              onPressed: onBack,
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-              tooltip: '返回消息',
+          Opacity(
+            opacity: actionOpacity,
+            child: _HeaderCircleButton(
+              icon: Icons.notes_rounded,
+              iconSize: 20,
+              tooltip: '个人与历史记录',
+              onTap: actionsEnabled ? onOpenDrawer : null,
             ),
           ),
           Expanded(
             child: Center(
-              child: Text(
-                kNovaName,
-                style: DunesTypography.sans(
+              child: TabBar(
+                controller: tabController,
+                isScrollable: true,
+                tabAlignment: TabAlignment.center,
+                splashFactory: NoSplash.splashFactory,
+                overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+                dividerColor: Colors.transparent,
+                indicatorSize: TabBarIndicatorSize.label,
+                indicator: const _SlidingTabIndicator(),
+                labelPadding: const EdgeInsets.symmetric(horizontal: 16),
+                labelColor: const Color(0xFF6B3FE2),
+                unselectedLabelColor: const Color(0xFF5E6573),
+                labelStyle: DunesTypography.sans(
                   fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF1F1F1F),
+                  fontWeight: FontWeight.w700,
                 ),
+                unselectedLabelStyle: DunesTypography.sans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+                tabs: [
+                  for (final label in tabLabels) Tab(text: label, height: 36),
+                ],
               ),
             ),
           ),
-          if (onVoiceCall != null)
-            IconButton(
-              tooltip: voiceCallBlocked ? '会议录音进行中，暂无法使用 τ 电话' : 'τ 电话',
-              onPressed: actionsEnabled ? onVoiceCall : null,
-              icon: Opacity(
-                opacity: voiceCallBlocked ? 0.38 : 1,
-                child: const Icon(Icons.phone_in_talk_rounded, size: 22),
-              ),
-            ),
-          Opacity(
-            opacity: actionOpacity,
-            child: PopupMenuButton<_NovaHeaderAction>(
-              enabled: actionsEnabled,
-              tooltip: '更多',
-              icon: const Icon(Icons.more_horiz_rounded, size: 26),
-              onSelected: (action) {
-                switch (action) {
-                  case _NovaHeaderAction.newChat:
-                    onNewChat?.call();
-                    break;
-                  case _NovaHeaderAction.history:
-                    onHistory?.call();
-                    break;
-                  case _NovaHeaderAction.knowledgeBase:
-                    onOpenKb?.call();
-                    break;
-                }
-              },
-              itemBuilder: (context) => [
-                if (onNewChat != null)
-                  const PopupMenuItem(
-                    value: _NovaHeaderAction.newChat,
-                    child: _NovaHeaderMenuItem(
-                      icon: Icons.add_comment_outlined,
-                      label: '新对话',
-                    ),
-                  ),
-                if (onHistory != null)
-                  const PopupMenuItem(
-                    value: _NovaHeaderAction.history,
-                    child: _NovaHeaderMenuItem(
-                      icon: Icons.history_rounded,
-                      label: '对话历史',
-                    ),
-                  ),
-                if (onOpenKb != null)
-                  const PopupMenuItem(
-                    value: _NovaHeaderAction.knowledgeBase,
-                    child: _NovaHeaderMenuItem(
-                      icon: Icons.menu_book_outlined,
-                      label: '知识库',
-                    ),
-                  ),
-              ],
-            ),
+          _HeaderCircleButton(
+            icon: Icons.close_rounded,
+            iconSize: 20,
+            tooltip: '关闭',
+            onTap: onBack,
           ),
         ],
       ),
     );
+  }
+}
+
+class _SlidingTabIndicator extends Decoration {
+  const _SlidingTabIndicator();
+
+  @override
+  BoxPainter createBoxPainter([VoidCallback? onChanged]) {
+    return _SlidingTabIndicatorPainter();
+  }
+}
+
+class _SlidingTabIndicatorPainter extends BoxPainter {
+  @override
+  void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
+    final size = configuration.size;
+    if (size == null) return;
+    const barWidth = 18.0;
+    const barHeight = 3.0;
+    final x = offset.dx + (size.width - barWidth) / 2;
+    final y = offset.dy + size.height - barHeight - 2;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, y, barWidth, barHeight),
+        const Radius.circular(2),
+      ),
+      Paint()..color = const Color(0xFF6B3FE2),
+    );
+  }
+}
+
+class _HeaderCircleButton extends StatelessWidget {
+  const _HeaderCircleButton({
+    required this.icon,
+    this.iconSize = 18,
+    this.iconOffset = Offset.zero,
+    this.tooltip,
+    this.onTap,
+    this.enabled = true,
+  });
+
+  final IconData icon;
+  final double iconSize;
+  final Offset iconOffset;
+  final String? tooltip;
+  final VoidCallback? onTap;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final button = Material(
+      color: Colors.transparent,
+      child: Ink(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF5F6F9),
+          shape: BoxShape.circle,
+          border: Border.all(color: const Color(0xFFE8EAF0), width: 0.8),
+        ),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: enabled ? onTap : null,
+          child: Center(
+            child: Transform.translate(
+              offset: iconOffset,
+              child: Icon(icon, size: iconSize, color: const Color(0xFF2C323E)),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (tooltip != null && tooltip!.isNotEmpty) {
+      return Tooltip(message: tooltip!, child: button);
+    }
+    return button;
   }
 }
 
@@ -666,13 +720,33 @@ class NovaC4AiBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
+    return Container(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width * 0.88,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(4),
+          topRight: Radius.circular(18),
+          bottomLeft: Radius.circular(18),
+          bottomRight: Radius.circular(18),
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A18274B),
+            blurRadius: 12,
+            offset: Offset(0, 3),
+          ),
+        ],
+        border: Border.all(color: const Color(0xFFEDEFF5)),
+      ),
       child: DefaultTextStyle(
         style: DunesTypography.sans(
-          fontSize: 13,
-          color: DunesColors.text,
-          height: 1.5,
+          fontSize: 14.5,
+          color: const Color(0xFF1F2329),
+          height: 1.55,
         ),
         child: child,
       ),
@@ -693,7 +767,7 @@ class NovaC4SentBubble extends StatelessWidget {
   final Widget? child;
   final bool highlighted;
 
-  /// 图片/语音等媒体消息：对齐 WebView `.msg-bubble.sent` 内嵌缩略图，减小内边距。
+  /// 图片/语音等媒体消息：减小内边距。
   final bool compactMedia;
 
   @override
@@ -705,38 +779,34 @@ class NovaC4SentBubble extends StatelessWidget {
       ),
       padding: compactMedia
           ? const EdgeInsets.all(4)
-          : const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+          : const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF7E64BD), Color(0xFF553B96)],
-        ),
+        color: const Color(0xFFE8F1FF),
         borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(16),
+          topLeft: Radius.circular(18),
           topRight: Radius.circular(4),
-          bottomLeft: Radius.circular(16),
-          bottomRight: Radius.circular(16),
+          bottomLeft: Radius.circular(18),
+          bottomRight: Radius.circular(18),
         ),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x4D553B96),
-            blurRadius: 10,
+            color: Color(0x082E75FF),
+            blurRadius: 8,
             offset: Offset(0, 2),
           ),
         ],
         border: highlighted
-            ? Border.all(color: const Color(0x592F5D62), width: 2)
-            : null,
+            ? Border.all(color: const Color(0xFF2E75FF), width: 1.5)
+            : Border.all(color: const Color(0xFFD4E5FF), width: 0.8),
       ),
       child:
           child ??
           Text(
             text,
             style: DunesTypography.sans(
-              fontSize: 13,
-              color: Colors.white,
-              height: 1.5,
+              fontSize: 14.5,
+              color: const Color(0xFF1D2129),
+              height: 1.45,
             ),
           ),
     );
@@ -744,7 +814,7 @@ class NovaC4SentBubble extends StatelessWidget {
 }
 
 class NovaC4ThinkingDots extends StatefulWidget {
-  const NovaC4ThinkingDots({super.key, this.label = '正在分析…'});
+  const NovaC4ThinkingDots({super.key, this.label = '小饕正在思考'});
 
   final String label;
 
@@ -761,7 +831,7 @@ class _NovaC4ThinkingDotsState extends State<NovaC4ThinkingDots>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 1100),
     )..repeat();
   }
 
@@ -780,17 +850,20 @@ class _NovaC4ThinkingDotsState extends State<NovaC4ThinkingDots>
           return AnimatedBuilder(
             animation: _controller,
             builder: (_, __) {
-              final t = (_controller.value + i * 0.15) % 1.0;
-              final opacity = 0.35 + (t < 0.5 ? t : 1 - t) * 1.3;
-              return Container(
-                width: 5,
-                height: 5,
-                margin: EdgeInsets.only(right: i < 2 ? 4 : 6),
-                decoration: BoxDecoration(
-                  color: DunesColors.accent.withValues(
-                    alpha: opacity.clamp(0.35, 1.0),
+              final t = (_controller.value + i * 0.18) % 1.0;
+              final bounce = (t < 0.5 ? t : 1 - t) * 2;
+              final dy = -3.5 * Curves.easeOut.transform(bounce);
+              final opacity = 0.35 + bounce * 0.65;
+              return Transform.translate(
+                offset: Offset(0, dy),
+                child: Container(
+                  width: 6,
+                  height: 6,
+                  margin: EdgeInsets.only(right: i < 2 ? 5 : 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6B3FE2).withValues(alpha: opacity),
+                    shape: BoxShape.circle,
                   ),
-                  shape: BoxShape.circle,
                 ),
               );
             },
@@ -799,10 +872,11 @@ class _NovaC4ThinkingDotsState extends State<NovaC4ThinkingDots>
         if (widget.label.trim().isNotEmpty)
           Text(
             widget.label,
-            style: DunesTypography.mono(
-              fontSize: 10,
-              color: DunesColors.text3,
-            ).copyWith(fontStyle: FontStyle.italic),
+            style: DunesTypography.sans(
+              fontSize: 12.5,
+              color: const Color(0xFF86909C),
+              fontWeight: FontWeight.w500,
+            ),
           ),
       ],
     );
@@ -817,7 +891,13 @@ class NovaC4MessageStream extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
-      decoration: BoxDecoration(color: Colors.white),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFF7F8FC), Color(0xFFF3F5FA)],
+        ),
+      ),
       child: child,
     );
   }
@@ -887,28 +967,23 @@ class NovaMsgDateDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 14, 0, 8),
-      child: Row(
-        children: [
-          const Expanded(
-            child: Divider(color: DunesColors.borderSoft, height: 1),
+      padding: const EdgeInsets.fromLTRB(0, 16, 0, 10),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEDEFF5),
+            borderRadius: BorderRadius.circular(20),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 11),
-            child: Text(
-              label.toUpperCase(),
-              style: DunesTypography.mono(
-                fontSize: 9.5,
-                color: DunesColors.text3,
-                letterSpacing: 0.06 * 9.5,
-                fontWeight: FontWeight.w500,
-              ),
+          child: Text(
+            label,
+            style: DunesTypography.sans(
+              fontSize: 11,
+              color: const Color(0xFF86909C),
+              fontWeight: FontWeight.w500,
             ),
           ),
-          const Expanded(
-            child: Divider(color: DunesColors.borderSoft, height: 1),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1037,51 +1112,79 @@ class NovaHistoryCard extends StatelessWidget {
     required this.preview,
     required this.timeLabel,
     required this.onTap,
+    this.onDelete,
   });
 
   final String title;
   final String preview;
   final String timeLabel;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 7),
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
       child: Material(
-        color: DunesColors.bgApp,
+        color: Colors.white,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(11),
-          side: const BorderSide(color: DunesColors.borderSoft),
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: Color(0xFFEDEFF5)),
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(11, 10, 11, 10),
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.all(13),
+            decoration: const BoxDecoration(
+              boxShadow: [
+                BoxShadow(
+                  color: Color(0x0818274B),
+                  blurRadius: 10,
+                  offset: Offset(0, 3),
+                ),
+              ],
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const NovaIconImage(size: 32, borderRadius: 9),
-                const SizedBox(width: 9),
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 1.2),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x146B3FE2),
+                        blurRadius: 6,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: ClipOval(
+                    child: NovaPersonAvatarImage(width: 36, height: 36),
+                  ),
+                ),
+                const SizedBox(width: 11),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Expanded(
                             child: Text(
                               title.isEmpty ? '新对话' : title,
                               style: DunesTypography.sans(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w500,
-                                color: DunesColors.text,
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF1D2129),
                                 height: 1.35,
                               ),
-                              maxLines: 2,
+                              maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -1089,24 +1192,42 @@ class NovaHistoryCard extends StatelessWidget {
                             const SizedBox(width: 8),
                             Text(
                               timeLabel,
-                              style: DunesTypography.mono(
-                                fontSize: 9,
-                                color: DunesColors.text3,
+                              style: DunesTypography.sans(
+                                fontSize: 11,
+                                color: const Color(0xFF86909C),
                               ),
+                            ),
+                          ],
+                          if (onDelete != null) ...[
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline_rounded,
+                                size: 16,
+                                color: Color(0xFFC2C7D0),
+                              ),
+                              tooltip: '删除对话',
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 26,
+                                minHeight: 26,
+                              ),
+                              onPressed: onDelete,
                             ),
                           ],
                         ],
                       ),
                       if (preview.isNotEmpty) ...[
-                        const SizedBox(height: 3),
+                        const SizedBox(height: 5),
                         Text(
                           preview,
-                          style: DunesTypography.mono(
-                            fontSize: 10,
-                            color: DunesColors.text3,
+                          style: DunesTypography.sans(
+                            fontSize: 12.5,
+                            color: const Color(0xFF4E5969),
                             height: 1.45,
                           ),
-                          maxLines: 3,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
@@ -1241,7 +1362,7 @@ class NovaC4MessageRow extends StatelessWidget {
         fileName: name,
         previewBytes: a.previewBytes,
         onDarkBubble: onDarkBubble,
-        onTap: novaIsMarkdownFile(name, mimeType: a.mimeType)
+        onTap: novaIsPreviewableDocument(name, mimeType: a.mimeType)
             ? () => openNovaMarkdownPreview(
                 context,
                 resolver: resolver,
@@ -1276,7 +1397,7 @@ class NovaC4MessageRow extends StatelessWidget {
                 text,
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: Colors.white,
+                  color: const Color(0xFF1D2129),
                   height: 1.5,
                 ),
               ),
@@ -1333,8 +1454,8 @@ class NovaC4MessageRow extends StatelessWidget {
       children: [
         if (thinking)
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 4),
-            child: NovaC4ThinkingDots(label: ''),
+            padding: EdgeInsets.symmetric(vertical: 2),
+            child: NovaC4ThinkingDots(),
           )
         else ...[
           NovaMarkdownBody(
@@ -1398,7 +1519,7 @@ class NovaC4MessageRow extends StatelessWidget {
         fileName: name,
         previewBytes: a.previewBytes,
         onDarkBubble: onDarkBubble,
-        onTap: novaIsMarkdownFile(name, mimeType: a.mimeType)
+        onTap: novaIsPreviewableDocument(name, mimeType: a.mimeType)
             ? () => openNovaMarkdownPreview(
                 context,
                 resolver: resolver,
@@ -1425,6 +1546,7 @@ class NovaC4MessageRow extends StatelessWidget {
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: copyText));
               selectableRegionState.hideToolbar();
+              HapticFeedback.selectionClick();
               if (menuContext.mounted) {
                 showDunesToast(
                   menuContext,
@@ -1453,72 +1575,157 @@ class NovaC4MessageRow extends StatelessWidget {
   String get _aiCopyText =>
       !thinking && kind.toUpperCase() == 'TEXT' ? text : '';
 
+  Widget _buildUserAvatar() {
+    final initial = userInitial.isNotEmpty
+        ? userInitial
+        : (userName.isNotEmpty ? userName[0] : '我');
+    return Container(
+      width: 38,
+      height: 38,
+      margin: const EdgeInsets.only(left: 8),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFFF0F4FC),
+        border: Border.all(color: Colors.white, width: 1.5),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ImUserAvatar(
+        initial: initial,
+        seed: userSeed,
+        size: 38,
+        avatarPreset: userAvatarPreset.trim().isEmpty ? null : userAvatarPreset,
+        avatarObjectKey:
+            userAvatarObjectKey.trim().isEmpty ? null : userAvatarObjectKey,
+        avatarUrl: userAvatarUrl.trim().isEmpty ? null : userAvatarUrl,
+        avatarService: avatarService,
+        fallbackBackground: const Color(0xFFF0F4FC),
+        fallbackForeground: const Color(0xFF2E75FF),
+      ),
+    );
+  }
+
+  Widget _buildAiAvatar() {
+    return Container(
+      width: 38,
+      height: 38,
+      margin: const EdgeInsets.only(right: 8),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 1.5),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x186B3FE2),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipOval(
+        child: NovaPersonAvatarImage(width: 38, height: 38),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (mine) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Flexible(
-                  child: _wrapCopyable(
-                    context,
-                    _buildUserBubbleContent(context),
-                    _userCopyText,
-                  ),
+    final body = mine ? _buildMineColumn(context) : _buildAiRow(context);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, (1 - value) * 10),
+            child: child,
+          ),
+        );
+      },
+      child: _NovaTappableTime(
+        time: time,
+        alignEnd: mine,
+        child: body,
+      ),
+    );
+  }
+
+  Widget _buildMineColumn(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Flexible(
+                child: _wrapCopyable(
+                  context,
+                  _buildUserBubbleContent(context),
+                  _userCopyText,
                 ),
-              ],
-            ),
-            if (onResend != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4, right: 2),
-                child: TextButton(
-                  onPressed: onResend,
-                  style: TextButton.styleFrom(
-                    foregroundColor: DunesColors.text3,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 0,
-                    ),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: VisualDensity.compact,
+              ),
+              _buildUserAvatar(),
+            ],
+          ),
+          if (onResend != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, right: 46),
+              child: TextButton(
+                onPressed: onResend,
+                style: TextButton.styleFrom(
+                  foregroundColor: DunesColors.text3,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 0,
                   ),
-                  child: Text(
-                    '重新发送',
-                    style: DunesTypography.sans(
-                      fontSize: 12,
-                      color: DunesColors.text3,
-                    ),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: Text(
+                  '重新发送',
+                  style: DunesTypography.sans(
+                    fontSize: 12,
+                    color: DunesColors.text3,
                   ),
                 ),
               ),
-          ],
-        ),
-      );
-    }
+            ),
+        ],
+      ),
+    );
+  }
 
+  Widget _buildAiRow(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
+      padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildAiAvatar(),
           Flexible(
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               decoration: highlighted
                   ? BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(18),
                       border: Border.all(
-                        color: const Color(0x592F5D62),
-                        width: 2,
+                        color: const Color(0xFF6B3FE2),
+                        width: 1.8,
                       ),
                       boxShadow: const [
                         BoxShadow(
-                          color: Color(0x1F2F5D62),
+                          color: Color(0x1F6B3FE2),
                           blurRadius: 0,
                           spreadRadius: 3,
                         ),
@@ -1531,6 +1738,65 @@ class NovaC4MessageRow extends StatelessWidget {
                 _aiCopyText,
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NovaTappableTime extends StatefulWidget {
+  const _NovaTappableTime({
+    required this.time,
+    required this.alignEnd,
+    required this.child,
+  });
+
+  final String time;
+  final bool alignEnd;
+  final Widget child;
+
+  @override
+  State<_NovaTappableTime> createState() => _NovaTappableTimeState();
+}
+
+class _NovaTappableTimeState extends State<_NovaTappableTime> {
+  bool _showTime = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.time.isEmpty
+          ? null
+          : () {
+              HapticFeedback.selectionClick();
+              setState(() => _showTime = !_showTime);
+            },
+      behavior: HitTestBehavior.deferToChild,
+      child: Column(
+        crossAxisAlignment:
+            widget.alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          widget.child,
+          AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            child: _showTime && widget.time.isNotEmpty
+                ? Padding(
+                    padding: EdgeInsets.only(
+                      top: 4,
+                      left: widget.alignEnd ? 0 : 46,
+                      right: widget.alignEnd ? 46 : 0,
+                    ),
+                    child: Text(
+                      widget.time,
+                      style: DunesTypography.sans(
+                        fontSize: 11,
+                        color: const Color(0xFF86909C),
+                      ),
+                    ),
+                  )
+                : const SizedBox.shrink(),
           ),
         ],
       ),
@@ -1568,7 +1834,7 @@ class NovaC4QuickActions extends StatelessWidget {
         onTap: enabled ? onAlbum : null,
       ),
       _NovaQaCell(
-        icon: Icons.description_outlined,
+        icon: Icons.groups_2_rounded,
         label: '会议纪要',
         onTap: enabled ? onOpenMeeting : null,
       ),
@@ -1643,6 +1909,11 @@ class NovaC4InputBar extends StatelessWidget {
     this.onAlbum,
     this.onOpenMeeting,
     this.onMeetingPrd,
+    this.onOpenKb,
+    this.onVoiceCall,
+    this.onNewChat,
+    this.onHistory,
+    this.voiceCallBlocked = false,
     this.recording = false,
     this.recordWillCancel = false,
     this.recordDurationMs = 0,
@@ -1671,6 +1942,11 @@ class NovaC4InputBar extends StatelessWidget {
   final VoidCallback? onAlbum;
   final VoidCallback? onOpenMeeting;
   final VoidCallback? onMeetingPrd;
+  final VoidCallback? onOpenKb;
+  final VoidCallback? onVoiceCall;
+  final VoidCallback? onNewChat;
+  final VoidCallback? onHistory;
+  final bool voiceCallBlocked;
   final bool recording;
   final bool recordWillCancel;
   final int recordDurationMs;
@@ -1686,132 +1962,156 @@ class NovaC4InputBar extends StatelessWidget {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
 
     return Container(
-      color: Colors.white,
+      color: Colors.transparent,
       padding: EdgeInsets.fromLTRB(
-        16,
-        6,
-        16,
-        bottomInset > 0 ? bottomInset + 8 : 12,
+        14,
+        4,
+        14,
+        bottomInset > 0 ? bottomInset + 6 : 10,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // 悬浮大药丸输入条（高度自适应，圆角 30）
           Container(
-            padding: const EdgeInsets.fromLTRB(12, 9, 12, 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(30),
               boxShadow: const [
                 BoxShadow(
-                  color: Color(0x16000000),
-                  blurRadius: 18,
+                  color: Color(0x121A2038),
+                  blurRadius: 16,
                   offset: Offset(0, 4),
+                  spreadRadius: 1,
                 ),
               ],
-              border: Border.all(color: const Color(0xFFF0F0F0)),
+              border: Border.all(color: const Color(0xFFEDEFF5)),
             ),
             child: voiceMode
-                ? Column(
-                    mainAxisSize: MainAxisSize.min,
+                ? Row(
                     children: [
-                      _NovaVoiceHoldField(
-                        locked: locked,
-                        recording: recording,
-                        recordWillCancel: recordWillCancel,
-                        recordDurationMs: recordDurationMs,
-                        onLongPressStart: onVoiceHoldStart,
-                        onLongPressMoveUpdate: onVoiceHoldMove,
-                        onLongPressEnd: onVoiceHoldEnd,
-                        onLongPressCancel: onVoiceHoldCancel,
-                      ),
-                      const SizedBox(height: 7),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: _NovaInputIcon(
-                          icon: Icons.keyboard_outlined,
-                          onTap: onToggleVoice,
+                      if (_hasQuickActions)
+                        _NovaInputIcon(
+                          icon: quickActionsOpen
+                              ? Icons.close_rounded
+                              : Icons.add_rounded,
+                          onTap: locked ? null : onToggleQuickActions,
                         ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: _NovaVoiceHoldField(
+                          locked: locked,
+                          recording: recording,
+                          recordWillCancel: recordWillCancel,
+                          recordDurationMs: recordDurationMs,
+                          onLongPressStart: onVoiceHoldStart,
+                          onLongPressMoveUpdate: onVoiceHoldMove,
+                          onLongPressEnd: onVoiceHoldEnd,
+                          onLongPressCancel: onVoiceHoldCancel,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      _NovaInputIcon(
+                        icon: Icons.keyboard_outlined,
+                        onTap: onToggleVoice,
                       ),
                     ],
                   )
-                : Column(
-                    mainAxisSize: MainAxisSize.min,
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      TextField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        enabled: enabled && !showStop,
-                        minLines: 1,
-                        maxLines: 4,
-                        onTap: onInputFocused,
-                        onSubmitted: locked ? null : (_) => onSend(),
-                        style: DunesTypography.sans(
-                          fontSize: 14,
-                          color: const Color(0xFF262626),
+                      // 左侧：加号快捷操作按钮
+                      if (_hasQuickActions)
+                        _NovaInputIcon(
+                          icon: quickActionsOpen
+                              ? Icons.close_rounded
+                              : Icons.add_rounded,
+                          onTap: locked ? null : onToggleQuickActions,
                         ),
-                        decoration: InputDecoration(
-                          isDense: true,
-                          border: InputBorder.none,
-                          hintText: hintText,
-                          hintStyle: DunesTypography.sans(
-                            fontSize: 14,
-                            color: const Color(0xFFB6B6B6),
+                      const SizedBox(width: 6),
+
+                      // 中间：输入框
+                      Expanded(
+                        child: TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          enabled: enabled && !showStop,
+                          minLines: 1,
+                          maxLines: 4,
+                          onTap: onInputFocused,
+                          onSubmitted: locked ? null : (_) => onSend(),
+                          style: DunesTypography.sans(
+                            fontSize: 14.5,
+                            color: const Color(0xFF1D2129),
                           ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 1,
-                            vertical: 5,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            border: InputBorder.none,
+                            hintText: hintText,
+                            hintStyle: DunesTypography.sans(
+                              fontSize: 14,
+                              color: const Color(0xFF86909C),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 7,
+                            ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 7),
-                      Row(
-                        children: [
-                          _NovaModelChip(
-                            label: modelLabel,
-                            onTap: locked ? null : onPickModel,
-                          ),
-                          const Spacer(),
-                          if (_hasQuickActions)
-                            _NovaInputIcon(
-                              icon: quickActionsOpen
-                                  ? Icons.close_rounded
-                                  : Icons.add_rounded,
-                              onTap: locked ? null : onToggleQuickActions,
-                            ),
-                          const SizedBox(width: 8),
-                          ValueListenableBuilder<TextEditingValue>(
-                            valueListenable: controller,
-                            builder: (context, value, _) {
-                              final hasText = value.text.trim().isNotEmpty;
-                              return _NovaInputIcon(
-                                icon: showStop
-                                    ? Icons.stop_rounded
-                                    : hasText
-                                    ? Icons.arrow_upward_rounded
-                                    : Icons.multitrack_audio_rounded,
-                                onTap: showStop
-                                    ? onStop
-                                    : (locked
-                                          ? null
-                                          : (hasText ? onSend : onToggleVoice)),
-                                filled: showStop || hasText,
-                                accentBlue: hasText && !showStop,
-                              );
-                            },
-                          ),
-                        ],
+                      const SizedBox(width: 6),
+
+                      // 右侧：发送/语音/停止按钮（高质感圆形药丸图标）
+                      ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: controller,
+                        builder: (context, value, _) {
+                          final hasText = value.text.trim().isNotEmpty;
+                          return _NovaInputIcon(
+                            icon: showStop
+                                ? Icons.stop_rounded
+                                : hasText
+                                ? Icons.arrow_upward_rounded
+                                : Icons.graphic_eq_rounded,
+                            onTap: showStop
+                                ? onStop
+                                : (locked
+                                      ? null
+                                      : (hasText ? onSend : onToggleVoice)),
+                            filled: showStop || hasText,
+                            accentBlue: hasText && !showStop,
+                          );
+                        },
                       ),
                     ],
                   ),
           ),
-          if (quickActionsOpen && !voiceMode)
-            _NovaExpandedActions(
-              onAttach: onAttach,
-              onCamera: onCamera,
-              onAlbum: onAlbum,
-              onOpenMeeting: onOpenMeeting,
-              onMeetingPrd: onMeetingPrd,
-            ),
+          const SizedBox(height: 10),
+          _NovaShortcutStrip(
+            locked: locked,
+            expanded: quickActionsOpen,
+            onToggleMore: onToggleQuickActions,
+            onOpenKb: onOpenKb,
+            onOpenMeeting: onOpenMeeting,
+            onVoiceCall: voiceCallBlocked ? null : onVoiceCall,
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: quickActionsOpen && !voiceMode
+                ? _NovaMoreGrid(
+                    onAttach: onAttach,
+                    onCamera: onCamera,
+                    onAlbum: onAlbum,
+                    onMeetingPrd: onMeetingPrd,
+                    onNewChat: onNewChat,
+                    onHistory: onHistory,
+                    onPickModel: onPickModel,
+                    modelLabel: modelLabel,
+                  )
+                : const SizedBox.shrink(),
+          ),
         ],
       ),
     );
@@ -1822,82 +2122,270 @@ class NovaC4InputBar extends StatelessWidget {
       onCamera != null ||
       onAlbum != null ||
       onOpenMeeting != null ||
-      onMeetingPrd != null;
+      onMeetingPrd != null ||
+      onOpenKb != null ||
+      onVoiceCall != null ||
+      onNewChat != null ||
+      onHistory != null;
 }
 
-class _NovaExpandedActions extends StatelessWidget {
-  const _NovaExpandedActions({
+class _NovaShortcutItem {
+  const _NovaShortcutItem({
+    required this.icon,
+    required this.label,
+    this.onTap,
+    this.active = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final bool active;
+}
+
+class _NovaShortcutStrip extends StatelessWidget {
+  const _NovaShortcutStrip({
+    required this.locked,
+    required this.expanded,
+    required this.onToggleMore,
+    this.onOpenKb,
+    this.onOpenMeeting,
+    this.onVoiceCall,
+  });
+
+  final bool locked;
+  final bool expanded;
+  final VoidCallback onToggleMore;
+  final VoidCallback? onOpenKb;
+  final VoidCallback? onOpenMeeting;
+  final VoidCallback? onVoiceCall;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = <_NovaShortcutItem>[
+      if (onOpenKb != null)
+        _NovaShortcutItem(
+          icon: Icons.menu_book_outlined,
+          label: '知识库',
+          onTap: locked ? null : onOpenKb,
+        ),
+      if (onOpenMeeting != null)
+        _NovaShortcutItem(
+          icon: Icons.groups_2_rounded,
+          label: '会议',
+          onTap: locked ? null : onOpenMeeting,
+        ),
+      if (onVoiceCall != null)
+        _NovaShortcutItem(
+          icon: Icons.phone_in_talk_rounded,
+          label: '电话',
+          onTap: locked ? null : onVoiceCall,
+        ),
+      _NovaShortcutItem(
+        icon: expanded ? Icons.expand_less_rounded : Icons.apps_rounded,
+        label: expanded ? '收起' : '更多',
+        onTap: locked ? null : onToggleMore,
+        active: expanded,
+      ),
+    ];
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            for (final item in items)
+              Expanded(
+                child: _NovaCircleAction(
+                  icon: item.icon,
+                  label: item.label,
+                  onTap: item.onTap,
+                  active: item.active,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Center(
+          child: Container(
+            width: 36,
+            height: 3,
+            decoration: BoxDecoration(
+              color: const Color(0xFFD8DCE6),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NovaCircleAction extends StatelessWidget {
+  const _NovaCircleAction({
+    required this.icon,
+    required this.label,
+    this.onTap,
+    this.active = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onTap!();
+              },
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: active ? const Color(0xFFF1EBFA) : Colors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: active
+                        ? const Color(0xFFD9C9F4)
+                        : const Color(0xFFEEF0F5),
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x0A000000),
+                      blurRadius: 10,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  icon,
+                  size: 22,
+                  color: active
+                      ? const Color(0xFF6B3FE2)
+                      : const Color(0xFF2C323F),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: active
+                      ? const Color(0xFF6B3FE2)
+                      : const Color(0xFF4E5969),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NovaMoreGrid extends StatelessWidget {
+  const _NovaMoreGrid({
     this.onAttach,
     this.onCamera,
     this.onAlbum,
-    this.onOpenMeeting,
     this.onMeetingPrd,
+    this.onNewChat,
+    this.onHistory,
+    this.onPickModel,
+    this.modelLabel = '',
   });
 
   final VoidCallback? onAttach;
   final VoidCallback? onCamera;
   final VoidCallback? onAlbum;
-  final VoidCallback? onOpenMeeting;
   final VoidCallback? onMeetingPrd;
+  final VoidCallback? onNewChat;
+  final VoidCallback? onHistory;
+  final VoidCallback? onPickModel;
+  final String modelLabel;
 
   @override
   Widget build(BuildContext context) {
-    final actions = <({IconData icon, String label, VoidCallback? onTap})>[
-      (icon: Icons.photo_camera_outlined, label: '拍照', onTap: onCamera),
-      (icon: Icons.photo_library_outlined, label: '图片', onTap: onAlbum),
-      (icon: Icons.description_outlined, label: '会议纪要', onTap: onOpenMeeting),
-      (icon: Icons.article_outlined, label: 'PRD', onTap: onMeetingPrd),
-      (icon: Icons.attach_file_rounded, label: '文件', onTap: onAttach),
-    ].where((action) => action.onTap != null).toList(growable: false);
+    final actions = <_NovaShortcutItem>[
+      if (onCamera != null)
+        _NovaShortcutItem(
+          icon: Icons.photo_camera_outlined,
+          label: '拍照',
+          onTap: onCamera,
+        ),
+      if (onAlbum != null)
+        _NovaShortcutItem(
+          icon: Icons.photo_library_outlined,
+          label: '图片',
+          onTap: onAlbum,
+        ),
+      if (onAttach != null)
+        _NovaShortcutItem(
+          icon: Icons.attach_file_rounded,
+          label: '文件',
+          onTap: onAttach,
+        ),
+      if (onMeetingPrd != null)
+        _NovaShortcutItem(
+          icon: Icons.article_outlined,
+          label: 'PRD',
+          onTap: onMeetingPrd,
+        ),
+      if (onNewChat != null)
+        _NovaShortcutItem(
+          icon: Icons.add_comment_outlined,
+          label: '新对话',
+          onTap: onNewChat,
+        ),
+      if (onHistory != null)
+        _NovaShortcutItem(
+          icon: Icons.history_rounded,
+          label: '历史',
+          onTap: onHistory,
+        ),
+      if (onPickModel != null)
+        _NovaShortcutItem(
+          icon: Icons.auto_awesome_rounded,
+          label: modelLabel.trim().isEmpty ? '模型' : modelLabel,
+          onTap: onPickModel,
+        ),
+    ];
 
-    // APP 端一行三个小名片；多出的自动换行。
-    const columns = 3;
-    const gap = 6.0;
-    const tileHeight = 58.0;
-    final rows = (actions.length / columns).ceil().clamp(1, 8);
-    final gridHeight = rows * tileHeight + (rows - 1) * gap;
+    if (actions.isEmpty) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.only(top: 10),
-      child: SizedBox(
-        height: gridHeight,
-        child: GridView.builder(
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: actions.length,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            mainAxisSpacing: gap,
-            crossAxisSpacing: gap,
-            mainAxisExtent: tileHeight,
-          ),
-          itemBuilder: (context, index) {
-            final action = actions[index];
-            return Material(
-              color: const Color(0xFFF7F7F7),
-              borderRadius: BorderRadius.circular(10),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(10),
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
+      child: Wrap(
+        alignment: WrapAlignment.start,
+        children: [
+          for (final action in actions)
+            SizedBox(
+              width: MediaQuery.sizeOf(context).width < 420
+                  ? (MediaQuery.sizeOf(context).width - 28) / 4
+                  : 88,
+              child: _NovaCircleAction(
+                icon: action.icon,
+                label: action.label,
                 onTap: action.onTap,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(action.icon, size: 18, color: const Color(0xFF3B3B3B)),
-                    const SizedBox(height: 4),
-                    Text(
-                      action.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: DunesTypography.sans(
-                        fontSize: 10,
-                        color: const Color(0xFF444444),
-                      ),
-                    ),
-                  ],
-                ),
               ),
-            );
-          },
-        ),
+            ),
+        ],
       ),
     );
   }
@@ -1974,27 +2462,29 @@ class _NovaInputIcon extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: Ink(
-          width: 28,
-          height: 28,
+          width: filled ? 32 : 30,
+          height: filled ? 32 : 30,
           decoration: BoxDecoration(
             color: filled
                 ? (accentBlue
-                      ? const Color(0xFF7E64BD)
-                      : const Color(0xFFB65252))
-                : Colors.white,
+                      ? const Color(0xFF6B3FE2)
+                      : const Color(0xFF4E5969))
+                : const Color(0xFFF5F6F9),
             shape: BoxShape.circle,
-            border: Border.all(
-              color: filled
-                  ? (accentBlue
-                        ? const Color(0xFF7E64BD)
-                        : const Color(0xFFB65252))
-                  : const Color(0xFF323232),
-            ),
+            boxShadow: filled
+                ? const [
+                    BoxShadow(
+                      color: Color(0x226B3FE2),
+                      blurRadius: 8,
+                      offset: Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
           child: Icon(
             icon,
-            size: 18,
-            color: filled ? Colors.white : const Color(0xFF303030),
+            size: filled ? 18 : 17,
+            color: filled ? Colors.white : const Color(0xFF4E5969),
           ),
         ),
       ),
@@ -2035,21 +2525,39 @@ class _NovaVoiceHoldField extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: recording
-              ? (recordWillCancel ? DunesColors.coral : const Color(0xFF8B72B7))
-              : const Color(0xFFF7F7F7),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Text(
-          recording
-              ? (recordWillCancel
-                    ? '松开取消'
-                    : '松开发送 ${(recordDurationMs / 1000).toStringAsFixed(1)}s')
-              : '按住 说话',
-          style: DunesTypography.sans(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: recording ? Colors.white : const Color(0xFF444444),
+              ? (recordWillCancel ? DunesColors.coral : const Color(0xFF2E75FF))
+              : const Color(0xFFF3F7FF),
+          borderRadius: BorderRadius.circular(23),
+          border: Border.all(
+            color: recording ? Colors.transparent : const Color(0xFFD6E4FF),
+            width: 1,
           ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!recording) ...[
+              const Icon(
+                Icons.mic_none_rounded,
+                size: 20,
+                color: Color(0xFF2E75FF),
+              ),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              recording
+                  ? (recordWillCancel
+                        ? '松开取消'
+                        : '松开发送 ${(recordDurationMs / 1000).toStringAsFixed(1)}s')
+                  : '按住说话',
+              style: DunesTypography.sans(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: recording ? Colors.white : const Color(0xFF2E75FF),
+              ),
+            ),
+          ],
         ),
       ),
     );

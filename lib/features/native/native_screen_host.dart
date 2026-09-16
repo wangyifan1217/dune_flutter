@@ -119,6 +119,7 @@ import '../shell/dunes_toast.dart';
 import '../update/app_update_dialog.dart';
 import '../update/app_update_notifier.dart';
 import '../update/app_update_service.dart';
+import '../update/app_release_history_page.dart';
 import '../workbench/native_avatar_sheet.dart';
 import '../workbench/native_my_workbench_pages.dart';
 import '../workbench/workbench_badge_notifier.dart';
@@ -4462,6 +4463,15 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenMeeting: () {
             widget.navigation.go('MM-L');
           },
+          onOpenDigitalEmployee: (item) {
+            setState(() => _selectedDigitalEmployee = item);
+            switch (item.screenId) {
+              case 'QJMA':
+              case 'QJTO':
+              case 'QJAM':
+                widget.navigation.go(item.screenId);
+            }
+          },
           focusConversationId: _novaFocusConversationId,
           focusMessageId: _novaFocusMessageId,
           onClearHistoryFocus: () {
@@ -4478,10 +4488,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenConversation: (convId, messageId, title, preview) {
             setState(() {
               _novaFocusConversationId = convId;
-              // 历史会话恢复完整内容后默认滚动到底部，不定位到单条中间消息。
               _novaFocusMessageId = null;
             });
-            widget.navigation.go('C4');
+            final nav = widget.navigation;
+            if (nav.history.contains('C4')) {
+              nav.popTo('C4');
+            } else {
+              nav.go('C4');
+            }
           },
         );
       case 'K1':
@@ -4722,6 +4736,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onCheckForUpdates: isWindowsDesktopCommOnly
               ? () => unawaited(_checkDesktopAppUpdate())
               : null,
+          onOpenReleaseHistory: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AppReleaseHistoryPage(),
+              ),
+            );
+          },
           onScanWorkstation: !isWindowsDesktopCommOnly
               ? () {
                   _leaveDesktopSettingsForChild();
@@ -5096,14 +5117,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       );
     }
 
-    // APP：始终保持 Column > Expanded(content) 结构，避免进出子页时
-    // 卸掉 AnimatedSwitcher 导致滑动动画丢失（此前直接 return content 会瞬切）。
+    // APP：根页用悬浮底栏覆盖内容，列表能透过导航胶囊呈现毛玻璃效果。
     return ColoredBox(
       color: DunesColors.bgApp,
-      child: Column(
+      child: Stack(
         children: [
-          Expanded(child: content),
-          if (_showsAppBottomTabBar(screen)) tabBar,
+          Positioned.fill(child: content),
+          if (_showsAppBottomTabBar(screen))
+            Align(alignment: Alignment.bottomCenter, child: tabBar),
         ],
       ),
     );
@@ -6144,6 +6165,14 @@ class _NativeB2PageState extends State<_NativeB2Page> {
     showDunesSoonToast(context, label);
   }
 
+  void _openReleaseHistory() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const AppReleaseHistoryPage(),
+      ),
+    );
+  }
+
   Future<void> _openQrLoginScanner() async {
     if (_qrLoginOpening) return;
     setState(() => _qrLoginOpening = true);
@@ -6379,7 +6408,12 @@ class _NativeB2PageState extends State<_NativeB2Page> {
               child: RefreshIndicator(
                 onRefresh: _loadStats,
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+                  padding: EdgeInsets.fromLTRB(
+                    12,
+                    10,
+                    12,
+                    dunesAppBottomNavContentPadding(context, fallback: 14),
+                  ),
                   children: [
                     _buildProfileCard(stats, profile),
                     if (isExternal) ...[
@@ -6392,6 +6426,15 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                           color: DunesColors.text3,
                         ),
                       ),
+                      const SizedBox(height: 14),
+                      _buildMenuList(<Widget>[
+                        _buildMenuItem(
+                          icon: Icons.history_rounded,
+                          title: '发版历史',
+                          desc: '${AppUpdateService.platformDisplayName()} 版本记录',
+                          onTap: _openReleaseHistory,
+                        ),
+                      ]),
                     ] else ...[
                       const SizedBox(height: 10),
                       if (_showQuickStats) ...[
@@ -6501,6 +6544,17 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                           onTap: () => widget.navigation.go('P1'),
                         ),
                       ]),
+                      const SizedBox(height: 10),
+                      _buildSectionLabel('应用'),
+                      const SizedBox(height: 8),
+                      _buildMenuList(<Widget>[
+                        _buildMenuItem(
+                          icon: Icons.history_rounded,
+                          title: '发版历史',
+                          desc: '${AppUpdateService.platformDisplayName()} 版本记录',
+                          onTap: _openReleaseHistory,
+                        ),
+                      ]),
                       if (_showDeferredTools) ...[
                         const SizedBox(height: 10),
                         _buildMenuList(<Widget>[
@@ -6553,10 +6607,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
         if (_live.active.value && !isWindowsDesktopCommOnly)
           Positioned(
             right: 16,
-            bottom:
-                kDunesMainTabBarHeight +
-                MediaQuery.viewPaddingOf(context).bottom +
-                12,
+            bottom: dunesAppBottomNavOverlayExtent(context) + 12,
             child: _buildLiveTranscribeFab(),
           ),
         if (_profileTourOpen)

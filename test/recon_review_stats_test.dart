@@ -284,12 +284,9 @@ void main() {
     expect(sectors.firstWhere((e) => e.sector == 'ENERGY').people, isEmpty);
   });
 
-  test('visible audit steps hide later layers', () {
-    expect(reconVisibleAuditSteps('L1'), [reconChainL1]);
-    expect(reconVisibleAuditSteps('TAG3_FINANCE'), [
-      reconChainL1,
-      reconChainFinance,
-    ]);
+  test('visible audit steps show every layer', () {
+    expect(reconVisibleAuditSteps('L1'), reconAuditChainSteps);
+    expect(reconVisibleAuditSteps('TAG3_FINANCE'), reconAuditChainSteps);
     expect(reconVisibleAuditSteps('L2'), reconAuditChainSteps);
     expect(reconVisibleAuditSteps('FINAL'), reconAuditChainSteps);
     expect(
@@ -304,7 +301,7 @@ void main() {
         ],
         reconVisibleAuditSteps('L1'),
       ).map((e) => e.userName),
-      ['一层'],
+      ['一层', '财务'],
     );
   });
 

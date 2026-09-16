@@ -184,27 +184,79 @@ bool inferNovaAwaitingReply(List<NativeNovaMessage> messages) {
   return false;
 }
 
-/// 会话消息按时间排序；同一时刻 user 在 assistant 之前。
+int? novaMessageSortMillis(NativeNovaMessage m) {
+  return m.createdAt?.millisecondsSinceEpoch ??
+      (m.id >= 1000000000000 ? m.id : null);
+}
+
+/// 下一条用户提问是否已经发生在这条回复之前（含少量时钟容差）。
+bool novaUserStartedByAssistantTime(
+  NativeNovaMessage user,
+  NativeNovaMessage assistant,
+) {
+  final ut = novaMessageSortMillis(user);
+  final at = novaMessageSortMillis(assistant);
+  if (ut != null && at != null) {
+    return ut <= at + 8000;
+  }
+  return user.id <= assistant.id;
+}
+
+/// 账号/网络失败文案，不应作为一轮 AI 回答出现在时间线上。
+bool isNovaTransientErrorReply(String text) {
+  final t = text.trim();
+  if (t.isEmpty || t.length > 80) return false;
+  const needles = <String>[
+    '暂时无法连接',
+    '无法连接 AI',
+    '账号服务',
+    '请稍后重试',
+    'NOVA 请求失败',
+    'NOVA请求失败',
+    'NOVA服务暂不可用',
+    '无法创建NOVA会话',
+    '无法创建 NOVA 会话',
+  ];
+  return needles.any(t.contains);
+}
+
+/// 比较两条消息的时间先后；同一时刻 user 必须在 assistant 之前。
+/// 能够正确处理客户端 13 位毫秒临时 ID 与服务端较小自增 ID 混合的情况。
+int compareNovaMessageTimes(NativeNovaMessage a, NativeNovaMessage b) {
+  if (a.isWelcome && !b.isWelcome) return -1;
+  if (b.isWelcome && !a.isWelcome) return 1;
+
+  final at = novaMessageSortMillis(a);
+  final bt = novaMessageSortMillis(b);
+
+  if (at != null && bt != null) {
+    if (at != bt) return at.compareTo(bt);
+  } else if (at != null && bt == null) {
+    // b 只有服务端较小自增 ID 且无时间，通常是先前的历史消息
+    return 1;
+  } else if (at == null && bt != null) {
+    return -1;
+  }
+
+  // 时间戳相同或都无法推导绝对时间时：user 必须严格在 assistant 之前！
+  if (a.role != b.role) {
+    if (a.role == 'user') return -1;
+    if (b.role == 'user') return 1;
+  }
+  return a.id.compareTo(b.id);
+}
+
+/// 会话消息按时间与问答轮次排序；确保 user 始终在其对应 assistant 之前。
 List<NativeNovaMessage> sortNovaMessages(List<NativeNovaMessage> items) {
   if (items.length < 2) return items;
-  final out = [...items];
-  out.sort((a, b) {
-    if (a.isWelcome && !b.isWelcome) return -1;
-    if (b.isWelcome && !a.isWelcome) return 1;
-    final ta = a.createdAt?.millisecondsSinceEpoch ?? a.id;
-    final tb = b.createdAt?.millisecondsSinceEpoch ?? b.id;
-    if (ta != tb) return ta.compareTo(tb);
-    if (a.role != b.role) {
-      if (a.role == 'user') return -1;
-      if (b.role == 'user') return 1;
-    }
-    return a.id.compareTo(b.id);
-  });
-  return out;
+  return repairNovaConversationMessages(items);
 }
 
 /// 去掉 AI 回声（assistant 正文与用户提问完全一致），并按问答轮次重排。
-/// 解决服务端忽略 createdAt、用户消息晚落库导致 id 大于 AI 回复的问题。
+/// 彻底解决：
+/// 1. 服务端忽略 createdAt 或晚落库导致 id 大于 AI 回复的问题；
+/// 2. 客户端 13 位毫秒时间戳 ID 与服务端自增 ID 混用导致把本轮 AI 回复塞到上一轮的问题；
+/// 3. 时钟偏差导致 AI 回复出现在提问上方的问题。
 List<NativeNovaMessage> repairNovaConversationMessages(
   List<NativeNovaMessage> raw,
 ) {
@@ -213,7 +265,12 @@ List<NativeNovaMessage> repairNovaConversationMessages(
       .where(
         (m) =>
             !m.isWelcome &&
-            !(m.role == 'assistant' && m.streaming && m.text.trim().isEmpty),
+            !(m.role == 'assistant' &&
+                ((m.streaming &&
+                        m.text.trim().isEmpty &&
+                        m.thinkText.trim().isEmpty &&
+                        m.thinkStatus.trim().isEmpty) ||
+                    isNovaTransientErrorReply(m.text))),
       )
       .toList(growable: false);
   if (items.isEmpty) return welcome;
@@ -241,45 +298,57 @@ List<NativeNovaMessage> repairNovaConversationMessages(
   }
 
   final users = items.where((m) => m.role == 'user').toList()
-    ..sort((a, b) => a.id.compareTo(b.id));
-  final assistants =
-      items
-          .where((m) => m.role == 'assistant' && m.text.trim().isNotEmpty)
-          .toList()
-        ..sort((a, b) => a.id.compareTo(b.id));
+    ..sort(compareNovaMessageTimes);
+  final assistants = items
+      .where((m) =>
+          m.role == 'assistant' &&
+          (m.text.trim().isNotEmpty ||
+              m.streaming ||
+              m.thinkText.trim().isNotEmpty ||
+              m.thinkStatus.trim().isNotEmpty))
+      .toList()
+    ..sort(compareNovaMessageTimes);
 
   if (users.isEmpty) {
-    return sortNovaMessages([...welcome, ...items]);
+    final pureAi = [...assistants]..sort(compareNovaMessageTimes);
+    return [...welcome, ...pureAi];
   }
 
   final buckets = <int, List<NativeNovaMessage>>{
     for (final u in users) u.id: <NativeNovaMessage>[],
   };
-  final usedAssistantIds = <int>{};
 
+  // 按轮次拉链配对，而不是「时间上最后一个更早的提问」。
+  // 连续追问时两条回复往往都落在最后一个提问之后，旧逻辑会变成 U1 U2 A1 A2。
+  var userIdx = 0;
   for (final a in assistants) {
-    NativeNovaMessage? owner;
-    for (final u in users) {
-      if (u.id <= a.id) owner = u;
+    while (userIdx < users.length - 1) {
+      final currentHasReply = buckets[users[userIdx].id]!.isNotEmpty;
+      if (!currentHasReply) break;
+      if (novaUserStartedByAssistantTime(users[userIdx + 1], a)) {
+        userIdx++;
+      } else {
+        break;
+      }
     }
-    owner ??= users.first;
-    buckets[owner.id]!.add(a);
-    usedAssistantIds.add(a.id);
+    buckets[users[userIdx].id]!.add(a);
   }
 
-  // 用单调递增时间戳保证 U1→A1→U2→A2… 不会因同秒/同毫秒塌缩成
-  // U1,U2,U3,A1,A2,A3（重新发送后 repair 全量重排时尤其容易触发）。
+  // 用单调递增时间戳保证 U1→A1→U2→A2… 严格按轮次前后排列，
+  // 保证每一个 User 提问必然在其对应的 Assistant 回复之前。
   final out = <NativeNovaMessage>[];
   DateTime? cursor;
   for (final u in users) {
-    var userAt =
-        u.createdAt ??
-        (u.id > 0 ? DateTime.fromMillisecondsSinceEpoch(u.id) : DateTime.now());
+    var userAt = u.createdAt ??
+        (u.id >= 1000000000000
+            ? DateTime.fromMillisecondsSinceEpoch(u.id)
+            : DateTime.now());
     if (cursor != null && !userAt.isAfter(cursor)) {
       userAt = cursor.add(const Duration(milliseconds: 1));
     }
     out.add(u.copyWith(createdAt: userAt));
     cursor = userAt;
+
     final turnAssistants = buckets[u.id] ?? const <NativeNovaMessage>[];
     for (final a in turnAssistants) {
       var aiAt = a.createdAt;
@@ -291,7 +360,7 @@ List<NativeNovaMessage> repairNovaConversationMessages(
     }
   }
 
-  return sortNovaMessages([...welcome, ...out]);
+  return [...welcome, ...out];
 }
 
 int novaHistoryRichness(NativeNovaMessage m) {
@@ -1595,7 +1664,9 @@ class NativeNovaService {
       );
     }
 
-    msgs = applyViewSinceFilter ? await _applyViewSinceFilter(msgs) : msgs;
+    msgs = (applyViewSinceFilter && !restoreFromHistory)
+        ? await _applyViewSinceFilter(msgs)
+        : msgs;
 
     if (!isStreamInFlight && !preserveGeneratingSnapshot) {
       msgs = _stripIncompleteStreamingMessages(msgs);
@@ -3026,11 +3097,103 @@ class NativeNovaService {
         }
       } catch (_) {}
     }
+    final deleted = await getDeletedConversationIds();
     final items = turns
         .map(_mapHistoryTurn)
-        .where((t) => t.conversationId > 0)
+        .where((t) => t.conversationId > 0 && !deleted.contains(t.conversationId))
         .toList();
     return NovaHistoryPageResult(items: items, hasMore: turns.length >= size);
+  }
+
+  /// 获取已删除的会话 ID 集合，保证历史记录不会再显示已被用户删除的会话
+  Future<Set<int>> getDeletedConversationIds() async {
+    if (session.userId <= 0) return const <int>{};
+    final storage = await NovaWebStorage.load(session.userId);
+    final raw = storage['dunes_nova_deleted_conversations'];
+    if (raw == null || raw.isEmpty) return const <int>{};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .map((e) => (e as num).toInt())
+            .where((id) => id > 0)
+            .toSet();
+      }
+    } catch (_) {}
+    return const <int>{};
+  }
+
+  /// 删除指定会话（从历史列表、本地缓存与服务端清理）
+  Future<bool> deleteConversation(int conversationId) async {
+    if (conversationId <= 0) return false;
+    final uid = session.userId;
+
+    // 1. 记入已删除黑名单
+    try {
+      final storage = await NovaWebStorage.load(uid);
+      final raw = storage['dunes_nova_deleted_conversations'];
+      final set = <int>{};
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          set.addAll(
+            decoded.map((e) => (e as num).toInt()).where((id) => id > 0),
+          );
+        }
+      }
+      set.add(conversationId);
+      await NovaWebStorage.merge(uid, {
+        'dunes_nova_deleted_conversations': jsonEncode(set.toList()),
+      });
+    } catch (_) {}
+
+    // 2. 从本地历史列表 dunes_nova_local_history 移除
+    try {
+      final storage = await NovaWebStorage.load(uid);
+      final raw = storage['dunes_nova_local_history'];
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          final updated = decoded.where((item) {
+            if (item is! Map) return true;
+            final cid = (item['conversationId'] as num?)?.toInt() ?? 0;
+            return cid != conversationId;
+          }).toList();
+          await NovaWebStorage.merge(uid, {
+            'dunes_nova_local_history': jsonEncode(updated),
+          });
+        }
+      }
+    } catch (_) {}
+
+    // 3. 清理会话的消息缓存与状态
+    await NovaWebStorage.removeKeys(uid, [
+      'dunes_nova_msgs_$conversationId',
+      'dunes_nova_stream_$conversationId',
+      'dunes_nova_gen_$conversationId',
+    ]);
+
+    // 4. 请求后端接口清除服务端会话/历史
+    try {
+      await _client.delete(
+        _dunesUri('/ai/history/turns?conversationId=$conversationId'),
+        headers: _dunesHeaders,
+      );
+    } catch (_) {}
+    try {
+      await _client.post(
+        _dunesUri('/conversations/$conversationId/clear-history'),
+        headers: _dunesHeaders,
+      );
+    } catch (_) {}
+    try {
+      await _client.delete(
+        _dunesUri('/conversations/$conversationId'),
+        headers: _dunesHeaders,
+      );
+    } catch (_) {}
+
+    return true;
   }
 
   NovaHistoryTurn _mapHistoryTurn(Map<String, dynamic> raw) {
@@ -4234,7 +4397,9 @@ class NativeNovaService {
 
   int _turnConvId(Map<String, dynamic> turn) {
     return (turn['conversationId'] as num?)?.toInt() ??
+        (turn['imConversationId'] as num?)?.toInt() ??
         (turn['conversation_id'] as num?)?.toInt() ??
+        (turn['im_conversation_id'] as num?)?.toInt() ??
         0;
   }
 

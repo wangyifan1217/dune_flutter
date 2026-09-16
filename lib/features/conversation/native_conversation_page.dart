@@ -16,6 +16,8 @@ import '../ai_summary/ai_summary_service.dart';
 import '../auth/auth_session.dart';
 import '../contacts/contact_models.dart';
 import '../contacts/contact_service.dart';
+import '../shell/dunes_main_tab_bar.dart';
+import '../shell/dunes_main_tab_bar.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'comm_unread_notifier.dart';
 import 'conversation_inbox_cache.dart';
@@ -199,7 +201,7 @@ class _InboxSection {
 
 class _NativeConversationPageState extends State<NativeConversationPage>
     with WidgetsBindingObserver {
-  static const _yunshuName = 'NOVA';
+  static const _yunshuName = '小饕';
 
   late final ConversationService _service;
   late final NotificationService _notificationService;
@@ -235,6 +237,54 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   Map<String, String> _novaStorage = const {};
   Map<String, InboxHiddenEntry> _hiddenConversations = const {};
   String _selfImStatus = ImUserStatusCatalog.online;
+
+  // IM 通讯主页整体左滑跳到 AI 会话页面
+  double? _swipeStartX;
+  double? _swipeStartY;
+  int _swipeStartTime = 0;
+  bool _swipeIsVertical = false;
+
+  void _handleSwipePointerDown(PointerDownEvent event) {
+    _swipeStartX = event.position.dx;
+    _swipeStartY = event.position.dy;
+    _swipeStartTime = DateTime.now().millisecondsSinceEpoch;
+    _swipeIsVertical = false;
+  }
+
+  void _handleSwipePointerMove(PointerMoveEvent event) {
+    if (_swipeStartX == null || _swipeStartY == null || _swipeIsVertical) return;
+    final dx = event.position.dx - _swipeStartX!;
+    final dy = event.position.dy - _swipeStartY!;
+    if (dy.abs() > 18 && dy.abs() > dx.abs() * 1.3) {
+      _swipeIsVertical = true;
+    }
+  }
+
+  void _handleSwipePointerUp(PointerUpEvent event) {
+    if (_swipeStartX == null || _swipeStartY == null) return;
+    final dx = event.position.dx - _swipeStartX!;
+    final dy = event.position.dy - _swipeStartY!;
+    final elapsed = DateTime.now().millisecondsSinceEpoch - _swipeStartTime;
+
+    final isLeftSwipe = !_swipeIsVertical &&
+        dx < -55 &&
+        dx.abs() > dy.abs() * 1.3 &&
+        (elapsed < 650 || dx < -110);
+
+    _swipeStartX = null;
+    _swipeStartY = null;
+    _swipeIsVertical = false;
+
+    if (isLeftSwipe) {
+      _openNovaConversation();
+    }
+  }
+
+  void _handleSwipePointerCancel(PointerCancelEvent event) {
+    _swipeStartX = null;
+    _swipeStartY = null;
+    _swipeIsVertical = false;
+  }
 
   @override
   void initState() {
@@ -1885,14 +1935,21 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       resizeToAvoidBottomInset: false,
       body: SafeArea(
         bottom: false,
-        child: GestureDetector(
-          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: Listener(
+          onPointerDown: _handleSwipePointerDown,
+          onPointerMove: _handleSwipePointerMove,
+          onPointerUp: _handleSwipePointerUp,
+          onPointerCancel: _handleSwipePointerCancel,
           behavior: HitTestBehavior.translucent,
-          child: Column(
+          child: GestureDetector(
+            onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+            behavior: HitTestBehavior.translucent,
+            child: Column(
             children: [
               ChatInboxHeader(
                 onOpenContacts: widget.onOpenContacts,
                 onNewChat: widget.onOpenNewChat,
+                showNovaLeading: isDesktopCommOnly,
                 onOpenNova: widget.session.isExternalUser
                     ? null
                     : _openNovaConversation,
@@ -1921,8 +1978,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildBody() {
     if (_loading && _items.isEmpty) {
@@ -2001,8 +2059,6 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       );
     }
 
-    children.add(const SizedBox(height: 6));
-
     return RefreshIndicator(
       onRefresh: () => _load(silent: true),
       child: ListView(
@@ -2012,7 +2068,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         physics: const AlwaysScrollableScrollPhysics(),
         // 必须裁剪：头像 OverflowBox / 未读角标会画出行外，否则上滑会盖住「消息」标题与搜索栏。
         clipBehavior: Clip.hardEdge,
-        padding: EdgeInsets.zero,
+        padding: EdgeInsets.only(
+          bottom: dunesAppBottomNavContentPadding(context, fallback: 6),
+        ),
         children: children,
       ),
     );

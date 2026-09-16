@@ -15,6 +15,7 @@ const _session = AuthSession(
   apiBase: '',
   roles: <String>[],
   kpiPerformanceAccess: true,
+  kpiFollowupAccess: true,
 );
 
 class _FakeKpiService extends WorkbenchKpiService {
@@ -540,6 +541,36 @@ void main() {
     expect(find.byKey(const Key('kpi-section-energy')), findsNothing);
     expect(find.byKey(const Key('kpi-project-energy')), findsOneWidget);
     expect(find.text('项目绩效系数'), findsOneWidget);
+    expect(find.byKey(const Key('kpi-person-9')), findsOneWidget);
+  });
+
+  testWidgets('没有催办权限时不显示催办页签', (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NativeWorkbenchKpiPage(
+            session: const AuthSession(
+              phone: '13800000000',
+              userId: 1,
+              token: '',
+              apiBase: '',
+              roles: <String>[],
+              kpiPerformanceAccess: true,
+            ),
+            service: _FakeKpiService(),
+            now: DateTime(2026, 9, 3),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('kpi-lens-followup')), findsNothing);
+    expect(find.byKey(const Key('kpi-lens-filter')), findsNothing);
     expect(find.byKey(const Key('kpi-person-9')), findsOneWidget);
   });
 

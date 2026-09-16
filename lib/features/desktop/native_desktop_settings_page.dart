@@ -9,6 +9,7 @@ import '../chat/file_download.dart' as file_dl;
 import '../chat/group_info_widgets.dart';
 import '../chat/im_file_save_dir.dart';
 import '../shell/dunes_toast.dart';
+import '../update/app_update_service.dart';
 
 /// PC 端企微/微信风格设置页，侧栏「设置」入口。
 class NativeDesktopSettingsPage extends StatefulWidget {
@@ -17,6 +18,7 @@ class NativeDesktopSettingsPage extends StatefulWidget {
     required this.onBack,
     this.onOpenTextScale,
     this.onCheckForUpdates,
+    this.onOpenReleaseHistory,
     this.onScanWorkstation,
     this.onOpenWechatBot,
     this.onClearCache,
@@ -27,6 +29,7 @@ class NativeDesktopSettingsPage extends StatefulWidget {
   final VoidCallback onBack;
   final VoidCallback? onOpenTextScale;
   final VoidCallback? onCheckForUpdates;
+  final VoidCallback? onOpenReleaseHistory;
   final VoidCallback? onScanWorkstation;
   final VoidCallback? onOpenWechatBot;
   final VoidCallback? onClearCache;
@@ -201,6 +204,7 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
               onTap: () => _setImageExtraWindow(!_imageExtraWindow),
             ),
             if (widget.onCheckForUpdates != null ||
+                widget.onOpenReleaseHistory != null ||
                 widget.onScanWorkstation != null ||
                 widget.onOpenWechatBot != null ||
                 widget.onClearCache != null ||
@@ -211,6 +215,14 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
                   icon: Icons.system_update_alt_rounded,
                   title: '检查更新',
                   onTap: widget.onCheckForUpdates!,
+                ),
+              if (widget.onOpenReleaseHistory != null)
+                _buildActionRow(
+                  icon: Icons.history_rounded,
+                  title: '发版历史',
+                  subtitle:
+                      '${AppUpdateService.platformDisplayName()} 版本记录',
+                  onTap: widget.onOpenReleaseHistory!,
                 ),
               if (widget.onScanWorkstation != null)
                 _buildActionRow(

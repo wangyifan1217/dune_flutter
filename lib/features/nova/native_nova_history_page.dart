@@ -112,6 +112,43 @@ class _NativeNovaHistoryPageState extends State<NativeNovaHistoryPage> {
     setState(() => _applyFilter(''));
   }
 
+  Future<void> _deleteTurn(NovaHistoryTurn t) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('删除对话记录', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: Text(
+          '确定要删除「${t.title.isEmpty ? '此对话' : t.title}」吗？删除后将无法恢复。',
+          style: const TextStyle(fontSize: 13.5, color: Color(0xFF4E5969), height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消', style: TextStyle(color: Color(0xFF86909C))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFFF4D4F)),
+            child: const Text('删除', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final convId = t.conversationId;
+    setState(() {
+      _all = _all.where((item) => item.conversationId != convId).toList();
+      _applyFilter(_searchController.text);
+    });
+
+    try {
+      await _service.deleteConversation(convId);
+    } catch (_) {}
+  }
+
   List<Widget> _buildRows() {
     final widgets = <Widget>[];
     DateTime? prevDay;
@@ -131,6 +168,7 @@ class _NativeNovaHistoryPageState extends State<NativeNovaHistoryPage> {
           preview: t.preview.isEmpty ? '（暂无消息预览）' : t.preview,
           timeLabel: formatNovaHistoryTime(at),
           onTap: () => widget.onOpenConversation(t.conversationId, t.messageId, t.title, t.preview),
+          onDelete: () => _deleteTurn(t),
         ),
       );
     }
@@ -155,7 +193,7 @@ class _NativeNovaHistoryPageState extends State<NativeNovaHistoryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: const Color(0xFFF6F8FC),
       body: SafeArea(
         bottom: false,
         child: Column(

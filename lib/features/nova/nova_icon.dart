@@ -6,6 +6,51 @@ abstract final class NovaIcon {
   static const tabAssetPath = 'assets/images/tau_tab_icon.png';
 }
 
+/// 小饕拟人形象资源。开眼帧更清晰，眨眼时切 wink。
+abstract final class NovaPersonAvatar {
+  static const openAsset = 'assets/images/ai_avatar_open.png';
+  static const winkAsset = 'assets/images/ai_avatar_wink.png';
+  static const asset = openAsset;
+}
+
+/// 按设备像素把 512 原图解到足够清晰的缓存，避免会话头像发糊。
+class NovaPersonAvatarImage extends StatelessWidget {
+  const NovaPersonAvatarImage({
+    super.key,
+    this.width,
+    this.height,
+    this.wink = false,
+    this.fit = BoxFit.cover,
+  });
+
+  final double? width;
+  final double? height;
+  final bool wink;
+  final BoxFit fit;
+
+  static const nativePx = 512;
+
+  @override
+  Widget build(BuildContext context) {
+    final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 2.0;
+    final logical = [width ?? 0, height ?? 0].reduce((a, b) => a > b ? a : b);
+    final decode = logical <= 0
+        ? nativePx
+        : (logical * dpr * 2).round().clamp(192, nativePx);
+    return Image.asset(
+      wink ? NovaPersonAvatar.winkAsset : NovaPersonAvatar.openAsset,
+      width: width,
+      height: height,
+      fit: fit,
+      filterQuality: FilterQuality.high,
+      isAntiAlias: true,
+      gaplessPlayback: true,
+      cacheWidth: decode,
+      cacheHeight: decode,
+    );
+  }
+}
+
 class NovaIconImage extends StatelessWidget {
   const NovaIconImage({
     super.key,
@@ -20,7 +65,13 @@ class NovaIconImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = borderRadius ?? (size <= 16 ? 4.0 : size <= 34 ? 9.0 : 12.0);
+    final radius =
+        borderRadius ??
+        (size <= 16
+            ? 4.0
+            : size <= 34
+            ? 9.0
+            : 12.0);
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: Image.asset(
@@ -29,14 +80,18 @@ class NovaIconImage extends StatelessWidget {
         height: size,
         fit: fit,
         gaplessPlayback: true,
-        errorBuilder: (_, __, ___) => _NovaIconSparkleFallback(size: size, borderRadius: radius),
+        errorBuilder: (_, __, ___) =>
+            _NovaIconSparkleFallback(size: size, borderRadius: radius),
       ),
     );
   }
 }
 
 class _NovaIconSparkleFallback extends StatelessWidget {
-  const _NovaIconSparkleFallback({required this.size, required this.borderRadius});
+  const _NovaIconSparkleFallback({
+    required this.size,
+    required this.borderRadius,
+  });
 
   final double size;
   final double borderRadius;

@@ -16,6 +16,7 @@ import 'native_tau_voice_call_callkit.dart';
 import 'tau_voice_call_barge_in.dart';
 import 'tau_voice_call_client.dart';
 import 'tau_voice_call_playback.dart';
+import '../nova_welcome_view.dart';
 
 enum TauVoiceCallMode { professional, casual }
 
@@ -222,7 +223,9 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
   Future<bool> _ensureCallPermissions() async {
     if (!await ensureMicrophonePermission()) {
       if (mounted) {
-        _showError(microphonePermissionHint(await Permission.microphone.status));
+        _showError(
+          microphonePermissionHint(await Permission.microphone.status),
+        );
       }
       return false;
     }
@@ -574,15 +577,7 @@ class _TauVoiceCallPageState extends State<TauVoiceCallPage>
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    ClipOval(
-                      child: Image.asset(
-                        'assets/images/tau_voice_avatar_female.png',
-                        width: 168,
-                        height: 168,
-                        fit: BoxFit.cover,
-                        gaplessPlayback: true,
-                      ),
-                    ),
+                    const NovaBlinkingAvatar(size: 168),
                     if (thinking)
                       const Positioned(
                         right: 20,

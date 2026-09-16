@@ -86,6 +86,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   bool _saving = false;
   bool _opening = false;
   bool _nextBusy = false;
+  bool _formDirty = false;
   String? _error;
   String _statusFilter = '';
   String _sectorFilter = '';
@@ -443,6 +444,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     setState(() {
       _formSession++;
       _editing = row;
+      _formDirty = false;
       _page = _ProposalPage.form;
     });
     widget.onChromeChanged?.call(
@@ -499,6 +501,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
   Future<void> _backToList() async {
     final editing = _editing;
     if (editing != null &&
+        _formDirty &&
         proposalIntakeShouldAutoSaveOnBack(
           editing,
           userId: widget.session.userId,
@@ -512,14 +515,14 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
                 form: proposalIntakeConfirmContractEdits(editing.form),
                 review: editing.review,
               )
-            : await _service.save(editing);
+            : await _service.saveResolvingConflict(editing);
         _editing = saved;
         if (mounted && proposalIntakeShowDraftSavedToast(saved)) {
           _toast('已保存草稿');
         }
       } catch (error) {
         final text = friendlyErrorText(error, fallback: '保存草稿失败');
-        if (!proposalIntakeIsWriteDeniedMessage(text)) {
+        if (!proposalIntakeShouldLeaveDespiteSaveError(text)) {
           _toast(text, error: true);
           return;
         }
@@ -572,7 +575,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       saving: _saving,
       service: _service,
       onChanged: (next) => _editing = next,
+      onDirtyChanged: (dirty) => _formDirty = dirty,
       onSaved: (next) {
+        _formDirty = false;
         setState(() => _editing = next);
       },
       onSubmit: (next) {
@@ -1314,6 +1319,7 @@ class ProposalIntakeForm extends StatefulWidget {
     required this.onSaved,
     required this.onSubmit,
     required this.onError,
+    this.onDirtyChanged,
     this.enableComments = true,
     this.onDeleted,
     this.onClose,
@@ -1333,6 +1339,7 @@ class ProposalIntakeForm extends StatefulWidget {
   final ProposalIntakeService service;
   final bool enableComments;
   final ValueChanged<ProposalIntakeRow> onChanged;
+  final ValueChanged<bool>? onDirtyChanged;
   final ValueChanged<ProposalIntakeRow> onSaved;
   final ValueChanged<ProposalIntakeRow> onSubmit;
   final ValueChanged<String> onError;
@@ -1741,6 +1748,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         _canEditHun ||
         _canEditProposalSubtitle ||
         _canEditFinanceModules ||
+        _canEditUnreviewedFinance ||
         _canEditFinanceInterface ||
         _canEditAsSubmitter ||
         (!_isContentFrozen && !_row.techRevisionOpen && _isTechFiller);
@@ -1796,6 +1804,21 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   bool get _canDelete => _row.id > 0 && _row.canDeleteBy(_me);
+
+  void _markFormDirty([bool value = true]) {
+    if (_dirty == value) return;
+    _dirty = value;
+    widget.onDirtyChanged?.call(value);
+  }
+
+  /// 提交人或财务部负责人二可改未复核的财务供给侧 / 渠道侧 / 账户字段。
+  bool get _canEditUnreviewedFinance =>
+      !_isLocked &&
+      !_row.techRevisionOpen &&
+      (_canEditAsSubmitter ||
+          (_isOwner('financeOwner2') &&
+              _isReviewing &&
+              !_moduleReviewed('financeCompleted')));
 
   bool _fillEnabled(
     bool? writable, {
@@ -1966,7 +1989,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     } else if (resetReview != null) {
       review[resetReview] = false;
     }
-    _dirty = true;
+    _markFormDirty();
     _row = _row.copyWith(
       title: key == 'proposalName' ? '$value'.trim() : _row.title,
       status: _statusAfterEdit,
@@ -2050,7 +2073,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     }
     form[kProposalContractEditsKey] = edits;
     setState(() {
-      _dirty = true;
+      _markFormDirty();
       _fieldEpoch++;
       _row = _row.copyWith(
         form: form,
@@ -2071,7 +2094,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ..['linkedPurchaseProposalCode'] = ''
       ..['linkedPurchaseProposalTitle'] = '';
     setState(() {
-      _dirty = true;
+      _markFormDirty();
       _fieldEpoch++;
       _purchaseProposalHits = const [];
       _row = _row.copyWith(
@@ -2122,7 +2145,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     }
     if (!mounted) return;
     setState(() {
-      _dirty = true;
+      _markFormDirty();
       _fieldEpoch++;
       _row = _row.copyWith(
         form: proposalIntakeRememberContractSnapshot(
@@ -2667,7 +2690,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
     final review = Map<String, dynamic>.from(_review);
     if (resetReview != null) review[resetReview] = false;
-    _dirty = true;
+    _markFormDirty();
     _row = _row.copyWith(form: form, review: review, status: _statusAfterEdit);
     if (mounted) setState(() {});
     widget.onChanged(_row);
@@ -2698,7 +2721,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     form = _withEstimatedFinanceCosts(form);
     final review = Map<String, dynamic>.from(_review);
     if (resetReview != null) review[resetReview] = false;
-    _dirty = true;
+    _markFormDirty();
     _row = _row.copyWith(form: form, review: review, status: _statusAfterEdit);
     if (mounted) setState(() {});
     widget.onChanged(_row);
@@ -2723,7 +2746,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
     final review = Map<String, dynamic>.from(_review)
       ..['financeCompleted'] = false;
-    _dirty = true;
+    _markFormDirty();
     _row = _row.copyWith(form: form, review: review, status: _statusAfterEdit);
     if (mounted) setState(() {});
     widget.onChanged(_row);
@@ -2748,7 +2771,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
     final review = Map<String, dynamic>.from(_review)
       ..['financeCompleted'] = false;
-    _dirty = true;
+    _markFormDirty();
     _row = _row.copyWith(form: form, review: review, status: _statusAfterEdit);
     if (mounted) setState(() {});
     widget.onChanged(_row);
@@ -2774,7 +2797,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final form = Map<String, dynamic>.from(_form)..addAll(values);
     final review = Map<String, dynamic>.from(_review);
     if (resetReview != null) review[resetReview] = false;
-    _dirty = true;
+    _markFormDirty();
     _row = _row.copyWith(
       title: values.containsKey('proposalName')
           ? '${values['proposalName'] ?? ''}'.trim()
@@ -3210,7 +3233,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final review = Map<String, dynamic>.from(_review)
       ..['marketCompleted'] = false
       ..['financeCompleted'] = false;
-    _dirty = true;
+    _markFormDirty();
     _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
     if (mounted) setState(() {});
     widget.onChanged(_row);
@@ -3876,7 +3899,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       if (!mounted) return;
       setState(() {
         _row = next.row;
-        _dirty = false;
+        _markFormDirty(false);
       });
       widget.onSaved(next.row);
       _toastNotified(
@@ -3955,12 +3978,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               form: confirmed.form,
               review: confirmed.review,
             )
-          : await widget.service.save(confirmed);
+          : await widget.service.saveResolvingConflict(confirmed);
       if (!mounted) return;
       setState(() {
         _row = saved;
         _serverForm = proposalIntakeCloneForm(saved.form);
-        _dirty = false;
+        _markFormDirty(false);
       });
       widget.onSaved(saved);
       final awaitingTech = _awaitingTechModuleConfirm;
@@ -5429,7 +5452,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final review = Map<String, dynamic>.from(_review)
       ..['technologyCompleted'] = false;
     setState(() {
-      _dirty = true;
+      _markFormDirty();
       _row = _row.copyWith(
         form: next,
         review: review,
@@ -6470,7 +6493,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final computed = _financeComputedMetric(key, formOverride: scope);
     final current = computed?.display ?? '${scope[key] ?? ''}'.trim();
     final enabled =
-        computed == null && _fillEnabled(null, resetReview: 'financeCompleted');
+        computed == null &&
+        _fillEnabled(
+          _canEditUnreviewedFinance,
+          resetReview: 'financeCompleted',
+          reviewSection: 'financeItem:$prefix:$key',
+        );
     final options = switch (key) {
       'supplySettleMode' ||
       'channelSettleMode' => _settleFieldOptions(key, current),
@@ -6540,7 +6568,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
     final review = Map<String, dynamic>.from(_review)
       ..['financeCompleted'] = false;
-    _dirty = true;
+    _markFormDirty();
     _row = _row.copyWith(form: form, review: review, status: _statusAfterEdit);
     if (mounted) setState(() {});
     widget.onChanged(_row);
@@ -6605,7 +6633,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       final review = Map<String, dynamic>.from(_review)
         ..['financeCompleted'] = false;
       setState(() {
-        _dirty = true;
+        _markFormDirty();
         _row = _row.copyWith(
           form: form,
           review: review,
@@ -7441,7 +7469,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ));
       if (!mounted) return;
       setState(() {
-        _dirty = true;
+        _markFormDirty();
         _fieldEpoch++;
         _row = _row.copyWith(
           form: appending
@@ -7484,7 +7512,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ..addAll(proposalIntakeResetContractFields(prefix))
         ..['${prefix}Mode'] = _text('${prefix}Mode');
       setState(() {
-        _dirty = true;
+        _markFormDirty();
         _fieldEpoch++;
         _row = _row.copyWith(
           form: form,
@@ -7507,7 +7535,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         prefix: prefix,
       );
       setState(() {
-        _dirty = true;
+        _markFormDirty();
         _fieldEpoch++;
         _row = _row.copyWith(form: form, status: _statusAfterEdit);
       });
@@ -7537,7 +7565,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       form = proposalIntakeSyncSelectedContractFiles(form, prefix: prefix);
       if (!mounted) return;
       setState(() {
-        _dirty = true;
+        _markFormDirty();
         _fieldEpoch++;
         _row = _row.copyWith(
           form: proposalIntakeRememberContractSnapshot(
@@ -7846,7 +7874,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (isExistingBuilt != null) form['isExistingBuilt'] = isExistingBuilt;
     form = _withEstimatedFinanceCosts(form);
     final review = Map<String, dynamic>.from(_review)..[resetReview] = false;
-    _dirty = true;
+    _markFormDirty();
     _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
     if (rebuild && mounted) setState(() {});
     widget.onChanged(_row);
@@ -7922,7 +7950,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     form = proposalIntakeSyncChildProductMeta(form);
     form = _withEstimatedFinanceCosts(form);
     final review = Map<String, dynamic>.from(_review)..[resetReview] = false;
-    _dirty = true;
+    _markFormDirty();
     _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
     if (rebuild && mounted) setState(() {});
     widget.onChanged(_row);
@@ -8078,7 +8106,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ..remove('$kProposalChildTechReviewPrefix$key');
       review['technologyItems'] = nextItems;
     }
-    _dirty = true;
+    _markFormDirty();
     _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
     if (rebuild && mounted) setState(() {});
     widget.onChanged(_row);
@@ -8232,7 +8260,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
     final review = Map<String, dynamic>.from(_review)
       ..['financeCompleted'] = false;
-    _dirty = true;
+    _markFormDirty();
     _row = _row.copyWith(form: form, review: review, status: _statusAfterEdit);
     if (mounted) setState(() {});
     widget.onChanged(_row);
@@ -9448,7 +9476,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (resetReview != 'financeCompleted') {
       review['financeCompleted'] = false;
     }
-    _dirty = true;
+    _markFormDirty();
     _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
     if (rebuild && mounted) setState(() {});
     widget.onChanged(_row);
@@ -11234,7 +11262,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     }
     final review = proposalIntakeClearContractReview(_review, prefix: prefix);
     setState(() {
-      _dirty = true;
+      _markFormDirty();
       _fieldEpoch++;
       _row = _row.copyWith(
         form: form,
@@ -11272,7 +11300,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     }
     final review = proposalIntakeClearContractReview(_review, prefix: prefix);
     setState(() {
-      _dirty = true;
+      _markFormDirty();
       _fieldEpoch++;
       _row = _row.copyWith(
         form: form,
@@ -12255,6 +12283,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           widget.options.resolvedSettleModes,
           required: true,
           addLabel: '新增结算模式',
+          writable: _canEditUnreviewedFinance,
           resetReview: 'financeCompleted',
           reviewSection: 'financeItem:$key',
           reviewLabel: _financeReviewLabel,
@@ -12273,6 +12302,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           widget.options.resolvedSettleCycles,
           required: true,
           addLabel: '新增结算周期',
+          writable: _canEditUnreviewedFinance,
           resetReview: 'financeCompleted',
           reviewSection: 'financeItem:$key',
           reviewLabel: _financeReviewLabel,
@@ -12302,6 +12332,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               maxLines: longText ? 12 : 3,
               minLines: longText ? 2 : 1,
               fullWidth: longText,
+              writable: _canEditUnreviewedFinance,
               resetReview: 'financeCompleted',
               reviewSection: 'financeItem:$key',
               reviewLabel: _financeReviewLabel,
@@ -12311,6 +12342,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               key,
               required: true,
               source: source,
+              writable: _canEditUnreviewedFinance,
               resetReview: 'financeCompleted',
               reviewSection: 'financeItem:$key',
               reviewLabel: _financeReviewLabel,
@@ -13055,7 +13087,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ..[key] = selected?.name ?? ''
                     ..['${key}UserId'] = selected?.userId;
                   setState(() {
-                    _dirty = true;
+                    _markFormDirty();
                     _row = _row.copyWith(form: form, status: _statusAfterEdit);
                   });
                   widget.onChanged(_row);
@@ -14304,7 +14336,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     }
     final review = Map<String, dynamic>.from(_review)
       ..['marketCompleted'] = false;
-    _dirty = true;
+    _markFormDirty();
     _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
     if (rebuild && mounted) setState(() {});
     widget.onChanged(_row);

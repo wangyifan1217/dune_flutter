@@ -100,6 +100,36 @@ void main() {
     expect(fromMe.kpiPerformanceAccess, isTrue);
   });
 
+  test('AuthSession reads and persists KPI followup access', () {
+    final fromJwt = AuthSession.fromJwt(
+      phone: '13800138000',
+      userId: 0,
+      token: _fakeJwt({'userId': 7, 'kpiFollowupAccess': true}),
+      apiBase: 'http://example/api/v1',
+    );
+    expect(fromJwt.kpiFollowupAccess, isTrue);
+    expect(fromJwt.effectiveKpiFollowupAccess, isTrue);
+    expect(
+      fromJwt.copyWith(kpiFollowupAccess: false).kpiFollowupAccess,
+      isFalse,
+    );
+    expect(AuthSession.fromJson(fromJwt.toJson()).kpiFollowupAccess, isTrue);
+
+    const base = AuthSession(
+      phone: '13800138000',
+      userId: 7,
+      token: 't',
+      apiBase: 'http://example/api/v1',
+      roles: [],
+    );
+    expect(
+      AuthSession.enrichFromUsersMe(base, {
+        'kpiFollowupAccess': true,
+      }).kpiFollowupAccess,
+      isTrue,
+    );
+  });
+
   test('AuthSession reads, copies and persists payroll report access', () {
     final fromJwt = AuthSession.fromJwt(
       phone: '13800138000',

@@ -42,6 +42,7 @@ class AuthSession {
     this.travelViewAll = false,
     this.workSituationViewAll = false,
     this.kpiPerformanceAccess = false,
+    this.kpiFollowupAccess = false,
     this.payrollReportAccess = false,
     this.paymentInvoiceAccess = false,
   });
@@ -113,6 +114,9 @@ class AuthSession {
   /// 工作台行政「月度绩效考评」。
   final bool kpiPerformanceAccess;
 
+  /// 月度绩效考评里的「催办」页签。
+  final bool kpiFollowupAccess;
+
   /// 工作台行政「工资报表」。
   final bool payrollReportAccess;
 
@@ -178,6 +182,9 @@ class AuthSession {
 
   bool get effectiveKpiPerformanceAccess =>
       kpiPerformanceAccess || DunesDefaults.localLighthouseAccessBypass;
+
+  bool get effectiveKpiFollowupAccess =>
+      kpiFollowupAccess || DunesDefaults.localLighthouseAccessBypass;
 
   bool get effectivePayrollReportAccess =>
       payrollReportAccess || DunesDefaults.localLighthouseAccessBypass;
@@ -279,6 +286,7 @@ class AuthSession {
     bool? travelViewAll,
     bool? workSituationViewAll,
     bool? kpiPerformanceAccess,
+    bool? kpiFollowupAccess,
     bool? payrollReportAccess,
     bool? paymentInvoiceAccess,
   }) {
@@ -325,6 +333,7 @@ class AuthSession {
       travelViewAll: travelViewAll ?? this.travelViewAll,
       workSituationViewAll: workSituationViewAll ?? this.workSituationViewAll,
       kpiPerformanceAccess: kpiPerformanceAccess ?? this.kpiPerformanceAccess,
+      kpiFollowupAccess: kpiFollowupAccess ?? this.kpiFollowupAccess,
       payrollReportAccess: payrollReportAccess ?? this.payrollReportAccess,
       paymentInvoiceAccess: paymentInvoiceAccess ?? this.paymentInvoiceAccess,
     );
@@ -404,6 +413,7 @@ class AuthSession {
       travelViewAll: data['travelViewAll'] == true,
       workSituationViewAll: data['workSituationViewAll'] == true,
       kpiPerformanceAccess: data['kpiPerformanceAccess'] == true,
+      kpiFollowupAccess: data['kpiFollowupAccess'] == true,
       payrollReportAccess: data['payrollReportAccess'] == true,
       paymentInvoiceAccess: data['paymentInvoiceAccess'] == true,
     );
@@ -461,6 +471,7 @@ class AuthSession {
       travelViewAll: claims['travelViewAll'] == true,
       workSituationViewAll: claims['workSituationViewAll'] == true,
       kpiPerformanceAccess: claims['kpiPerformanceAccess'] == true,
+      kpiFollowupAccess: claims['kpiFollowupAccess'] == true,
       payrollReportAccess: claims['payrollReportAccess'] == true,
       paymentInvoiceAccess: claims['paymentInvoiceAccess'] == true,
     );
@@ -523,6 +534,7 @@ class AuthSession {
       'travelViewAll': travelViewAll,
       'workSituationViewAll': workSituationViewAll,
       'kpiPerformanceAccess': kpiPerformanceAccess,
+      'kpiFollowupAccess': kpiFollowupAccess,
       'payrollReportAccess': payrollReportAccess,
       'paymentInvoiceAccess': paymentInvoiceAccess,
     };
@@ -574,6 +586,7 @@ class AuthSession {
       travelViewAll: json['travelViewAll'] == true,
       workSituationViewAll: json['workSituationViewAll'] == true,
       kpiPerformanceAccess: json['kpiPerformanceAccess'] == true,
+      kpiFollowupAccess: json['kpiFollowupAccess'] == true,
       payrollReportAccess: json['payrollReportAccess'] == true,
       paymentInvoiceAccess: json['paymentInvoiceAccess'] == true,
     );

@@ -13,6 +13,7 @@ const _session = AuthSession(
   apiBase: '',
   roles: <String>[],
   kpiPerformanceAccess: true,
+  kpiFollowupAccess: true,
 );
 
 class _FakeFollowupService extends WorkbenchKpiService {

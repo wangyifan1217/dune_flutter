@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -555,7 +557,7 @@ Future<void> openNovaDeliverablePreview(
   required NovaMediaResolver resolver,
   required NovaDeliverableItem file,
 }) async {
-  if (!novaIsMarkdownFile(file.name)) {
+  if (!novaIsPreviewableDocument(file.name)) {
     _novaToast(context, '暂不支持预览此格式，请使用下载', error: true);
     return;
   }
@@ -577,7 +579,7 @@ Future<void> openNovaDeliverableDownload(
   required NovaMediaResolver resolver,
   required NovaDeliverableItem file,
 }) async {
-  if (novaIsMarkdownFile(file.name)) {
+  if (novaIsPreviewableDocument(file.name)) {
     await openNovaDeliverablePreview(context, resolver: resolver, file: file);
     return;
   }
@@ -1204,113 +1206,111 @@ class NovaC4DeliverableFileCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ext = file.ext.isNotEmpty ? file.ext : novaFileExt(file.name);
     final sizeHint = ext.isNotEmpty ? ext.toUpperCase() : 'FILE';
-    final canPreview = novaIsMarkdownFile(file.name);
-    return Material(
-      color: DunesColors.bgSoft,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => openNovaDeliverableDownload(
-          context,
-          resolver: resolver,
-          file: file,
-        ),
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: DunesColors.borderSoft),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x0A0F172A),
-                blurRadius: 4,
-                offset: Offset(0, 1),
+    final canPreview = novaIsPreviewableDocument(file.name);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Material(
+          color: const Color(0xCCFFFFFF),
+          child: InkWell(
+            onTap: () => openNovaDeliverableDownload(
+              context,
+              resolver: resolver,
+              file: file,
+            ),
+            child: Ink(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0x66FFFFFF)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x140F172A),
+                    blurRadius: 18,
+                    offset: Offset(0, 8),
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: DunesColors.borderSoft),
-                  ),
-                  child: Icon(
-                    novaFileIconData(ext),
-                    size: 22,
-                    color: DunesColors.accentDeep,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        file.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: DunesTypography.sans(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: DunesColors.text,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: const Color(0xB3FFFFFF),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0x33FFFFFF)),
+                          ),
+                          child: Icon(
+                            novaFileIconData(ext),
+                            size: 22,
+                            color: DunesColors.accentDeep,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        canPreview ? '$sizeHint · 可预览或下载' : '$sizeHint · 可下载',
-                        style: DunesTypography.sans(
-                          fontSize: 11,
-                          color: DunesColors.text3,
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                file.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: DunesTypography.sans(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: DunesColors.text,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                canPreview
+                                    ? '$sizeHint · 点击查看正文'
+                                    : '$sizeHint · 可下载',
+                                style: DunesTypography.sans(
+                                  fontSize: 11,
+                                  color: DunesColors.text3,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 34,
+                            minHeight: 34,
+                          ),
+                          tooltip: '下载',
+                          onPressed: () => openNovaDeliverableDownloadOnly(
+                            context,
+                            resolver: resolver,
+                            file: file,
+                          ),
+                          icon: const Icon(
+                            Icons.download_rounded,
+                            size: 18,
+                            color: DunesColors.accentDeep,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (canPreview) ...[
+                      const SizedBox(height: 10),
+                      NovaInlineDocumentGlass(
+                        resolver: resolver,
+                        file: file,
                       ),
                     ],
-                  ),
+                  ],
                 ),
-                if (canPreview)
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 34,
-                      minHeight: 34,
-                    ),
-                    tooltip: '预览',
-                    onPressed: () => openNovaDeliverablePreview(
-                      context,
-                      resolver: resolver,
-                      file: file,
-                    ),
-                    icon: const Icon(
-                      Icons.visibility_outlined,
-                      size: 18,
-                      color: DunesColors.accentDeep,
-                    ),
-                  ),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 34,
-                    minHeight: 34,
-                  ),
-                  tooltip: '下载',
-                  onPressed: () => openNovaDeliverableDownloadOnly(
-                    context,
-                    resolver: resolver,
-                    file: file,
-                  ),
-                  icon: const Icon(
-                    Icons.download_rounded,
-                    size: 18,
-                    color: DunesColors.accentDeep,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),

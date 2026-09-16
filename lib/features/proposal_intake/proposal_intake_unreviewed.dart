@@ -124,7 +124,8 @@ bool proposalIntakeFormKeyLocked(
   }
   if (_kFinanceReviewKeys.contains(key)) {
     return _reviewFlag(review, 'financeCompleted') ||
-        _itemReviewed(review, 'financeItems', key);
+        _itemReviewed(review, 'financeItems', key) ||
+        _itemReviewed(review, 'financeItems', 'main:$key');
   }
   if (key == 'financeModules' ||
       key == 'launchRows' ||
@@ -322,6 +323,64 @@ Object? proposalIntakeMergeSkuCatalog({
   ];
 }
 
+bool _financeItemLocked(
+  Map<String, dynamic> review,
+  String key, {
+  String owner = '',
+}) {
+  if (_reviewFlag(review, 'financeCompleted')) return true;
+  if (_itemReviewed(review, 'financeItems', key)) return true;
+  if (owner.isNotEmpty &&
+      _itemReviewed(review, 'financeItems', '$owner:$key')) {
+    return true;
+  }
+  return false;
+}
+
+Map<String, dynamic> _mergeProductFinanceGroup({
+  required Object? existing,
+  required Object? incoming,
+  required Map<String, dynamic> review,
+  required String owner,
+}) {
+  final base = existing is Map
+      ? Map<String, dynamic>.from(existing)
+      : <String, dynamic>{};
+  if (incoming is! Map) return base;
+  final next = Map<String, dynamic>.from(incoming);
+  final out = Map<String, dynamic>.from(base);
+  for (final entry in next.entries) {
+    if (_financeItemLocked(review, '${entry.key}', owner: owner)) continue;
+    out['${entry.key}'] = entry.value;
+  }
+  return out;
+}
+
+Object? _mergeProductFinance({
+  required Object? existing,
+  required Object? incoming,
+  required Map<String, dynamic> review,
+}) {
+  final base = existing is Map
+      ? Map<String, dynamic>.from(existing)
+      : <String, dynamic>{};
+  final next = incoming is Map
+      ? Map<String, dynamic>.from(incoming)
+      : const <String, dynamic>{};
+  if (base.isEmpty && next.isEmpty) return incoming;
+  final out = Map<String, dynamic>.from(base);
+  for (final owner in const ['main', 'children']) {
+    if (base[owner] == null && next[owner] == null) continue;
+    out[owner] = _mergeProductFinanceGroup(
+      existing: base[owner],
+      incoming: next[owner] ?? base[owner],
+      review: review,
+      owner: owner,
+    );
+  }
+  return out;
+}
+
 /// 已复核字段沿用上次服务端值，避免整单保存时被关联重算带偏。
 Map<String, dynamic> proposalIntakeKeepUnreviewedForm({
   required Map<String, dynamic> baseline,
@@ -337,6 +396,17 @@ Map<String, dynamic> proposalIntakeKeepUnreviewedForm({
       final incoming = current[key];
       if (existing == null && incoming == null) continue;
       out[key] = _mergeSharedSettlements(
+        existing: existing,
+        incoming: incoming ?? existing,
+        review: review,
+      );
+      continue;
+    }
+    if (key == 'productFinance') {
+      final existing = baseline[key];
+      final incoming = current[key];
+      if (existing == null && incoming == null) continue;
+      out[key] = _mergeProductFinance(
         existing: existing,
         incoming: incoming ?? existing,
         review: review,

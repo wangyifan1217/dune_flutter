@@ -214,6 +214,49 @@ void main() {
     );
   });
 
+  test('unreviewed nested supply fields can change after market review', () {
+    const review = {
+      'marketCompleted': true,
+      'financeItems': {'main:profit': true, 'profit': true},
+    };
+    final got = proposalIntakeKeepUnreviewedForm(
+      baseline: {
+        'proposalName': '已复核名称',
+        'supplySettleCycle': '现金 D+2',
+        'productFinance': {
+          'main': {
+            'supplySettleCycle': '现金 D+2',
+            'profit': 8,
+          },
+        },
+      },
+      current: {
+        'proposalName': '不该改',
+        'supplySettleCycle': '折扣应付已扣',
+        'productFinance': {
+          'main': {
+            'supplySettleCycle': '折扣应付已扣',
+            'profit': 99,
+          },
+        },
+      },
+      review: review,
+    );
+    expect(got['proposalName'], '已复核名称');
+    expect(got['supplySettleCycle'], '折扣应付已扣');
+    expect(
+      (got['productFinance'] as Map)['main']['supplySettleCycle'],
+      '折扣应付已扣',
+    );
+    expect((got['productFinance'] as Map)['main']['profit'], 8);
+    expect(
+      proposalIntakeFormKeyLocked('supplySettleCycle', const {}, {
+        'financeItems': {'main:supplySettleCycle': true},
+      }),
+      isTrue,
+    );
+  });
+
   test(
     'finance interface lock follows technology, not stale interface flag',
     () {

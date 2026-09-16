@@ -37,5 +37,16 @@ void main() {
       const input = '武汉-北京的高铁大约四小时。';
       expect(normalizeNovaMarkdownLayout(input), input);
     });
+
+    test('splits compressed weather labels stuck to previous clause', () {
+      expect(
+        normalizeNovaMarkdownLayout('夜间转中雨或小雨-气温：约 18°C。空气质量：轻度污染-风力：东风。'),
+        contains('\n- 气温：'),
+      );
+      expect(
+        normalizeNovaMarkdownLayout('夜间转中雨或小雨-气温：约 18°C。空气质量：轻度污染-风力：东风。'),
+        contains('\n- 风力：'),
+      );
+    });
   });
 }

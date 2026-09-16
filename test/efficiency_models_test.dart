@@ -177,6 +177,8 @@ void main() {
           'taskOverdue': 2,
           'meetings': 1,
           'imSessions': 6,
+          'avatarPreset': 'fox',
+          'avatarObjectKey': 'users/8.png',
           'items': [
             {'kind': 'overdue', 'title': '需求评审纪要落地', 'hint': '已超期'},
           ],
@@ -186,6 +188,8 @@ void main() {
     expect(board.viewAll, isTrue);
     expect(board.grain, 'month');
     expect(board.people.single.taskOverdue, 2);
+    expect(board.people.single.avatarPreset, 'fox');
+    expect(board.people.single.avatarObjectKey, 'users/8.png');
     expect(board.people.single.items.single.title, '需求评审纪要落地');
   });
 

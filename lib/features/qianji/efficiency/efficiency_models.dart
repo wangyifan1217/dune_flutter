@@ -517,6 +517,9 @@ class WorkSituationPerson {
     this.taskOverdueHighWeight = 0,
     this.taskReviewLevel = '',
     this.taskReviewWhy = '',
+    this.avatarPreset = '',
+    this.avatarObjectKey = '',
+    this.avatarUrl = '',
     this.items = const [],
   });
 
@@ -579,9 +582,13 @@ class WorkSituationPerson {
   final int taskOverdueHighWeight;
   final String taskReviewLevel;
   final String taskReviewWhy;
+  final String avatarPreset;
+  final String avatarObjectKey;
+  final String avatarUrl;
   final List<WorkSituationItem> items;
 
   factory WorkSituationPerson.fromJson(Map<String, dynamic> json) {
+    final avatar = workSituationAvatarFromJson(json);
     return WorkSituationPerson(
       userId: (json['userId'] as num?)?.toInt() ?? 0,
       name: '${json['name'] ?? json['displayName'] ?? ''}'.trim(),
@@ -646,6 +653,9 @@ class WorkSituationPerson {
       taskReviewWhy: humanizeWorkSituationCopy(
         '${json['taskReviewWhy'] ?? ''}',
       ),
+      avatarPreset: avatar.preset,
+      avatarObjectKey: avatar.objectKey,
+      avatarUrl: avatar.url,
       items: (json['items'] as List? ?? const [])
           .whereType<Map>()
           .map((row) => WorkSituationItem.fromJson(Map<String, dynamic>.from(row)))
@@ -653,7 +663,13 @@ class WorkSituationPerson {
     );
   }
 
-  WorkSituationPerson copyWith({List<WorkSituationItem>? items, String? note}) {
+  WorkSituationPerson copyWith({
+    List<WorkSituationItem>? items,
+    String? note,
+    String? avatarPreset,
+    String? avatarObjectKey,
+    String? avatarUrl,
+  }) {
     return WorkSituationPerson(
       userId: userId,
       name: name,
@@ -714,9 +730,64 @@ class WorkSituationPerson {
       taskOverdueHighWeight: taskOverdueHighWeight,
       taskReviewLevel: taskReviewLevel,
       taskReviewWhy: taskReviewWhy,
+      avatarPreset: avatarPreset ?? this.avatarPreset,
+      avatarObjectKey: avatarObjectKey ?? this.avatarObjectKey,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
       items: items ?? this.items,
     );
   }
+
+  bool get hasAvatar =>
+      avatarPreset.trim().isNotEmpty ||
+      avatarObjectKey.trim().isNotEmpty ||
+      avatarUrl.trim().isNotEmpty;
+
+  WorkSituationPerson withAvatar(WorkSituationAvatar? avatar) {
+    if (avatar == null || !avatar.hasImage) return this;
+    return copyWith(
+      avatarPreset: avatarPreset.trim().isNotEmpty
+          ? avatarPreset
+          : avatar.preset,
+      avatarObjectKey: avatarObjectKey.trim().isNotEmpty
+          ? avatarObjectKey
+          : avatar.objectKey,
+      avatarUrl: avatarUrl.trim().isNotEmpty ? avatarUrl : avatar.url,
+    );
+  }
+}
+
+class WorkSituationAvatar {
+  const WorkSituationAvatar({
+    this.preset = '',
+    this.objectKey = '',
+    this.url = '',
+  });
+
+  final String preset;
+  final String objectKey;
+  final String url;
+
+  bool get hasImage =>
+      preset.trim().isNotEmpty ||
+      objectKey.trim().isNotEmpty ||
+      url.trim().isNotEmpty;
+}
+
+WorkSituationAvatar workSituationAvatarFromJson(Map<String, dynamic> json) {
+  var url =
+      '${json['avatarUrl'] ?? json['avatarFullUrl'] ?? json['avatarImageUrl'] ?? json['avatar'] ?? ''}'
+          .trim();
+  final objectKey =
+      '${json['avatarObjectKey'] ?? json['peerAvatarObjectKey'] ?? ''}'.trim();
+  if (url.isEmpty &&
+      (objectKey.startsWith('http://') || objectKey.startsWith('https://'))) {
+    url = objectKey;
+  }
+  return WorkSituationAvatar(
+    preset: '${json['avatarPreset'] ?? json['peerAvatarPreset'] ?? ''}'.trim(),
+    objectKey: objectKey,
+    url: url,
+  );
 }
 
 class WorkSituationBoard {

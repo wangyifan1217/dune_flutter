@@ -6,6 +6,8 @@ import '../../../core/theme/dunes_theme.dart';
 import '../../../core/widgets/horizontal_drag_scroll_view.dart';
 import '../../../core/widgets/spotlight_tour.dart';
 import '../../auth/auth_session.dart';
+import '../../chat/user_avatar_widget.dart';
+import '../../conversation/conversation_service.dart';
 import '../../kb/native_kb_doc_page.dart';
 import '../../meeting/native_meeting_detail_page.dart';
 import '../../tasks/native_task_action_page.dart';
@@ -673,6 +675,7 @@ class _NativeQianjiEfficiencyBossPreviewState
   late DateTime _day;
   String _grain = 'month';
   late final EfficiencyService? _service;
+  late final ConversationService? _avatarService;
   final _search = TextEditingController();
   final _searchFocus = FocusNode();
   String _filter = 'all';
@@ -709,6 +712,9 @@ class _NativeQianjiEfficiencyBossPreviewState
         (widget.session == null
             ? null
             : EfficiencyService(session: widget.session!));
+    _avatarService = widget.session == null
+        ? null
+        : ConversationService(session: widget.session!);
     _tourPrefs = WorkSituationTourPrefs(widget.session?.userId ?? 0);
     unawaited(_load());
   }
@@ -850,6 +856,7 @@ class _NativeQianjiEfficiencyBossPreviewState
           );
         }
       });
+      unawaited(_hydrateAvatars(board, generation));
       unawaited(_maybeStartTour());
     } catch (error) {
       if (!mounted || generation != _generation) return;
@@ -859,6 +866,36 @@ class _NativeQianjiEfficiencyBossPreviewState
       });
       unawaited(_maybeStartTour());
     }
+  }
+
+  Future<void> _hydrateAvatars(WorkSituationBoard board, int generation) async {
+    final service = _service;
+    if (service == null) return;
+    final ids = board.people.map((p) => p.userId).where((id) => id > 0).toSet();
+    if (ids.isEmpty) return;
+    try {
+      final avatars = await service.fetchUserAvatars(ids);
+      if (!mounted || generation != _generation || avatars.isEmpty) return;
+      setState(() {
+        final current = _board ?? board;
+        _board = WorkSituationBoard(
+          grain: current.grain,
+          date: current.date,
+          month: current.month,
+          viewAll: current.viewAll,
+          scopeLabel: current.scopeLabel,
+          departments: current.departments,
+          people: [
+            for (final person in current.people)
+              person.withAvatar(avatars[person.userId]),
+          ],
+        );
+        final opened = _person;
+        if (opened != null) {
+          _person = opened.withAvatar(avatars[opened.userId]);
+        }
+      });
+    } catch (_) {}
   }
 
   Future<void> _openPerson(WorkSituationPerson person) async {
@@ -876,7 +913,13 @@ class _NativeQianjiEfficiencyBossPreviewState
               userId: person.userId,
             );
       if (!mounted || _person?.userId != person.userId) return;
-      setState(() => _person = detail);
+      setState(() => _person = detail.withAvatar(
+        WorkSituationAvatar(
+          preset: person.avatarPreset,
+          objectKey: person.avatarObjectKey,
+          url: person.avatarUrl,
+        ),
+      ));
     } catch (_) {}
   }
 
@@ -1181,6 +1224,7 @@ class _NativeQianjiEfficiencyBossPreviewState
                             person: _person!,
                             monthLabel: monthLabel,
                             session: widget.session,
+                            avatarService: _avatarService,
                             onOpenDept: () {
                               setState(() {
                                 _departmentId = _person!.departmentId;
@@ -1227,6 +1271,7 @@ class _NativeQianjiEfficiencyBossPreviewState
                             }),
                             onPerson: _openPerson,
                             onDept: (id) => setState(() => _departmentId = id),
+                            avatarService: _avatarService,
                           ),
                   ),
                 ],
@@ -1456,6 +1501,7 @@ class _Board extends StatelessWidget {
     required this.onToggle,
     required this.onPerson,
     required this.onDept,
+    this.avatarService,
   });
 
   final bool loading;
@@ -1471,6 +1517,7 @@ class _Board extends StatelessWidget {
   final ValueChanged<int> onToggle;
   final ValueChanged<WorkSituationPerson> onPerson;
   final ValueChanged<int> onDept;
+  final ConversationService? avatarService;
 
   @override
   Widget build(BuildContext context) {
@@ -1537,6 +1584,7 @@ class _Board extends StatelessWidget {
                 onToggle: () => onToggle(dept.id),
                 onPerson: onPerson,
                 onSelect: () => onDept(dept.id),
+                avatarService: avatarService,
               ),
               const SizedBox(height: 10),
             ],
@@ -2119,6 +2167,7 @@ class _DeptCard extends StatelessWidget {
     required this.onToggle,
     required this.onPerson,
     required this.onSelect,
+    this.avatarService,
   });
 
   final _Dept dept;
@@ -2126,6 +2175,7 @@ class _DeptCard extends StatelessWidget {
   final VoidCallback onToggle;
   final ValueChanged<WorkSituationPerson> onPerson;
   final VoidCallback onSelect;
+  final ConversationService? avatarService;
 
   @override
   Widget build(BuildContext context) {
@@ -2168,7 +2218,11 @@ class _DeptCard extends StatelessWidget {
           ),
           if (expanded)
             for (final person in dept.people)
-              _PersonRow(person: person, onTap: () => onPerson(person)),
+              _PersonRow(
+                person: person,
+                onTap: () => onPerson(person),
+                avatarService: avatarService,
+              ),
         ],
       ),
     );
@@ -2176,10 +2230,15 @@ class _DeptCard extends StatelessWidget {
 }
 
 class _PersonRow extends StatelessWidget {
-  const _PersonRow({required this.person, required this.onTap});
+  const _PersonRow({
+    required this.person,
+    required this.onTap,
+    this.avatarService,
+  });
 
   final WorkSituationPerson person;
   final VoidCallback onTap;
+  final ConversationService? avatarService;
 
   @override
   Widget build(BuildContext context) {
@@ -2190,7 +2249,7 @@ class _PersonRow extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _Avatar(name: person.name, alert: _hasWeak(person)),
+            _Avatar(person: person, avatarService: avatarService),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -2368,25 +2427,31 @@ String _whyText(WorkSituationPerson person, String name, _Sig sig) {
 }
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.name, required this.alert});
+  const _Avatar({required this.person, this.avatarService, this.size = 32});
 
-  final String name;
-  final bool alert;
+  final WorkSituationPerson person;
+  final ConversationService? avatarService;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
-    final label = name.isEmpty ? '?' : name.substring(0, 1);
-    return CircleAvatar(
-      radius: 16,
-      backgroundColor: alert ? DunesColors.coralSoft : DunesColors.blueSoft,
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: alert ? DunesColors.coral : DunesColors.blue,
-        ),
-      ),
+    final name = person.name.trim();
+    final initial = name.isEmpty ? '?' : String.fromCharCode(name.runes.first);
+    final alert = _hasWeak(person);
+    return ImUserAvatar(
+      initial: initial,
+      seed: person.userId,
+      size: size,
+      avatarPreset: person.avatarPreset.trim().isEmpty
+          ? null
+          : person.avatarPreset,
+      avatarObjectKey: person.avatarObjectKey.trim().isEmpty
+          ? null
+          : person.avatarObjectKey,
+      avatarUrl: person.avatarUrl.trim().isEmpty ? null : person.avatarUrl,
+      avatarService: avatarService,
+      fallbackBackground: alert ? DunesColors.coralSoft : DunesColors.blueSoft,
+      fallbackForeground: alert ? DunesColors.coral : DunesColors.blue,
     );
   }
 }
@@ -2398,6 +2463,7 @@ class _PersonDetail extends StatelessWidget {
     required this.onOpenDept,
     this.onDrillDay,
     this.session,
+    this.avatarService,
   });
 
   final WorkSituationPerson person;
@@ -2405,6 +2471,7 @@ class _PersonDetail extends StatelessWidget {
   final VoidCallback onOpenDept;
   final VoidCallback? onDrillDay;
   final AuthSession? session;
+  final ConversationService? avatarService;
 
   @override
   Widget build(BuildContext context) {
@@ -2438,7 +2505,11 @@ class _PersonDetail extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  _Avatar(name: person.name, alert: _hasWeak(person)),
+                  _Avatar(
+                    person: person,
+                    avatarService: avatarService,
+                    size: 36,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(

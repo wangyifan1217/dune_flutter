@@ -9,8 +9,9 @@ import '../profile/work_profile_kpi.dart';
 import 'kpi_followup.dart';
 
 class WorkbenchKpiAccess {
-  const WorkbenchKpiAccess({required this.allowed});
+  const WorkbenchKpiAccess({required this.allowed, this.followup = false});
   final bool allowed;
+  final bool followup;
 }
 
 class WorkbenchKpiPersonRef {
@@ -282,7 +283,10 @@ class WorkbenchKpiService {
     final map = data is Map
         ? Map<String, dynamic>.from(data)
         : <String, dynamic>{};
-    return WorkbenchKpiAccess(allowed: map['allowed'] == true);
+    return WorkbenchKpiAccess(
+      allowed: map['allowed'] == true,
+      followup: map['followup'] == true,
+    );
   }
 
   Future<List<WorkbenchKpiTask>> listMyTasks({

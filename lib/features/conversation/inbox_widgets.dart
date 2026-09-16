@@ -22,6 +22,7 @@ class ChatInboxHeader extends StatelessWidget {
     this.selfImStatus = ImUserStatusCatalog.online,
     this.novaThinking = false,
     this.novaUnread = false,
+    this.showNovaLeading = true,
   });
 
   final VoidCallback onOpenContacts;
@@ -35,6 +36,7 @@ class ChatInboxHeader extends StatelessWidget {
   final String selfImStatus;
   final bool novaThinking;
   final bool novaUnread;
+  final bool showNovaLeading;
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +56,7 @@ class ChatInboxHeader extends StatelessWidget {
                 color: const Color(0xFF1C1C1C),
               ),
             ),
-            if (onOpenNova != null)
+            if (showNovaLeading && onOpenNova != null)
               Align(
                 alignment: Alignment.centerLeft,
                 child: Row(
@@ -1108,7 +1110,27 @@ class _Avatar extends StatelessWidget {
 
     switch (kind) {
       case ChatInboxRowKind.aiAssistant:
-        return const NovaIconImage(size: _inboxAvatarSize, borderRadius: 12);
+        return Container(
+          width: _inboxAvatarSize,
+          height: _inboxAvatarSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: const Color(0xFFEBF0FA), width: 1),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x182E75FF),
+                blurRadius: 6,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: ClipOval(
+            child: NovaPersonAvatarImage(
+              width: _inboxAvatarSize,
+              height: _inboxAvatarSize,
+            ),
+          ),
+        );
       case ChatInboxRowKind.approvalAssistant:
         decoration = BoxDecoration(
           borderRadius: borderRadius,
@@ -1400,7 +1422,7 @@ class _NovaEyesButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Tooltip(
-      message: 'NOVA',
+      message: '小饕',
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -1408,14 +1430,30 @@ class _NovaEyesButton extends StatelessWidget {
           onTap: onTap,
           child: SizedBox(
             width: 44,
-            height: 40,
+            height: 44,
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                const Positioned.fill(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [_NovaEye(), SizedBox(width: 4), _NovaEye()],
+                Positioned.fill(
+                  child: Center(
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x222E75FF),
+                            blurRadius: 5,
+                            offset: Offset(0, 1.5),
+                          ),
+                        ],
+                      ),
+                      child: ClipOval(
+                        child: NovaPersonAvatarImage(width: 34, height: 34),
+                      ),
+                    ),
                   ),
                 ),
                 if (unread)
@@ -1444,22 +1482,6 @@ class _NovaEyesButton extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _NovaEye extends StatelessWidget {
-  const _NovaEye();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 8,
-      height: 8,
-      decoration: const BoxDecoration(
-        color: Color(0xFF7E64BD),
-        shape: BoxShape.circle,
       ),
     );
   }

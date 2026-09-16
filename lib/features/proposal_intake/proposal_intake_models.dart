@@ -1727,6 +1727,19 @@ bool proposalIntakeIsWriteDeniedMessage(String text) {
       msg.contains('无权修改');
 }
 
+bool proposalIntakeIsConflictMessage(String text) {
+  final msg = text.trim();
+  if (msg.isEmpty) return false;
+  return msg.contains('已被其他协作者更新') ||
+      (msg.contains('协作者') && msg.contains('刷新后重试'));
+}
+
+/// 返回列表时这些错误不应把人留在详情页：无权写入、或别人已改出版本。
+bool proposalIntakeShouldLeaveDespiteSaveError(String text) {
+  return proposalIntakeIsWriteDeniedMessage(text) ||
+      proposalIntakeIsConflictMessage(text);
+}
+
 /// 自动保存成功后是否提示「已保存草稿」。
 bool proposalIntakeShowDraftSavedToast(ProposalIntakeRow row) {
   return row.status == 'draft' ||

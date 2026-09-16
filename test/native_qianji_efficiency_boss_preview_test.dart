@@ -198,6 +198,16 @@ class _FakeEfficiencyService extends EfficiencyService {
   }) async {
     return _boardFor(date ?? month ?? '').people.firstWhere((p) => p.userId == userId);
   }
+
+  @override
+  Future<Map<int, WorkSituationAvatar>> fetchUserAvatars(
+    Iterable<int> userIds,
+  ) async {
+    return {
+      for (final id in userIds.where((id) => id > 0))
+        id: WorkSituationAvatar(preset: 'cartoon-0${(id % 6) + 1}'),
+    };
+  }
 }
 
 void main() {

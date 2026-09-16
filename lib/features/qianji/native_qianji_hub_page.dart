@@ -8,21 +8,18 @@ import '../robots/robot_character.dart';
 import '../robots/robot_consult_store.dart';
 import '../robots/robot_models.dart';
 import '../robots/robot_service.dart';
+import '../shell/dunes_main_tab_bar.dart';
 import 'digital_auto/digital_employee_service.dart';
 
+/// 饕板块紫调主色系统
 const _themePurple = Color(0xFF7B5CD8);
-const _hubCardColumns = 3;
-const _hubCardGap = 12.0;
+const _deepPurple = Color(0xFF261D38);
+const _subText = Color(0xFF888196);
+const _cardBorder = Color(0xFFEDE8F5);
+const _bgSurface = Color(0xFFF7F6FA);
 
-double _hubCardWidth(double availableWidth) {
-  // Floor so 3×width + 2×gap never exceeds maxWidth (avoids 4th card staying on row 1
-  // on wide screens, and prevents FP overflow wrapping early on APP).
-  final totalGap = (_hubCardColumns - 1) * _hubCardGap;
-  final raw = (availableWidth - totalGap) / _hubCardColumns;
-  return raw.floorToDouble().clamp(1.0, availableWidth);
-}
-
-/// NOVA Hub：机器人（接口目录）+ 管理入口。
+/// 千机（饕）板块页面：
+/// 采用参考支付宝 APP 的高质感卡片布局风格，并保持当前紫色调为主色。
 class NativeQianjiHubPage extends StatefulWidget {
   const NativeQianjiHubPage({
     super.key,
@@ -123,9 +120,16 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
     }
   }
 
+  Future<void> _refreshAll() async {
+    await Future.wait([
+      _loadRobots(),
+      _loadDigitalEmployees(),
+    ]);
+  }
+
   Future<void> _loadRobots() async {
     final session = widget.session;
-    if (session == null || !session.effectiveRobotAccess) {
+    if (session == null || !_canUseRobots) {
       if (mounted) {
         setState(() {
           _robots = const [];
@@ -192,125 +196,217 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
     }
   }
 
+  void _onTapDigitalEmployee(DigitalEmployeeItem item) {
+    if (item.comingSoon) {
+      _showMeetingAssistantComingSoon();
+      return;
+    }
+    switch (item.screenId) {
+      case 'QJTO':
+      case 'QJMA':
+      case 'QJAM':
+        if (widget.onOpenDigitalEmployee != null) {
+          widget.onOpenDigitalEmployee!(item);
+        } else {
+          _showMeetingAssistantComingSoon();
+        }
+        break;
+      default:
+        _showMeetingAssistantComingSoon();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_hasAccess) {
       return _buildNoAccessView();
     }
 
+    final assetRows = <Widget>[
+      if (widget.onOpenCashFlow != null)
+        _AlipayAssetRow(
+          icon: Icons.account_balance_rounded,
+          iconBgColor: const Color(0xFFE8F5E9),
+          iconColor: const Color(0xFF2E7D32),
+          title: '资金流向',
+          subtitle: '公司账户 · 由大到小',
+          actionText: '实时看板',
+          onTap: widget.onOpenCashFlow!,
+        ),
+      if (widget.onOpenMonthlyBill != null)
+        _AlipayAssetRow(
+          icon: Icons.receipt_long_rounded,
+          iconBgColor: const Color(0xFFEDE7F6),
+          iconColor: _themePurple,
+          title: '月结',
+          subtitle: '应收 · 应付',
+          actionText: '账单台账',
+          onTap: widget.onOpenMonthlyBill!,
+        ),
+      if (widget.onOpenFundSecondment != null)
+        _AlipayAssetRow(
+          icon: Icons.account_balance_wallet_rounded,
+          iconBgColor: const Color(0xFFFFF3E0),
+          iconColor: const Color(0xFFE65100),
+          title: '资金借调',
+          subtitle: '已通过借款单',
+          actionText: '借还明细',
+          onTap: widget.onOpenFundSecondment!,
+        ),
+      if (widget.onOpenTravel != null)
+        _AlipayAssetRow(
+          icon: Icons.flight_takeoff_rounded,
+          iconBgColor: const Color(0xFFE0F7FA),
+          iconColor: const Color(0xFF00838F),
+          title: '差旅管理',
+          subtitle: '出行成本 · 地图',
+          actionText: '行程地图',
+          onTap: widget.onOpenTravel!,
+        ),
+    ];
+
+    final superviseItems = <_SuperviseItemData>[
+      _SuperviseItemData(
+        title: '工作情况',
+        subtitle: widget.session?.workSituationViewAll == true
+            ? '全部部门'
+            : '本人及下级',
+        icon: Icons.groups_outlined,
+        gradientColors: const [Color(0xFF8B6BE8), Color(0xFF6743D3)],
+        onTap: widget.onOpenEfficiencyBossPreview,
+      ),
+      if (widget.onOpenEfficiencyAnalysis != null)
+        _SuperviseItemData(
+          title: 'AI效能分析',
+          subtitle: '个人与部门',
+          icon: Icons.insights_outlined,
+          gradientColors: const [Color(0xFF6272EA), Color(0xFF4856C7)],
+          onTap: widget.onOpenEfficiencyAnalysis,
+        ),
+      _SuperviseItemData(
+        title: '会议纪要',
+        subtitle: '本人及下级',
+        icon: Icons.fact_check_outlined,
+        gradientColors: const [Color(0xFF9E43C2), Color(0xFF7A25A0)],
+        onTap: widget.onOpenMeetingSupervise,
+      ),
+      _SuperviseItemData(
+        title: 'IM会话',
+        subtitle: '本人及下级',
+        icon: Icons.forum_outlined,
+        gradientColors: const [Color(0xFF4884E8), Color(0xFF2E63BE)],
+        onTap: widget.onOpenSessionSupervise,
+      ),
+      _SuperviseItemData(
+        title: '知识库',
+        subtitle: '本人及下级',
+        icon: Icons.folder_shared_outlined,
+        gradientColors: const [Color(0xFFD67E33), Color(0xFFB5611B)],
+        onTap: widget.onOpenKbSupervise,
+      ),
+      _SuperviseItemData(
+        title: 'Cursor账号',
+        subtitle: '账号与用量',
+        icon: Icons.manage_accounts_outlined,
+        gradientColors: const [Color(0xFF4A3E66), Color(0xFF322849)],
+        onTap: widget.onOpenCursorAccount,
+      ),
+    ];
+
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: _bgSurface,
       child: SafeArea(
         bottom: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+              child: Stack(
                 children: [
-                  if (_canUseDigitalEmployees &&
-                      (_loadingDigitalEmployees ||
-                          _digitalEmployees.isNotEmpty)) ...[
-                    _TauHubPreview(
-                      items: _digitalEmployees,
-                      onOpenDigitalEmployee: widget.onOpenDigitalEmployee,
-                      onComingSoon: _showMeetingAssistantComingSoon,
+                  // 顶部微光柔和紫光渐变，保留高质感背景氛围
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: 160,
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Color(0xFFEFE9FA),
+                            Color(0xFFF7F4FD),
+                            _bgSurface,
+                          ],
+                          stops: [0.0, 0.6, 1.0],
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 16),
-                  ],
-                  _NovaHubSection(
-                    title: '管理',
-                    accent: _themePurple,
-                    children: [
-                      _NovaHubTile(
-                        title: 'Cursor账号',
-                        subtitle: '账号与用量',
-                        icon: Icons.manage_accounts_outlined,
-                        color: _themePurple,
-                        onTap: widget.onOpenCursorAccount,
-                      ),
-                      _NovaHubTile(
-                        title: '会议纪要',
-                        subtitle: '本人及下级',
-                        icon: Icons.fact_check_outlined,
-                        color: _themePurple,
-                        onTap: widget.onOpenMeetingSupervise,
-                      ),
-                      _NovaHubTile(
-                        title: 'IM会话',
-                        subtitle: '本人及下级',
-                        icon: Icons.forum_outlined,
-                        color: _themePurple,
-                        onTap: widget.onOpenSessionSupervise,
-                      ),
-                      _NovaHubTile(
-                        title: '知识库',
-                        subtitle: '本人及下级',
-                        icon: Icons.folder_shared_outlined,
-                        color: _themePurple,
-                        onTap: widget.onOpenKbSupervise,
-                      ),
-                      _NovaHubTile(
-                        title: '工作情况',
-                        subtitle: widget.session?.workSituationViewAll == true
-                            ? '全部部门'
-                            : '本人及下级',
-                        icon: Icons.groups_outlined,
-                        color: _themePurple,
-                        onTap: widget.onOpenEfficiencyBossPreview,
-                      ),
-                      if (widget.onOpenEfficiencyAnalysis != null)
-                        _NovaHubTile(
-                          title: 'AI效能分析',
-                          subtitle: '个人与部门效能',
-                          icon: Icons.insights_outlined,
-                          color: _themePurple,
-                          onTap: widget.onOpenEfficiencyAnalysis,
-                        ),
-                      if (widget.onOpenFundSecondment != null)
-                        _NovaHubTile(
-                          title: '资金借调',
-                          subtitle: '已通过借款单',
-                          icon: Icons.account_balance_wallet_outlined,
-                          color: _themePurple,
-                          onTap: widget.onOpenFundSecondment,
-                        ),
-                      if (widget.onOpenCashFlow != null)
-                        _NovaHubTile(
-                          title: '资金流向',
-                          subtitle: '公司账户 · 由大到小',
-                          icon: Icons.account_balance_outlined,
-                          color: _themePurple,
-                          onTap: widget.onOpenCashFlow,
-                        ),
-                      if (widget.onOpenMonthlyBill != null)
-                        _NovaHubTile(
-                          title: '月结',
-                          subtitle: '应收 · 应付',
-                          icon: Icons.receipt_long_outlined,
-                          color: _themePurple,
-                          onTap: widget.onOpenMonthlyBill,
-                        ),
-                      _NovaHubTile(
-                        title: '差旅管理',
-                        subtitle: '出行成本 · 地图',
-                        icon: Icons.flight_takeoff_outlined,
-                        color: _themePurple,
-                        onTap: widget.onOpenTravel,
-                      ),
-                    ],
                   ),
-                  if (_canUseRobots &&
-                      (_loadingRobots || _robots.isNotEmpty)) ...[
-                    const SizedBox(height: 16),
-                    _RobotHubPreview(
-                      robots: _robots,
-                      loading: _loadingRobots,
-                      onOpenRobot: widget.onOpenRobot,
-                      onOpenConsultList: widget.onOpenRobotHome,
-                    ),
-                  ],
+
+                  // 页面主体容器（PC 端响应式铺平，APP 端紧凑单列）
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isWide = constraints.maxWidth >= 768;
+                      final horizontalPadding = isWide ? 24.0 : 16.0;
+
+                      return RefreshIndicator(
+                        color: _themePurple,
+                        onRefresh: _refreshAll,
+                        child: ListView(
+                          physics: const AlwaysScrollableScrollPhysics(
+                            parent: BouncingScrollPhysics(),
+                          ),
+                          padding: EdgeInsets.fromLTRB(
+                            horizontalPadding,
+                            16,
+                            horizontalPadding,
+                            dunesAppBottomNavContentPadding(
+                              context,
+                              fallback: 40,
+                            ),
+                          ),
+                          children: [
+                            // 1. 资金看板（PC 全宽上下结构，宽屏内 2 列铺开）
+                            if (assetRows.isNotEmpty) ...[
+                              _buildFinanceAssetCard(
+                                assetRows,
+                                isWide: isWide,
+                              ),
+                              SizedBox(height: isWide ? 18 : 14),
+                            ],
+
+                            // 2. 督导管理区（PC 全宽铺在资金看板下方）
+                            if (superviseItems.isNotEmpty) ...[
+                              _buildSuperviseGridCard(
+                                superviseItems,
+                                isWide: isWide,
+                              ),
+                              SizedBox(height: isWide ? 18 : 14),
+                            ],
+
+                            // 3. 数字员工专区（PC 宽屏自适应 3~4 列平铺网格）
+                            if (_canUseDigitalEmployees &&
+                                (_loadingDigitalEmployees ||
+                                    _digitalEmployees.isNotEmpty)) ...[
+                              _buildDigitalEmployeesSection(
+                                _digitalEmployees,
+                                isWide: isWide,
+                              ),
+                              const SizedBox(height: 18),
+                            ],
+
+                            // 4. 智能机器人矩阵（PC 宽屏双列平铺网格）
+                            if (_canUseRobots &&
+                                (_loadingRobots || _robots.isNotEmpty)) ...[
+                              _buildRobotSection(_robots, isWide: isWide),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
@@ -320,9 +416,387 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
     );
   }
 
+  /// 1. 资金与财务看板
+  Widget _buildFinanceAssetCard(
+    List<Widget> assetRows, {
+    bool isWide = false,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _cardBorder),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF331E54).withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final useTwoCol = isWide && constraints.maxWidth >= 720;
+          if (!useTwoCol) {
+            return Column(
+              children: [
+                for (var i = 0; i < assetRows.length; i++) ...[
+                  assetRows[i],
+                  if (i < assetRows.length - 1)
+                    const Divider(
+                      height: 1,
+                      indent: 64,
+                      endIndent: 16,
+                      color: Color(0xFFF3F0F7),
+                    ),
+                ],
+              ],
+            );
+          }
+
+          const columns = 2;
+          final itemWidth = (constraints.maxWidth / columns).floorToDouble();
+          return Wrap(
+            children: [
+              for (var i = 0; i < assetRows.length; i++)
+                SizedBox(
+                  width: itemWidth,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border(
+                        right: i.isEven
+                            ? const BorderSide(color: Color(0xFFF3F0F7))
+                            : BorderSide.none,
+                        bottom: i <
+                                assetRows.length -
+                                    (assetRows.length.isOdd ? 1 : 2)
+                            ? const BorderSide(color: Color(0xFFF3F0F7))
+                            : BorderSide.none,
+                      ),
+                    ),
+                    child: assetRows[i],
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// 2. 管理与督导金刚区
+  Widget _buildSuperviseGridCard(
+    List<_SuperviseItemData> items, {
+    bool isWide = false,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _cardBorder),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF331E54).withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = isWide
+              ? (constraints.maxWidth >= 960
+                  ? 6
+                  : (constraints.maxWidth >= 480 ? 4 : 3))
+              : 4;
+          const gap = 8.0;
+          final itemWidth =
+              ((constraints.maxWidth - (columns - 1) * gap) / columns)
+                  .floorToDouble();
+
+          return Wrap(
+            spacing: gap,
+            runSpacing: 14,
+            children: [
+              for (final item in items)
+                SizedBox(
+                  width: itemWidth,
+                  child: _AlipayGridItem(
+                    icon: item.icon,
+                    gradientColors: item.gradientColors,
+                    title: item.title,
+                    subtitle: item.subtitle,
+                    onTap: item.onTap,
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// 3. 数字员工专区
+  Widget _buildDigitalEmployeesSection(
+    List<DigitalEmployeeItem> items, {
+    bool isWide = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Row(
+            children: [
+              Container(
+                width: 4,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: _themePurple,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'AI 数字员工',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: _deepPurple,
+                ),
+              ),
+              if (_loadingDigitalEmployees) ...[
+                const SizedBox(width: 8),
+                const SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: _themePurple,
+                  ),
+                ),
+              ],
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1EBF9),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.bolt_rounded, size: 12, color: _themePurple),
+                    SizedBox(width: 2),
+                    Text(
+                      '7×24h 在岗运行',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: _themePurple,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = isWide
+                ? (constraints.maxWidth >= 1050
+                    ? 4
+                    : (constraints.maxWidth >= 680 ? 3 : 2))
+                : (constraints.maxWidth >= 460 ? 2 : 1);
+            const gap = 12.0;
+            final itemWidth =
+                ((constraints.maxWidth - (columns - 1) * gap) / columns)
+                    .floorToDouble();
+
+            return Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: [
+                for (final item in items)
+                  SizedBox(
+                    width: itemWidth,
+                    child: _DigitalEmployeeCard(
+                      item: item,
+                      onTap: () => _onTapDigitalEmployee(item),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  /// 4. 智能机器人矩阵
+  Widget _buildRobotSection(
+    List<RobotRole> robots, {
+    bool isWide = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Row(
+            children: [
+              Container(
+                width: 4,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: _themePurple,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                '智能机器人矩阵',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: _deepPurple,
+                ),
+              ),
+              if (_loadingRobots) ...[
+                const SizedBox(width: 8),
+                const SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: _themePurple,
+                  ),
+                ),
+              ],
+              const Spacer(),
+              if (widget.onOpenRobotHome != null)
+                InkWell(
+                  onTap: widget.onOpenRobotHome,
+                  borderRadius: BorderRadius.circular(6),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    child: Row(
+                      children: [
+                        Text(
+                          '服务大厅',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _subText,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 16,
+                          color: _subText,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (isWide && constraints.maxWidth >= 680) {
+              const columns = 2;
+              const gap = 12.0;
+              final itemWidth =
+                  ((constraints.maxWidth - (columns - 1) * gap) / columns)
+                      .floorToDouble();
+
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final robot in robots)
+                    SizedBox(
+                      width: itemWidth,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: _cardBorder),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF331E54).withValues(alpha: 0.04),
+                              blurRadius: 14,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: _RobotListTile(
+                          role: robot,
+                          onTap: () {
+                            if (widget.onOpenRobot != null) {
+                              widget.onOpenRobot!(robot);
+                              return;
+                            }
+                            widget.onOpenRobotHome?.call();
+                          },
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            }
+
+            return Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _cardBorder),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF331E54).withValues(alpha: 0.04),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  for (var i = 0; i < robots.length; i++) ...[
+                    _RobotListTile(
+                      role: robots[i],
+                      onTap: () {
+                        if (widget.onOpenRobot != null) {
+                          widget.onOpenRobot!(robots[i]);
+                          return;
+                        }
+                        widget.onOpenRobotHome?.call();
+                      },
+                    ),
+                    if (i < robots.length - 1)
+                      const Divider(
+                        height: 1,
+                        indent: 64,
+                        endIndent: 16,
+                        color: Color(0xFFF3F0F7),
+                      ),
+                  ],
+                ],
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
   Widget _buildNoAccessView() {
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: _bgSurface,
       child: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -335,7 +809,7 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                 decoration: BoxDecoration(
                   color: const Color(0xFFF0EEF7),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFE8EAED)),
+                  border: Border.all(color: _cardBorder),
                 ),
                 child: const Icon(
                   Icons.lock_outline_rounded,
@@ -370,183 +844,349 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
   }
 }
 
-class _TauHubPreview extends StatelessWidget {
-  const _TauHubPreview({
-    required this.items,
-    this.onOpenDigitalEmployee,
-    this.onComingSoon,
+class _SuperviseItemData {
+  const _SuperviseItemData({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.gradientColors,
+    required this.onTap,
   });
 
-  final List<DigitalEmployeeItem> items;
-  final ValueChanged<DigitalEmployeeItem>? onOpenDigitalEmployee;
-  final VoidCallback? onComingSoon;
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final List<Color> gradientColors;
+  final VoidCallback? onTap;
+}
 
-  VoidCallback? _onTap(DigitalEmployeeItem item) {
-    if (item.comingSoon) return onComingSoon;
-    switch (item.screenId) {
-      case 'QJTO':
-      case 'QJMA':
-      case 'QJAM':
-        return onOpenDigitalEmployee == null
-            ? onComingSoon
-            : () => onOpenDigitalEmployee!(item);
-      default:
-        return onComingSoon;
-    }
-  }
+/// 支付宝列表风格资产单行组件
+class _AlipayAssetRow extends StatelessWidget {
+  const _AlipayAssetRow({
+    required this.icon,
+    required this.iconBgColor,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.actionText,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color iconBgColor;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final String actionText;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8EAED)),
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
             children: [
+              // 浅底圆角高质感双色图标
               Container(
-                width: 4,
-                height: 16,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  color: _themePurple,
-                  borderRadius: BorderRadius.circular(2),
+                  color: iconBgColor,
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                alignment: Alignment.center,
+                child: Icon(icon, color: iconColor, size: 21),
               ),
-              const SizedBox(width: 8),
-              const Text(
-                '数字员工',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: _themePurple,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final cardWidth = _hubCardWidth(constraints.maxWidth);
-              return Wrap(
-                spacing: _hubCardGap,
-                runSpacing: _hubCardGap,
-                children: [
-                  for (final item in items)
-                    _NovaHubCard(
-                      width: cardWidth,
-                      tile: _NovaHubTile(
-                        title: item.name,
-                        subtitle: item.subtitle,
-                        icon: digitalEmployeeIcon(item.iconKey),
-                        color: _themePurple,
-                        onTap: _onTap(item),
+              const SizedBox(width: 14),
+
+              // 主副标题
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: _deepPurple,
                       ),
                     ),
-                ],
-              );
-            },
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: _subText,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // 右侧辅助说明文案 + 细箭头
+              Text(
+                actionText,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: Color(0xFF9F98AC),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(width: 2),
+              const Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: Color(0xFFB5AFBF),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _RobotHubPreview extends StatelessWidget {
-  const _RobotHubPreview({
-    required this.robots,
-    this.loading = false,
-    this.onOpenRobot,
-    this.onOpenConsultList,
+/// 支付宝金刚区单项组件
+class _AlipayGridItem extends StatelessWidget {
+  const _AlipayGridItem({
+    required this.icon,
+    required this.gradientColors,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
   });
 
-  final List<RobotRole> robots;
-  final bool loading;
-  final ValueChanged<RobotRole>? onOpenRobot;
-  final VoidCallback? onOpenConsultList;
+  final IconData icon;
+  final List<Color> gradientColors;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8EAED)),
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
+              // 立体微渐变底座 + 高质感白图标
               Container(
-                width: 4,
-                height: 16,
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
-                  color: RobotTheme.purple,
-                  borderRadius: BorderRadius.circular(2),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: gradientColors,
+                  ),
+                  borderRadius: BorderRadius.circular(13),
+                  boxShadow: [
+                    BoxShadow(
+                      color: gradientColors.last.withValues(alpha: 0.22),
+                      blurRadius: 7,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
                 ),
+                alignment: Alignment.center,
+                child: Icon(icon, color: Colors.white, size: 21),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(height: 8),
+
+              // 主标题
               Text(
-                '机器人',
-                style: DunesTypography.sans(
-                  fontSize: 15,
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: RobotTheme.purple,
+                  color: _deepPurple,
+                  letterSpacing: -0.2,
                 ),
               ),
-              if (loading) ...[
-                const SizedBox(width: 10),
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+              const SizedBox(height: 2),
+
+              // 副标题小说明
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 10.5,
+                  color: _subText,
+                  fontWeight: FontWeight.w400,
                 ),
-              ],
+              ),
             ],
           ),
-          const SizedBox(height: 14),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final cardWidth = _hubCardWidth(constraints.maxWidth);
-              return Wrap(
-                spacing: _hubCardGap,
-                runSpacing: _hubCardGap,
-                children: [
-                  for (final robot in robots)
-                    _RobotMiniCard(
-                      role: robot,
-                      width: cardWidth,
-                      onTap: () {
-                        if (onOpenRobot != null) {
-                          onOpenRobot!(robot);
-                          return;
-                        }
-                        onOpenConsultList?.call();
-                      },
-                    ),
-                ],
-              );
-            },
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _RobotMiniCard extends StatelessWidget {
-  const _RobotMiniCard({required this.role, required this.width, this.onTap});
+/// 数字员工大卡片组件
+class _DigitalEmployeeCard extends StatelessWidget {
+  const _DigitalEmployeeCard({required this.item, required this.onTap});
+
+  final DigitalEmployeeItem item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _cardBorder),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF331E54).withValues(alpha: 0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0EBF9),
+                      borderRadius: BorderRadius.circular(11),
+                      border: Border.all(color: const Color(0xFFE2D6F5)),
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(
+                      digitalEmployeeIcon(item.iconKey),
+                      color: _themePurple,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w700,
+                            color: _deepPurple,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEDE7F6),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'AI 协同助理',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w600,
+                              color: _themePurple,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                item.subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  height: 1.3,
+                  color: _subText,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _themePurple.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '开启对话',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: _themePurple,
+                          ),
+                        ),
+                        SizedBox(width: 2),
+                        Icon(
+                          Icons.arrow_forward_rounded,
+                          size: 13,
+                          color: _themePurple,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 机器人单行卡片组件
+class _RobotListTile extends StatelessWidget {
+  const _RobotListTile({required this.role, required this.onTap});
 
   final RobotRole role;
-  final double width;
-  final VoidCallback? onTap;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -555,314 +1195,165 @@ class _RobotMiniCard extends StatelessWidget {
       builder: (context, _) {
         final store = RobotConsultStore.instance;
         final status = store.hubStatus;
-        final active = store.activeCount;
+        final isBusy = status == RobotConsultStatus.running ||
+            status == RobotConsultStatus.queued;
+
         return Material(
-          color: const Color(0xFFF8F7FB),
-          borderRadius: BorderRadius.circular(10),
+          color: Colors.transparent,
           child: InkWell(
-            borderRadius: BorderRadius.circular(10),
             onTap: onTap,
-            child: SizedBox(
-              width: width,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  // 头像与状态光标
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: role.accent.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(13),
+                        ),
+                        alignment: Alignment.center,
+                        child: RobotFaceAvatar(
+                          role: role,
+                          size: 34,
+                          animate: true,
+                          busy: isBusy,
+                        ),
+                      ),
+                      Positioned(
+                        right: -2,
+                        top: -2,
+                        child: Container(
+                          width: 10,
+                          height: 10,
                           decoration: BoxDecoration(
-                            color: role.accent.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          alignment: Alignment.center,
-                          child: RobotFaceAvatar(
-                            role: role,
-                            size: 36,
-                            animate: true,
-                            busy:
-                                status == RobotConsultStatus.running ||
-                                status == RobotConsultStatus.queued,
+                            color: role.canChat
+                                ? const Color(0xFF2E7D32)
+                                : const Color(0xFFD67E33),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 1.8),
                           ),
                         ),
-                        if (!role.canChat)
-                          Positioned(
-                            right: -6,
-                            top: -6,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 5,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFF4E5),
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                  color: const Color(0xFFE8C48A),
-                                ),
-                              ),
-                              child: const Text(
-                                '仅推送',
-                                style: TextStyle(
-                                  fontSize: 9,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 14),
+
+                  // 机器人名称与职能
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                role.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14.5,
                                   fontWeight: FontWeight.w700,
-                                  color: Color(0xFFB07A2B),
+                                  color: _deepPurple,
                                 ),
                               ),
                             ),
-                          )
-                        else if (status != null)
-                          Positioned(
-                            right: -4,
-                            top: -4,
-                            child: _StatusDot(status: status),
+                            const SizedBox(width: 6),
+                            if (!role.canChat)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFF3E0),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  '仅推送',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFFB5611B),
+                                  ),
+                                ),
+                              )
+                            else
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE8F5E9),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  '在线',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF2E7D32),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          role.desc.isNotEmpty ? role.desc : role.category,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            color: _subText,
                           ),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      role.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        height: 1.25,
-                        fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
-                      ),
+                  ),
+
+                  // 右侧咨询按钮
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
                     ),
-                    const SizedBox(height: 2),
-                    if (!role.canChat)
-                      const Text(
-                        '仅推送通知',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          height: 1.25,
-                          color: DunesColors.text3,
+                    decoration: BoxDecoration(
+                      color: _themePurple.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          role.canChat ? '咨询' : '详情',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _themePurple,
+                          ),
                         ),
-                      )
-                    else if (status != null)
-                      Text(
-                        active > 1 ? '${status.label} · $active' : status.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          height: 1.25,
-                          fontWeight: FontWeight.w600,
-                          color: status == RobotConsultStatus.running
-                              ? RobotTheme.purple
-                              : const Color(0xFFB07A2B),
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          size: 15,
+                          color: _themePurple,
                         ),
-                      )
-                    else
-                      Text(
-                        role.category,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          height: 1.25,
-                          color: DunesColors.text3,
-                        ),
-                      ),
-                  ],
-                ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
         );
       },
-    );
-  }
-}
-
-class _StatusDot extends StatelessWidget {
-  const _StatusDot({required this.status});
-
-  final RobotConsultStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    final running = status == RobotConsultStatus.running;
-    return Container(
-      width: 16,
-      height: 16,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 3),
-        ],
-      ),
-      alignment: Alignment.center,
-      child: running
-          ? const SizedBox(
-              width: 10,
-              height: 10,
-              child: CircularProgressIndicator(
-                strokeWidth: 1.8,
-                color: RobotTheme.purple,
-              ),
-            )
-          : Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                color: Color(0xFFB07A2B),
-                shape: BoxShape.circle,
-              ),
-            ),
-    );
-  }
-}
-
-class _NovaHubTile {
-  const _NovaHubTile({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-    this.onTap,
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-  final VoidCallback? onTap;
-}
-
-class _NovaHubSection extends StatelessWidget {
-  const _NovaHubSection({
-    required this.title,
-    required this.accent,
-    required this.children,
-  });
-
-  final String title;
-  final Color accent;
-  final List<_NovaHubTile> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8EAED)),
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 4,
-                height: 16,
-                decoration: BoxDecoration(
-                  color: accent,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: accent,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final cardWidth = _hubCardWidth(constraints.maxWidth);
-              return Wrap(
-                spacing: _hubCardGap,
-                runSpacing: _hubCardGap,
-                children: [
-                  for (final tile in children)
-                    _NovaHubCard(tile: tile, width: cardWidth),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _NovaHubCard extends StatelessWidget {
-  const _NovaHubCard({required this.tile, required this.width});
-
-  final _NovaHubTile tile;
-  final double width;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFFF8F7FB),
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: tile.onTap,
-        child: SizedBox(
-          width: width,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: tile.color.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(tile.icon, color: tile.color, size: 18),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  tile.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    height: 1.25,
-                    fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  tile.subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    height: 1.25,
-                    color: DunesColors.text3,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

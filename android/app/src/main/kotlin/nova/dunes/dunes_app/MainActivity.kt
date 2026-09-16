@@ -60,7 +60,6 @@ class MainActivity : FlutterActivity() {
     private var sessionTracking = false
     private var sessionTitle = ""
     private var crashWav: CrashSafeWavWriter? = null
-    private val rotateRunnable = Runnable { rotateLiveSegmentIfNeeded() }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -196,23 +195,8 @@ class MainActivity : FlutterActivity() {
         deleteQuietly(liveSessionFile())
     }
 
-    private fun startSegmentRotateTimer() {
-        mainHandler.removeCallbacks(rotateRunnable)
-        if (!sessionTracking) return
-        mainHandler.postDelayed(rotateRunnable, 60_000L)
-    }
-
-    private fun rotateLiveSegmentIfNeeded() {
-        if (!isRecording || isPaused || !sessionTracking) return
-        accumulatedDurationMs += currentSegmentDurationMs()
-        startedAtMs = System.currentTimeMillis()
-        finalizeCurrentSegmentIfNeeded()
-        startNewSegmentEncoder(newVoiceRecordingPath("voice"))
-        persistLiveSession()
-        startSegmentRotateTimer()
-        refreshRecordingNotification()
-    }
-
+    // 会议录音只在真正暂停/结束时收尾编码器；固定 60 秒轮换会与采集线程并发
+    // 操作 MediaCodec，部分 Vivo/OriginOS 设备会因此误触发麦克风占用暂停。
     private fun flushLiveSessionForDeath() {
         if (!isRecording || !sessionTracking) return
         if (!isPaused) {
@@ -393,14 +377,14 @@ class MainActivity : FlutterActivity() {
             ignoreSilentConflictUntilMs = System.currentTimeMillis() + 3_000L
             ensureWakeLock()
 
-            recordThread = Thread { writePcmLoop() }.also { it.start() }
-            requestAudioFocusForRecording()
             if (sessionTracking) {
                 closeCrashWav(deleteFile = true)
                 crashWav = CrashSafeWavWriter(livePcmFile().absolutePath)
             }
+            // 先准备崩溃保护文件，再启动采集线程，避免开录初始窗口丢掉 PCM。
+            recordThread = Thread { writePcmLoop() }.also { it.start() }
+            requestAudioFocusForRecording()
             persistLiveSession()
-            startSegmentRotateTimer()
             refreshRecordingNotification()
             result.success(true)
         } catch (e: Exception) {
@@ -764,7 +748,6 @@ class MainActivity : FlutterActivity() {
         isPaused = false
         pausedBySystemInterruption = false
         micConflictDetected = false
-        mainHandler.removeCallbacks(rotateRunnable)
         // 先停采集，避免录音线程卡在 read() 上，join 把主线程拖死。
         stopAudioRecordCapture()
         try {

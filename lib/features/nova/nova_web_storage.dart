@@ -103,6 +103,7 @@ abstract final class NovaWebStorage {
     'dunes_nova_owner_uid',
     'dunes_nova_profile_session',
     'dunes_nova_local_history',
+    'dunes_nova_deleted_conversations',
     'dunes_nova_chat_model',
     'dunes_nova_view_since',
     'dunes_nova_history_sync_queue',

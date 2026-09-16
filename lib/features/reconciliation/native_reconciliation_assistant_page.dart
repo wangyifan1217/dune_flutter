@@ -23,6 +23,8 @@ import 'recon_markdown_table.dart';
 import 'reconciliation_shucai_models.dart';
 import 'reconciliation_shucai_service.dart';
 import 'shucai_report_table.dart';
+import 'tag3_daily_models.dart';
+import 'tag3_daily_table.dart';
 
 /// 对账助手：真实 RECONCILIATION_ASSISTANT 会话，保留原名片/评价/确认风格。
 class NativeReconciliationAssistantPage extends StatefulWidget {
@@ -61,6 +63,8 @@ class _NativeReconciliationAssistantPageState
   final List<NativeChatMessage> _messages = [];
   final Map<String, ReconCardStatus> _status = {};
   ShucaiSnapshot? _snapshot;
+  Tag3DailySnapshot? _tag3Daily;
+  final Set<String> _tag3ConfirmingKeys = {};
   String? _error;
   bool _loading = true;
   bool _confirming = false;
@@ -165,7 +169,11 @@ class _NativeReconciliationAssistantPageState
     final dates = <String>{};
     for (final msg in list) {
       final card = _cardFromMessage(msg);
-      if (card != null && card.asOfDate.isNotEmpty) dates.add(card.asOfDate);
+      if (card != null &&
+          card.asOfDate.isNotEmpty &&
+          !isTag3DailyCard(card.cardType)) {
+        dates.add(card.asOfDate);
+      }
     }
     final statusMap = <String, ReconCardStatus>{};
     for (final date in dates) {
@@ -402,6 +410,8 @@ class _NativeReconciliationAssistantPageState
     setState(() {
       _showDetails = false;
       _selectedRowKeys.clear();
+      _tag3Daily = null;
+      _tag3ConfirmingKeys.clear();
     });
     _scrollToLatestOnEnter();
   }
@@ -432,6 +442,10 @@ class _NativeReconciliationAssistantPageState
   }
 
   Future<void> _openDetails(_ReconCardPayload card, {bool refresh = false}) async {
+    if (isTag3DailyCard(card.cardType)) {
+      await _openTag3Daily(card, refresh: refresh);
+      return;
+    }
     final jump = widget.onOpenWorkbenchDailyRecon;
     if (jump != null && card.asOfDate.trim().isNotEmpty && !refresh) {
       jump(
@@ -484,6 +498,265 @@ class _NativeReconciliationAssistantPageState
       if (!mounted) return;
       setState(() => _error = friendlyErrorText(e));
     }
+  }
+
+  Future<void> _openTag3Daily(_ReconCardPayload card, {bool refresh = false}) async {
+    setState(() {
+      _detailCardType = 'TAG3_DAILY';
+      _detailAsOfDate = card.asOfDate;
+      _showDetails = true;
+      if (!refresh) _tag3Daily = null;
+      _error = null;
+    });
+    try {
+      final snap = await _shucai.fetchTag3Daily(asOfDate: card.asOfDate);
+      if (!mounted) return;
+      setState(() => _tag3Daily = snap);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = friendlyErrorText(e));
+    }
+  }
+
+  Future<void> _confirmTag3Daily(Tag3DailyRow row) async {
+    await _submitTag3DailyAction(row, confirm: true);
+  }
+
+  Future<void> _commentTag3Daily(Tag3DailyRow row) async {
+    await _submitTag3DailyAction(row, confirm: false);
+  }
+
+  Future<void> _submitTag3DailyAction(
+    Tag3DailyRow row, {
+    required bool confirm,
+  }) async {
+    final stage = (row.canConfirmStage ?? '').trim();
+    if (confirm && (!row.showConfirmAction || stage.isEmpty)) return;
+    if (!confirm && !row.showCommentAction) return;
+    if (_tag3ConfirmingKeys.contains(row.actionId)) return;
+    final remark = await showTag3DailyActionDialog(
+      context: context,
+      row: row,
+      confirm: confirm,
+    );
+    if (remark == null || !mounted) return;
+    setState(() => _tag3ConfirmingKeys.add(row.actionId));
+    try {
+      if (confirm) {
+        await _shucai.confirmTag3Daily(
+          asOfDate: _detailAsOfDate,
+          rowKeys: [row.rowKey],
+          stage: stage,
+          expectedStatus: row.confirmationStatus,
+          remark: remark,
+          period: row.period,
+          statDate: row.statDateDay,
+          periodLabel: row.periodLabel,
+          projectName: row.projectName,
+        );
+      } else {
+        await _shucai.commentTag3Daily(
+          asOfDate: _detailAsOfDate,
+          row: row,
+          body: remark,
+        );
+      }
+      final snap = await _shucai.fetchTag3Daily(asOfDate: _detailAsOfDate);
+      if (!mounted) return;
+      setState(() => _tag3Daily = snap);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            confirm
+                ? '已确认 ${row.projectName} · ${row.periodLabel}'
+                : '已记录 ${row.projectName} · ${row.periodLabel} 的意见',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyErrorText(e)),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _tag3ConfirmingKeys.remove(row.actionId));
+      }
+    }
+  }
+
+  void _viewTag3DailyComments(Tag3DailyRow row) {
+    final comments = _tag3Daily?.commentsFor(row) ?? const <Tag3DailyComment>[];
+    unawaited(
+      showTag3DailyCommentHistory(
+        context: context,
+        row: row,
+        comments: comments,
+      ),
+    );
+  }
+
+  Future<void> _openTag3DailyDrilldown({
+    required Tag3DailyRow row,
+    required String metricKey,
+  }) async {
+    try {
+      final data = await _shucai.fetchTag3DailyDrilldown(
+        asOfDate: _detailAsOfDate,
+        rowKey: row.rowKey,
+        metricKey: metricKey,
+        period: metricKey == 'receivableAmount' ? row.period : null,
+        statDate: metricKey == 'receivableAmount' && row.period == 'DAY'
+            ? row.statDateDay
+            : null,
+        sourceTab: row.sourceTab,
+      );
+      if (!mounted) return;
+      final title = metricKey == 'provinceSplit'
+          ? '${row.projectName} · 分省'
+          : '${row.projectName} · 应收 · ${row.periodLabel}';
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (ctx) => SizedBox(
+          height: MediaQuery.sizeOf(ctx).height * 0.72,
+          child: Tag3DailyDrilldownSheet(title: title, data: data),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyErrorText(e)),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Widget _buildTag3DailyScaffold() {
+    final snap = _tag3Daily;
+    final confirmable = snap?.confirmableRows ?? const <Tag3DailyRow>[];
+    return Scaffold(
+      backgroundColor: DunesColors.bgApp,
+      appBar: AppBar(
+        backgroundColor: DunesColors.bgApp,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          tooltip: '返回对账消息',
+          onPressed: _closeDetails,
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 19),
+        ),
+        titleSpacing: 0,
+        title: Text(
+          '业财一体-日清',
+          style: DunesTypography.sans(
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+            color: DunesColors.text,
+          ),
+        ),
+        actions: [
+          IconButton(
+            tooltip: '刷新',
+            onPressed: () {
+              unawaited(
+                _openTag3Daily(
+                  _ReconCardPayload(
+                    cardType: 'TAG3_DAILY',
+                    asOfDate: _detailAsOfDate,
+                    title: reconCardTitle('TAG3_DAILY'),
+                    subtitle: '',
+                    metric: '',
+                    createdAt: null,
+                  ),
+                  refresh: true,
+                ),
+              );
+            },
+            icon: const Icon(Icons.refresh_rounded, size: 21),
+          ),
+          IconButton(
+            tooltip: '说明',
+            onPressed: _showInfo,
+            icon: const Icon(Icons.help_outline_rounded, size: 21),
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+          children: [
+            _CardSurface(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$_dateLabel · 日清标签三',
+                    style: DunesTypography.sans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.text,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    confirmable.isEmpty
+                        ? '当前没有需要你确认的日行。可以只填意见；业务和运营同时审核，记录按人保留。'
+                        : '业务和运营一起审、不排队。轮到你名下的行点确认即可，不用填内容。意见另填。本月累计只展示。',
+                    style: DunesTypography.sans(
+                      fontSize: 12.5,
+                      color: DunesColors.text2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            if (_error != null) ...[
+              Text(
+                _error!,
+                style: DunesTypography.sans(fontSize: 13, color: DunesColors.coral),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (snap == null)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              )
+            else
+              Tag3DailyTable(
+                rows: snap.rows,
+                assignees: snap.assignees,
+                comments: snap.comments,
+                myUserId: widget.session.userId,
+                busyKeys: _tag3ConfirmingKeys,
+                onProjectTap: (row) => unawaited(
+                  _openTag3DailyDrilldown(row: row, metricKey: 'provinceSplit'),
+                ),
+                onReceivableTap: (row) => unawaited(
+                  _openTag3DailyDrilldown(
+                    row: row,
+                    metricKey: 'receivableAmount',
+                  ),
+                ),
+                onConfirm: _confirmTag3Daily,
+                onComment: _commentTag3Daily,
+                onViewComments: _viewTag3DailyComments,
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _confirm() async {
@@ -906,6 +1179,7 @@ class _NativeReconciliationAssistantPageState
 
   List<Widget> _buildConversationItems() {
     const cardOrder = [
+      'TAG3_DAILY',
       'CNPC',
       'ENERGY',
       'PRIVATE',
@@ -1151,7 +1425,7 @@ class _NativeReconciliationAssistantPageState
       builder: (context) => AlertDialog(
         title: const Text('对账助手'),
         content: const Text(
-          '每天由后台按推送时间发给对账参与人。点击消息里的标签二 / 标签三链接，会按资管 1.0 相同方式免登打开对应页面。',
+          '日清在对账助手里点开查看。日行、上月行可逐条确认并填建议；本月累计只展示。没有驳回。',
         ),
         actions: [
           TextButton(
@@ -1164,6 +1438,9 @@ class _NativeReconciliationAssistantPageState
   }
 
   Widget _buildDetailScaffold() {
+    if (isTag3DailyCard(_detailCardType)) {
+      return _buildTag3DailyScaffold();
+    }
     final status = _currentStatus;
     final expected = status?.expectedCount ?? 0;
     final confirmed = status?.confirmedCount ?? 0;

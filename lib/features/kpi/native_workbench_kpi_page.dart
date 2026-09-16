@@ -72,6 +72,14 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
   bool _detailLoading = false;
   String? _detailError;
 
+  bool get _canRoster => widget.session.effectiveKpiPerformanceAccess;
+  bool get _canFollowup => widget.session.effectiveKpiFollowupAccess;
+
+  List<MapEntry<String, String>> get _lensOptions => [
+        if (_canRoster) const MapEntry('roster', '名单'),
+        if (_canFollowup) const MapEntry('followup', '催办'),
+      ];
+
   DateTime get _clock => widget.now ?? DateTime.now();
   DateTime get _currentMonth => kpiMonthStart(_clock);
   DateTime get _earliestMonth => DateTime(_currentMonth.year - 3, 1);
@@ -81,6 +89,9 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
     super.initState();
     _service = widget.service ?? WorkbenchKpiService(session: widget.session);
     _month = DateTime(_currentMonth.year, _currentMonth.month - 1);
+    if (!_canRoster && _canFollowup) {
+      _lens = 'followup';
+    }
     _keywordCtrl.addListener(_onKeywordChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _publishChrome();
@@ -126,6 +137,14 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
   }
 
   Future<void> _load() async {
+    if (!_canRoster) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = null;
+      });
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
@@ -734,6 +753,8 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
 
   void _setLens(String value) {
     if (_lens == value) return;
+    if (value == 'followup' && !_canFollowup) return;
+    if (value == 'roster' && !_canRoster) return;
     setState(() => _lens = value);
     if (value == 'roster') _jumpRosterTop();
   }
@@ -848,6 +869,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
   /// 操作按流程排：先处理数据（导入 / 重跑），再对外输出（导出 / 转发），
   /// 最后「发布结果」—— 唯一会通知到员工的动作，做成主按钮。
   List<_KpiAction> _actions(List<WorkProfileKpiPerson> people) {
+    if (!_canRoster) return const [];
     final idle = !_busy && !_loading;
     return [
       _KpiAction(
@@ -946,21 +968,20 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
               actions: _actions(people),
             ),
             const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: _KpiSectorTabs(
-                key: const Key('kpi-lens-filter'),
-                value: _lens,
-                expand: false,
-                segmentKeyPrefix: 'kpi-lens',
-                onChanged: _busy ? null : _setLens,
-                options: const [
-                  MapEntry('roster', '名单'),
-                  MapEntry('followup', '催办'),
-                ],
+            if (_lensOptions.length > 1) ...[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _KpiSectorTabs(
+                  key: const Key('kpi-lens-filter'),
+                  value: _lens,
+                  expand: false,
+                  segmentKeyPrefix: 'kpi-lens',
+                  onChanged: _busy ? null : _setLens,
+                  options: _lensOptions,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
+              const SizedBox(height: 8),
+            ],
             Align(
               alignment: Alignment.centerLeft,
               child: _KpiSectorTabs(

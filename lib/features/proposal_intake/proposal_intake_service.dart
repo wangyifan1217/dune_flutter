@@ -3,8 +3,10 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import 'proposal_intake_models.dart';
+import 'proposal_intake_unreviewed.dart';
 
 class ProposalIntakeService {
   ProposalIntakeService({required this.session});
@@ -213,6 +215,31 @@ class ProposalIntakeService {
       ),
     );
     return ProposalIntakeRow.fromJson(_asMap(data));
+  }
+
+  /// 复核中其他人打勾会抬版本。冲突时拉最新稿、只合并未复核改动再写一次。
+  Future<ProposalIntakeRow> saveResolvingConflict(ProposalIntakeRow row) async {
+    try {
+      return await save(row);
+    } catch (error) {
+      if (row.id <= 0 ||
+          !proposalIntakeIsConflictMessage(friendlyErrorText(error))) {
+        rethrow;
+      }
+      final latest = await fetchDetail(row.id);
+      final merged = proposalIntakeKeepUnreviewedForm(
+        baseline: latest.form,
+        current: row.form,
+        review: latest.review,
+      );
+      return save(
+        latest.copyWith(
+          title: row.title,
+          form: merged,
+          status: row.status,
+        ),
+      );
+    }
   }
 
   Future<ProposalIntakeWriteResult> saveReview(

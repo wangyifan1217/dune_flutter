@@ -8,6 +8,14 @@ bool novaIsMarkdownFile(String fileName, {String? mimeType}) {
   return mime.contains('markdown') || mime == 'text/x-markdown';
 }
 
+bool novaIsPreviewableDocument(String fileName, {String? mimeType}) {
+  if (novaIsMarkdownFile(fileName, mimeType: mimeType)) return true;
+  final name = fileName.trim().toLowerCase();
+  if (name.endsWith('.txt')) return true;
+  final mime = (mimeType ?? '').trim().toLowerCase();
+  return mime == 'text/plain' || mime == 'text/markdown';
+}
+
 bool isDirectHttpUrl(String raw) {
   final s = raw.trim().toLowerCase();
   return s.startsWith('http://') || s.startsWith('https://');

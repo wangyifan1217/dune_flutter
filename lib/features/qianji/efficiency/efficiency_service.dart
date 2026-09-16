@@ -78,6 +78,93 @@ class EfficiencyService {
     return WorkSituationPerson.fromJson(_asMap(_unwrap(response)));
   }
 
+  Future<Map<int, WorkSituationAvatar>> fetchUserAvatars(
+    Iterable<int> userIds,
+  ) async {
+    final ids = userIds.where((id) => id > 0).toSet().toList()..sort();
+    if (ids.isEmpty) return const {};
+    final out = <int, WorkSituationAvatar>{};
+    await _collectOrgUserAvatars(ids, out);
+    final missing = ids.where((id) => !(out[id]?.hasImage ?? false)).toList();
+    if (missing.isNotEmpty) {
+      await _collectContactAvatars(out);
+    }
+    return out;
+  }
+
+  Future<void> _collectOrgUserAvatars(
+    List<int> ids,
+    Map<int, WorkSituationAvatar> out,
+  ) async {
+    const chunkSize = 80;
+    for (var i = 0; i < ids.length; i += chunkSize) {
+      final chunk = ids.sublist(
+        i,
+        i + chunkSize > ids.length ? ids.length : i + chunkSize,
+      );
+      try {
+        final response = await dunesHttpGet(
+          session,
+          '/org/users?ids=${chunk.join(',')}',
+          client: _client,
+        );
+        _ingestAvatarRows(_unwrap(response), out);
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _collectContactAvatars(Map<int, WorkSituationAvatar> out) async {
+    try {
+      final response = await dunesHttpGet(
+        session,
+        '/contacts?view=org',
+        client: _client,
+      );
+      _ingestAvatarRows(_unwrap(response), out);
+    } catch (_) {}
+  }
+
+  void _ingestAvatarRows(dynamic raw, Map<int, WorkSituationAvatar> out) {
+    void take(Map<String, dynamic> row) {
+      final id =
+          (row['userId'] as num?)?.toInt() ?? (row['id'] as num?)?.toInt() ?? 0;
+      if (id <= 0) return;
+      final avatar = workSituationAvatarFromJson(row);
+      final current = out[id];
+      if (current == null || (!current.hasImage && avatar.hasImage)) {
+        out[id] = avatar;
+      }
+    }
+
+    void walk(dynamic node) {
+      if (node is List) {
+        for (final item in node) {
+          walk(item);
+        }
+        return;
+      }
+      if (node is! Map) return;
+      final map = Map<String, dynamic>.from(node);
+      if (map.containsKey('userId') ||
+          map.containsKey('avatarPreset') ||
+          map.containsKey('avatarObjectKey') ||
+          map.containsKey('avatarUrl')) {
+        take(map);
+      }
+      for (final key in const [
+        'items',
+        'users',
+        'people',
+        'departments',
+        'children',
+      ]) {
+        walk(map[key]);
+      }
+    }
+
+    walk(raw);
+  }
+
   Future<EfficiencyAnalysis> startAnalysis({
     required String scope,
     required String month,

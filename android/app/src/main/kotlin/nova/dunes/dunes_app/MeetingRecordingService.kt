@@ -17,7 +17,7 @@ import androidx.core.app.NotificationCompat
  * Android 10/11/14 要求：只有存在「microphone」类型的前台服务时，App 切后台或锁屏后
  * 才被允许继续采集麦克风；否则系统会静音麦克风。录音期间启动本服务并展示常驻通知。
  *
- * 小米 HyperOS 对 IMPORTANCE_LOW 通知容易折叠后冻结进程，会议录音用 DEFAULT 且每分钟刷新文案。
+ * 小米/OriginOS 等厂商可能会冻结低重要性通知对应的进程，会议录音使用 DEFAULT 常驻通知。
  */
 class MeetingRecordingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null

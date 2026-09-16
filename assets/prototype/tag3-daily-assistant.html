@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>对账助手 · 业财一体日清 静态预览</title>
+<style>
+  :root {
+    --bg-app: #FBFAF6; --bg-soft: #F2EFE7; --text: #1F2421; --text2: #5A5C56;
+    --text3: #94938A; --accent: #2F5D62; --green: #5D8A4E; --green-soft: #EAEFDF;
+    --amber: #B07A2B; --amber-soft: #F4E8D2; --border: #DAD5C7; --card: #EAF3F1; --card-line: #C9DFDA;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: "Geist", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #e8e4dc; color: var(--text); padding: 28px 20px 48px;
+  }
+  .stage { max-width: 430px; margin: 0 auto; }
+  .kicker { font-size: 11px; letter-spacing: .08em; color: var(--accent); margin-bottom: 8px; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 8px; }
+  .sub { color: var(--text2); font-size: 13px; line-height: 1.6; margin: 0 0 18px; }
+  .phone { background: #1f1d1a; border-radius: 36px; padding: 10px; box-shadow: 0 18px 40px -18px rgba(40,38,32,.35); }
+  .screen { background: var(--bg-app); border-radius: 28px; min-height: 740px; overflow: hidden; display: flex; flex-direction: column; }
+  .head { display: flex; align-items: center; gap: 10px; padding: 14px 14px 10px; }
+  .av { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg,#5B6FC4,#7652B8); color: #fff; display: grid; place-items: center; }
+  .av.lg { width: 45px; height: 45px; border-radius: 14px; }
+  .head b { font-size: 17px; }
+  .head span { font-size: 12px; color: var(--text3); }
+  .chat { padding: 8px 16px 24px; flex: 1; }
+  .row { display: flex; gap: 10px; align-items: flex-start; }
+  .bubble { background: #F3F4F6; border-radius: 4px 14px 14px 14px; padding: 10px 12px; font-size: 14px; line-height: 1.5; max-width: 280px; }
+  .card { margin-top: 8px; max-width: 280px; background: var(--card); border: 1px solid var(--card-line); border-radius: 12px; padding: 10px 12px; cursor: pointer; }
+  .card .k { font-size: 12px; color: var(--text3); }
+  .card .n { font-size: 15px; font-weight: 700; margin: 3px 0; }
+  .card .m { font-size: 12px; color: var(--accent); font-weight: 600; }
+  .hint { text-align: center; font-size: 11.5px; color: var(--text3); margin-top: 10px; }
+  .back { border: 0; background: transparent; color: var(--text2); cursor: pointer; font-size: 16px; padding: 0 4px; }
+  .body { padding: 12px 12px 24px; overflow: auto; flex: 1; }
+  .hero { background: #fff; border-radius: 16px; padding: 14px 16px; }
+  .hero h2 { margin: 0 0 6px; font-size: 16px; }
+  .hero p { margin: 0; font-size: 12.5px; color: var(--text2); }
+  .table-wrap { overflow: auto; margin-top: 12px; background: #fff; border-radius: 12px; }
+  table { border-collapse: collapse; min-width: 1180px; font-size: 12px; }
+  th { background: #F4F7F6; color: var(--text2); font-weight: 600; padding: 10px 8px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 10px 8px; border-bottom: 1px solid #eeeae0; white-space: nowrap; vertical-align: top; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  a.link { color: var(--accent); text-decoration: underline; cursor: pointer; }
+  .btn { border: 0; background: var(--accent); color: #fff; border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .btn:disabled { background: var(--green-soft); color: var(--green); }
+  .btn.ghost-btn { background: #fff; color: var(--accent); border: 1px solid var(--accent); }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .hist { display: block; margin-top: 6px; color: var(--accent); font-size: 11.5px; cursor: pointer; }
+  .pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--amber-soft); color: var(--amber); }
+  .pill.ok { background: var(--green-soft); color: var(--green); }
+  .muted { color: var(--text3); }
+  .sheet, .dlgmask { display: none; position: fixed; inset: 0; background: rgba(20,22,24,.35); z-index: 8; align-items: center; justify-content: center; }
+  .sheet.on, .dlgmask.on { display: flex; }
+  .sheet { align-items: flex-end; }
+  .sheet-card, .dlg { background: #fff; padding: 16px 18px 20px; }
+  .sheet-card { width: min(920px, 100%); max-height: 72vh; overflow: auto; border-radius: 16px 16px 0 0; }
+  .dlg { width: 320px; border-radius: 12px; }
+  .dlg textarea { width: 100%; min-height: 72px; border: 1px solid var(--border); border-radius: 8px; padding: 8px; font: inherit; }
+  .dlg .preview { background: var(--bg-soft); border-radius: 8px; padding: 8px 10px; font-size: 13px; color: var(--text2); margin-top: 8px; }
+  .dlg .row-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+  .ghost { border: 0; background: transparent; color: var(--text2); padding: 8px 10px; cursor: pointer; }
+  .toast { display: none; position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: #2a2e2b; color: #fff; border-radius: 999px; padding: 8px 14px; font-size: 13px; z-index: 9; }
+  .toast.on { display: block; }
+  .hidden { display: none !important; }
+  .lane { font-size: 11.5px; line-height: 1.45; }
+  .lane.now { color: var(--amber); font-weight: 600; }
+  .lane.done { color: var(--green); }
+  .lane.wait { color: var(--text3); }
+  .hist-item b { font-size: 13px; }
+  .hist-item p { margin: 4px 0 0; font-size: 13px; color: var(--text2); }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="kicker">对账助手内 · 一张卡片点开明细</div>
+  <h1>业财一体-日清</h1>
+  <p class="sub">业务和运营一起推、各审各的，不排队。确认不用填内容，意见按人留历史。</p>
+  <div class="phone">
+    <div class="screen">
+      <div class="head">
+        <button class="back hidden" id="backBtn" type="button">‹</button>
+        <div class="av">⇄</div>
+        <div>
+          <b id="title">对账助手</b><br /><span id="subtitle">每日对账</span>
+        </div>
+      </div>
+      <div class="chat" id="chatView">
+        <div class="row">
+          <div class="av lg">⇄</div>
+          <div>
+            <div class="bubble">今日对账信息已生成，请核对下面的对账卡片并完成确认。</div>
+            <div class="card" id="openCard">
+              <div class="k">2026-09-15 · 点击查看明细</div>
+              <div class="n">业财一体-日清标签三</div>
+              <div class="m">查看详情并确认</div>
+            </div>
+          </div>
+        </div>
+        <div class="hint">点击名片查看明细与确认状态</div>
+      </div>
+      <div class="body hidden" id="detailView">
+        <div class="hero">
+          <h2>2026年9月15日 · 日清标签三</h2>
+          <p>业务和运营同时审。点确认只需二次确认；意见另填并按人留记录。本月累计只展示。</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>渠道</th><th>项目</th><th>统计周期</th><th>回款周期</th>
+                <th>销售额</th><th>核销额</th><th>利润</th><th>经营性现金流</th>
+                <th>现金应收</th><th>现金实收</th><th>现金应收差额</th><th>补贴应收</th>
+                <th>审核记录</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="sheet" id="sheet"><div class="sheet-card"><h3 id="sheetTitle">下钻</h3><p id="sheetSum" style="color:#5A5C56;font-size:12px"></p><div class="table-wrap"><table id="sheetTable"></table></div></div></div>
+<div class="dlgmask" id="dlgmask">
+  <div class="dlg">
+    <h3 id="dlgTitle">意见</h3>
+    <p id="dlgHint" style="margin:0 0 8px;font-size:12px;color:#5A5C56"></p>
+    <textarea id="dlgText" placeholder="填写意见"></textarea>
+    <div class="preview hidden" id="dlgPreview"></div>
+    <div class="row-actions">
+      <button class="ghost" id="dlgCancel" type="button">取消</button>
+      <button class="btn" id="dlgOk" type="button">下一步</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast">已记录</div>
+<script>
+const me = '张三';
+const data = [
+  { id: 'yk-14', ch: '多渠道', proj: '亿科景信', period: '2026-09-14', month: false, term: 'D+1', sales: 800, write: 300, profit: 89.24, cf: 0, rec: 211.10, paid: 0, diff: 211.10, sub: 0, biz: '张三', ops: '王五', stage: 'WAIT_BUSINESS' },
+  { id: 'yk-15', ch: '多渠道', proj: '亿科景信', period: '2026-09-15', month: false, term: 'D+1', sales: 720, write: 340, profit: 102.20, cf: 0, rec: 238.20, paid: 0, diff: 238.20, sub: 0, biz: '张三', ops: '王五', stage: 'WAIT_BUSINESS' },
+  { id: 'yk-m', ch: '多渠道', proj: '亿科景信', period: '本月累计', month: true, term: 'D+1', sales: 14830, write: 5460, profit: 1631.67, cf: 0, rec: 3830.60, paid: 102000, diff: -98169.40, sub: 0, biz: '张三', ops: '王五', stage: 'WAIT_BUSINESS' },
+  { id: 'js-14', ch: '运营商', proj: '江苏移动', period: '2026-09-14', month: false, term: 'D+1', sales: 340, write: 165, profit: 0, cf: 0, rec: 0, paid: 0, diff: 0, sub: 0, biz: '赵六', ops: '王五', stage: 'WAIT_OPERATION' },
+  { id: 'js-15', ch: '运营商', proj: '江苏移动', period: '2026-09-15', month: false, term: 'D+1', sales: 200, write: 70, profit: 0, cf: 0, rec: 0, paid: 0, diff: 0, sub: 0, biz: '赵六', ops: '王五', stage: 'WAIT_BUSINESS' },
+  { id: 'js-m', ch: '运营商', proj: '江苏移动', period: '本月累计', month: true, term: 'D+1', sales: 446395, write: 2575, profit: -20, cf: 0, rec: 0, paid: 0, diff: 0, sub: 0, biz: '赵六', ops: '王五', stage: 'WAIT_OPERATION' },
+];
+const comments = {
+  'yk-14': [
+    { name: '李四', kind: '意见', body: '核销偏少，先记一笔', time: '09-15 10:12' },
+  ],
+};
+const money = n => Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+let pending = null;
+let dlgStep = 1;
+function showDetail(on) {
+  document.getElementById('chatView').classList.toggle('hidden', on);
+  document.getElementById('detailView').classList.toggle('hidden', !on);
+  document.getElementById('backBtn').classList.toggle('hidden', !on);
+  document.getElementById('title').textContent = on ? '业财一体-日清' : '对账助手';
+  document.getElementById('subtitle').textContent = on ? '2026-09-15' : '每日对账';
+}
+function historyOf(id) {
+  return comments[id] || [];
+}
+function canConfirm(row) {
+  if (row.month) return false;
+  const hist = historyOf(row.id);
+  if (hist.some(item => item.kind === '确认' && item.name === me)) return false;
+  return me === row.biz || me === row.ops;
+}
+function confirmLabel(row) {
+  return me === row.ops && me !== row.biz ? '运营确认' : '业务确认';
+}
+function auditHtml(row) {
+  const hist = historyOf(row.id);
+  const bizDone = hist.some(item => item.kind === '确认' && item.name === row.biz);
+  const opsDone = hist.some(item => item.kind === '确认' && item.name === row.ops);
+  return `<div class="lane ${bizDone ? 'done' : 'wait'}">业务 ${row.biz} · ${bizDone ? '已确认' : '未确认'}</div>
+    <div class="lane ${opsDone ? 'done' : 'wait'}">运营 ${row.ops} · ${opsDone ? '已确认' : '未确认'}</div>`;
+}
+function render() {
+  document.getElementById('rows').innerHTML = data.map((r, i) => {
+    const showCh = i === 0 || data[i-1].ch !== r.ch;
+    const showProj = i === 0 || data[i-1].proj !== r.proj;
+    const hist = historyOf(r.id);
+    const latest = hist[hist.length - 1];
+    const action = r.month
+      ? '<span class="muted">月累计</span>'
+      : `<div class="actions">
+          <button class="btn ghost-btn" data-comment="${r.id}">意见</button>
+          ${canConfirm(r) ? `<button class="btn" data-confirm="${r.id}">${confirmLabel(r)}</button>` : ''}
+        </div>
+        ${latest ? `<a class="hist" data-hist="${r.id}">${hist.length}条 · ${latest.name} ${latest.kind}</a>` : ''}`;
+    return `<tr>
+      <td>${showCh ? r.ch : ''}</td>
+      <td>${showProj ? `<a class="link" data-dd="province" data-i="${i}">${r.proj}</a>` : ''}</td>
+      <td>${r.period}</td><td>${r.term}</td>
+      <td class="num">${money(r.sales)}</td><td class="num">${money(r.write)}</td>
+      <td class="num">${money(r.profit)}</td><td class="num">${money(r.cf)}</td>
+      <td class="num"><a class="link" data-dd="recv" data-i="${i}">${money(r.rec)}</a></td>
+      <td class="num">${money(r.paid)}</td><td class="num">${money(r.diff)}</td>
+      <td class="num">${money(r.sub)}</td>
+      <td>${auditHtml(r)}</td><td>${action}</td>
+    </tr>`;
+  }).join('');
+}
+function toast(t){ const el=document.getElementById('toast'); el.textContent=t; el.classList.add('on'); setTimeout(()=>el.classList.remove('on'),1400); }
+function openDialog(id, confirm) {
+  const row = data.find(r => r.id === id);
+  pending = { id, confirm };
+  if (confirm) {
+    dlgStep = 2;
+    const stageLabel = me === row.ops && me !== row.biz ? '运营' : '业务';
+    document.getElementById('dlgTitle').textContent = '二次确认';
+    document.getElementById('dlgHint').textContent = `确定以${stageLabel}身份确认「${row.proj} · ${row.period}」？`;
+    document.getElementById('dlgText').classList.add('hidden');
+    document.getElementById('dlgPreview').classList.add('hidden');
+    document.getElementById('dlgOk').textContent = '确定确认';
+    document.getElementById('dlgCancel').textContent = '取消';
+    document.getElementById('dlgmask').classList.add('on');
+    return;
+  }
+  dlgStep = 1;
+  document.getElementById('dlgTitle').textContent = `意见 ${row.proj} · ${row.period}`;
+  document.getElementById('dlgHint').textContent = '只填意见，不改确认状态。提交前会再问一次。';
+  document.getElementById('dlgText').classList.remove('hidden');
+  document.getElementById('dlgText').value = '';
+  document.getElementById('dlgPreview').classList.add('hidden');
+  document.getElementById('dlgOk').textContent = '下一步';
+  document.getElementById('dlgCancel').textContent = '取消';
+  document.getElementById('dlgmask').classList.add('on');
+}
+function showHistory(id) {
+  const row = data.find(r => r.id === id);
+  const hist = historyOf(id);
+  document.getElementById('sheetTitle').textContent = `${row.proj} · ${row.period} · 意见记录`;
+  document.getElementById('sheetSum').textContent = hist.length ? '按提交时间查看，对应到具体的人。' : '暂无意见';
+  document.getElementById('sheetTable').innerHTML = hist.map(item =>
+    `<div class="hist-item"><b>${item.name} · ${item.kind} · ${item.time}</b><p>${item.body || '已确认，未填写意见'}</p></div>`
+  ).join('');
+  document.getElementById('sheet').classList.add('on');
+}
+document.getElementById('openCard').onclick = () => showDetail(true);
+document.getElementById('backBtn').onclick = () => showDetail(false);
+document.getElementById('rows').addEventListener('click', (e) => {
+  const commentBtn = e.target.closest('[data-comment]');
+  if (commentBtn) { openDialog(commentBtn.dataset.comment, false); return; }
+  const confirmBtn = e.target.closest('[data-confirm]');
+  if (confirmBtn) { openDialog(confirmBtn.dataset.confirm, true); return; }
+  const hist = e.target.closest('[data-hist]');
+  if (hist) { showHistory(hist.dataset.hist); return; }
+  const a = e.target.closest('[data-dd]');
+  if (!a) return;
+  const row = data[+a.dataset.i];
+  const table = document.getElementById('sheetTable');
+  if (a.dataset.dd === 'province') {
+    document.getElementById('sheetTitle').textContent = row.proj + ' · 分省';
+    document.getElementById('sheetSum').textContent = '销售额 14,830.00 · 核销 5,460.00 · 利润 1,631.67';
+    table.innerHTML = `<thead><tr><th>省份</th><th>周期</th><th>销售额</th><th>核销额</th><th>利润</th><th>利润率</th><th>现金应收</th></tr></thead>
+      <tbody><tr><td>吉林</td><td>${row.period}</td><td class="num">${money(row.sales)}</td><td class="num">${money(row.write)}</td><td class="num">${money(row.profit)}</td><td>30.00%</td><td class="num">${money(row.rec)}</td></tr></tbody>`;
+  } else {
+    document.getElementById('sheetTitle').textContent = row.proj + ' · 应收 · ' + row.period;
+    document.getElementById('sheetSum').textContent = '销售额 ' + money(row.sales);
+    table.innerHTML = `<thead><tr><th>统计日</th><th>产品</th><th>销售额</th><th>核销额</th><th>利润</th><th>利润率</th><th>应收</th></tr></thead>
+      <tbody><tr><td>${row.period}</td><td>其他</td><td class="num">${money(row.sales)}</td><td class="num">${money(row.write)}</td><td class="num">${money(row.profit)}</td><td>29.75%</td><td class="num">${money(row.rec)}</td></tr></tbody>`;
+  }
+  document.getElementById('sheet').classList.add('on');
+});
+document.getElementById('sheet').onclick = (e) => { if (e.target.id === 'sheet') e.currentTarget.classList.remove('on'); };
+document.getElementById('dlgCancel').onclick = () => {
+  if (dlgStep === 2 && pending && !pending.confirm) {
+    dlgStep = 1;
+    document.getElementById('dlgTitle').textContent = document.getElementById('dlgTitle').textContent.replace('二次确认 · ', '');
+    document.getElementById('dlgHint').textContent = '只填意见，不改确认状态。提交前会再问一次。';
+    document.getElementById('dlgText').classList.remove('hidden');
+    document.getElementById('dlgPreview').classList.add('hidden');
+    document.getElementById('dlgOk').textContent = '下一步';
+    document.getElementById('dlgCancel').textContent = '取消';
+    return;
+  }
+  pending = null;
+  document.getElementById('dlgmask').classList.remove('on');
+};
+document.getElementById('dlgOk').onclick = () => {
+  if (!pending) return;
+  const text = document.getElementById('dlgText').value.trim();
+  if (dlgStep === 1) {
+    if (!text) { toast('请先填写意见'); return; }
+    dlgStep = 2;
+    document.getElementById('dlgTitle').textContent = '二次确认 · 提交意见';
+    document.getElementById('dlgHint').textContent = '确定提交这条意见？会记在你的名下。';
+    document.getElementById('dlgText').classList.add('hidden');
+    const preview = document.getElementById('dlgPreview');
+    preview.classList.remove('hidden');
+    preview.textContent = '意见：' + text;
+    document.getElementById('dlgOk').textContent = '确定提交';
+    document.getElementById('dlgCancel').textContent = '返回修改';
+    return;
+  }
+  const row = data.find(r => r.id === pending.id);
+  if (pending.confirm) {
+    comments[pending.id] = comments[pending.id] || [];
+    comments[pending.id].push({ name: me, kind: '确认', body: '', time: '09-16 17:50' });
+  } else {
+    comments[pending.id] = comments[pending.id] || [];
+    comments[pending.id].push({ name: me, kind: '意见', body: text, time: '09-16 17:46' });
+  }
+  const done = pending.confirm ? `已确认 ${row.proj} · ${row.period}` : `已记录 ${row.proj} · ${row.period} 的意见`;
+  pending = null;
+  document.getElementById('dlgmask').classList.remove('on');
+  render();
+  toast(done);
+};
+render();
+</script>
+</body>
+</html>

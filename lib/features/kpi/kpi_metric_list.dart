@@ -14,7 +14,8 @@ class KpiMetricList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (metrics.isEmpty) {
+    final rows = _visibleMetrics(metrics);
+    if (rows.isEmpty) {
       return const SizedBox.shrink();
     }
     return Container(
@@ -26,22 +27,30 @@ class KpiMetricList extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Column(
         children: [
-          for (var i = 0; i < metrics.length; i++)
+          for (var i = 0; i < rows.length; i++)
             Container(
               padding: const EdgeInsets.symmetric(vertical: 8),
               decoration: BoxDecoration(
-                border: i == metrics.length - 1
+                border: i == rows.length - 1
                     ? null
                     : const Border(
                         bottom: BorderSide(color: Color(0xFFF1F3F5)),
                       ),
               ),
-              child: _MetricRow(metric: metrics[i]),
+              child: _MetricRow(metric: rows[i]),
             ),
         ],
       ),
     );
   }
+}
+
+/// 量表只打项上的总分，第一行是总分、后面才是评分档；总分已经在卡片上，这里只留档位说明。
+List<WorkProfileKpiMetric> _visibleMetrics(List<WorkProfileKpiMetric> metrics) {
+  if (metrics.isNotEmpty && metrics.first.kind == 'rubric') {
+    return metrics.skip(1).toList(growable: false);
+  }
+  return metrics;
 }
 
 class _MetricRow extends StatelessWidget {
@@ -54,6 +63,8 @@ class _MetricRow extends StatelessWidget {
     final cap = metric.maxPoints > 0 ? metric.maxPoints : metric.weight;
     final pts = metric.points;
     final fill = (pts != null && cap > 0) ? (pts / cap).clamp(0.0, 1.0) : 0.0;
+    final rubric = metric.kind == 'rubric';
+    final selected = rubric && metric.status == 'ok';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -62,51 +73,64 @@ class _MetricRow extends StatelessWidget {
             Expanded(
               child: Text(
                 metric.label,
-                style: const TextStyle(fontSize: 13, color: DunesColors.text2),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                  color: selected ? _accent : DunesColors.text2,
+                ),
               ),
             ),
-            Text(
-              _points(metric),
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: pts == null ? DunesColors.text3 : DunesColors.text,
+            if (!rubric && _points(metric).isNotEmpty)
+              Text(
+                _points(metric),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: pts == null ? DunesColors.text3 : DunesColors.text,
+                ),
               ),
-            ),
-            if (cap > 0)
+            if (!rubric && cap > 0)
               Text(
                 ' / ${cap.toStringAsFixed(0)}',
                 style: const TextStyle(fontSize: 12, color: DunesColors.text3),
               ),
           ],
         ),
-        const SizedBox(height: 4),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(2),
-          child: LinearProgressIndicator(
-            value: fill,
-            minHeight: 4,
-            backgroundColor: const Color(0xFFF1F3F5),
-            valueColor: AlwaysStoppedAnimation<Color>(
-              pts == null ? const Color(0xFFD7DBDE) : _accent,
+        if (!rubric) ...[
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              value: fill,
+              minHeight: 4,
+              backgroundColor: const Color(0xFFF1F3F5),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                pts == null ? const Color(0xFFD7DBDE) : _accent,
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          _detail(metric),
-          style: TextStyle(fontSize: 11, color: _detailColor(metric)),
-        ),
+        ],
+        if (_detail(metric).isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            _detail(metric),
+            style: TextStyle(fontSize: 11, color: _detailColor(metric)),
+          ),
+        ],
       ],
     );
   }
 
   static String _points(WorkProfileKpiMetric m) {
     if (m.points != null) return m.points!.toStringAsFixed(1);
+    if (m.kind == 'rubric') return '';
     return m.status == 'manual' ? '待填' : '—';
   }
 
   static String _detail(WorkProfileKpiMetric m) {
+    if (m.kind == 'rubric') {
+      return m.note.trim();
+    }
     if (m.status == 'manual') {
       return '不自动打分，需人工填写';
     }

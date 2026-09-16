@@ -1342,19 +1342,34 @@ const double lighthouseLedgerPanelBorderWidth = 0.8;
 const double lighthouseLedgerPanelRadius = 12;
 const double lighthouseLedgerPanelShadowBlur = 12;
 const bool lighthousePeriodUsesFloatingSegment = true;
-const double lighthousePeriodTrackHeight = 44;
-// 期间条是主 Hero 框架的一部分：轨道 = 缩小的 Hero 壳（雾紫底 + 轻紫边），
-// 选中胶囊 = 缩小的内容卡（白紫纸 + 轻紫边）。半径 14 / 10 与 4 的内边距同心。
-const double lighthousePeriodTrackRadius = 14;
-const double lighthousePeriodSelectedRadius = 10;
+// v24 · 顶栏 + 期间条比例重排（和下面 Hero 白卡配成一套）：
+//   · 旧版 44 高轨道里只放 12px 字，五格等分后字小、空多，整条显得空；
+//     现在 40 高 + 13px 字，字和轨道的比例从 0.27 抬到 0.33。
+//   · 旧轨道是雾紫面 + 投影、半径 14，下面 Hero 卡是白面 + 发丝紫边、半径 12，
+//     两块「浮起来的板」材质和圆角都不一样，叠在一起像两套组件。
+//     现在轨道是「凹进去的槽」：不投影、边和 Hero 卡同一根紫发丝、半径 12 同卡；
+//     选中胶囊才是「浮起来的那块」—— 白纸 + 同色边 + 轻投影，等于一张缩小的 Hero 卡。
+//   · 选中项前那颗紫点和「今日 ⌄」的箭头说的是同一件事，去掉点，只留箭头。
+//   · 半径 12 / 9 与 3 的内边距同心。
+const double lighthousePeriodTrackHeight = 40;
+const double lighthousePeriodTrackRadius = 12;
+const double lighthousePeriodSelectedRadius = 9;
+const double lighthousePeriodTrackPadding = 3;
+const double lighthousePeriodLabelFontSize = 13;
 const bool lighthousePeriodUsesHeroSurface = true;
-const double lighthousePeriodStatusDotSize = 4;
+const double lighthousePeriodStatusDotSize = 0;
 const int lighthousePeriodAnimationMs = 180;
+/// 期间条到 Hero 卡、顶栏到期间条的竖向间距。
+const double lighthousePeriodGapAbove = 4;
 const double lighthouseAppBarTitleFontSize = 18;
 const int lighthouseAppBarTitleColorValue = 0xFF7C5CE6;
 const double lighthouseAppBarEnglishFontSize = 8.5;
 const double lighthouseAppBarToolbarHeight = 30;
 const double lighthouseAppBarToolbarRadius = 15;
+
+/// 顶栏左右边距 = Hero / 期间条 / 账本卡的左沿（旧版 16，品牌标比下面的卡
+/// 往外探出 6pt，右侧工具条也探出去，整页没有一条竖直参考线）。
+const double lighthouseAppBarPaddingH = lighthouseHeroShellMarginH;
 
 /// 日期与同步状态跟「灯塔 LIGHTHOUSE」同一行，不再单独占一行。
 const bool lighthouseAppBarPutsDateOnTitleRow = false;

@@ -47,7 +47,7 @@ WorkProfileKpiPerson _market({
     categories: [
       WorkProfileKpiCategory(
         category: sector,
-        categoryLabel: sector == 'telecom' ? '通信' : '能源',
+        categoryLabel: sector == 'telecom' ? '运营商' : '能源',
         categoryWeight: 1,
         score: score,
         tasks: [
@@ -155,7 +155,7 @@ void main() {
         categories: [
           WorkProfileKpiCategory(
             category: 'telecom',
-            categoryLabel: '通信',
+            categoryLabel: '运营商',
             categoryWeight: 0.6,
             score: 90,
             tasks: [

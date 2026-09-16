@@ -360,6 +360,20 @@ class XflowField {
       .map((c) => c.key)
       .toList(growable: false);
 
+  bool visibleIn(Map<String, dynamic> values) {
+    if (raw['hiddenOnCreate'] == true) return false;
+    final cond = (raw['visibleWhen'] ?? '').toString().trim();
+    if (cond.isEmpty) return true;
+    return xflowParseFormCond(cond, values);
+  }
+
+  bool requiredIn(Map<String, dynamic> values) {
+    if (required) return true;
+    final cond = (raw['requiredWhen'] ?? '').toString().trim();
+    if (cond.isEmpty) return false;
+    return xflowParseFormCond(cond, values);
+  }
+
   /// 卡片分组的组内必填缺口，文案含「付款1…」。非卡片 dynamicList 返回空。
   List<String> missingRequiredGroupLabels(dynamic rawValue) {
     if (!isCardDynamicList) return const [];
@@ -382,6 +396,50 @@ class XflowField {
     }
     return out;
   }
+}
+
+const _xflowSkipRequiredTypes = {'section', 'action', 'computed', 'row'};
+
+bool xflowParseFormCond(String expr, Map<String, dynamic> values) {
+  final trimmed = expr.trim();
+  if (trimmed.isEmpty) return true;
+  final eq = trimmed.indexOf('=');
+  if (eq <= 0) return true;
+  final key = trimmed.substring(0, eq).trim();
+  final want = trimmed.substring(eq + 1).trim();
+  final got = values[key];
+  if (got is List) return got.contains(want) || got.join('、') == want;
+  return (got?.toString() ?? '') == want;
+}
+
+bool xflowValueFilled(dynamic value) {
+  if (value == null) return false;
+  if (value is String) return value.trim().isNotEmpty;
+  if (value is List) return value.isNotEmpty;
+  if (value is Map) return value.isNotEmpty;
+  return true;
+}
+
+/// 与提交校验、星号一致：visibleWhen 隐藏的不拦，requiredWhen 成立才必填。
+List<String> xflowMissingRequiredLabels(
+  List<XflowField> fields,
+  Map<String, dynamic> values,
+) {
+  final out = <String>[];
+  for (final field in fields) {
+    if (field.key.isEmpty || _xflowSkipRequiredTypes.contains(field.type)) {
+      continue;
+    }
+    if (!field.visibleIn(values)) continue;
+    if (field.isCardDynamicList) {
+      out.addAll(field.missingRequiredGroupLabels(values[field.key]));
+      continue;
+    }
+    if (!field.requiredIn(values)) continue;
+    if (xflowValueFilled(values[field.key])) continue;
+    out.add(field.label.isEmpty ? field.key : field.label);
+  }
+  return out;
 }
 
 List<Map<String, dynamic>> _asGroupList(dynamic raw) {

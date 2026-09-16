@@ -48,6 +48,54 @@ String formatKpiNum(double? v) {
   return v.toStringAsFixed(2);
 }
 
+String formatKpiProjectScore(double v) {
+  final s = v.toStringAsFixed(2);
+  if (s.endsWith('00')) return v.toStringAsFixed(0);
+  if (s.endsWith('0')) return v.toStringAsFixed(1);
+  return s;
+}
+
+/// 项目绩效系数分档（整体绩效评价表，10 分制项目得分）。
+class KpiProjectTier {
+  const KpiProjectTier({required this.range, required this.coefficient});
+
+  final String range;
+  final double coefficient;
+}
+
+const kpiProjectTiers = <KpiProjectTier>[
+  KpiProjectTier(range: '≤6', coefficient: 0.7),
+  KpiProjectTier(range: '6–7', coefficient: 0.8),
+  KpiProjectTier(range: '7–8', coefficient: 0.9),
+  KpiProjectTier(range: '8–9', coefficient: 1),
+  KpiProjectTier(range: '9–10', coefficient: 1.1),
+];
+
+/// X≤6→0.7；6<X≤7→0.8；7<X≤8→0.9；8<X≤9→1；9<X≤10→1.1。
+double kpiProjectCoefficientOfScore(double score) {
+  if (score <= 6) return 0.7;
+  if (score <= 7) return 0.8;
+  if (score <= 8) return 0.9;
+  if (score <= 9) return 1;
+  return 1.1;
+}
+
+/// 项目得分 → 项目绩效系数。
+/// ≤1.1 视为表里直接填的系数；1.1–10 按分档表；百分制板块得分沿用已有系数。
+double kpiProjectCoefficient(double projectScore, {double fallback = 0}) {
+  if (projectScore <= 0) return fallback > 0 ? fallback : 0;
+  if (projectScore <= 1.1) return projectScore;
+  if (projectScore <= 10) return kpiProjectCoefficientOfScore(projectScore);
+  if (fallback > 0) return fallback;
+  return kpiGradeOf(projectScore).coefficient;
+}
+
+/// 项目得分是不是 10 分制（能对上分档表）。
+bool kpiProjectScoreOnTenScale(double projectScore) =>
+    projectScore > 1.1 && projectScore <= 10;
+
+String formatKpiProjectCoefficient(double v) => v.toStringAsFixed(1);
+
 String formatKpiAckedAt(String raw) {
   final parsed = DateTime.tryParse(raw.trim());
   if (parsed == null) return '';
@@ -275,6 +323,8 @@ class WorkProfileKpiPerson {
     this.needsPublish = false,
     this.supervisorId = 0,
     this.supervisorName = '',
+    this.skipReason = '',
+    this.skipNote = '',
     this.categories = const [],
   });
 
@@ -303,14 +353,23 @@ class WorkProfileKpiPerson {
   final bool needsPublish;
   final int supervisorId;
   final String supervisorName;
+  final String skipReason;
+  final String skipNote;
   final List<WorkProfileKpiCategory> categories;
 
   bool get isRubric => scoreSource == 'rubric';
   bool get isPending => scoreStatus == 'pending';
+  bool get isSkipped =>
+      scoreStatus == 'skipped' || skipReason.trim().isNotEmpty;
   bool get isAcked => ackedAt.trim().isNotEmpty;
-  bool get isUnpublished => isRubric && !isPending && needsPublish;
+  bool get isUnpublished => isRubric && !isPending && !isSkipped && needsPublish;
+
+  String get skipLabel => kpiSkipLabel(skipReason, skipNote);
 
   KpiGrade get resolvedGrade {
+    if (isSkipped) {
+      return KpiGrade(code: '', label: skipLabel, coefficient: 0);
+    }
     if (gradeLabel.trim().isNotEmpty) {
       return KpiGrade(
         code: grade.trim().isEmpty ? kpiGradeOf(mainScore).code : grade.trim(),
@@ -350,6 +409,8 @@ class WorkProfileKpiPerson {
       needsPublish: json['needsPublish'] == true,
       supervisorId: (json['supervisorId'] as num?)?.toInt() ?? 0,
       supervisorName: '${json['supervisorName'] ?? ''}',
+      skipReason: '${json['skipReason'] ?? ''}',
+      skipNote: '${json['skipNote'] ?? ''}',
       categories: (json['categories'] as List? ?? const [])
           .whereType<Map>()
           .map(
@@ -377,6 +438,10 @@ class WorkProfileKpiTeam {
   final double coefficient;
   final double memberAvg;
   final double deptScore;
+
+  /// 项目绩效系数（0.7–1.1），按 [kpiProjectCoefficient] 从项目得分重新算。
+  double get projectCoefficient =>
+      kpiProjectCoefficient(projectScore, fallback: coefficient);
 
   factory WorkProfileKpiTeam.fromJson(Map<String, dynamic> json) {
     return WorkProfileKpiTeam(
@@ -507,6 +572,11 @@ String kpiLighthouseSliceTitle(WorkProfileKpiTask task) {
 }
 
 String kpiLighthouseSliceSubtitle(WorkProfileKpiTask task) {
+  if (task.isRubric) {
+    final desc = task.matchSummary.trim();
+    if (desc.isNotEmpty) return desc;
+    return task.bucketLabel.trim();
+  }
   final dims = parseKpiLighthouseDims(task);
   final title = kpiLighthouseSliceTitle(task);
   final bits = <String>[];
@@ -538,16 +608,40 @@ List<WorkProfileKpiPerson> kpiPeopleByScoreDesc(
 }
 
 int kpiPersonScoreCompare(WorkProfileKpiPerson a, WorkProfileKpiPerson b) {
+  if (a.isSkipped != b.isSkipped) return a.isSkipped ? 1 : -1;
   if (a.isPending != b.isPending) return a.isPending ? 1 : -1;
   final byScore = b.mainScore.compareTo(a.mainScore);
   if (byScore != 0) return byScore;
   return a.userName.compareTo(b.userName);
 }
 
+const kKpiSkipReasons = [
+  MapEntry('probation', '试用期'),
+  MapEntry('resigned', '离职'),
+  MapEntry('absent', '未出勤'),
+];
+
+String kpiSkipLabel(String reason, [String note = '']) {
+  switch (reason.trim()) {
+    case 'probation':
+    case '试用期':
+      return '试用期';
+    case 'resigned':
+    case '离职':
+      return '离职';
+    case 'absent':
+    case '未出勤':
+      return '未出勤';
+    default:
+      final extra = note.trim();
+      return extra.isEmpty ? '不考核' : extra;
+  }
+}
+
 /// 研发量表名单按沙丘组织分组的展示顺序。
 const kKpiRdGroupOrder = ['AI研发', '产业研发', '出行', '能源', '大宗电商'];
 
-/// 通信领导层置顶顺序。
+/// 运营商领导层置顶顺序。
 const kKpiTelecomLeaders = ['石淼', '徐峥', '李同池'];
 
 /// 能源领导层置顶顺序。
@@ -615,6 +709,25 @@ String kpiPrimarySectorOf(WorkProfileKpiPerson person) {
   if (person.categories.any((c) => c.category == 'rd')) return 'rd';
   if (person.categories.any((c) => c.category == 'office')) return 'office';
   return 'none';
+}
+
+/// 转发汇总按这个人计分的任务分「运营商 / 能源」，不按名册部门。
+/// 何佳伟名册在能源、绩效却是会员套餐订阅时，应归到运营商。
+String kpiPersonShareDepartment(WorkProfileKpiPerson person) {
+  switch (kpiPrimarySectorOf(person)) {
+    case 'telecom':
+      return '运营商';
+    case 'energy':
+      return '能源';
+    case 'rd':
+      final group = kpiCanonicalRdGroup(person.departmentName);
+      return group == '未分组' ? '研发' : group;
+    case 'office':
+      final dept = person.departmentName.trim();
+      return dept.isEmpty ? '职能' : dept;
+    default:
+      return person.departmentName.trim();
+  }
 }
 
 WorkProfileKpiTask? kpiPrimarySectorTask(
@@ -755,6 +868,137 @@ List<String> kpiProjectGroupFilterOptions(
   ];
 }
 
+class KpiPublishGroup {
+  const KpiPublishGroup({
+    required this.name,
+    this.scored = const [],
+    this.pending = const [],
+  });
+
+  final String name;
+  final List<WorkProfileKpiPerson> scored;
+  final List<WorkProfileKpiPerson> pending;
+
+  int get expected => scored.length + pending.length;
+}
+
+class KpiAppeal {
+  const KpiAppeal({
+    this.id = 0,
+    this.month = '',
+    this.userId = 0,
+    this.userName = '',
+    this.departmentName = '',
+    this.kind = 'data',
+    this.kindLabel = '',
+    this.comment = '',
+    this.status = 'open',
+    this.createdAt = '',
+    this.handledAt = '',
+  });
+
+  final int id;
+  final String month;
+  final int userId;
+  final String userName;
+  final String departmentName;
+  final String kind;
+  final String kindLabel;
+  final String comment;
+  final String status;
+  final String createdAt;
+  final String handledAt;
+
+  bool get isRubric => kind == 'rubric';
+  bool get isOpen => status != 'done';
+
+  String get resolvedKindLabel {
+    if (kindLabel.trim().isNotEmpty) return kindLabel.trim();
+    return isRubric ? '评价结果' : '绩效数据';
+  }
+
+  factory KpiAppeal.fromJson(Map<String, dynamic> json) {
+    return KpiAppeal(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      month: '${json['month'] ?? ''}',
+      userId: (json['userId'] as num?)?.toInt() ?? 0,
+      userName: '${json['userName'] ?? ''}',
+      departmentName: '${json['departmentName'] ?? ''}',
+      kind: '${json['kind'] ?? 'data'}',
+      kindLabel: '${json['kindLabel'] ?? ''}',
+      comment: '${json['comment'] ?? ''}',
+      status: '${json['status'] ?? 'open'}',
+      createdAt: '${json['createdAt'] ?? ''}',
+      handledAt: '${json['handledAt'] ?? ''}',
+    );
+  }
+}
+
+String kpiAppealTitle({required bool isRubric}) =>
+    isRubric ? '申诉评价结果' : '申诉绩效数据';
+
+List<KpiAppeal> kpiAppealsFromData(Object? data) {
+  if (data is List) {
+    return [
+      for (final row in data)
+        if (row is Map) KpiAppeal.fromJson(Map<String, dynamic>.from(row)),
+    ];
+  }
+  if (data is Map) {
+    return kpiAppealsFromData(data['items']);
+  }
+  return const [];
+}
+
+bool kpiPersonInSector(WorkProfileKpiPerson person, String sector) {
+  if (sector == 'all') return true;
+  return person.categories.any(
+    (c) => c.category == sector && c.tasks.isNotEmpty,
+  );
+}
+
+List<KpiPublishGroup> kpiPublishGroupsForSector(
+  List<WorkProfileKpiPerson> people, {
+  required String sector,
+}) {
+  final eligible = [
+    for (final person in people)
+      if (person.isRubric &&
+          person.canWrite &&
+          kpiPersonInSector(person, sector))
+        person,
+  ];
+  if (eligible.isEmpty) return const [];
+  return [
+    for (final entry in kpiPeopleByProjectGroup(eligible, sector: sector))
+      KpiPublishGroup(
+        name: entry.key,
+        scored: [
+          for (final person in entry.value)
+            if (!person.isPending) person,
+        ],
+        pending: [
+          for (final person in entry.value)
+            if (person.isPending) person,
+        ],
+      ),
+  ];
+}
+
+String kpiDefaultPublishSector(
+  List<WorkProfileKpiPerson> people,
+  String sector,
+) {
+  if (sector != 'all' &&
+      kpiPublishGroupsForSector(people, sector: sector).isNotEmpty) {
+    return sector;
+  }
+  for (final id in const ['rd', 'office', 'telecom', 'energy']) {
+    if (kpiPublishGroupsForSector(people, sector: id).isNotEmpty) return id;
+  }
+  return sector == 'all' ? 'rd' : sector;
+}
+
 List<MapEntry<String, List<WorkProfileKpiPerson>>> _kpiBucketPeople(
   List<WorkProfileKpiPerson> people, {
   required String Function(WorkProfileKpiPerson person) groupOf,
@@ -808,9 +1052,18 @@ String kpiScoreSummaryMarkdown(
     }
 
     final grade = person.resolvedGrade;
+    final scoreCell = person.isPending || person.isSkipped
+        ? '—'
+        : person.mainScore.toStringAsFixed(2);
+    final gradeCell = person.isSkipped
+        ? person.skipLabel
+        : (person.isPending ? '待录入' : grade.label);
+    final coefCell = person.isPending || person.isSkipped
+        ? '—'
+        : '${grade.coefficient}';
     buf.writeln(
-      '| ${cell(person.departmentName)} | ${cell(kpiIndexedPersonName(i, person.userName))} | ${cell(person.position)} '
-      '| ${person.mainScore.toStringAsFixed(2)} | ${grade.label} | ${grade.coefficient} |',
+      '| ${cell(kpiPersonShareDepartment(person))} | ${cell(kpiIndexedPersonName(i, person.userName))} | ${cell(person.position)} '
+      '| $scoreCell | ${cell(gradeCell)} | $coefCell |',
     );
   }
   return buf.toString().trimRight();
@@ -900,5 +1153,32 @@ class WorkProfileKpiService {
         ? Map<String, dynamic>.from(data)
         : <String, dynamic>{};
     return WorkProfileKpiScore.fromJson(map);
+  }
+
+  Future<KpiAppeal> submitAppeal({
+    required String month,
+    required String comment,
+  }) async {
+    final resp = await dunesHttpPost(
+      session,
+      '/kpi/appeal',
+      body: jsonEncode({'month': month.trim(), 'comment': comment.trim()}),
+      client: _client,
+    );
+    final data = _unwrap(resp);
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    return KpiAppeal.fromJson(map);
+  }
+
+  Future<List<KpiAppeal>> listMyAppeals({required String month}) async {
+    final q = '?month=${Uri.encodeQueryComponent(month.trim())}';
+    final resp = await dunesHttpGet(
+      session,
+      '/kpi/my-appeals$q',
+      client: _client,
+    );
+    return kpiAppealsFromData(_unwrap(resp));
   }
 }

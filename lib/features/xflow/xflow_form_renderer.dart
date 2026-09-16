@@ -97,22 +97,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     );
   }
 
-  bool _isVisible(XflowField field) {
-    if (field.raw['hiddenOnCreate'] == true) return false;
-    final cond = (field.raw['visibleWhen'] ?? '').toString().trim();
-    if (cond.isEmpty) return true;
-    return _parseCond(cond, widget.values);
-  }
-
-  bool _parseCond(String expr, Map<String, dynamic> values) {
-    final parts = expr.split('=');
-    if (parts.length < 2) return true;
-    final key = parts.first.trim();
-    final want = parts.sublist(1).join('=').trim();
-    final got = values[key];
-    if (got is List) return got.contains(want) || got.join('、') == want;
-    return (got?.toString() ?? '') == want;
-  }
+  bool _isVisible(XflowField field) => field.visibleIn(widget.values);
 
   ({int pct, int bizDone, int bizTotal, int finDone, int finTotal})
   _progress() {
@@ -1747,7 +1732,11 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        XfFieldLabel(label: label, required: field.required, compact: inRow),
+        XfFieldLabel(
+          label: label,
+          required: field.requiredIn(widget.values),
+          compact: inRow,
+        ),
         child,
         if (hint != null && hint.isNotEmpty)
           Padding(

@@ -2191,19 +2191,36 @@ class _TrendLinesPainter extends CustomPainter {
     );
 
     // ── 1. 网格：三条发丝（顶 / 中 / 底），底线稍重当基线 ─────────────────
+    //   v17 · 质感：顶 / 中两条改成点状发丝，只让底线实一点当基线 ——
+    //   实线网格会和主线抢「线」的注意力，点线退到纸面里。
     final gridPaint = Paint()
-      ..color = _LhPlum.deep.withAlpha(16)
-      ..strokeWidth = 0.6;
+      ..color = _LhPlum.deep.withAlpha(22)
+      ..strokeWidth = 0.6
+      ..strokeCap = StrokeCap.round;
     final left = padH;
     final right = size.width - padH;
-    canvas.drawLine(Offset(left, plotTop), Offset(right, plotTop), gridPaint);
+    _trendDashedLine(
+      canvas,
+      Offset(left, plotTop),
+      Offset(right, plotTop),
+      gridPaint,
+      dash: 1.2,
+      gap: 3.2,
+    );
     final midY = (plotTop + plotBottom) / 2;
-    canvas.drawLine(Offset(left, midY), Offset(right, midY), gridPaint);
+    _trendDashedLine(
+      canvas,
+      Offset(left, midY),
+      Offset(right, midY),
+      gridPaint,
+      dash: 1.2,
+      gap: 3.2,
+    );
     canvas.drawLine(
       Offset(left, plotBottom),
       Offset(right, plotBottom),
       Paint()
-        ..color = _LhPlum.deep.withAlpha(36)
+        ..color = _LhPlum.deep.withAlpha(30)
         ..strokeWidth = 0.7,
     );
 
@@ -2279,21 +2296,78 @@ class _TrendLinesPainter extends CustomPainter {
       path.lineTo(offsets.last.dx, plotBottom);
       path.lineTo(offsets.first.dx, plotBottom);
       path.close();
+      // v17 · 渐变从「线的最高点」起算而不是画布顶：峰下最浓、
+      // 很快衰到透明，面只是托住线的一层雾，不再是一整块紫。
+      var lineTop = plotBottom;
+      for (final o in offsets) {
+        if (o.dy < lineTop) lineTop = o.dy;
+      }
       canvas.drawPath(
         path,
         Paint()
           ..shader = LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [heroColor.withAlpha(56), heroColor.withAlpha(0)],
-          ).createShader(Rect.fromLTRB(0, plotTop, size.width, plotBottom))
+            colors: [
+              heroColor.withAlpha(44),
+              heroColor.withAlpha(14),
+              heroColor.withAlpha(0),
+            ],
+            stops: const [0.0, 0.55, 1.0],
+          ).createShader(Rect.fromLTRB(0, lineTop, size.width, plotBottom))
           ..style = PaintingStyle.fill,
       );
     }
 
     // ── 3. 主线 ─────────────────────────────────────────────────────────
-    if (heroDrawable) {
-      drawLine(heroSolid, heroColor, heroBounds, strokeWidth: 2.2);
+    //   v17 · 质感：旧版是 2.2px 纯色线 + 贴线的浓填充，边缘发虚、像马克笔。
+    //   现在三层：① 往下错 2px 的柔影把线「抬」离纸面；② 白色衬底把线和
+    //   填充切开，边缘利落；③ 主线本身左浅右深的横向渐变 —— 越靠近本期越实，
+    //   视线自然落到末端读数上。
+    if (heroDrawable && heroSolid.length >= 2) {
+      final offsets = <Offset>[
+        for (int i = 0; i < heroSolid.length; i++)
+          Offset(xOf(i), yOf(heroSolid[i], heroBounds)),
+      ];
+      final linePath = Path();
+      _addSmoothPath(linePath, offsets);
+      canvas.drawPath(
+        linePath.shift(const Offset(0, 2.2)),
+        Paint()
+          ..color = heroColor.withAlpha(46)
+          ..strokeWidth = 3.2
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.6),
+      );
+      canvas.drawPath(
+        linePath,
+        Paint()
+          ..color = Colors.white.withAlpha(210)
+          ..strokeWidth = 3.6
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
+      final x0 = offsets.first.dx;
+      final x1 = math.max(offsets.last.dx, x0 + 1);
+      canvas.drawPath(
+        linePath,
+        Paint()
+          ..shader = LinearGradient(
+            colors: [
+              Color.lerp(heroColor, Colors.white, 0.38)!,
+              heroColor,
+              Color.lerp(heroColor, _LhPlum.deep, 0.22)!,
+            ],
+            stops: const [0.0, 0.6, 1.0],
+          ).createShader(Rect.fromLTRB(x0, 0, x1, size.height))
+          ..strokeWidth = 2.0
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
     }
 
     // ── 4. 极值小圈（数字由外层 widget 贴 pill）────────────────────────────
@@ -2308,14 +2382,14 @@ class _TrendLinesPainter extends CustomPainter {
         for (final i in <int>{hi, lo}) {
           if (i == heroSolid.length - 1) continue; // 末端有自己的点
           final o = Offset(xOf(i), yOf(heroSolid[i], heroBounds));
-          canvas.drawCircle(o, 2.6, Paint()..color = Colors.white);
+          canvas.drawCircle(o, 3.0, Paint()..color = Colors.white);
           canvas.drawCircle(
             o,
-            2.6,
+            3.0,
             Paint()
               ..color = heroColor
               ..style = PaintingStyle.stroke
-              ..strokeWidth = 1.2,
+              ..strokeWidth = 1.4,
           );
         }
       }
@@ -2325,12 +2399,24 @@ class _TrendLinesPainter extends CustomPainter {
     if (heroDrawable) {
       final i = heroSolid.length - 1;
       final o = Offset(xOf(i), yOf(heroSolid[i], heroBounds));
+      //   v17 · 两圈半透明光晕叠在一起边缘发糊，换成「白珠 + 投影」：
+      //   白环压实、下方一点柔影，点像是嵌在线上，而不是晕开的墨。
       if (!partial) {
-        canvas.drawCircle(o, 7.0, Paint()..color = heroColor.withAlpha(28));
-        canvas.drawCircle(o, 5.0, Paint()..color = heroColor.withAlpha(60));
+        canvas.drawCircle(o, 8.5, Paint()..color = heroColor.withAlpha(18));
+        canvas.drawCircle(
+          o.translate(0, 1.2),
+          5.0,
+          Paint()
+            ..color = _LhPlum.deep.withAlpha(60)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0),
+        );
       }
-      canvas.drawCircle(o, 3.6, Paint()..color = Colors.white);
-      canvas.drawCircle(o, 2.6, Paint()..color = heroColor);
+      canvas.drawCircle(o, 4.6, Paint()..color = Colors.white);
+      canvas.drawCircle(
+        o,
+        2.9,
+        Paint()..color = Color.lerp(heroColor, _LhPlum.deep, 0.22)!,
+      );
     }
 
     // ── 6. 当月进度胶囊 ──────────────────────────────────────────────────
@@ -7242,11 +7328,19 @@ class _TrendChartState extends State<_TrendChart> {
   /// v16 · 极值读数 pill：白底发丝边，压在线上也读得清。
   Widget _extremePill(String tag, double value) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 3.5, vertical: 1),
+      padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1.5),
       decoration: BoxDecoration(
-        color: Colors.white.withAlpha(235),
-        borderRadius: BorderRadius.circular(3),
-        border: Border.all(color: _LhPlum.deep.withAlpha(34), width: 0.6),
+        color: Colors.white.withAlpha(245),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: _LhPlum.deep.withAlpha(18), width: 0.5),
+        boxShadow: [
+          BoxShadow(
+            color: _LhPlum.deep.withAlpha(26),
+            blurRadius: 6,
+            spreadRadius: -1,
+            offset: const Offset(0, 1.5),
+          ),
+        ],
       ),
       child: RichText(
         text: TextSpan(
@@ -10662,12 +10756,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
 
     if (!_detailHasDrillMaps(detailDict)) {
-      _showDetailDrillHint('当前网关未返回三级明细，请部署新版 lighthouse-go 或使用本地 API');
+      _showDetailDrillHint('当前网关未返回细分明细，请部署新版 lighthouse-go 或使用本地 API');
       _ensureDetailDrillData();
       return;
     }
 
-    _showDetailDrillHint('该行暂无三级明细');
+    _showDetailDrillHint('该行暂无细分明细');
   }
 
   String _detailDimLabel(String dim) {
@@ -10687,7 +10781,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       case 'productName':
         return 'SKU';
       case lighthouseProductL3SubTab:
-        return '三级';
+        return '细分';
       case 'supplierCode':
         return '产品码';
       case 'signEntity':
@@ -12957,7 +13051,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   // 标题、日期、同步状态、工具同一行。
   Widget _buildAppBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+      padding: const EdgeInsets.fromLTRB(
+        lighthouseAppBarPaddingH,
+        10,
+        lighthouseAppBarPaddingH,
+        10,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -13152,12 +13251,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
-  /// 顶栏工具的共用壳：期间条同款雾紫轨道。
+  /// 顶栏工具的共用壳：期间条同款凹槽（v24 跟着期间条换成淡紫底 + Hero 卡紫发丝边）。
   BoxDecoration _appBarToolShell({required double radius}) {
     return BoxDecoration(
-      color: _LhPlum.heroFill,
+      color: const Color(0xFFF3EFFA),
       borderRadius: BorderRadius.circular(radius),
-      border: Border.all(color: _LhPlum.heroEdge, width: 0.8),
+      border: Border.all(color: _LhPlum.line, width: 0.8),
     );
   }
 
@@ -13211,7 +13310,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         color: atDefault ? _LhPlum.heroFill.withAlpha(0) : Colors.white,
         borderRadius: BorderRadius.circular(r - 4),
         border: Border.all(
-          color: atDefault ? _LhPlum.heroEdge.withAlpha(0) : _LhPlum.heroEdge,
+          color: atDefault ? _LhPlum.line.withAlpha(0) : _LhPlum.line,
           width: 0.8,
         ),
         boxShadow: atDefault
@@ -14229,9 +14328,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       children: [
         Padding(
           padding: EdgeInsets.fromLTRB(
-            22,
-            2,
-            22,
+            lighthouseHeroShellMarginH,
+            lighthousePeriodGapAbove,
+            lighthouseHeroShellMarginH,
             lighthouseSoftReloadKeepsContent ? 0 : 10,
           ),
           child: _buildPeriodBar(),
@@ -17656,26 +17755,28 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           trackRadius: lighthousePeriodTrackRadius,
           pillRadius: lighthousePeriodSelectedRadius,
           dotSize: lighthousePeriodStatusDotSize,
+          trackPadding: lighthousePeriodTrackPadding,
           primary: _LhPlum.primary,
           deep: _LhPlum.deep,
-          // Hero 框架：轨道 = 雾紫壳，胶囊 = 白紫内容卡，字走 hero 大数深紫。
+          // v24 · 轨道 = 凹槽（淡紫底、Hero 卡同款紫发丝边、不投影），
+          // 胶囊 = 缩小的 Hero 白卡（白纸 + 同色边 + 轻投影）。
           trackColor: lighthousePeriodUsesHeroSurface
-              ? _LhPlum.heroFill
+              ? const Color(0xFFF3EFFA)
               : LhColors.paper,
           trackBorder: lighthousePeriodUsesHeroSurface
-              ? _LhPlum.heroEdge
+              ? _LhPlum.line
               : LhColors.line2,
           trackShadowColor: lighthousePeriodUsesHeroSurface
-              ? _LhPlum.deep.withAlpha(15)
+              ? Colors.transparent
               : Colors.black.withAlpha(8),
           pillGradient: lighthousePeriodUsesHeroSurface
-              ? const [Color(0xFFFFFFFF), Color(0xFFFFFDFF), Color(0xFFFBF8FE)]
+              ? const [Color(0xFFFFFFFF), Color(0xFFFFFFFF), Color(0xFFFCFAFF)]
               : const [Color(0xFFF6F1FD), Color(0xFFE3D9F7), Color(0xFFEFE9FB)],
           pillEdgeColor: lighthousePeriodUsesHeroSurface
-              ? _LhPlum.heroEdge
+              ? _LhPlum.line
               : null,
           pillShadowColor: lighthousePeriodUsesHeroSurface
-              ? _LhPlum.deep.withAlpha(22)
+              ? _LhPlum.deep.withAlpha(30)
               : null,
           shimmerColor: lighthousePeriodUsesHeroSurface
               ? _LhPlum.lavender
@@ -17689,10 +17790,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               : _periodPillLabel(_period, _periodOffset),
           ambientMotion: lighthousePeriodAmbientMotion,
           baseTextStyle: LhTypography.sans(
-            size: 12,
+            size: lighthousePeriodLabelFontSize,
             color: LhColors.ink2,
             weight: FontWeight.w500,
-            letterSpacing: 0.3,
+            letterSpacing: 0,
             height: 1.0,
           ),
           onTap: (i) {
@@ -31284,7 +31385,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       if (!_detailHasDrillMaps(detailDict)) {
         _ensureDetailDrillData();
       }
-      _showDetailDrillHint('该三级暂无明细，请部署新版 lighthouse-go');
+      _showDetailDrillHint('该细分暂无明细，请部署新版 lighthouse-go');
       return;
     }
     setState(() {
@@ -31299,7 +31400,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     });
   }
 
-  /// 父卡片底部的三级折叠条。
+  /// 父卡片底部的「细分」折叠条。
+  ///   「三级」是数据字段名不是人话，改叫「细分」；图标用 ↳，
+  ///   和展开后子卡片名字前的「↳」同一个符号，一眼看出是往下挂的子项。
   Widget _buildProductL3Bar({
     required List<Map<String, dynamic>> children,
     required bool open,
@@ -31311,7 +31414,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final hasUnassigned = children.length > real;
     return Semantics(
       button: true,
-      label: open ? '收起三级分类' : '展开 $real 个三级分类',
+      label: open ? '收起细分产品' : '展开 $real 个细分产品',
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {
@@ -31333,8 +31436,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           child: Row(
             children: [
               Icon(
-                Icons.account_tree_outlined,
-                size: _fs(13),
+                Icons.subdirectory_arrow_right_rounded,
+                size: _fs(14),
                 color: groupColor,
               ),
               SizedBox(width: _fs(5)),
@@ -31348,7 +31451,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   borderRadius: BorderRadius.circular(_fs(4)),
                 ),
                 child: Text(
-                  '三级 $real',
+                  '细分 $real',
                   style: _tabular(
                     LhTypography.sans(
                       size: _fs(10),
@@ -33482,7 +33585,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       // 只在该二级下有真正的三级时出现（见 _buildDetailView 的过滤）。
       _SubTabInfo(
         key: lighthouseProductL3SubTab,
-        label: '三级',
+        label: '细分',
         color: LhColors.product,
       ),
       _SubTabInfo(key: 'supply', label: '供给', color: LhColors.sinopec),

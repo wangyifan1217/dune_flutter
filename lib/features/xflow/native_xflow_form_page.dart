@@ -875,25 +875,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
   List<String> _missingRequired() {
     final template = _template;
     if (template == null) return const [];
-    final out = <String>[];
-    for (final field in template.fields) {
-      if (field.key.isEmpty || field.type == 'section') continue;
-      if (field.raw['hiddenOnCreate'] == true) continue;
-      if (field.isCardDynamicList) {
-        out.addAll(field.missingRequiredGroupLabels(_values[field.key]));
-        continue;
-      }
-      if (!field.required) continue;
-      final value = _values[field.key];
-      final ok =
-          value != null &&
-          ((value is String && value.trim().isNotEmpty) ||
-              (value is List && value.isNotEmpty) ||
-              (value is Map && value.isNotEmpty) ||
-              (value is! String && value is! List && value is! Map));
-      if (!ok) out.add(field.label.isEmpty ? field.key : field.label);
-    }
-    return out;
+    return xflowMissingRequiredLabels(template.fields, _values);
   }
 
   String get _submitLabel => '提交审批';

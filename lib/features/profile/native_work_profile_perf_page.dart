@@ -1,10 +1,12 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../kpi/kpi_metric_list.dart';
+import '../shell/dunes_toast.dart';
 import 'work_profile_kpi.dart';
 
 const _perfAccent = Color(0xFF8C5A91);
@@ -50,6 +52,8 @@ class NativeWorkProfilePerfPage extends StatefulWidget {
     this.now,
     this.loadScore,
     this.ackScore,
+    this.submitAppeal,
+    this.listMyAppeals,
   });
 
   final AuthSession session;
@@ -59,6 +63,8 @@ class NativeWorkProfilePerfPage extends StatefulWidget {
   final DateTime? now;
   final Future<WorkProfileKpiScore> Function(String month)? loadScore;
   final Future<WorkProfileKpiScore> Function(String month)? ackScore;
+  final Future<KpiAppeal> Function(String month, String comment)? submitAppeal;
+  final Future<List<KpiAppeal>> Function(String month)? listMyAppeals;
 
   @override
   State<NativeWorkProfilePerfPage> createState() =>
@@ -71,6 +77,7 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
   bool _loading = true;
   Object? _error;
   int _loadGen = 0;
+  List<KpiAppeal> _appeals = const [];
 
   DateTime get _clock => widget.now ?? DateTime.now();
   DateTime get _currentMonth => kpiMonthStart(_clock);
@@ -89,6 +96,7 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
     } else {
       unawaited(_load());
     }
+    unawaited(_refreshAppeals());
   }
 
   Future<void> _load() async {
@@ -108,9 +116,11 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
           : await WorkProfileKpiService(
               session: widget.session,
             ).fetchMyScore(month: month);
+      final appeals = await _fetchAppeals(month);
       if (!mounted || gen != _loadGen) return;
       setState(() {
         _score = score;
+        _appeals = appeals;
         _loading = false;
       });
     } catch (e) {
@@ -121,6 +131,26 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
         _loading = false;
       });
     }
+  }
+
+  Future<List<KpiAppeal>> _fetchAppeals(String month) async {
+    try {
+      if (widget.listMyAppeals != null) {
+        return await widget.listMyAppeals!(month);
+      }
+      if (widget.score != null) return const [];
+      return await WorkProfileKpiService(
+        session: widget.session,
+      ).listMyAppeals(month: month);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> _refreshAppeals() async {
+    final appeals = await _fetchAppeals(formatKpiMonth(_month));
+    if (!mounted) return;
+    setState(() => _appeals = appeals);
   }
 
   Future<void> _pickMonth() async {
@@ -179,6 +209,35 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
     }
   }
 
+  Future<void> _openAppeal() async {
+    final person = _score?.me;
+    if (person == null) return;
+    final isRubric = person.isRubric;
+    final comment = await showDialog<String>(
+      context: context,
+      builder: (ctx) => _KpiAppealDialog(isRubric: isRubric),
+    );
+    if (comment == null || !mounted) return;
+    try {
+      final month = formatKpiMonth(_month);
+      final saved = widget.submitAppeal != null
+          ? await widget.submitAppeal!(month, comment)
+          : await WorkProfileKpiService(
+              session: widget.session,
+            ).submitAppeal(month: month, comment: comment);
+      if (!mounted) return;
+      setState(() => _appeals = [saved, ..._appeals]);
+      showDunesToast(context, '已提交');
+    } catch (e) {
+      if (!mounted) return;
+      showDunesToast(
+        context,
+        friendlyErrorText(e, fallback: '申诉失败'),
+        kind: DunesToastKind.error,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final person = _score?.me;
@@ -193,7 +252,11 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
         bottom: false,
         child: Column(
           children: [
-            _Header(onBack: widget.onBack),
+            _Header(
+              onBack: widget.onBack,
+              onAppeal: hasScore ? () => unawaited(_openAppeal()) : null,
+              appealed: _appeals.any((a) => a.isOpen),
+            ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
@@ -234,9 +297,7 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
                         const SizedBox(height: 10),
                         FilledButton(
                           key: const Key('work-profile-perf-ack'),
-                          onPressed: _loading
-                              ? null
-                              : () => unawaited(_ack()),
+                          onPressed: _loading ? null : () => unawaited(_ack()),
                           style: FilledButton.styleFrom(
                             backgroundColor: _perfAccent,
                           ),
@@ -262,9 +323,11 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.onBack});
+  const _Header({required this.onBack, this.onAppeal, this.appealed = false});
 
   final VoidCallback onBack;
+  final VoidCallback? onAppeal;
+  final bool appealed;
 
   @override
   Widget build(BuildContext context) {
@@ -293,8 +356,71 @@ class _Header extends StatelessWidget {
               ),
             ),
           ),
+          if (onAppeal != null)
+            TextButton(
+              key: const Key('work-profile-perf-appeal'),
+              onPressed: onAppeal,
+              child: Text(
+                appealed ? '已申诉' : '绩效申诉',
+                style: DunesTypography.sans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: _perfAccent,
+                ),
+              ),
+            ),
         ],
       ),
+    );
+  }
+}
+
+class _KpiAppealDialog extends StatefulWidget {
+  const _KpiAppealDialog({required this.isRubric});
+
+  final bool isRubric;
+
+  @override
+  State<_KpiAppealDialog> createState() => _KpiAppealDialogState();
+}
+
+class _KpiAppealDialogState extends State<_KpiAppealDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(kpiAppealTitle(isRubric: widget.isRubric)),
+      content: TextField(
+        key: const Key('work-profile-perf-appeal-comment'),
+        controller: _controller,
+        maxLines: 4,
+        autofocus: true,
+        decoration: const InputDecoration(hintText: '写清要改什么'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          key: const Key('work-profile-perf-appeal-ok'),
+          onPressed: () => Navigator.pop(context, _controller.text),
+          child: const Text('提交'),
+        ),
+      ],
     );
   }
 }
@@ -423,7 +549,9 @@ class _SummaryCard extends StatelessWidget {
             runSpacing: 6,
             children: [
               Text(
-                '主营 ${person.mainScore.toStringAsFixed(2)}',
+                person.isRubric
+                    ? '量表 ${person.mainScore.toStringAsFixed(2)}'
+                    : '主营 ${person.mainScore.toStringAsFixed(2)}',
                 style: DunesTypography.sans(
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
@@ -440,20 +568,22 @@ class _SummaryCard extends StatelessWidget {
                     color: const Color(0xFFB07A2B),
                   ),
                 ),
-              Text(
-                '通信权重 ${person.telecomWeight.toStringAsFixed(4)}',
-                style: DunesTypography.sans(
-                  fontSize: 12,
-                  color: DunesColors.text2,
+              if (!person.isRubric) ...[
+                Text(
+                  '运营商权重 ${person.telecomWeight.toStringAsFixed(4)}',
+                  style: DunesTypography.sans(
+                    fontSize: 12,
+                    color: DunesColors.text2,
+                  ),
                 ),
-              ),
-              Text(
-                '能源权重 ${person.energyWeight.toStringAsFixed(4)}',
-                style: DunesTypography.sans(
-                  fontSize: 12,
-                  color: DunesColors.text2,
+                Text(
+                  '能源权重 ${person.energyWeight.toStringAsFixed(4)}',
+                  style: DunesTypography.sans(
+                    fontSize: 12,
+                    color: DunesColors.text2,
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ],
@@ -498,7 +628,9 @@ class _CategoryBlock extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '${category.categoryLabel}（${category.tasks.length}条规则）',
+            category.category == 'rd' || category.category == 'office'
+                ? '${category.categoryLabel}（${category.tasks.length}项）'
+                : '${category.categoryLabel}（${category.tasks.length}条规则）',
             style: DunesTypography.sans(
               fontSize: 15,
               fontWeight: FontWeight.w700,
@@ -507,7 +639,9 @@ class _CategoryBlock extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            '板块得分 ${category.score.toStringAsFixed(2)} · 权重 ${category.categoryWeight.toStringAsFixed(4)}',
+            category.category == 'rd' || category.category == 'office'
+                ? '量表得分 ${category.score.toStringAsFixed(2)}'
+                : '板块得分 ${category.score.toStringAsFixed(2)} · 权重 ${category.categoryWeight.toStringAsFixed(4)}',
             style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
           ),
           const SizedBox(height: 8),
@@ -567,7 +701,10 @@ class _TaskRow extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(right: 10),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(20),
@@ -583,7 +720,9 @@ class _TaskRow extends StatelessWidget {
                     ),
                   ),
                 Text(
-                  task.taskTotal.toStringAsFixed(1),
+                  task.isRubric
+                      ? '${task.taskTotal.toStringAsFixed(1)} / ${task.weightPct == task.weightPct.roundToDouble() ? task.weightPct.toStringAsFixed(0) : task.weightPct.toStringAsFixed(1)}'
+                      : task.taskTotal.toStringAsFixed(1),
                   style: DunesTypography.sans(
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
@@ -593,31 +732,34 @@ class _TaskRow extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            Row(
-              children: [
-                if (task.weightOverridden)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Text(
-                      '手工',
-                      style: DunesTypography.sans(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFFB07A2B),
+            if (!task.isRubric)
+              Row(
+                children: [
+                  if (task.weightOverridden)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Text(
+                        '手工',
+                        style: DunesTypography.sans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFFB07A2B),
+                        ),
                       ),
                     ),
+                  Text(
+                    '权重 ${task.weightPct.toStringAsFixed(2)}%',
+                    style: DunesTypography.sans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: DunesColors.coral,
+                    ),
                   ),
-                Text(
-                  '权重 ${task.weightPct.toStringAsFixed(2)}%',
-                  style: DunesTypography.sans(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: DunesColors.coral,
-                  ),
-                ),
-              ],
-            ),
-            if (task.weightOverridden && task.autoWeightPct != null)
+                ],
+              ),
+            if (!task.isRubric &&
+                task.weightOverridden &&
+                task.autoWeightPct != null)
               Text(
                 '自动权重 ${task.autoWeightPct!.toStringAsFixed(2)}%',
                 style: DunesTypography.sans(
@@ -641,20 +783,25 @@ class _TaskRow extends StatelessWidget {
                   color: const Color(0xFFB07A2B),
                 ),
               ),
-            Text(
-              '本月营收 ${kpiMoney(task.curRevenue)} · 上月 ${kpiMoney(task.prevRevenue)}',
-              style: DunesTypography.sans(fontSize: 12, color: DunesColors.text2),
-            ),
-            Text(
-              task.scoreAdjusted && task.autoTaskTotal != null
-                  ? '任务分 ${task.taskTotal.toStringAsFixed(1)}（自动 ${task.autoTaskTotal!.toStringAsFixed(1)}）'
-                  : '任务分 ${task.taskTotal.toStringAsFixed(1)}',
-              style: DunesTypography.sans(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: DunesColors.text2,
+            if (!task.isRubric) ...[
+              Text(
+                '本月营收 ${kpiMoney(task.curRevenue)} · 上月 ${kpiMoney(task.prevRevenue)}',
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  color: DunesColors.text2,
+                ),
               ),
-            ),
+              Text(
+                task.scoreAdjusted && task.autoTaskTotal != null
+                    ? '任务分 ${task.taskTotal.toStringAsFixed(1)}（自动 ${task.autoTaskTotal!.toStringAsFixed(1)}）'
+                    : '任务分 ${task.taskTotal.toStringAsFixed(1)}',
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: DunesColors.text2,
+                ),
+              ),
+            ],
             const SizedBox(height: 6),
             // 收入/利润/用户的本月上月都在指标明细里，不再单独铺三行文字。
             KpiMetricList(metrics: task.metrics),

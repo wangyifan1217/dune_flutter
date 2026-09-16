@@ -1,4 +1,6 @@
 import 'package:dunes_app/features/auth/auth_session.dart';
+import 'package:dunes_app/features/kpi/kpi_score_summary_card.dart';
+import 'package:dunes_app/features/profile/native_work_profile_perf_page.dart';
 import 'package:dunes_app/features/profile/native_work_profile_perf_page.dart';
 import 'package:dunes_app/features/profile/work_profile_kpi.dart';
 import 'package:flutter/material.dart';
@@ -49,7 +51,7 @@ void main() {
     final fromSummary = _slice(
       taskName: '小套-加油会员',
       province: '广东',
-      bucketLabel: '通信板块',
+      bucketLabel: '运营商',
       matchSummary: '产品=小套-加油会员',
     );
     expect(kpiLighthouseSliceTitle(fromSummary), '小套-加油会员');
@@ -70,6 +72,38 @@ void main() {
     );
     expect(kpiLighthouseSliceTitle(channel), '多渠道');
     expect(kpiLighthouseSliceSubtitle(channel), '全国');
+  });
+
+  test('量表明细用考核目标，不写成全国', () {
+    const task = WorkProfileKpiTask(
+      taskId: -11,
+      taskName: '目标完成度',
+      province: '',
+      bucketLabel: '业绩产出',
+      weightPct: 40,
+      taskTotal: 34,
+      curRevenue: 0,
+      prevRevenue: 0,
+      curProfit: 0,
+      prevProfit: 0,
+      matchSummary: '所负责产品/项目的核心业务指标（OKR/KPI）达成情况',
+      metrics: [
+        WorkProfileKpiMetric(
+          key: 'goal',
+          label: '目标完成度',
+          status: 'ok',
+          kind: 'rubric',
+          maxPoints: 40,
+          points: 34,
+          note: '所负责产品/项目的核心业务指标（OKR/KPI）达成情况',
+        ),
+      ],
+    );
+    expect(task.isRubric, isTrue);
+    expect(
+      kpiLighthouseSliceSubtitle(task),
+      '所负责产品/项目的核心业务指标（OKR/KPI）达成情况',
+    );
   });
 
   test('builds markdown summary of final scores and grades', () {
@@ -116,6 +150,99 @@ void main() {
     expect(filtered, isNot(contains('何佳伟')));
   });
 
+  test('summary marks skipped people without a fake zero score', () {
+    const ding = WorkProfileKpiPerson(
+      userId: 11,
+      userName: '丁涛',
+      departmentName: '出行组',
+      position: 'Java工程师',
+      mainScore: 0,
+      bonus: 0,
+      telecomWeight: 0,
+      energyWeight: 0,
+      telecomScore: 0,
+      energyScore: 0,
+      scoreSource: 'rubric',
+      scoreStatus: 'skipped',
+      skipReason: 'probation',
+      gradeLabel: '试用期',
+    );
+    const scored = WorkProfileKpiPerson(
+      userId: 1,
+      userName: '胡浩',
+      departmentName: '出行组',
+      position: 'Java工程师',
+      mainScore: 86,
+      bonus: 0,
+      telecomWeight: 0,
+      energyWeight: 0,
+      telecomScore: 0,
+      energyScore: 0,
+      scoreSource: 'rubric',
+      scoreStatus: 'scored',
+    );
+    const score = WorkProfileKpiScore(
+      month: '2026-08',
+      prevMonth: '2026-07',
+      people: [ding, scored],
+    );
+    final md = kpiScoreSummaryMarkdown(score);
+    expect(md, contains('| 出行组 | 1. 胡浩 | Java工程师 | 86.00 |'));
+    expect(md, contains('| 出行组 | 2. 丁涛 | Java工程师 | — | 试用期 | — |'));
+    expect(md, isNot(contains('| 0.00 | 试用期 |')));
+    expect(kpiPersonShareDepartment(ding), '出行组');
+    final data = kpiScoreSummaryData(score);
+    expect(data.skippedCount, 1);
+    expect(data.pendingCount, 0);
+    expect(data.averageScore, 86);
+  });
+
+  test('summary groups by scored sector, not roster department', () {
+    const he = WorkProfileKpiPerson(
+      userId: 40,
+      userName: '何佳伟',
+      departmentName: '能源板块',
+      position: '高级售前顾问',
+      mainScore: 49.51,
+      bonus: 0,
+      telecomWeight: 1,
+      energyWeight: 0,
+      telecomScore: 49.51,
+      energyScore: 0,
+      categories: [
+        WorkProfileKpiCategory(
+          category: 'telecom',
+          categoryLabel: '运营商',
+          categoryWeight: 1,
+          score: 49.51,
+          tasks: [
+            WorkProfileKpiTask(
+              taskId: 1,
+              taskName: '会员套餐订阅',
+              province: '广东',
+              bucketLabel: '运营商',
+              weightPct: 100,
+              taskTotal: 49.51,
+              curRevenue: 1,
+              prevRevenue: 1,
+              curProfit: 1,
+              prevProfit: 1,
+            ),
+          ],
+        ),
+      ],
+    );
+    const score = WorkProfileKpiScore(
+      month: '2026-08',
+      prevMonth: '2026-07',
+      people: [he],
+    );
+    final md = kpiScoreSummaryMarkdown(score);
+    expect(md, contains('| 运营商 | 1. 何佳伟 | 高级售前顾问 |'));
+    expect(md, isNot(contains('| 能源 | 1. 何佳伟 |')));
+    expect(kpiPersonShareDepartment(he), '运营商');
+  });
+
   const session = AuthSession(
     phone: '13800000000',
     userId: 1,
@@ -141,7 +268,7 @@ void main() {
           'categories': [
             {
               'category': 'telecom',
-              'categoryLabel': '通信',
+              'categoryLabel': '运营商',
               'categoryWeight': 0.33,
               'score': 90,
               'tasks': [
@@ -233,7 +360,7 @@ void main() {
           'categories': [
             {
               'category': 'telecom',
-              'categoryLabel': '通信',
+              'categoryLabel': '运营商',
               'categoryWeight': 0.33,
               'score': 90,
               'tasks': [
@@ -310,7 +437,7 @@ void main() {
     expect(find.textContaining('主营 80.50'), findsOneWidget);
     expect(find.textContaining('中（低于预期）'), findsOneWidget);
     expect(find.byKey(const Key('work-profile-perf-add')), findsNothing);
-    expect(find.textContaining('通信（2条规则）'), findsOneWidget);
+    expect(find.textContaining('运营商（2条规则）'), findsOneWidget);
     expect(find.textContaining('能源（1条规则）'), findsOneWidget);
     expect(find.text('权重 70.00%'), findsOneWidget);
     expect(find.text('权重 30.00%'), findsOneWidget);
@@ -436,7 +563,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('work-profile-perf-error')), findsOneWidget);
     expect(find.text('加载失败，请稍后重试'), findsOneWidget);
-    expect(find.textContaining('通信（2）'), findsNothing);
+    expect(find.textContaining('运营商（2）'), findsNothing);
     expect(find.text('页面预览 · 样例数据，非正式成绩'), findsNothing);
   });
 
@@ -577,5 +704,256 @@ void main() {
     expect(ackCount, 1);
     expect(find.byKey(const Key('work-profile-perf-acked')), findsOneWidget);
     expect(find.byKey(const Key('work-profile-perf-ack')), findsNothing);
+  });
+
+  testWidgets('绩效发展量表明细用考核目标和评分标准，不画进度条', (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const person = WorkProfileKpiPerson(
+      userId: 1,
+      userName: '朱子姝',
+      departmentName: 'AI研发',
+      mainScore: 90,
+      bonus: 0,
+      telecomWeight: 0,
+      energyWeight: 0,
+      telecomScore: 0,
+      energyScore: 0,
+      grade: '良',
+      gradeLabel: '良（达到预期）',
+      coefficient: 1,
+      scoreSource: 'rubric',
+      scoreStatus: 'scored',
+      ackedAt: '2026-09-15T03:00:00Z',
+      categories: [
+        WorkProfileKpiCategory(
+          category: 'rd',
+          categoryLabel: 'AI研发',
+          categoryWeight: 1,
+          score: 90,
+          tasks: [
+            WorkProfileKpiTask(
+              taskId: -11,
+              taskName: '目标完成度',
+              province: '',
+              bucketLabel: '业绩产出',
+              weightPct: 40,
+              taskTotal: 34,
+              curRevenue: 0,
+              prevRevenue: 0,
+              curProfit: 0,
+              prevProfit: 0,
+              matchSummary: '所负责产品/项目的核心业务指标（OKR/KPI）达成情况',
+              metrics: [
+                WorkProfileKpiMetric(
+                  key: 'goal',
+                  label: '目标完成度',
+                  status: 'ok',
+                  kind: 'rubric',
+                  maxPoints: 40,
+                  points: 34,
+                  note: '所负责产品/项目的核心业务指标（OKR/KPI）达成情况',
+                ),
+                WorkProfileKpiMetric(
+                  key: 'goal_32_35',
+                  label: '32–35分',
+                  status: 'ok',
+                  kind: 'rubric',
+                  base: 32,
+                  maxPoints: 35,
+                  note: '100%达成所有目标，成果符合预期。',
+                ),
+                WorkProfileKpiMetric(
+                  key: 'goal_0_20',
+                  label: '0–20分',
+                  status: 'none',
+                  kind: 'rubric',
+                  base: 0,
+                  maxPoints: 20,
+                  note: '任务完成率低于70%，或有任务未完成严重影响项目。',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeWorkProfilePerfPage(
+          session: session,
+          onBack: () {},
+          now: DateTime(2026, 9, 16),
+          score: const WorkProfileKpiScore(
+            month: '2026-08',
+            prevMonth: '2026-07',
+            people: [person],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('量表 90.00'), findsOneWidget);
+    expect(find.textContaining('运营商权重'), findsNothing);
+    expect(find.textContaining('本月营收'), findsNothing);
+    expect(find.textContaining('上期为 0'), findsNothing);
+    expect(find.textContaining('全国'), findsNothing);
+    expect(
+      find.text('所负责产品/项目的核心业务指标（OKR/KPI）达成情况'),
+      findsWidgets,
+    );
+    expect(find.text('100%达成所有目标，成果符合预期。'), findsOneWidget);
+    expect(find.textContaining('34.0 / 40'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+  });
+
+  testWidgets('lighthouse detail can send a data appeal to HR', (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    var sent = '';
+    const score = WorkProfileKpiScore(
+      month: '2026-08',
+      prevMonth: '2026-07',
+      people: [
+        WorkProfileKpiPerson(
+          userId: 1,
+          userName: '李四',
+          mainScore: 80,
+          bonus: 0,
+          telecomWeight: 1,
+          energyWeight: 0,
+          telecomScore: 80,
+          energyScore: 0,
+          categories: [
+            WorkProfileKpiCategory(
+              category: 'telecom',
+              categoryLabel: '运营商',
+              categoryWeight: 1,
+              score: 80,
+              tasks: [
+                WorkProfileKpiTask(
+                  taskId: 1,
+                  taskName: '小套-出行会员',
+                  province: '广东',
+                  bucketLabel: '运营商',
+                  weightPct: 100,
+                  taskTotal: 80,
+                  curRevenue: 100,
+                  prevRevenue: 90,
+                  curProfit: 10,
+                  prevProfit: 9,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeWorkProfilePerfPage(
+          session: session,
+          onBack: () {},
+          score: score,
+          submitAppeal: (month, comment) async {
+            sent = '$month|$comment';
+            return KpiAppeal(
+              id: 9,
+              month: month,
+              userId: 1,
+              kind: 'data',
+              comment: comment,
+            );
+          },
+        ),
+      ),
+    );
+    expect(find.byKey(const Key('work-profile-perf-appeal')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('work-profile-perf-appeal')));
+    await tester.pumpAndSettle();
+    expect(find.text('申诉绩效数据'), findsOneWidget);
+    expect(find.textContaining('收入、利润、项目归属'), findsNothing);
+    await tester.enterText(
+      find.byKey(const Key('work-profile-perf-appeal-comment')),
+      '出行会员利润不该计入',
+    );
+    await tester.tap(find.byKey(const Key('work-profile-perf-appeal-ok')));
+    await tester.pumpAndSettle();
+    expect(sent, '2026-08|出行会员利润不该计入');
+    expect(find.text('已申诉'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('rubric detail appeals evaluation not lighthouse numbers', (
+    tester,
+  ) async {
+    const scored = WorkProfileKpiPerson(
+      userId: 1,
+      userName: '王奕凡',
+      departmentName: 'AI研发',
+      mainScore: 95,
+      bonus: 0,
+      telecomWeight: 0,
+      energyWeight: 0,
+      telecomScore: 0,
+      energyScore: 0,
+      scoreSource: 'rubric',
+      scoreStatus: 'scored',
+      categories: [
+        WorkProfileKpiCategory(
+          category: 'rd',
+          categoryLabel: 'AI研发',
+          categoryWeight: 1,
+          score: 95,
+          tasks: [
+            WorkProfileKpiTask(
+              taskId: -11,
+              taskName: '目标完成度',
+              province: '',
+              bucketLabel: '业绩产出',
+              weightPct: 30,
+              taskTotal: 30,
+              curRevenue: 0,
+              prevRevenue: 0,
+              curProfit: 0,
+              prevProfit: 0,
+            ),
+          ],
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeWorkProfilePerfPage(
+          session: session,
+          onBack: () {},
+          score: const WorkProfileKpiScore(
+            month: '2026-08',
+            prevMonth: '2026-07',
+            people: [scored],
+          ),
+          submitAppeal: (month, comment) async {
+            return KpiAppeal(
+              id: 3,
+              month: month,
+              userId: 1,
+              kind: 'rubric',
+              comment: comment,
+            );
+          },
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('work-profile-perf-appeal')));
+    await tester.pumpAndSettle();
+    expect(find.text('申诉评价结果'), findsOneWidget);
+    expect(find.textContaining('某档打错、等级不服'), findsNothing);
+    expect(find.textContaining('不改灯塔流水'), findsNothing);
   });
 }

@@ -34,6 +34,7 @@ class LhPeriodBar extends StatefulWidget {
     this.trackRadius = 12,
     this.pillRadius = 8,
     this.dotSize = 4,
+    this.trackPadding = 4,
     this.floating = true,
     this.primary = const Color(0xFF7B5CD8),
     this.deep = const Color(0xFF5A458F),
@@ -72,6 +73,9 @@ class LhPeriodBar extends StatefulWidget {
   final double trackRadius;
   final double pillRadius;
   final double dotSize;
+
+  /// 轨道内边距（胶囊到轨道边的距离）。半径应满足 trackRadius - trackPadding = pillRadius。
+  final double trackPadding;
 
   /// 是否绘制外层悬浮轨道（白底 + 描边 + 投影）
   final bool floating;
@@ -258,7 +262,7 @@ class _LhPeriodBarState extends State<LhPeriodBar>
     return RepaintBoundary(
       child: Container(
         height: widget.height,
-        padding: const EdgeInsets.all(4),
+        padding: EdgeInsets.all(widget.trackPadding),
         decoration: widget.floating
             ? BoxDecoration(
                 color: widget.trackColor,
@@ -317,7 +321,7 @@ class _LhPeriodBarState extends State<LhPeriodBar>
                           pillWidth: pillW,
                           pillOpacity: fade,
                           radius: widget.pillRadius,
-                          trackRadius: widget.trackRadius - 4,
+                          trackRadius: widget.trackRadius - widget.trackPadding,
                           glow: glow,
                           shimmer: shimmerT,
                           comet:
@@ -372,7 +376,8 @@ class _LhPeriodBarState extends State<LhPeriodBar>
         widget.ambientMotion ? FontWeight.w600 : FontWeight.w700,
         t,
       ),
-      shadows: t > 0.05
+      // 字辉光只配常驻动效那套；静态版的白胶囊上它只会让字发糊。
+      shadows: t > 0.05 && widget.ambientMotion
           ? [
               Shadow(
                 color: widget.primary.withValues(
@@ -428,6 +433,7 @@ class _LhPeriodBarState extends State<LhPeriodBar>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (widget.dotSize > 0)
                 slot(
                   width: dotSlot,
                   alignment: Alignment.centerLeft,
@@ -458,8 +464,8 @@ class _LhPeriodBarState extends State<LhPeriodBar>
                     curve: Curves.easeOutCubic,
                     child: Icon(
                       Icons.keyboard_arrow_down_rounded,
-                      size: 14,
-                      color: widget.primary,
+                      size: 15,
+                      color: widget.primary.withValues(alpha: 0.8),
                     ),
                   ),
                 ),
@@ -519,22 +525,25 @@ class _LhPeriodFxPainter extends CustomPainter {
       final rect = Rect.fromLTWH(pillLeft, 0, pillWidth, h);
       final rr = RRect.fromRectAndRadius(rect, Radius.circular(radius));
 
-      // ① 外辉光 —— 呼吸
-      canvas.drawRRect(
-        rr.inflate(1.2),
-        Paint()
-          ..color = primary.withValues(alpha: (0.10 + 0.14 * glow) * o)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 5 + 4.5 * glow),
-      );
+      // ① 外辉光 —— 呼吸。卡片式胶囊（给了投影色）不画：
+      //   紫光晕 + 投影叠在一起，胶囊边缘会糊成一圈雾。
+      if (pillShadowColor == null) {
+        canvas.drawRRect(
+          rr.inflate(1.2),
+          Paint()
+            ..color = primary.withValues(alpha: (0.10 + 0.14 * glow) * o)
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, 5 + 4.5 * glow),
+        );
+      }
 
       // ①' 落位投影 —— 胶囊像一张内容卡压在雾紫轨道上
       final shadow = pillShadowColor;
       if (shadow != null) {
         canvas.drawRRect(
-          rr.shift(const Offset(0, 1.5)),
+          rr.shift(const Offset(0, 1)),
           Paint()
             ..color = shadow.withValues(alpha: shadow.a * o)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.5),
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
         );
       }
 

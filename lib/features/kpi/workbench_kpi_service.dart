@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../../core/http/session_http.dart';
 import '../auth/auth_session.dart';
 import '../profile/work_profile_kpi.dart';
+import 'kpi_followup.dart';
 
 class WorkbenchKpiAccess {
   const WorkbenchKpiAccess({required this.allowed});
@@ -190,10 +191,15 @@ class WorkbenchKpiRubricImportResult {
     var teamHint = '';
     if (team is Map) {
       final name = '${team['departmentName'] ?? ''}';
-      final coef = team['coefficient'];
-      final project = team['projectScore'];
+      final rawCoef = (team['coefficient'] as num?)?.toDouble() ?? 0;
+      final project = (team['projectScore'] as num?)?.toDouble() ?? 0;
       if (name.isNotEmpty) {
-        teamHint = '$name 团队系数 $coef（项目 $project）';
+        final coef = formatKpiProjectCoefficient(
+          kpiProjectCoefficient(project, fallback: rawCoef),
+        );
+        teamHint = kpiProjectScoreOnTenScale(project)
+            ? '$name 项目绩效系数 $coef（项目得分 ${formatKpiProjectScore(project)}）'
+            : '$name 项目绩效系数 $coef';
       }
     }
     return WorkbenchKpiRubricImportResult(
@@ -436,6 +442,20 @@ class WorkbenchKpiService {
     return WorkProfileKpiScore.fromJson(map);
   }
 
+  Future<KpiFollowupBoard> fetchFollowup({required String month}) async {
+    final q = Uri.encodeQueryComponent(month.trim());
+    final resp = await dunesHttpGet(
+      session,
+      '/kpi/rubric-progress?month=$q',
+      client: _client,
+    );
+    final data = _unwrap(resp);
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    return KpiFollowupBoard.fromJson(map);
+  }
+
   Future<WorkProfileKpiScore> saveOverrides({
     required String month,
     required int userId,
@@ -480,6 +500,30 @@ class WorkbenchKpiService {
     return WorkProfileKpiScore.fromJson(map);
   }
 
+  Future<WorkProfileKpiScore> saveSkip({
+    required String month,
+    required int userId,
+    required String reason,
+    String note = '',
+  }) async {
+    final resp = await dunesHttpPut(
+      session,
+      '/kpi/score/skip',
+      body: jsonEncode({
+        'month': month.trim(),
+        'userId': userId,
+        'reason': reason.trim(),
+        'note': note.trim(),
+      }),
+      client: _client,
+    );
+    final data = _unwrap(resp);
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    return WorkProfileKpiScore.fromJson(map);
+  }
+
   Future<WorkbenchKpiRubricImportResult> importRubricScore({
     required String month,
     required List<int> bytes,
@@ -514,10 +558,7 @@ class WorkbenchKpiService {
     final resp = await dunesHttpPost(
       session,
       '/kpi/rubric-score/publish',
-      body: jsonEncode({
-        'month': month.trim(),
-        'userIds': userIds,
-      }),
+      body: jsonEncode({'month': month.trim(), 'userIds': userIds}),
       client: _client,
     );
     final data = _unwrap(resp);
@@ -558,5 +599,39 @@ class WorkbenchKpiService {
         )
         .where((e) => e.userId > 0 && e.displayName.isNotEmpty)
         .toList();
+  }
+
+  Future<List<KpiAppeal>> listAppeals({
+    required String month,
+    String status = '',
+  }) async {
+    final query = <String, String>{'month': month.trim()};
+    if (status.trim().isNotEmpty) query['status'] = status.trim();
+    final qs = query.entries
+        .map(
+          (e) =>
+              '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}',
+        )
+        .join('&');
+    final resp = await dunesHttpGet(
+      session,
+      '/kpi/appeals?$qs',
+      client: _client,
+    );
+    return kpiAppealsFromData(_unwrap(resp));
+  }
+
+  Future<KpiAppeal> closeAppeal(int id) async {
+    final resp = await dunesHttpPatch(
+      session,
+      '/kpi/appeals/$id',
+      body: jsonEncode({'status': 'done'}),
+      client: _client,
+    );
+    final data = _unwrap(resp);
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    return KpiAppeal.fromJson(map);
   }
 }

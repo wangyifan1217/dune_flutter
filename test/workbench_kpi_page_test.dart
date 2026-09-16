@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:dunes_app/features/auth/auth_session.dart';
 import 'package:dunes_app/features/kpi/native_workbench_kpi_page.dart';
+import 'package:dunes_app/features/kpi/kpi_followup.dart';
 import 'package:dunes_app/features/kpi/workbench_kpi_service.dart';
 import 'package:dunes_app/features/profile/work_profile_kpi.dart';
 import 'package:flutter/material.dart';
@@ -155,6 +156,14 @@ class _FakeKpiService extends WorkbenchKpiService {
           ],
         ),
       ],
+      teams: const [
+        WorkProfileKpiTeam(
+          departmentId: 0,
+          departmentName: '能源',
+          projectScore: 81,
+          coefficient: 0.9,
+        ),
+      ],
     );
   }
 
@@ -165,6 +174,11 @@ class _FakeKpiService extends WorkbenchKpiService {
   }) async {
     fetchCount++;
     return _personScore(month);
+  }
+
+  @override
+  Future<KpiFollowupBoard> fetchFollowup({required String month}) async {
+    return KpiFollowupBoard(month: month);
   }
 
   @override
@@ -205,7 +219,7 @@ class _FakeKpiService extends WorkbenchKpiService {
       month: month,
       imported: 2,
       people: const ['朱子姝 已导入', '王奕凡 已导入'],
-      teamHint: 'AI研发 团队系数 1（项目 9）',
+      teamHint: 'AI研发 项目绩效系数 1.0（项目得分 9）',
     );
   }
 
@@ -439,7 +453,7 @@ void main() {
     await tester.pump();
     expect(picked, 1);
     expect(sentId, 42);
-    expect(sentMd, contains('| — | 1. 李四 | — | 88.00 | 良（达到预期） | 1.0 |'));
+    expect(sentMd, contains('| 能源 | 1. 李四 | — | 88.00 | 良（达到预期） | 1.0 |'));
     expect(find.text('已转发到会话'), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
   });
@@ -493,20 +507,22 @@ void main() {
     expect(find.byType(ChoiceChip), findsNothing);
     expect(find.byKey(const Key('kpi-lens-sector')), findsNothing);
     expect(find.byKey(const Key('kpi-lens-dept')), findsNothing);
+    expect(find.byKey(const Key('kpi-lens-roster')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-lens-followup')), findsOneWidget);
     expect(find.byKey(const Key('kpi-sector-telecom')), findsOneWidget);
     expect(find.byKey(const Key('kpi-sector-energy')), findsOneWidget);
     expect(find.byKey(const Key('kpi-sector-office')), findsOneWidget);
     expect(find.text('导出 Excel'), findsOneWidget);
     expect(find.text('导入量表'), findsOneWidget);
 
-    // 李四只有能源板块的任务，切到通信后不该出现在表里。
+    // 李四只有能源板块的任务，切到运营商后不该出现在表里。
     expect(find.byKey(const Key('kpi-person-9')), findsOneWidget);
     await tester.tap(find.byKey(const Key('kpi-sector-telecom')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('kpi-person-9')), findsNothing);
     expect(
       tester.widget<Text>(find.byKey(const Key('kpi-scope-hint'))).data,
-      contains('通信 · 共'),
+      contains('运营商 · 共'),
     );
 
     await tester.tap(find.byKey(const Key('kpi-sector-energy')));
@@ -516,9 +532,43 @@ void main() {
       tester.widget<Text>(find.byKey(const Key('kpi-scope-hint'))).data,
       contains('能源 · 共'),
     );
-    expect(find.byKey(const Key('kpi-group-filter')), findsOneWidget);
-    expect(find.byKey(const Key('kpi-section-平安')), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('kpi-scope-hint'))).data,
+      contains('项目绩效系数 0.9'),
+    );
+    expect(find.byKey(const Key('kpi-group-filter')), findsNothing);
     expect(find.byKey(const Key('kpi-section-energy')), findsNothing);
+    expect(find.byKey(const Key('kpi-project-energy')), findsOneWidget);
+    expect(find.text('项目绩效系数'), findsOneWidget);
+    expect(find.byKey(const Key('kpi-person-9')), findsOneWidget);
+  });
+
+  testWidgets('职能月度绩效分组能看到行政项目分数', (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _OfficeKpiService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NativeWorkbenchKpiPage(
+            session: _session,
+            service: service,
+            now: DateTime(2026, 9, 3),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('kpi-sector-office')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('kpi-section-行政')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-project-行政')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-section-财务')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-project-财务')), findsOneWidget);
+    expect(find.text('项目绩效系数'), findsWidgets);
   });
 
   testWidgets('mixes AI research rubric people with energy and opens bands', (
@@ -556,12 +606,14 @@ void main() {
     expect(find.textContaining('共 2 人'), findsOneWidget);
     expect(find.textContaining('研发 · 共 2 人'), findsOneWidget);
     expect(find.byKey(const Key('kpi-section-rd')), findsNothing);
-    expect(find.byKey(const Key('kpi-section-AI研发')), findsOneWidget);
-    expect(find.byKey(const Key('kpi-section-出行')), findsOneWidget);
-    expect(find.text('待确认'), findsWidgets);
     expect(find.byKey(const Key('kpi-group-filter')), findsOneWidget);
     expect(find.byKey(const Key('kpi-group-AI研发')), findsOneWidget);
     expect(find.byKey(const Key('kpi-group-出行')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-section-AI研发')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-section-出行')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-project-AI研发')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-project-出行')), findsOneWidget);
+    expect(find.text('待确认'), findsWidgets);
     expect(find.byKey(const Key('kpi-dept-filter')), findsNothing);
 
     await tester.tap(find.byKey(const Key('kpi-person-2')));
@@ -609,13 +661,13 @@ void main() {
     await tester.tap(find.byKey(const Key('kpi-import')));
     await tester.pumpAndSettle();
     expect(find.text('确认导入量表？'), findsOneWidget);
-    expect(find.textContaining('整体绩效评价表写成团队系数'), findsOneWidget);
+    expect(find.textContaining('项目绩效得分'), findsOneWidget);
     expect(find.textContaining('不会自动通知员工'), findsOneWidget);
     await tester.tap(find.byKey(const Key('kpi-confirm-ok')));
     await tester.pumpAndSettle();
     expect(service.importCount, 1);
     expect(find.textContaining('已导入 2 人'), findsOneWidget);
-    expect(find.textContaining('AI研发 团队系数'), findsOneWidget);
+    expect(find.textContaining('AI研发 项目绩效系数'), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
   });
 
@@ -677,8 +729,9 @@ void main() {
     expect(find.text('发布结果'), findsOneWidget);
     await tester.tap(find.byKey(const Key('kpi-publish')));
     await tester.pumpAndSettle();
-    expect(find.text('发布到绩效助手？'), findsOneWidget);
-    expect(find.textContaining('不会通知他们'), findsNothing);
+    expect(find.text('按项目组发布'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('kpi-publish-select-all')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('kpi-confirm-ok')));
     await tester.pumpAndSettle();
     expect(service.publishCount, 1);
@@ -711,7 +764,10 @@ void main() {
     expect(find.text('未发布'), findsOneWidget);
     await tester.tap(find.byKey(const Key('kpi-publish')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('还有 1 人未评完'), findsOneWidget);
+    expect(find.text('按项目组发布'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('kpi-publish-group-AI研发')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('未评完，这次不发他们'), findsOneWidget);
     await tester.tap(find.byKey(const Key('kpi-confirm-ok')));
     await tester.pumpAndSettle();
     expect(service.lastPublishIds, [2]);
@@ -743,37 +799,47 @@ void main() {
 
     await tester.tap(find.byKey(const Key('kpi-sector-telecom')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('kpi-group-filter')), findsOneWidget);
-    expect(find.byKey(const Key('kpi-group-出行会员')), findsOneWidget);
-    expect(find.byKey(const Key('kpi-group-加油会员')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-group-filter')), findsNothing);
     var shi = tester.getTopLeft(find.text('石淼'));
     var wan = tester.getTopLeft(find.text('万青'));
     expect(shi.dy, lessThan(wan.dy));
-
-    await tester.tap(find.byKey(const Key('kpi-group-加油会员')));
-    await tester.pumpAndSettle();
-    expect(find.text('石淼'), findsNothing);
     expect(find.text('徐峥'), findsOneWidget);
-    expect(find.text('万青'), findsNothing);
-    expect(
-      tester.widget<Text>(find.byKey(const Key('kpi-scope-hint'))).data,
-      contains('通信 · 加油会员'),
-    );
 
     await tester.tap(find.byKey(const Key('kpi-sector-energy')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('kpi-group-中石油')), findsOneWidget);
-    expect(find.byKey(const Key('kpi-group-平安')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-group-filter')), findsNothing);
     final wang = tester.getTopLeft(find.text('王一凡'));
     final xuan = tester.getTopLeft(find.text('王轩'));
     expect(wang.dy, lessThan(xuan.dy));
 
     await tester.tap(find.byKey(const Key('kpi-sector-rd')));
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('kpi-group-filter')), findsOneWidget);
     expect(find.byKey(const Key('kpi-group-AI研发')), findsOneWidget);
-    final zhu = tester.getTopLeft(find.text('朱子姝'));
-    final yi = tester.getTopLeft(find.text('王奕凡'));
+    expect(find.byKey(const Key('kpi-group-出行')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-project-AI研发')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-project-出行')), findsOneWidget);
+    var zhu = tester.getTopLeft(find.text('朱子姝'));
+    var yi = tester.getTopLeft(find.text('王奕凡'));
     expect(zhu.dy, lessThan(yi.dy));
+    expect(find.text('雷江华'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('kpi-group-出行')));
+    await tester.pumpAndSettle();
+    expect(find.text('朱子姝'), findsNothing);
+    expect(find.text('王奕凡'), findsNothing);
+    expect(find.text('雷江华'), findsOneWidget);
+    expect(find.byKey(const Key('kpi-project-出行')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-project-AI研发')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('kpi-group-AI研发')));
+    await tester.pumpAndSettle();
+    expect(find.text('雷江华'), findsNothing);
+    zhu = tester.getTopLeft(find.text('朱子姝'));
+    yi = tester.getTopLeft(find.text('王奕凡'));
+    expect(zhu.dy, lessThan(yi.dy));
+    expect(find.byKey(const Key('kpi-project-AI研发')), findsOneWidget);
+    expect(find.byKey(const Key('kpi-project-出行')), findsNothing);
   });
 }
 
@@ -963,14 +1029,21 @@ class _MixedKpiService extends _FakeKpiService {
         _rubricWang(),
         _rubricLei(),
       ],
-      teams: const [
-        WorkProfileKpiTeam(
+      teams: [
+        ...super._personScore(month).teams,
+        const WorkProfileKpiTeam(
           departmentId: 2,
           departmentName: 'AI研发',
           projectScore: 9,
           coefficient: 1,
           memberAvg: 95,
           deptScore: 95,
+        ),
+        const WorkProfileKpiTeam(
+          departmentId: 3,
+          departmentName: '出行',
+          projectScore: 8.95,
+          coefficient: 1,
         ),
       ],
     );
@@ -1052,6 +1125,87 @@ class _PendingPublishKpiService extends _FakeKpiService {
   }
 }
 
+class _OfficeKpiService extends _FakeKpiService {
+  @override
+  WorkProfileKpiScore _personScore(String month) {
+    return WorkProfileKpiScore(
+      month: month,
+      prevMonth: '2026-07',
+      people: [
+        _officePerson(
+          userId: 33,
+          userName: '商羽',
+          departmentName: '行政人事部',
+          score: 86,
+        ),
+        _officePerson(
+          userId: 34,
+          userName: '邓艳丽',
+          departmentName: '财务数据中心',
+          score: 75,
+        ),
+      ],
+      teams: const [
+        WorkProfileKpiTeam(
+          departmentId: 8,
+          departmentName: '行政人事部',
+          projectScore: 1,
+          coefficient: 1,
+        ),
+        WorkProfileKpiTeam(
+          departmentId: 9,
+          departmentName: '财务数据中心',
+          projectScore: 0.7,
+          coefficient: 0.7,
+        ),
+      ],
+    );
+  }
+}
+
+WorkProfileKpiPerson _officePerson({
+  required int userId,
+  required String userName,
+  required String departmentName,
+  required double score,
+}) {
+  return WorkProfileKpiPerson(
+    userId: userId,
+    userName: userName,
+    departmentName: departmentName,
+    mainScore: score,
+    bonus: 0,
+    telecomWeight: 0,
+    energyWeight: 0,
+    telecomScore: 0,
+    energyScore: 0,
+    scoreSource: 'rubric',
+    scoreStatus: 'scored',
+    categories: [
+      WorkProfileKpiCategory(
+        category: 'office',
+        categoryLabel: '职能',
+        categoryWeight: 1,
+        score: score,
+        tasks: [
+          WorkProfileKpiTask(
+            taskId: -userId,
+            taskName: '综合得分',
+            province: '',
+            bucketLabel: '月度绩效',
+            weightPct: 100,
+            taskTotal: score,
+            curRevenue: 0,
+            prevRevenue: 0,
+            curProfit: 0,
+            prevProfit: 0,
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
 WorkProfileKpiPerson _marketPerson({
   required int id,
   required String name,
@@ -1073,7 +1227,7 @@ WorkProfileKpiPerson _marketPerson({
     categories: [
       WorkProfileKpiCategory(
         category: sector,
-        categoryLabel: sector == 'telecom' ? '通信' : '能源',
+        categoryLabel: sector == 'telecom' ? '运营商' : '能源',
         categoryWeight: 1,
         score: score,
         tasks: [
@@ -1084,7 +1238,7 @@ WorkProfileKpiPerson _marketPerson({
             productName: product,
             productGroup: sector == 'telecom' ? '运营商' : '能源',
             channelName: channel,
-            bucketLabel: sector == 'telecom' ? '通信' : '能源',
+            bucketLabel: sector == 'telecom' ? '运营商' : '能源',
             weightPct: 100,
             taskTotal: score,
             curRevenue: 0,
@@ -1153,6 +1307,21 @@ class _ProjectGroupKpiService extends _FakeKpiService {
         ),
         _rubricWang(),
         _rubricWang(userId: 31, userName: '朱子姝', position: 'AI应用架构师'),
+        _rubricLei(),
+      ],
+      teams: const [
+        WorkProfileKpiTeam(
+          departmentId: 2,
+          departmentName: 'AI研发',
+          projectScore: 9,
+          coefficient: 1,
+        ),
+        WorkProfileKpiTeam(
+          departmentId: 3,
+          departmentName: '出行',
+          projectScore: 8.95,
+          coefficient: 1,
+        ),
       ],
     );
   }

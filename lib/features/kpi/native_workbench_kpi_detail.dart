@@ -21,6 +21,7 @@ class WorkbenchKpiDetailPane extends StatefulWidget {
     this.busy = false,
     this.onSave,
     this.onSaveRubric,
+    this.onSkip,
     this.onAck,
   });
 
@@ -39,6 +40,7 @@ class WorkbenchKpiDetailPane extends StatefulWidget {
     String summary,
   )?
   onSaveRubric;
+  final Future<void> Function(String reason)? onSkip;
   final Future<void> Function()? onAck;
 
   @override
@@ -288,6 +290,14 @@ class _WorkbenchKpiDetailPaneState extends State<WorkbenchKpiDetailPane> {
           ],
           const SizedBox(height: 8),
           _ScoreHeader(person: person),
+          if (widget.canEdit && widget.onSkip != null) ...[
+            const SizedBox(height: 10),
+            _KpiSkipBar(
+              person: person,
+              busy: widget.busy,
+              onSkip: widget.onSkip!,
+            ),
+          ],
           const SizedBox(height: 12),
           if (person.isRubric) ...[
             for (final cat in person.categories) ...[
@@ -834,8 +844,74 @@ class _KpiAdjustField extends StatelessWidget {
   }
 }
 
-/// 顶部：主营分、等级系数，以及通信/能源两个板块各占多少权重。
-/// 没有某个板块的任务时不再显示「通信 0.0」这种看着像出错的数。
+class _KpiSkipBar extends StatelessWidget {
+  const _KpiSkipBar({
+    required this.person,
+    required this.busy,
+    required this.onSkip,
+  });
+
+  final WorkProfileKpiPerson person;
+  final bool busy;
+  final Future<void> Function(String reason) onSkip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '本月不考核',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: DunesColors.text2,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final option in kKpiSkipReasons)
+              ChoiceChip(
+                key: Key('kpi-skip-${option.key}'),
+                label: Text(option.value),
+                selected: person.skipReason == option.key,
+                onSelected: busy
+                    ? null
+                    : (_) {
+                        final next = person.skipReason == option.key
+                            ? ''
+                            : option.key;
+                        unawaited(onSkip(next));
+                      },
+                selectedColor: DunesColors.brandPurpleSoft,
+                labelStyle: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: person.skipReason == option.key
+                      ? DunesColors.brandPurple
+                      : DunesColors.text2,
+                ),
+                side: BorderSide(
+                  color: person.skipReason == option.key
+                      ? DunesColors.brandPurple.withValues(alpha: 0.35)
+                      : const Color(0xFFE8EAED),
+                ),
+                backgroundColor: Colors.white,
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// 顶部：主营分、等级系数，以及运营商/能源两个板块各占多少权重。
+/// 没有某个板块的任务时不再显示「运营商 0.0」这种看着像出错的数。
 class _ScoreHeader extends StatelessWidget {
   const _ScoreHeader({required this.person});
 
@@ -860,7 +936,11 @@ class _ScoreHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                person.isPending ? '未评分' : person.mainScore.toStringAsFixed(2),
+                person.isSkipped
+                    ? person.skipLabel
+                    : person.isPending
+                    ? '未评分'
+                    : person.mainScore.toStringAsFixed(2),
                 style: const TextStyle(
                   fontSize: 30,
                   fontWeight: FontWeight.w800,
@@ -884,14 +964,18 @@ class _ScoreHeader extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    person.isPending ? '未评分' : grade.label,
+                    person.isSkipped
+                        ? '本月不考核'
+                        : person.isPending
+                        ? '未评分'
+                        : grade.label,
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: _accent,
                     ),
                   ),
-                  if (!person.isPending)
+                  if (!person.isPending && !person.isSkipped)
                     Text(
                       '系数 ${grade.coefficient}',
                       style: const TextStyle(
@@ -912,15 +996,17 @@ class _ScoreHeader extends StatelessWidget {
           ],
           const SizedBox(height: 10),
           Text(
-            person.isRubric
+            person.isSkipped
+                ? '本月不考核（${person.skipLabel}），转发只带备注，不进均分'
+                : person.isRubric
                 ? (person.isPending
                       ? '量表未录完必填项，暂不算绩效等级'
                       : '主营分 = 量表各档加总（减分项默认为 0）')
                 : hasTelecom && hasEnergy
-                ? '主营分 = 通信 ${person.telecomScore.toStringAsFixed(1)} × ${(person.telecomWeight * 100).toStringAsFixed(0)}% + 能源 ${person.energyScore.toStringAsFixed(1)} × ${(person.energyWeight * 100).toStringAsFixed(0)}%（按两边当月营收占比）'
+                ? '主营分 = 运营商 ${person.telecomScore.toStringAsFixed(1)} × ${(person.telecomWeight * 100).toStringAsFixed(0)}% + 能源 ${person.energyScore.toStringAsFixed(1)} × ${(person.energyWeight * 100).toStringAsFixed(0)}%（按两边当月营收占比）'
                 : hasEnergy
-                ? '只有能源板块任务，主营分就是能源板块分'
-                : '只有通信板块任务，主营分就是通信板块分',
+                ? '只有能源任务，主营分就是能源分'
+                : '只有运营商任务，主营分就是运营商分',
             style: const TextStyle(fontSize: 12, color: DunesColors.text2),
           ),
         ],
@@ -1037,15 +1123,30 @@ class _RubricItemEditor extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  task.bucketLabel.isEmpty
-                      ? task.taskName
-                      : '${task.taskName} · ${task.bucketLabel}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: DunesColors.text,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      task.bucketLabel.isEmpty
+                          ? task.taskName
+                          : '${task.taskName} · ${task.bucketLabel}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: DunesColors.text,
+                      ),
+                    ),
+                    if (task.matchSummary.trim().isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        task.matchSummary.trim(),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               SizedBox(

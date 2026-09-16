@@ -11,9 +11,9 @@ import '../profile/work_profile_kpi.dart';
 // 「整体怎么样、谁好谁差、分布如何」这三件事，只能一行一行横着扫。
 //
 // 这版把它当成一张给领导看的汇总卡：
-//   · 顶部三格总览：人数 / 均分 / 最高分（未评完的人单独计数，不拉低均分）
+//   · 顶部三格总览：人数 / 均分 / 项目绩效系数（整体绩效评价表 10 分制得分按档取 0.7–1.1）
 //   · 等级分布条：优良中普改辅按人数分段上色，一眼看出结构
-//   · 按部门分组，每人一行：序号 · 姓名 / 岗位两行 · 右侧 得分 + 等级徽章 + 系数
+//   · 按这个人计分的板块分组（运营商/能源看任务，不看名册部门）：序号 · 姓名 / 岗位 · 得分 + 等级 + 系数
 //   · 超过 [kKpiSummaryCollapsedRows] 人先收起，点「展开全部」
 //
 // 消息正文仍然是原来那段 Markdown（给会话列表预览、复制、老版本客户端兜底），
@@ -37,6 +37,9 @@ class KpiScoreSummaryRow {
     this.gradeLabel = '',
     this.coefficient = 0,
     this.pending = false,
+    this.skipped = false,
+    this.skipLabel = '',
+    this.projectScore,
   });
 
   final int rank;
@@ -48,6 +51,9 @@ class KpiScoreSummaryRow {
   final String gradeLabel;
   final double coefficient;
   final bool pending;
+  final bool skipped;
+  final String skipLabel;
+  final double? projectScore;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'rank': rank,
@@ -59,6 +65,9 @@ class KpiScoreSummaryRow {
     'gradeLabel': gradeLabel,
     'coefficient': coefficient,
     if (pending) 'pending': true,
+    if (skipped) 'skipped': true,
+    if (skipLabel.isNotEmpty) 'skipLabel': skipLabel,
+    if (projectScore != null) 'projectScore': projectScore,
   };
 
   factory KpiScoreSummaryRow.fromJson(Map<String, dynamic> json, int index) {
@@ -75,22 +84,36 @@ class KpiScoreSummaryRow {
       gradeLabel: label,
       coefficient: (json['coefficient'] as num?)?.toDouble() ?? 0,
       pending: json['pending'] == true,
+      skipped: json['skipped'] == true,
+      skipLabel: '${json['skipLabel'] ?? ''}'.trim(),
+      projectScore: _positiveSummaryNum(json['projectScore']),
     );
   }
 }
 
 class KpiScoreSummaryData {
-  const KpiScoreSummaryData({required this.title, required this.rows});
+  const KpiScoreSummaryData({
+    required this.title,
+    required this.rows,
+    this.projectScore,
+    this.projectCoefficient,
+  });
 
   final String title;
   final List<KpiScoreSummaryRow> rows;
 
+  /// 研发整体绩效评价表加权总分（满分 10）。行政 / 财务 / 业务板块没有。
+  final double? projectScore;
+  final double? projectCoefficient;
+
   List<KpiScoreSummaryRow> get scoredRows => [
     for (final r in rows)
-      if (!r.pending) r,
+      if (!r.pending && !r.skipped) r,
   ];
 
-  int get pendingCount => rows.length - scoredRows.length;
+  int get pendingCount => rows.where((r) => r.pending && !r.skipped).length;
+
+  int get skippedCount => rows.where((r) => r.skipped).length;
 
   double? get averageScore {
     final scored = scoredRows;
@@ -102,6 +125,13 @@ class KpiScoreSummaryData {
     final scored = scoredRows;
     if (scored.isEmpty) return null;
     return scored.map((r) => r.score).reduce((a, b) => a > b ? a : b);
+  }
+
+  /// 已评分人员个人绩效系数的算术平均，未录入 / 不考核的人不计入。
+  double? get departmentCoefficient {
+    final scored = scoredRows;
+    if (scored.isEmpty) return null;
+    return scored.fold<double>(0, (s, r) => s + r.coefficient) / scored.length;
   }
 
   /// 已评分的人里全部是 0 分 —— 多半还没开始录入，卡片上给一句提示。
@@ -137,6 +167,8 @@ class KpiScoreSummaryData {
   Map<String, dynamic> toJson() => <String, dynamic>{
     'title': title,
     'rows': [for (final r in rows) r.toJson()],
+    if (projectScore != null) 'projectScore': projectScore,
+    if (projectCoefficient != null) 'projectCoefficient': projectCoefficient,
   };
 
   static KpiScoreSummaryData? fromJson(Object? raw) {
@@ -158,6 +190,8 @@ class KpiScoreSummaryData {
     return KpiScoreSummaryData(
       title: '${json['title'] ?? ''}'.trim(),
       rows: rows,
+      projectScore: _positiveSummaryNum(json['projectScore']),
+      projectCoefficient: _positiveSummaryNum(json['projectCoefficient']),
     );
   }
 
@@ -246,23 +280,126 @@ KpiScoreSummaryData kpiScoreSummaryData(
 }) {
   final list = kpiPeopleByScoreDesc(people ?? score.people);
   final monthTitle = kpiScoreMonthTitle(score.month);
+  final team = kpiSummaryProjectTeamOf(score, people: list);
   return KpiScoreSummaryData(
     title: monthTitle.isEmpty ? '月度绩效考评汇总' : '$monthTitle 月度绩效考评汇总',
+    projectScore: team?.projectScore,
+    projectCoefficient: team?.coefficient,
     rows: [
       for (var i = 0; i < list.length; i++)
         KpiScoreSummaryRow(
           rank: i + 1,
           name: list[i].userName.trim(),
-          department: list[i].departmentName.trim(),
+          department: kpiPersonShareDepartment(list[i]),
           position: list[i].position.trim(),
           score: list[i].mainScore,
           gradeCode: list[i].resolvedGrade.code,
           gradeLabel: list[i].resolvedGrade.label,
           coefficient: list[i].resolvedGrade.coefficient,
           pending: list[i].isPending,
+          skipped: list[i].isSkipped,
+          skipLabel: list[i].isSkipped ? list[i].skipLabel : '',
+          projectScore: kpiSummaryProjectTeamOf(
+            score,
+            people: [list[i]],
+          )?.projectScore,
         ),
     ],
   );
+}
+
+/// 当前名单对应的项目绩效：行政/财务看汇总表第一行，研发看整体绩效评价表，
+/// 运营商/能源看板块整体。名单跨组且分数不一致时不合成一个数。
+WorkProfileKpiTeam? kpiSummaryProjectTeamOf(
+  WorkProfileKpiScore score, {
+  List<WorkProfileKpiPerson>? people,
+}) {
+  final list = people ?? score.people;
+  WorkProfileKpiTeam? first;
+  var missing = false;
+  var found = false;
+  for (final person in list) {
+    if (person.isSkipped) continue;
+    final team = kpiSummaryProjectTeamForPerson(score, person);
+    if (team == null) {
+      missing = true;
+      continue;
+    }
+    found = true;
+    first ??= team;
+    if ((team.projectScore - first.projectScore).abs() >= 0.005) {
+      return null;
+    }
+  }
+  if (!found || missing) return null;
+  return first;
+}
+
+String kpiSummaryTeamKey(WorkProfileKpiPerson person) {
+  switch (kpiPrimarySectorOf(person)) {
+    case 'telecom':
+      return '运营商';
+    case 'energy':
+      return '能源';
+    case 'office':
+      return kpiCanonicalOfficeGroup(person.departmentName);
+    case 'rd':
+      return kpiCanonicalRdGroup(person.departmentName);
+    default:
+      final name = person.departmentName.trim();
+      return name;
+  }
+}
+
+WorkProfileKpiTeam? kpiSummaryProjectTeamForPerson(
+  WorkProfileKpiScore score,
+  WorkProfileKpiPerson person,
+) {
+  final key = kpiSummaryTeamKey(person);
+  if (key.isEmpty || key == '未分组') return null;
+  final sector = kpiPrimarySectorOf(person);
+  WorkProfileKpiTeam? best;
+  for (final team in score.teams) {
+    if (team.projectScore <= 0) continue;
+    if (!kpiSummaryTeamMatches(team, key, sector)) continue;
+    if (best == null) {
+      best = team;
+      continue;
+    }
+    if ((sector == 'telecom' || sector == 'energy') &&
+        team.departmentId == 0 &&
+        best.departmentId != 0) {
+      best = team;
+    }
+  }
+  return best;
+}
+
+bool kpiSummaryTeamMatches(
+  WorkProfileKpiTeam team,
+  String key,
+  String sector,
+) {
+  final name = team.departmentName.trim();
+  if (name.isEmpty) return false;
+  switch (sector) {
+    case 'telecom':
+    case 'energy':
+      return name == key && team.departmentId == 0;
+    case 'office':
+      return name == key || kpiCanonicalOfficeGroup(name) == key;
+    case 'rd':
+      return name == key || kpiCanonicalRdGroup(name) == key;
+    default:
+      return name == key;
+  }
+}
+
+double? _positiveSummaryNum(Object? raw) {
+  if (raw is! num) return null;
+  final v = raw.toDouble();
+  if (v <= 0) return null;
+  return v;
 }
 
 /// 等级色与工作台绩效列表、绩效助手结果卡保持一致。
@@ -284,6 +421,8 @@ KpiScoreSummaryData kpiScoreSummaryData(
 }
 
 String _fmtScore(double v) => v.toStringAsFixed(v.abs() >= 100 ? 0 : 1);
+
+String _fmtProject(double v) => formatKpiProjectScore(v);
 
 String _fmtCoef(double v) {
   if (v <= 0) return '—';
@@ -449,7 +588,12 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
 
   Widget _overview(KpiScoreSummaryData data) {
     final avg = data.averageScore;
-    final top = data.topScore;
+    final project = data.projectScore == null
+        ? data.projectCoefficient
+        : kpiProjectCoefficient(
+            data.projectScore!,
+            fallback: data.projectCoefficient ?? 0,
+          );
 
     Widget cell(String caption, String value, {String unit = '', String? sub}) {
       return Expanded(
@@ -539,12 +683,29 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
             '人数',
             '${data.rows.length}',
             unit: '人',
-            sub: data.pendingCount > 0 ? '${data.pendingCount} 人待录入' : null,
+            sub: [
+              if (data.pendingCount > 0) '${data.pendingCount} 人待录入',
+              if (data.skippedCount > 0) '${data.skippedCount} 人不考核',
+            ].isEmpty
+                ? null
+                : [
+                    if (data.pendingCount > 0) '${data.pendingCount} 人待录入',
+                    if (data.skippedCount > 0) '${data.skippedCount} 人不考核',
+                  ].join(' · '),
           ),
           divider(),
           cell('均分', avg == null ? '—' : _fmtScore(avg)),
           divider(),
-          cell('最高分', top == null ? '—' : _fmtScore(top)),
+          cell(
+            '项目绩效系数',
+            project == null || project <= 0
+                ? '—'
+                : formatKpiProjectCoefficient(project),
+            sub: data.projectScore != null &&
+                    kpiProjectScoreOnTenScale(data.projectScore!)
+                ? '项目得分 ${_fmtProject(data.projectScore!)}'
+                : null,
+          ),
         ],
       ),
     );
@@ -669,11 +830,19 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
   }) {
     final scored = [
       for (final r in rows)
-        if (!r.pending) r,
+        if (!r.pending && !r.skipped) r,
     ];
     final avg = scored.isEmpty
         ? null
         : scored.fold<double>(0, (s, r) => s + r.score) / scored.length;
+    final projectScores = <double>{
+      for (final r in rows)
+        if (r.projectScore != null) r.projectScore!,
+    };
+    final project = projectScores.length == 1 ? projectScores.first : null;
+    final coef = scored.isEmpty
+        ? null
+        : scored.fold<double>(0, (s, r) => s + r.coefficient) / scored.length;
     final shown = [
       for (final r in rows)
         if (visibleRanks.contains(r.rank)) r,
@@ -714,6 +883,9 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
                 [
                   '${rows.length} 人',
                   if (avg != null) '均分 ${_fmtScore(avg)}',
+                  if (project != null)
+                    '项目绩效系数 ${formatKpiProjectCoefficient(kpiProjectCoefficient(project))}',
+                  if (project == null && coef != null) '系数 ${_fmtCoef(coef)}',
                 ].join(' · '),
                 style: DunesTypography.sans(
                   fontSize: 10.5,
@@ -732,7 +904,7 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
 
   Widget _personRow(KpiScoreSummaryRow r, {required bool last}) {
     final (gradeFg, gradeBg) = kpiSummaryGradeColors(r.gradeCode);
-    final topThree = r.rank <= 3 && !r.pending && r.score > 0;
+    final topThree = r.rank <= 3 && !r.pending && !r.skipped && r.score > 0;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 9, 14, 9),
       decoration: BoxDecoration(
@@ -798,7 +970,17 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
             ),
           ),
           const SizedBox(width: 8),
-          if (r.pending)
+          if (r.skipped)
+            Text(
+              r.skipLabel.isEmpty ? '不考核' : r.skipLabel,
+              style: DunesTypography.sans(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: DunesColors.text2,
+                height: 1.0,
+              ),
+            )
+          else if (r.pending)
             Text(
               '待录入',
               style: DunesTypography.sans(

@@ -1887,12 +1887,17 @@ void main() {
 
   test('period selector uses a floating rounded segmented control', () {
     expect(lighthousePeriodUsesFloatingSegment, isTrue);
-    expect(lighthousePeriodTrackHeight, 44);
-    expect(lighthousePeriodTrackRadius, 14);
-    expect(lighthousePeriodSelectedRadius, 10);
+    expect(lighthousePeriodTrackHeight, 40);
+    expect(lighthousePeriodTrackRadius, lighthouseLedgerPanelRadius);
+    expect(
+      lighthousePeriodSelectedRadius,
+      lighthousePeriodTrackRadius - lighthousePeriodTrackPadding,
+    );
+    expect(lighthousePeriodLabelFontSize, 13);
     expect(lighthousePeriodUsesHeroSurface, isTrue);
     expect(lighthouseHeroSectionUsesHeroSurface, isTrue);
-    expect(lighthousePeriodStatusDotSize, 4);
+    expect(lighthousePeriodStatusDotSize, 0);
+    expect(lighthouseAppBarPaddingH, lighthouseHeroShellMarginH);
     expect(lighthousePeriodAnimationMs, 180);
   });
 

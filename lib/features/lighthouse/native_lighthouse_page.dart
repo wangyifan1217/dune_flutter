@@ -22,6 +22,7 @@ import 'lighthouse_discount_metric.dart';
 import 'lighthouse_forecast.dart';
 import 'lighthouse_hero_metric.dart';
 import 'lighthouse_period_bar.dart';
+import 'lighthouse_product_l3.dart';
 import 'lighthouse_service.dart';
 import 'lighthouse_theme.dart';
 import 'lighthouse_scroll_text.dart';
@@ -9621,6 +9622,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   bool _biViewOpen = false;
   final List<String> _metricPageStack = [];
   String? _detailKey; // non-null when detail view is open
+
+  /// 从二级详情点进产品三级详情时记住来路：返回键 / 路径条回到二级，而不是一级列表。
+  final List<({String type, String key, String subTab})> _detailReturnStack =
+      [];
+
+  /// 一级产品账本里「三级」折叠条的开合（key = l3::名称::一级）。
+  final Set<String> _expandedProductL3 = <String>{};
   String? _detailType;
   String _detailSubTab = '';
   String _detailSkuQuery = '';
@@ -10394,7 +10402,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         });
         return true;
       }
+      if (_detailReturnStack.isNotEmpty) {
+        setState(_popDetailReturnStack);
+        return true;
+      }
       setState(() {
+        _detailReturnStack.clear();
         _detailKey = null;
         _detailType = null;
         _resetDetailSkuSearch();
@@ -10673,6 +10686,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         return '人效';
       case 'productName':
         return 'SKU';
+      case lighthouseProductL3SubTab:
+        return '三级';
       case 'supplierCode':
         return '产品码';
       case 'signEntity':
@@ -11880,11 +11895,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   ) {
     if (!_ledgerSearchActive) return rows;
     final q = _ledgerSearch.trim().toLowerCase();
-    return rows.where((r) {
-      final name = (r['name']?.toString() ?? '').toLowerCase();
-      final group = (r['group']?.toString() ?? '').toLowerCase();
-      return name.contains(q) || group.contains(q);
-    }).toList();
+    // 产品行连三级名一起找：搜「出行金」要能找到它所在的「会员套餐点播」，
+    // 命中的三级在卡片下方自动展开（见 _buildLedgerRowGroup）。
+    return rows.where((r) => lighthouseLedgerRowMatchesSearch(r, q)).toList();
   }
 
   String get _ledgerSearchHint {
@@ -13689,6 +13702,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     unawaited(_loadDetail(_tab, detKey));
     setState(() {
       _closeMetricPage();
+      _detailReturnStack.clear();
       _detailKey = detKey;
       _detailType = _tab;
       _detailSubTab = '';
@@ -28808,8 +28822,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   child: rankChip,
                 ),
                 SizedBox(width: _fs(5)),
-              ] else
-                SizedBox(width: _fs(12)),
+              ] else ...[
+                // 三级子行：名字前一枚业务线色的「↳」，读得出挂在哪个二级下面。
+                Padding(
+                  padding: EdgeInsets.only(top: _fs(1)),
+                  child: Icon(
+                    Icons.subdirectory_arrow_right_rounded,
+                    size: _fs(14),
+                    color: groupColor,
+                  ),
+                ),
+                SizedBox(width: _fs(3)),
+              ],
               Expanded(
                 // 这里必须是会换行的 Text：LhScrollText 走单行可横拖的渲染
                 // 路径，maxLines 对它无效 —— 正是它把名字画到列外去的。
@@ -30896,6 +30920,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       unawaited(_loadDetail(tab, detKey));
       setState(() {
         _closeMetricPage();
+        _detailReturnStack.clear();
         _detailKey = detKey;
         _detailType = tab;
         _detailSubTab = '';
@@ -30920,14 +30945,34 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final cardBorder = isAnyExpanded
         ? _LhPlum.primary.withAlpha(70)
         : _LhPlum.line.withAlpha(165);
+    final isChildRow = r['isChild'] == true;
+    // 产品三级：凡是带 children 的二级产品行都出折叠条 —— 一级产品账本、
+    // 供给 / 渠道 / 人效二级页的「产品」子维、三级交叉页的产品列表。
+    // （产品自己的二级详情走「三级」子维，那里的产品行不带 children。）
+    final l3Children = !isChildRow
+        ? lighthouseProductL3LedgerRows(r)
+        : const <Map<String, dynamic>>[];
+    final l3Key = 'l3::$prefix::$name::$group';
+    final l3SearchHit =
+        l3Children.isNotEmpty &&
+        _ledgerSearchActive &&
+        lighthouseProductL3ChildMatchesSearch(r, _ledgerSearch);
+    // 查找命中三级时默认展开；再点一次折叠条仍能收起（开合取反）。
+    final l3Open =
+        l3Children.isNotEmpty &&
+        (l3SearchHit
+            ? !_expandedProductL3.contains(l3Key)
+            : _expandedProductL3.contains(l3Key));
     return [
       Padding(
-        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+        padding: isChildRow
+            ? const EdgeInsets.fromLTRB(6, 0, 8, 6)
+            : const EdgeInsets.fromLTRB(8, 0, 8, 8),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: isChildRow ? const Color(0xFFFDFCFF) : Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: cardBorder, width: 0.8),
             boxShadow: [
@@ -31050,6 +31095,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   ),
                 ),
               ),
+              if (l3Children.isNotEmpty)
+                _buildProductL3Bar(
+                  children: l3Children,
+                  open: l3Open,
+                  groupColor: groupColor,
+                  onTap: () => setState(() {
+                    if (!_expandedProductL3.remove(l3Key)) {
+                      _expandedProductL3.add(l3Key);
+                    }
+                  }),
+                ),
               if (lighthouseLedgerShowsFundPoolPreview(tab) &&
                   fundPoolPanel != null)
                 _buildSupplyFundPoolDetails(
@@ -31090,7 +31146,317 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           ),
         ),
       ),
+      if (l3Open)
+        _buildProductL3ChildList(
+          parent: r,
+          children: l3Children,
+          groupColor: groupColor,
+          cols: cols,
+          pinnedW: pinnedW,
+          rowH: rowH,
+          summaryCellH: summaryCellH,
+          tab: tab,
+          trendKeyPrefix: prefix,
+          onChildTap: _productL3ChildTapFor(r),
+        ),
     ];
+  }
+
+  // ══ 产品三级 ══════════════════════════════════════════════════════
+  //
+  //  有三级的二级卡片底部多一条「三级 N · 出行金、视频会员…  展开」折叠条；
+  //  展开后三级以缩进子卡片挂在父卡片下方 —— 同一套冻结列 + 六格指标，
+  //  视觉与一级账本完全一致，只是左侧多一根业务线色的引导线。
+  //  子卡片的「›」进三级详情：整页复用二级详情（供给 / 渠道 / 项目 / 人效）。
+  //  没有三级的二级（多数能源券）不出折叠条，保持原样。
+
+  void _popDetailReturnStack() {
+    if (_detailReturnStack.isEmpty) return;
+    final prev = _detailReturnStack.removeLast();
+    _resetDetailSkuSearch();
+    _resetDetailDrill();
+    _resetCodeDrill();
+    _detailKey = prev.key;
+    _detailType = prev.type;
+    _detailSubTab = prev.subTab;
+    _detailPage = 1;
+    _heroPointIndex = null;
+    _detailDrillReloadAttempted = false;
+  }
+
+  void _openProductL3Detail({
+    required String l3,
+    required String l1,
+    required String l2,
+  }) {
+    if (l3.trim().isEmpty || l2.trim().isEmpty) return;
+    final detKey = lighthouseProductL3DetailKey(l3: l3, l1: l1, l2: l2);
+    final fromType = _detailKey == null ? null : _detailType;
+    final fromKey = _detailKey;
+    if (fromKey == null) _captureMainListScroll();
+    unawaited(_loadDetail('product', detKey));
+    setState(() {
+      _closeMetricPage();
+      _resetDetailSkuSearch();
+      _resetDetailDrill();
+      _resetCodeDrill();
+      if (fromType != null && fromKey != null && fromKey != detKey) {
+        _detailReturnStack.add((
+          type: fromType,
+          key: fromKey,
+          subTab: _detailSubTab,
+        ));
+      } else if (fromKey == null) {
+        _detailReturnStack.clear();
+      }
+      _detailKey = detKey;
+      _detailType = 'product';
+      _detailSubTab = '';
+      _detailPage = 1;
+      _heroPointIndex = null;
+      _detailDrillReloadAttempted = false;
+    });
+  }
+
+  /// 三级详情路径条上点「二级」：来路就是这个二级则出栈，否则直接打开二级详情。
+  void _returnToProductL2FromBreadcrumb(String l2, String l1) {
+    final l2Key = l1.isEmpty ? l2 : '$l2::$l1';
+    _closeDropdown();
+    setState(() {
+      if (_detailReturnStack.isNotEmpty &&
+          _detailReturnStack.last.key == l2Key) {
+        _popDetailReturnStack();
+        return;
+      }
+      _detailReturnStack.clear();
+      _resetDetailSkuSearch();
+      _resetDetailDrill();
+      _resetCodeDrill();
+      _detailKey = l2Key;
+      _detailType = 'product';
+      _detailSubTab = lighthouseProductL3SubTab;
+      _detailPage = 1;
+      _heroPointIndex = null;
+      _detailDrillReloadAttempted = false;
+    });
+    unawaited(_loadDetail('product', l2Key));
+  }
+
+  /// 三级子卡片点「›」去哪：
+  ///   · 一级产品账本 → 整页三级详情；
+  ///   · 供给 / 渠道 / 人效二级页的「产品」子维 → 交叉 drill（广东省 ∩ 出行金）；
+  ///   · 已经在交叉 drill 里 → 不再往下钻（只看数）。
+  void Function(Map<String, dynamic> child)? _productL3ChildTapFor(
+    Map<String, dynamic> parent,
+  ) {
+    final l2 = parent['name']?.toString() ?? '';
+    final l1 = parent['group']?.toString() ?? '';
+    if (_detailKey == null) {
+      return (child) => _openProductL3Detail(
+        l3: child['name']?.toString() ?? '',
+        l1: l1,
+        l2: l2,
+      );
+    }
+    if (_drillKey != null || _codeDrillKey != null) return null;
+    if (_detailSubTab != 'product') return null;
+    return (child) => _openProductL3Drill(
+      l3: child['name']?.toString() ?? '',
+      l1: l1,
+      l2: l2,
+    );
+  }
+
+  /// 供给 / 渠道 / 人效二级页里点三级产品：进 product_drill 里的三级交叉节点。
+  void _openProductL3Drill({
+    required String l3,
+    required String l1,
+    required String l2,
+  }) {
+    final type = _detailType;
+    final key = _detailKey;
+    if (type == null || key == null || l3.trim().isEmpty) return;
+    final detailDict = _detailEntityMap(type, key);
+    if (detailDict == null) return;
+    final drillKey = lighthouseProductL3DetailKey(l3: l3, l1: l1, l2: l2);
+    final drillRoot = _detailDrillRoot(detailDict, 'product');
+    if (drillRoot == null || drillRoot[drillKey] is! Map) {
+      if (!_detailHasDrillMaps(detailDict)) {
+        _ensureDetailDrillData();
+      }
+      _showDetailDrillHint('该三级暂无明细，请部署新版 lighthouse-go');
+      return;
+    }
+    setState(() {
+      _resetCodeDrill();
+      _drillDim = 'product';
+      _drillKey = drillKey;
+      _drillDisplayName = '$l2$lighthouseProductL3Sep$l3';
+      _drillGroup = l1;
+      _detailSubTab = _drillSubTabsFor('product').first.key;
+      _detailPage = 1;
+      _resetDetailSkuSearch();
+    });
+  }
+
+  /// 父卡片底部的三级折叠条。
+  Widget _buildProductL3Bar({
+    required List<Map<String, dynamic>> children,
+    required bool open,
+    required Color groupColor,
+    required VoidCallback onTap,
+  }) {
+    final real = lighthouseProductL3RealCount(children);
+    final preview = lighthouseProductL3Preview(children);
+    final hasUnassigned = children.length > real;
+    return Semantics(
+      button: true,
+      label: open ? '收起三级分类' : '展开 $real 个三级分类',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          constraints: BoxConstraints(minHeight: _fs(34)),
+          padding: EdgeInsets.fromLTRB(11, _fs(6), 8, _fs(6)),
+          decoration: BoxDecoration(
+            color: open
+                ? _LhPlum.primary.withAlpha(14)
+                : const Color(0xFFFAF9FD),
+            border: Border(
+              top: BorderSide(color: _LhPlum.line.withAlpha(150), width: 0.7),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.account_tree_outlined,
+                size: _fs(13),
+                color: groupColor,
+              ),
+              SizedBox(width: _fs(5)),
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: _fs(5),
+                  vertical: _fs(1.5),
+                ),
+                decoration: BoxDecoration(
+                  color: groupColor.withAlpha(26),
+                  borderRadius: BorderRadius.circular(_fs(4)),
+                ),
+                child: Text(
+                  '三级 $real',
+                  style: _tabular(
+                    LhTypography.sans(
+                      size: _fs(10),
+                      weight: FontWeight.w700,
+                      color: _LhPlum.deep,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: _fs(7)),
+              Expanded(
+                child: Text(
+                  hasUnassigned && preview.isNotEmpty
+                      ? '$preview · 含$lighthouseProductL3Unassigned'
+                      : preview,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: LhTypography.sans(
+                    size: _fs(11),
+                    weight: FontWeight.w500,
+                    color: LhColors.ink2,
+                    height: 1.2,
+                  ),
+                ),
+              ),
+              SizedBox(width: _fs(6)),
+              Text(
+                open ? '收起' : '展开',
+                style: LhTypography.sans(
+                  size: _fs(10.5),
+                  weight: FontWeight.w600,
+                  color: _LhPlum.primary,
+                  height: 1.2,
+                ),
+              ),
+              AnimatedRotation(
+                turns: open ? 0.5 : 0,
+                duration: const Duration(milliseconds: 180),
+                child: Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: _fs(17),
+                  color: _LhPlum.primary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 父卡片下方的三级子卡片列表：左侧一根业务线色引导线把它们挂在父卡片上。
+  Widget _buildProductL3ChildList({
+    required Map<String, dynamic> parent,
+    required List<Map<String, dynamic>> children,
+    required Color groupColor,
+    required List<_LedgerCol> cols,
+    required double pinnedW,
+    required double rowH,
+    required double summaryCellH,
+    required String tab,
+    required String trendKeyPrefix,
+    void Function(Map<String, dynamic> child)? onChildTap,
+  }) {
+    final parentName = parent['name']?.toString() ?? '';
+    // 子卡片跟一级账本同一个排序字段；「未细分」是兜底，永远垫底。
+    final sorted = List<Map<String, dynamic>>.from(children)
+      ..sort((a, b) {
+        final ua = a['name']?.toString() == lighthouseProductL3Unassigned;
+        final ub = b['name']?.toString() == lighthouseProductL3Unassigned;
+        if (ua != ub) return ua ? 1 : -1;
+        final pa = _rowMetricValue(a, _sortField);
+        final pb = _rowMetricValue(b, _sortField);
+        return _sortDesc ? pb.compareTo(pa) : pa.compareTo(pb);
+      });
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 0, 0, 8),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(color: groupColor.withAlpha(90), width: 1.4),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var j = 0; j < sorted.length; j++)
+                ..._buildLedgerRowGroup(
+                  sorted[j],
+                  j,
+                  cols,
+                  pinnedW,
+                  rowH,
+                  summaryCellH: summaryCellH,
+                  metricsTab: tab,
+                  trendKeyPrefix: '$trendKeyPrefix:l3:$parentName',
+                  showRowChevron: onChildTap != null,
+                  allowDefaultDetailOpen: false,
+                  onRowTap: onChildTap,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Map<String, dynamic>? _findListRow(String name, String group) {
@@ -33113,6 +33479,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   );
   static const _kDetailSubTabs = {
     'product': [
+      // 只在该二级下有真正的三级时出现（见 _buildDetailView 的过滤）。
+      _SubTabInfo(
+        key: lighthouseProductL3SubTab,
+        label: '三级',
+        color: LhColors.product,
+      ),
       _SubTabInfo(key: 'supply', label: '供给', color: LhColors.sinopec),
       _SubTabInfo(key: 'channel', label: '渠道', color: LhColors.carrier),
       _SubTabInfo(key: 'project', label: '项目', color: _LhPlum.primary),
@@ -33200,6 +33572,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   void _returnToLighthouseRootFromBreadcrumb() {
     _closeDropdown();
     setState(() {
+      _detailReturnStack.clear();
       _detailKey = null;
       _detailType = null;
       _resetDetailSkuSearch();
@@ -33231,6 +33604,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     // 层级路径必须跟随“实际点击行”，不能读取 L1 的列表筛选条件。
     // 用户可能在「全部」筛选下点击某个具体产品；此时来源仍是该产品，不是「全部」。
     final rootDimension = _detailRootLabel(type);
+    final productL3 = type == 'product'
+        ? lighthouseParseProductL3Key(_detailKey ?? '')
+        : null;
     final level1Parts = <String>[
       '$rootDimension列表',
       rootDisplayName,
@@ -33321,7 +33697,45 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
+        children: productL3 != null
+            ? [
+                // 三级详情：一级列表 → 二级（可点回）→ 三级 [→ 交叉维]。
+                step(
+                  level: '一级 · L1',
+                  label: [
+                    '产品列表',
+                    if (productL3.l1.isNotEmpty) productL3.l1,
+                  ].join(' · '),
+                  isCurrent: false,
+                  onTap: _returnToLighthouseRootFromBreadcrumb,
+                ),
+                divider(),
+                step(
+                  level: '二级 · L2',
+                  label: '${productL3.l2}详情',
+                  isCurrent: false,
+                  onTap: () => _returnToProductL2FromBreadcrumb(
+                    productL3.l2,
+                    productL3.l1,
+                  ),
+                ),
+                divider(),
+                step(
+                  level: '三级 · L3',
+                  label: '${productL3.l3}详情',
+                  isCurrent: !isDrill,
+                  onTap: isDrill ? _returnToDetailLevel2FromBreadcrumb : null,
+                ),
+                if (isDrill) ...[
+                  divider(),
+                  step(
+                    level: '四级 · L4',
+                    label: '${_detailDimLabel(_drillDim!)} · $_drillDisplayName',
+                    isCurrent: true,
+                  ),
+                ],
+              ]
+            : [
           step(
             level: '一级 · L1',
             label: level1Label,
@@ -33339,7 +33753,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             divider(),
             step(level: '三级 · L3', label: level3Label, isCurrent: true),
           ],
-        ],
+              ],
       ),
     );
   }
@@ -33551,9 +33965,19 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     // 二级汇总：一律直读详情接口 payload（L2/L3），禁止回退列表行拼凑。
     final summaryEntity = Map<String, dynamic>.from(viewDict);
 
+    final rawProductL3 = detailDict[lighthouseProductL3SubTab];
+    final hasProductL3 =
+        type == 'product' && rawProductL3 is List && rawProductL3.isNotEmpty;
+    final productL3Key = type == 'product'
+        ? lighthouseParseProductL3Key(key)
+        : null;
     final subTabList = isDrill
         ? _drillSubTabsFor(_drillDim!)
-        : (_kDetailSubTabs[type] ?? _kDetailSubTabs['product']!);
+        : [
+            for (final t
+                in (_kDetailSubTabs[type] ?? _kDetailSubTabs['product']!))
+              if (t.key != lighthouseProductL3SubTab || hasProductL3) t,
+          ];
     // Ensure _detailSubTab is valid for this type
     if (!subTabList.any((t) => t.key == _detailSubTab)) {
       _detailSubTab = subTabList.first.key;
@@ -33640,6 +34064,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final heroTitle = isDrill
         ? '${_detailDimLabel(_drillDim!)} · $rootDisplayName · $_drillDisplayName详情'
               '${_drillGroup.isNotEmpty ? ' · $_drillGroup' : ''}'
+        : productL3Key != null
+        ? '产品三级 · ${productL3Key.l2} › ${productL3Key.l3}详情'
         : '${_detailRootLabel(type)} · $rootDisplayName详情'
               '${rootGroupLabel.isNotEmpty ? ' · $rootGroupLabel' : ''}';
 
@@ -33776,6 +34202,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               .toList();
                           final isSupplierCodeSubTab =
                               _detailSubTab == 'supplierCode';
+                          final isProductL3SubTab =
+                              _detailSubTab == lighthouseProductL3SubTab;
                           final canDrill = !(isDrill || isSupplierCodeSubTab);
                           final trendPrefix =
                               'detail:$type:$key:${_detailSubTab}:${isDrill ? _drillKey : ''}';
@@ -33789,13 +34217,25 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                 trendKeyPrefix: trendPrefix,
                                 showRowChevron: canDrill,
                                 allowDefaultDetailOpen: false,
-                                onRowTap: canDrill
-                                    ? (row) => _openDetailDrill(
+                                onRowTap: !canDrill
+                                    ? null
+                                    : isProductL3SubTab
+                                    // 三级行进的是整页三级详情，不是交叉维 drill。
+                                    ? (row) => _openProductL3Detail(
+                                        l3: row['name']?.toString() ?? '',
+                                        l1:
+                                            (detailDict['group']?.toString() ??
+                                                    '')
+                                                .isNotEmpty
+                                            ? detailDict['group'].toString()
+                                            : rootGroupLabel,
+                                        l2: rootDisplayName,
+                                      )
+                                    : (row) => _openDetailDrill(
                                         detailDict: detailDict,
                                         dim: _detailSubTab,
                                         row: row,
-                                      )
-                                    : null,
+                                      ),
                               ),
                               if (totalPages > 1)
                                 Padding(

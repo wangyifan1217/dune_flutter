@@ -123,6 +123,30 @@ class LighthouseService {
     }, '灯塔摘要加载失败');
   }
 
+  /// 主 Hero 走势往前翻一页：[before] = 当前最早桶的键（summary.heroSeriesKeys 首项
+  /// 或上一页的 keys 首项）。筛选参数与 [fetchSummary] 同口径。
+  Future<Map<String, dynamic>> fetchHeroHistory({
+    required String before,
+    String? period,
+    int? offset,
+    String? tab,
+    String? group,
+    int? count,
+  }) {
+    final g = (group ?? '').trim();
+    final t = (tab ?? '').trim();
+    return _getData('/lighthouse/hero-history', {
+      'before': before,
+      if (period != null && period.isNotEmpty) 'period': period,
+      if (offset != null && offset != 0) 'offset': '$offset',
+      if (count != null && count > 0) 'count': '$count',
+      if (g.isNotEmpty && g != '全部' && t.isNotEmpty && t != 'analysis') ...{
+        'tab': t,
+        'group': g,
+      },
+    }, '灯塔历史走势加载失败');
+  }
+
   Future<Map<String, dynamic>> fetchDimension({
     required String tab,
     String? period,

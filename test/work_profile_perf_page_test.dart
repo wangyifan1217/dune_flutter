@@ -197,7 +197,7 @@ void main() {
     expect(data.averageScore, 86);
   });
 
-  test('summary groups by scored sector, not roster department', () {
+  test('summary groups market people by roster plate, not task product', () {
     const he = WorkProfileKpiPerson(
       userId: 40,
       userName: '何佳伟',
@@ -238,9 +238,12 @@ void main() {
       people: [he],
     );
     final md = kpiScoreSummaryMarkdown(score);
-    expect(md, contains('| 运营商 | 1. 何佳伟 | 高级售前顾问 |'));
-    expect(md, isNot(contains('| 能源 | 1. 何佳伟 |')));
-    expect(kpiPersonShareDepartment(he), '运营商');
+    expect(md, contains('| 能源板块 | 1. 何佳伟 | 高级售前顾问 |'));
+    expect(md, isNot(contains('| 运营商 | 1. 何佳伟 |')));
+    expect(kpiPrimarySectorOf(he), 'energy');
+    expect(kpiPersonInSector(he, 'energy'), isTrue);
+    expect(kpiPersonInSector(he, 'telecom'), isFalse);
+    expect(kpiPersonShareDepartment(he), '能源板块');
   });
 
   const session = AuthSession(

@@ -38,6 +38,7 @@ import '../desktop/windows_desktop_tray.dart';
 import '../desktop/windows_tray_unread_items.dart';
 import '../robots/robot_analyzing_coordinator.dart';
 import '../robots/robot_catalog_cache.dart';
+import '../shell/dunes_toast.dart';
 import '../robots/robot_character.dart';
 import '../robots/robot_markdown.dart';
 

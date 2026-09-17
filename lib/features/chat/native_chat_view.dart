@@ -44,6 +44,7 @@ import '../kb/native_kb_service.dart';
 import '../meeting/meeting_minutes_chat_share.dart';
 import '../meeting/native_meeting_detail_page.dart';
 import '../kpi/kpi_score_summary_card.dart';
+import '../kpi/kpi_summary_person_sheet.dart';
 import '../robots/robot_markdown.dart';
 import '../shell/dunes_toast.dart';
 import '../weekly_summary/native_weekly_summary_page.dart';
@@ -6664,6 +6665,31 @@ class _NativeChatViewState extends State<NativeChatView>
     );
   }
 
+  Widget _kpiSummaryCard(KpiScoreSummaryData data) {
+    return ChatKpiScoreSummaryCard(
+      data: data,
+      onOpenPerson: (row) => unawaited(_openKpiSummaryPerson(data, row)),
+    );
+  }
+
+  Future<void> _openKpiSummaryPerson(
+    KpiScoreSummaryData data,
+    KpiScoreSummaryRow row,
+  ) async {
+    if (data.month.trim().isEmpty) {
+      _showToast('这条是旧转发，重新转发后才能看明细');
+      return;
+    }
+    if (!mounted) return;
+    await showKpiSummaryPersonSheet(
+      context: context,
+      session: widget.session,
+      name: row.name,
+      month: data.month,
+      userId: row.userId,
+    );
+  }
+
   Future<void> _forwardApprovalToChat() async {
     final conv = _conversation;
     if (conv == null) {
@@ -7959,9 +7985,7 @@ class _NativeChatViewState extends State<NativeChatView>
               alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
               child: SizedBox(
                 width: maxW.clamp(0.0, 400.0),
-                child: RepaintBoundary(
-                  child: ChatKpiScoreSummaryCard(data: kpiSummary),
-                ),
+                child: RepaintBoundary(child: _kpiSummaryCard(kpiSummary)),
               ),
             );
           }
@@ -8134,9 +8158,7 @@ class _NativeChatViewState extends State<NativeChatView>
     if (_isRobotMarkdownPayload(e.payload)) {
       final kpiSummary = KpiScoreSummaryData.fromMessage(e.payload, e.text);
       if (kpiSummary != null) {
-        return RepaintBoundary(
-          child: ChatKpiScoreSummaryCard(data: kpiSummary),
-        );
+        return RepaintBoundary(child: _kpiSummaryCard(kpiSummary));
       }
       return RepaintBoundary(
         child: RobotMarkdown(markdown: e.text, selectable: true),

@@ -692,10 +692,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
   }
 
   bool _personInSector(WorkProfileKpiPerson person) {
-    if (_sector == 'all') return true;
-    return person.categories.any(
-      (c) => c.category == _sector && c.tasks.isNotEmpty,
-    );
+    return kpiPersonInSector(person, _sector);
   }
 
   String _deptNameOf(WorkProfileKpiPerson person) =>

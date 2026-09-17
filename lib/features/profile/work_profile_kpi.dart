@@ -301,6 +301,7 @@ class WorkProfileKpiPerson {
     required this.userId,
     required this.userName,
     this.departmentName = '',
+    this.parentDepartmentName = '',
     this.position = '',
     required this.mainScore,
     required this.bonus,
@@ -331,6 +332,7 @@ class WorkProfileKpiPerson {
   final int userId;
   final String userName;
   final String departmentName;
+  final String parentDepartmentName;
   final String position;
   final double mainScore;
   final String grade;
@@ -387,6 +389,7 @@ class WorkProfileKpiPerson {
       userId: (json['userId'] as num?)?.toInt() ?? 0,
       userName: '${json['userName'] ?? ''}',
       departmentName: '${json['departmentName'] ?? ''}',
+      parentDepartmentName: '${json['parentDepartmentName'] ?? ''}',
       position: '${json['position'] ?? ''}',
       mainScore: (json['mainScore'] as num?)?.toDouble() ?? 0,
       grade: '${json['grade'] ?? ''}',
@@ -695,33 +698,54 @@ String kpiCanonicalOfficeGroup(String departmentName) {
   return name;
 }
 
-String kpiPrimarySectorOf(WorkProfileKpiPerson person) {
-  const sectors = {'telecom', 'energy', 'rd', 'office'};
-  WorkProfileKpiCategory? best;
-  for (final cat in person.categories) {
-    if (!sectors.contains(cat.category)) continue;
-    if (cat.tasks.isEmpty && cat.category != 'rd' && cat.category != 'office') {
-      continue;
-    }
-    if (best == null || cat.score > best.score) best = cat;
+bool kpiIsOfficeDept(String departmentName) {
+  final name = departmentName.trim();
+  return name.contains('行政') || name.contains('人事') || name.contains('财务');
+}
+
+/// 业务名单按通讯录「能源板块 / 通信板块」归类，不看灯塔任务是运营商还是能源。
+String kpiOrgMarketSector(
+  String departmentName, [
+  String parentDepartmentName = '',
+]) {
+  for (final raw in [departmentName, parentDepartmentName]) {
+    final name = raw.trim();
+    if (name.contains('能源板块')) return 'energy';
+    if (name.contains('通信板块')) return 'telecom';
   }
-  if (best != null) return best.category;
-  if (person.categories.any((c) => c.category == 'rd')) return 'rd';
-  if (person.categories.any((c) => c.category == 'office')) return 'office';
+  return '';
+}
+
+String kpiPrimarySectorOf(WorkProfileKpiPerson person) {
+  final hasOffice =
+      person.categories.any((c) => c.category == 'office') ||
+      person.templateKey == 'office_summary' ||
+      kpiIsOfficeDept(person.departmentName);
+  if (hasOffice) return 'office';
+  final hasRd =
+      person.categories.any((c) => c.category == 'rd') ||
+      person.scoreSource == 'rubric';
+  if (hasRd) return 'rd';
+  final market = kpiOrgMarketSector(
+    person.departmentName,
+    person.parentDepartmentName,
+  );
+  if (market.isNotEmpty) return market;
   return 'none';
 }
 
-/// 转发汇总按这个人计分的任务分「运营商 / 能源」，不按名册部门。
-/// 何佳伟名册在能源、绩效却是会员套餐订阅时，应归到运营商。
+/// 转发汇总的业务部门列用通讯录板块，不再按任务产品切到运营商 / 能源。
 String kpiPersonShareDepartment(WorkProfileKpiPerson person) {
   switch (kpiPrimarySectorOf(person)) {
     case 'telecom':
-      return '运营商';
+      final name = person.departmentName.trim();
+      return name.isEmpty ? '通信板块' : name;
     case 'energy':
-      return '能源';
+      final name = person.departmentName.trim();
+      return name.isEmpty ? '能源板块' : name;
     case 'rd':
-      final group = kpiCanonicalRdGroup(person.departmentName);
-      return group == '未分组' ? '研发' : group;
+      final dept = person.departmentName.trim();
+      return dept.isEmpty ? '研发' : dept;
     case 'office':
       final dept = person.departmentName.trim();
       return dept.isEmpty ? '职能' : dept;
@@ -952,9 +976,7 @@ List<KpiAppeal> kpiAppealsFromData(Object? data) {
 
 bool kpiPersonInSector(WorkProfileKpiPerson person, String sector) {
   if (sector == 'all') return true;
-  return person.categories.any(
-    (c) => c.category == sector && c.tasks.isNotEmpty,
-  );
+  return kpiPrimarySectorOf(person) == sector;
 }
 
 List<KpiPublishGroup> kpiPublishGroupsForSector(

@@ -6,6 +6,7 @@ import 'dart:ui' show FontFeature;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart' show FrictionSimulation;
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -26,6 +27,7 @@ import 'lighthouse_period_bar.dart';
 import 'lighthouse_product_l3.dart';
 import 'lighthouse_service.dart';
 import 'lighthouse_theme.dart';
+import 'lighthouse_trend_history.dart';
 import 'lighthouse_scroll_text.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2128,11 +2130,21 @@ class _TrendLinesPainter extends CustomPainter {
     this.available = const [true, true, true, false, false, false],
     this.scaleForecast,
     this.heroIndexOverride,
+    this.extremeLo,
+    this.extremeHi,
+    this.showEndpoint = true,
   });
   final _TrendSeries series;
   final _TrendBounds bounds;
   final List<Color> colors;
   final double padH;
+
+  /// 极值小圈只在 [extremeLo, extremeHi] 里找（视窗模式下切片两端各多一个画布外的点）。
+  final int? extremeLo;
+  final int? extremeHi;
+
+  /// 末端点只在切片真的包含最新一期时画，否则会在视窗右沿冒出一颗假的「本期」。
+  final bool showEndpoint;
   // v3.9 · [revenue, cost, profit, scale, scaleAlt, costAlt] 每条序列是否可见
   final List<bool> available;
 
@@ -2372,10 +2384,12 @@ class _TrendLinesPainter extends CustomPainter {
     }
 
     // ── 4. 极值小圈（数字由外层 widget 贴 pill）────────────────────────────
-    if (heroDrawable && heroSolid.length >= 3) {
-      var hi = 0;
-      var lo = 0;
-      for (var i = 1; i < heroSolid.length; i++) {
+    final eFrom = math.max(0, extremeLo ?? 0);
+    final eTo = math.min(heroSolid.length - 1, extremeHi ?? heroSolid.length - 1);
+    if (heroDrawable && eTo - eFrom >= 2) {
+      var hi = eFrom;
+      var lo = eFrom;
+      for (var i = eFrom + 1; i <= eTo; i++) {
         if (heroSolid[i] > heroSolid[hi]) hi = i;
         if (heroSolid[i] < heroSolid[lo]) lo = i;
       }
@@ -2397,7 +2411,7 @@ class _TrendLinesPainter extends CustomPainter {
     }
 
     // ── 5. 末端点：走完的期给 halo；没走完时 halo 让给进度胶囊 ────────────
-    if (heroDrawable) {
+    if (heroDrawable && showEndpoint) {
       final i = heroSolid.length - 1;
       final o = Offset(xOf(i), yOf(heroSolid[i], heroBounds));
       //   v17 · 两圈半透明光晕叠在一起边缘发糊，换成「白珠 + 投影」：
@@ -2549,6 +2563,9 @@ class _TrendLinesPainter extends CustomPainter {
       old.padH != padH ||
       old.scaleForecast != scaleForecast ||
       old.heroIndexOverride != heroIndexOverride ||
+      old.extremeLo != extremeLo ||
+      old.extremeHi != extremeHi ||
+      old.showEndpoint != showEndpoint ||
       !identical(old.colors, colors) ||
       !listEquals(old.available, available);
 }
@@ -6849,7 +6866,25 @@ class _TrendChart extends StatefulWidget {
     this.soloKey,
     this.onSoloChanged,
     this.formulaExpression,
+    this.viewportCount = 0,
+    this.historyCount = 0,
+    this.historyLoading = false,
+    this.historyHasMore = false,
+    this.onNeedHistory,
   });
+
+  /// 股票式视窗：>= 2 时一屏只画这么多个点，横拖平移、长按逐点看。
+  /// 0 = 旧行为（整条序列铺满、横拖逐点看）。账本图不传。
+  final int viewportCount;
+
+  /// 序列最前面有几个点是「往前拉」加载来的历史。
+  /// 数值只增加且尾部不变时，图按「往前补了一页」处理：视窗和选中点跟着平移，不重置。
+  final int historyCount;
+  final bool historyLoading;
+  final bool historyHasMore;
+
+  /// 拖到左沿附近时回调，外层去要更早的一页。
+  final VoidCallback? onNeedHistory;
 
   final List<String> labels; // 每个点的完整标签（X 轴 / tooltip）
   final List<double> revenue;
@@ -6967,8 +7002,15 @@ class _TrendChart extends StatefulWidget {
   State<_TrendChart> createState() => _TrendChartState();
 }
 
-class _TrendChartState extends State<_TrendChart> {
+class _TrendChartState extends State<_TrendChart>
+    with SingleTickerProviderStateMixin {
   static const double _kChartPadH = 6.0;
+
+  /// 视窗最右那个点的下标（拖动 / 惯性中可带小数）。
+  double _viewEnd = 0;
+  late final AnimationController _panAnim = AnimationController.unbounded(
+    vsync: this,
+  )..addListener(_onPanAnimTick);
   // v3.8 · 反转层级:行 context 是"这一行的毛利趋势",毛利上升为 hero deep,
   // 收入/成本降为柔粉描线,视觉上让毛利粗线主导.color 顺序不变,只是深浅换位.
   static const Color _cRev = Color(lighthouseRevenueAccentValue);
@@ -7163,11 +7205,70 @@ class _TrendChartState extends State<_TrendChart> {
       _selectedIndex = widget.selectedIndex;
     }
     _recompute();
+    _viewEnd = math.max(0, _n - 1).toDouble();
+  }
+
+  @override
+  void dispose() {
+    _panAnim.dispose();
+    super.dispose();
+  }
+
+  /// 新数据 = 旧数据前面补了 [k] 个点（往前拉加载了一页历史），其余一概没变。
+  bool _isHistoryPrepend(_TrendChart old, int k) {
+    if (k <= 0) return false;
+    bool tail(List<double> now, List<double> was) {
+      if (now.isEmpty && was.isEmpty) return true;
+      return now.length == was.length + k && listEquals(now.sublist(k), was);
+    }
+
+    return tail(widget.profit, old.profit) &&
+        tail(widget.revenue, old.revenue) &&
+        tail(widget.cost, old.cost) &&
+        tail(widget.costAlt, old.costAlt) &&
+        tail(widget.scale, old.scale) &&
+        tail(widget.scaleAlt, old.scaleAlt) &&
+        tail(widget.stock, old.stock) &&
+        widget.labels.length == old.labels.length + k &&
+        listEquals(widget.labels.sublist(k), old.labels) &&
+        old.periodScaleAlt == widget.periodScaleAlt &&
+        old.periodStock == widget.periodStock &&
+        old.periodScaleDeltaPct == widget.periodScaleDeltaPct &&
+        old.periodRevenueDeltaPct == widget.periodRevenueDeltaPct &&
+        old.periodCostDeltaPct == widget.periodCostDeltaPct &&
+        old.periodScaleAltDeltaPct == widget.periodScaleAltDeltaPct &&
+        old.periodCostAltDeltaPct == widget.periodCostAltDeltaPct &&
+        old.periodStockDeltaPct == widget.periodStockDeltaPct &&
+        old.partialPeriod == widget.partialPeriod &&
+        old.periodRevenue == widget.periodRevenue &&
+        old.periodCost == widget.periodCost &&
+        old.periodProfit == widget.periodProfit &&
+        old.periodCostAlt == widget.periodCostAlt &&
+        old.periodScale == widget.periodScale &&
+        old.scaleForecast?.forecast == widget.scaleForecast?.forecast &&
+        old.periodProfitDeltaPct == widget.periodProfitDeltaPct;
   }
 
   @override
   void didUpdateWidget(_TrendChart old) {
     super.didUpdateWidget(old);
+    final prepended = widget.historyCount - old.historyCount;
+    if (_isHistoryPrepend(old, prepended)) {
+      // 往前补了一页：视窗和选中点整体右移 k 格，画面停在原处不跳。
+      if (_panAnim.isAnimating) _panAnim.stop();
+      _recompute();
+      _viewEnd = lighthouseTrendClampViewEnd(
+        viewEnd: _viewEnd + prepended,
+        count: _n,
+        visible: math.max(2, widget.viewportCount),
+      );
+      if (widget.onSelectedIndexChanged != null) {
+        _selectedIndex = widget.selectedIndex;
+      } else if (_selectedIndex != null) {
+        _selectedIndex = _selectedIndex! + prepended;
+      }
+      return;
+    }
     final dataChanged =
         !listEquals(old.profit, widget.profit) ||
         !listEquals(old.revenue, widget.revenue) ||
@@ -7195,6 +7296,7 @@ class _TrendChartState extends State<_TrendChart> {
         old.periodProfitDeltaPct != widget.periodProfitDeltaPct;
     if (dataChanged) {
       _recompute();
+      _resetViewport();
       if (_selectedIndex != null) {
         _selectedIndex = null;
         final notify = widget.onSelectedIndexChanged;
@@ -7305,9 +7407,19 @@ class _TrendChartState extends State<_TrendChart> {
     final usable = widthPx - _kChartPadH * 2;
     if (usable <= 0 || n <= 0) return;
     final relX = (localX - _kChartPadH).clamp(0.0, usable);
-    final raw = n <= 1
-        ? 0
-        : ((relX / usable) * (n - 1)).round().clamp(0, n - 1);
+    final int raw;
+    if (_windowed) {
+      raw = lighthouseTrendIndexAtX(
+        x: localX,
+        padH: _kChartPadH,
+        step: _stepFor(widthPx),
+        viewStart: _viewStart,
+        visible: _visible,
+        count: n,
+      );
+    } else {
+      raw = n <= 1 ? 0 : ((relX / usable) * (n - 1)).round().clamp(0, n - 1);
+    }
     final int? i = widget.lastPointIsPeriod && raw == n - 1 ? null : raw;
     if (_selectedIndex != i) {
       setState(() => _selectedIndex = i);
@@ -7380,6 +7492,150 @@ class _TrendChartState extends State<_TrendChart> {
     _ => widget.stockLabel,
   };
 
+  // ── 视窗（股票式往前拉）────────────────────────────────────────────────
+  //   viewportCount >= 2 时进入视窗模式：一屏固定画 viewportCount 个点，
+  //   单指横拖平移、松手带惯性，拖到左沿附近回调 onNeedHistory 往前补一页；
+  //   点一下选中某点，长按后拖动逐点扫（十字光标）。
+  //   视窗之外的点不画、不参与 Y 值域 —— 纵轴跟着看到的那一段自适应。
+
+  bool get _viewportMode => widget.viewportCount >= 2;
+  int get _visible => widget.viewportCount;
+
+  /// 点数多于一屏：真的需要平移。
+  bool get _windowed => _viewportMode && _n > _visible;
+  double get _viewStart => _windowed ? _viewEnd - (_visible - 1) : 0.0;
+  double _stepFor(double w) => (w - _kChartPadH * 2) / (_visible - 1);
+
+  void _resetViewport() {
+    if (_panAnim.isAnimating) _panAnim.stop();
+    _viewEnd = math.max(0, _n - 1).toDouble();
+  }
+
+  void _setViewEnd(double v) {
+    final next = lighthouseTrendClampViewEnd(
+      viewEnd: v,
+      count: _n,
+      visible: _visible,
+    );
+    if ((next - _viewEnd).abs() < 1e-6) return;
+    setState(() => _viewEnd = next);
+  }
+
+  void _maybeNeedHistory({bool onStart = false}) {
+    final cb = widget.onNeedHistory;
+    if (cb == null || !widget.historyHasMore || widget.historyLoading) return;
+    // 第一次拖动就先要一页（还没有任何历史时），之后只在靠近左沿时再要。
+    if ((onStart && widget.historyCount == 0) || _viewStart <= 2.0) cb();
+  }
+
+  void _panBy(double dx, double w) {
+    final step = _stepFor(w);
+    if (step <= 0) return;
+    _setViewEnd(_viewEnd - dx / step);
+    _maybeNeedHistory();
+  }
+
+  void _endPan(double vx, double w) {
+    final step = _stepFor(w);
+    if (!_windowed || step <= 0 || vx.abs() < 60) return;
+    _panAnim.animateWith(FrictionSimulation(0.08, _viewEnd, -vx / step));
+  }
+
+  void _onPanAnimTick() {
+    if (!mounted) return;
+    final raw = _panAnim.value;
+    final v = lighthouseTrendClampViewEnd(
+      viewEnd: raw,
+      count: _n,
+      visible: _visible,
+    );
+    if ((v - raw).abs() > 1e-6 && _panAnim.isAnimating) _panAnim.stop();
+    if ((v - _viewEnd).abs() > 1e-6) setState(() => _viewEnd = v);
+    _maybeNeedHistory();
+  }
+
+  void _jumpToLatest() {
+    HapticFeedback.selectionClick();
+    _panAnim.stop();
+    _panAnim.value = _viewEnd;
+    _panAnim.animateTo(
+      math.max(0, _n - 1).toDouble(),
+      duration: const Duration(milliseconds: 360),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  _TrendSeries _sliceSeries(int lo, int hi) {
+    List<double> cut(List<double> l) =>
+        l.isEmpty ? l : l.sublist(lo, math.min(hi + 1, l.length));
+    return _TrendSeries(
+      revenue: cut(_series.revenue),
+      cost: cut(_series.cost),
+      profit: cut(_series.profit),
+      scale: cut(_series.scale),
+      scaleAlt: cut(_series.scaleAlt),
+      costAlt: cut(_series.costAlt),
+      stock: cut(_series.stock),
+    );
+  }
+
+  /// 视窗模式下贴在画布上的小胶囊（加载中 / 已到最早 / 回到最新）。
+  Widget _viewportTag(String text, {bool busy = false, VoidCallback? onTap}) {
+    final pill = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(240),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _LhPlum.deep.withAlpha(22), width: 0.5),
+        boxShadow: [
+          BoxShadow(
+            color: _LhPlum.deep.withAlpha(22),
+            blurRadius: 6,
+            spreadRadius: -1,
+            offset: const Offset(0, 1.5),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (busy) ...[
+            SizedBox(
+              width: 7,
+              height: 7,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.1,
+                color: _LhPlum.primary.withAlpha(200),
+              ),
+            ),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            text,
+            style: LhTypography.mono(
+              size: 7.5,
+              color: onTap != null ? _LhPlum.deep : LhColors.mute2,
+              weight: FontWeight.w700,
+              letterSpacing: 0.3,
+            ),
+          ),
+          if (onTap != null)
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 10,
+              color: _LhPlum.deep.withAlpha(200),
+            ),
+        ],
+      ),
+    );
+    if (onTap == null) return IgnorePointer(child: pill);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Padding(padding: const EdgeInsets.all(4), child: pill),
+    );
+  }
+
   Widget _trendCanvas() {
     return LayoutBuilder(
       builder: (ctx, c) {
@@ -7397,10 +7653,45 @@ class _TrendChartState extends State<_TrendChart> {
         final padTop = geo.plotTop;
         final usableH = geo.plotBottom - geo.plotTop;
         if (usableH <= 4) return const SizedBox.shrink();
-        final forecast = vis[3] ? widget.scaleForecast?.forecast : null;
+
+        // ── 视窗切片 ──────────────────────────────────────────────────
+        //   只把可见区间左右各多带一个点交给画笔（线从画布外平滑地进来），
+        //   画笔按切片自己的点距画，再整体平移 left 像素、裁在画布里。
+        final n = _n;
+        final windowed = _windowed;
+        var lo = 0;
+        var hi = math.max(0, n - 1);
+        var paintLeft = 0.0;
+        var paintW = w;
+        var step = n <= 1 ? 0.0 : (w - _kChartPadH * 2) / (n - 1);
+        var series = _series;
+        var bounds = _bounds;
+        final viewStart = _viewStart;
+        if (windowed) {
+          step = _stepFor(w);
+          lo = math.max(0, viewStart.floor() - 1);
+          hi = math.min(n - 1, _viewEnd.ceil() + 1);
+          series = _sliceSeries(lo, hi);
+          bounds = _computeBounds(
+            series,
+            scaleForecast: hi == n - 1 && _hasScale
+                ? widget.scaleForecast?.forecast
+                : null,
+            shareScaleRange: lighthouseTrendShareScaleRange(
+              scaleLabel: widget.scaleLabel,
+              scaleAltLabel: widget.scaleAltLabel,
+            ),
+          );
+          paintLeft = (lo - viewStart) * step;
+          paintW = _kChartPadH * 2 + (hi - lo) * step;
+        }
+        final includesLatest = hi == n - 1;
+        final forecast = vis[3] && includesLatest
+            ? widget.scaleForecast?.forecast
+            : null;
         final extremeSpec = _trendPaintSpec(
-          series: _series,
-          bounds: _bounds,
+          series: series,
+          bounds: bounds,
           colors: _paintColors,
           index: heroIndex,
         );
@@ -7412,9 +7703,17 @@ class _TrendChartState extends State<_TrendChart> {
           heroIndex: heroIndex,
           heroPts: extremeSpec.pts,
         );
-        final extremePts = partial
-            ? extremeSpec.pts.sublist(0, extremeSpec.pts.length - 1)
-            : extremeSpec.pts;
+        // 极值只在「看得见的点」里找（切片两端各多出的一个点在画布外）。
+        final pts = extremeSpec.pts;
+        var eLo = 0;
+        var eHi = pts.length - 1 - (partial ? 1 : 0);
+        if (windowed) {
+          eLo = math.max(eLo, (viewStart - 1e-6).ceil() - lo);
+          eHi = math.min(eHi, (_viewEnd + 1e-6).floor() - lo);
+        }
+        final extremePts = (pts.isNotEmpty && eHi >= eLo)
+            ? pts.sublist(eLo, eHi + 1)
+            : const <double>[];
         final hasProfit = vis[heroIndex] && extremePts.isNotEmpty;
         final actualMaxP = hasProfit ? extremePts.reduce(math.max) : 0.0;
         final actualMinP = hasProfit ? extremePts.reduce(math.min) : 0.0;
@@ -7423,8 +7722,6 @@ class _TrendChartState extends State<_TrendChart> {
         final maxY = yOf(actualMaxP);
         final minY = yOf(actualMinP);
         // MAX/MIN 跟着极值点的横坐标走（旧版钉在右边缘，读数挂到了别的线上）。
-        final n = _n;
-        final extremeStep = n <= 1 ? 0.0 : (w - _kChartPadH * 2) / (n - 1);
         double extremeLeft(bool wantMax) {
           if (!hasProfit) return w - 56;
           var best = 0;
@@ -7435,7 +7732,7 @@ class _TrendChartState extends State<_TrendChart> {
             if (better) best = i;
           }
           // pill 以点为中心，靠边时夹回画布内。
-          final px = _kChartPadH + best * extremeStep;
+          final px = paintLeft + _kChartPadH + (eLo + best) * step;
           return (px - 26).clamp(0.0, math.max(0.0, w - 58));
         }
 
@@ -7444,11 +7741,24 @@ class _TrendChartState extends State<_TrendChart> {
             extremePts.length >= 3 &&
             (actualMaxP - actualMinP).abs() > 1e-6 &&
             (minY - maxY) > 26;
+        final sel = _selectedIndex;
+        final sliceSelected = sel == null || sel < lo || sel > hi
+            ? null
+            : sel - lo;
+        final viewport = _viewportMode;
+        final showLatestTag = windowed && _viewEnd < n - 1 - 0.5;
+        final showEarliestTag =
+            viewport &&
+            !widget.historyLoading &&
+            !widget.historyHasMore &&
+            widget.historyCount > 0 &&
+            viewStart < 0.5;
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTapDown: (d) {
             _notifyInteraction(true);
-            _setSelectionFromX(d.localPosition.dx, w);
+            // 视窗模式里按下可能是要拖，等抬手再选点。
+            if (!viewport) _setSelectionFromX(d.localPosition.dx, w);
           },
           onTapUp: (d) {
             _setSelectionFromX(d.localPosition.dx, w);
@@ -7457,44 +7767,88 @@ class _TrendChartState extends State<_TrendChart> {
           onTapCancel: () => _notifyInteraction(false),
           onHorizontalDragStart: (d) {
             _notifyInteraction(true);
-            _setSelectionFromX(d.localPosition.dx, w);
+            if (viewport) {
+              _panAnim.stop();
+              _maybeNeedHistory(onStart: true);
+            } else {
+              _setSelectionFromX(d.localPosition.dx, w);
+            }
           },
           onHorizontalDragUpdate: (d) {
-            _setSelectionFromX(d.localPosition.dx, w);
+            if (viewport) {
+              _panBy(d.delta.dx, w);
+            } else {
+              _setSelectionFromX(d.localPosition.dx, w);
+            }
           },
-          onHorizontalDragEnd: (_) => _notifyInteraction(false),
+          onHorizontalDragEnd: (d) {
+            if (viewport) _endPan(d.velocity.pixelsPerSecond.dx, w);
+            _notifyInteraction(false);
+          },
           onHorizontalDragCancel: () => _notifyInteraction(false),
+          onLongPressStart: viewport
+              ? (d) {
+                  HapticFeedback.selectionClick();
+                  _panAnim.stop();
+                  _notifyInteraction(true);
+                  _setSelectionFromX(d.localPosition.dx, w);
+                }
+              : null,
+          onLongPressMoveUpdate: viewport
+              ? (d) => _setSelectionFromX(d.localPosition.dx, w)
+              : null,
+          onLongPressEnd: viewport ? (_) => _notifyInteraction(false) : null,
           child: SizedBox(
             height: chartH,
             child: Stack(
               clipBehavior: Clip.none,
               children: [
                 Positioned.fill(
-                  child: RepaintBoundary(
-                    child: CustomPaint(
-                      painter: _TrendLinesPainter(
-                        series: _series,
-                        bounds: _bounds,
-                        colors: _paintColors,
-                        padH: _kChartPadH,
-                        available: vis,
-                        heroIndexOverride: heroIndex,
-                        scaleForecast: forecast,
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned.fill(
-                  child: CustomPaint(
-                    painter: _TrendOverlayPainter(
-                      series: _series,
-                      bounds: _bounds,
-                      colors: _paintColors,
-                      padH: _kChartPadH,
-                      selectedIndex: _selectedIndex,
-                      available: vis,
-                      heroIndexOverride: heroIndex,
-                      scaleForecast: forecast,
+                  child: ClipRect(
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Positioned(
+                          left: paintLeft,
+                          top: 0,
+                          bottom: 0,
+                          width: paintW,
+                          child: RepaintBoundary(
+                            child: CustomPaint(
+                              painter: _TrendLinesPainter(
+                                series: series,
+                                bounds: bounds,
+                                colors: _paintColors,
+                                padH: _kChartPadH,
+                                available: vis,
+                                heroIndexOverride: heroIndex,
+                                scaleForecast: forecast,
+                                extremeLo: eLo,
+                                extremeHi: eHi,
+                                showEndpoint: includesLatest,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          left: paintLeft,
+                          top: 0,
+                          bottom: 0,
+                          width: paintW,
+                          child: CustomPaint(
+                            painter: _TrendOverlayPainter(
+                              series: series,
+                              bounds: bounds,
+                              colors: _paintColors,
+                              padH: _kChartPadH,
+                              selectedIndex: sliceSelected,
+                              available: vis,
+                              heroIndexOverride: heroIndex,
+                              scaleForecast: forecast,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -7526,6 +7880,24 @@ class _TrendChartState extends State<_TrendChart> {
                         letterSpacing: 0.4,
                       ),
                     ),
+                  ),
+                if (viewport && widget.historyLoading)
+                  Positioned(
+                    left: 0,
+                    top: geo.plotBottom - 16,
+                    child: _viewportTag('加载更早', busy: true),
+                  )
+                else if (showEarliestTag)
+                  Positioned(
+                    left: 0,
+                    top: geo.plotBottom - 16,
+                    child: _viewportTag('已到最早'),
+                  ),
+                if (showLatestTag)
+                  Positioned(
+                    right: -4,
+                    top: geo.plotBottom - 20,
+                    child: _viewportTag('回到最新', onTap: _jumpToLatest),
                   ),
               ],
             ),
@@ -8128,6 +8500,46 @@ class _TrendChartState extends State<_TrendChart> {
               final w = c.maxWidth;
               final usableW = w - _kChartPadH * 2;
               final n = _n;
+              if (_windowed) {
+                // 视窗模式：标签跟着点平移，只摆看得见的那几个。
+                final step = _stepFor(w);
+                final vs = _viewStart;
+                final slotW = (usableW / _visible).clamp(18.0, 32.0);
+                final labelSize = _visible > 12
+                    ? 7.0
+                    : (_visible > 8 ? 7.5 : 8.5);
+                final first = math.max(0, vs.floor());
+                final last = math.min(n - 1, _viewEnd.ceil());
+                return ClipRect(
+                  child: Stack(
+                    children: [
+                      for (int i = first; i <= last && i < _xLabels.length; i++)
+                        Positioned(
+                          left: _kChartPadH + (i - vs) * step - slotW / 2,
+                          width: slotW,
+                          child: Center(
+                            child: Text(
+                              _xLabels[i],
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: LhTypography.mono(
+                                size: labelSize,
+                                color:
+                                    widget.partialPeriod && i == n - 1
+                                    ? _LhPlum.deep
+                                    : LhColors.mute2,
+                                weight: widget.partialPeriod && i == n - 1
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                letterSpacing: 0.1,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              }
               final labelCount = _xAnchors.length;
               final slotW = labelCount <= 1
                   ? usableW
@@ -8184,7 +8596,7 @@ class _TrendChartState extends State<_TrendChart> {
             child: isSelected
                 ? const SizedBox.shrink()
                 : Text(
-                    '拖动查看每点',
+                    _viewportMode ? '拖动翻看历史 · 长按查看每点' : '拖动查看每点',
                     style: LhTypography.sans(
                       size: 9,
                       color: LhColors.mute2,
@@ -15181,6 +15593,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return out;
   }
 
+  bool _heroHistoryPreloadScheduled = false;
+
+  /// 当前这份 summary 还没有任何历史页时，下一帧预取一页。
+  /// 只预取第一页；再往前由拖到左沿时触发（_TrendChart.onNeedHistory）。
+  void _scheduleHeroHistoryPreload() {
+    if (_heroHistoryPreloadScheduled || !_heroHistorySupported) return;
+    if (_activeHeroHistory != null) return;
+    _heroHistoryPreloadScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _heroHistoryPreloadScheduled = false;
+      if (!mounted || _activeHeroHistory != null) return;
+      unawaited(_loadHeroHistory());
+    });
+  }
+
   /// 走势图回传选中点。松手不清；点图例 / 换周期 / 换分类导致数据变化时
   /// 由图自己回传 null，Hero 跟着回到整期 —— 不必在每个切 tab 的地方补一行。
   void _onHeroPointSelected(int? i) {
@@ -15203,6 +15630,134 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 主 Hero 走势图上被点住的那一点（null = 看整期合计）。
   /// 图通过 selectedIndex 和外层共用这一份，避免「回本期」只清大数、图还亮着。
   int? _heroPointIndex;
+
+  // ── 主 Hero 走势往前拉加载历史（股票式）─────────────────────────────────
+  //
+  //   summary 只给最近 N 个桶；往前拖到左沿时按 heroSeriesKeys 首键请求
+  //   /lighthouse/hero-history，一页页拼在前面。拼好的是一份「更长的 metrics
+  //   视图」（_heroSeriesMetrics）：走势图、点选某天换大数（_heroTotalsAtPoint）、
+  //   点选环比（_deltaAtHeroPoint）全部读它，下标天然对齐。
+  //   只做一级主 Hero；二级详情、净TA、自定义区间、本地筛选不开。
+
+  LighthouseHeroHistory? _heroHistory;
+  Map<String, dynamic>? _heroMergedMetrics;
+  Object? _heroMergedBase;
+  String _heroMergedKey = '';
+  DateTime? _heroHistoryRetryAt;
+
+  List<String> get _heroBaseSeriesKeys {
+    final raw = _bundle?.metrics['heroSeriesKeys'];
+    if (raw is! List) return const <String>[];
+    return [for (final e in raw) e.toString()];
+  }
+
+  bool get _heroHistorySupported =>
+      _detailKey == null &&
+      !_isCustomRange &&
+      !_isNonLedgerTab &&
+      _tab != 'netTa' &&
+      !_heroLocalOnlyFilterActive &&
+      _heroSummaryMatchesGroup &&
+      _heroBaseSeriesKeys.length >= 2;
+
+  String get _heroHistoryRequestKey {
+    final keys = _heroBaseSeriesKeys;
+    return '$_period|$_periodOffset|$_tab|$_groupFilter|${keys.isEmpty ? '' : keys.first}';
+  }
+
+  LighthouseHeroHistory? get _activeHeroHistory {
+    final h = _heroHistory;
+    if (h == null || !_heroHistorySupported) return null;
+    return h.requestKey == _heroHistoryRequestKey ? h : null;
+  }
+
+  /// 已拼到主 Hero 序列前面的历史点数。
+  int get _heroHistoryCount => _activeHeroHistory?.length ?? 0;
+
+  /// 走势类读数统一走这里：有历史时是「历史 + 本窗口」拼好的 metrics。
+  Map<String, dynamic> get _heroSeriesMetrics {
+    final base = _bundle?.metrics ?? const <String, dynamic>{};
+    final h = _activeHeroHistory;
+    if (h == null || h.length == 0) return base;
+    final cacheKey = '${h.requestKey}#${h.version}';
+    final cached = _heroMergedMetrics;
+    if (cached != null &&
+        identical(_heroMergedBase, base) &&
+        _heroMergedKey == cacheKey) {
+      return cached;
+    }
+    final merged = lighthouseMergeHeroHistory(base, h);
+    _heroMergedMetrics = merged;
+    _heroMergedBase = base;
+    _heroMergedKey = cacheKey;
+    return merged;
+  }
+
+  /// 主 Hero 走势图共用的视窗参数（见 _TrendChart.viewportCount）。
+  int get _heroViewportCount =>
+      _heroHistorySupported ? _heroBaseSeriesKeys.length : 0;
+
+  bool get _heroHistoryLoading => _activeHeroHistory?.loading ?? false;
+
+  bool get _heroHistoryHasMore {
+    if (!_heroHistorySupported) return false;
+    return _activeHeroHistory?.hasMore ?? true;
+  }
+
+  Future<void> _loadHeroHistory() async {
+    if (!mounted || !_heroHistorySupported) return;
+    final retryAt = _heroHistoryRetryAt;
+    if (retryAt != null && DateTime.now().isBefore(retryAt)) return;
+    final reqKey = _heroHistoryRequestKey;
+    var h = _heroHistory;
+    if (h == null || h.requestKey != reqKey) {
+      h = LighthouseHeroHistory(requestKey: reqKey);
+    }
+    if (h.loading || !h.hasMore) return;
+    final before = h.keys.isNotEmpty ? h.keys.first : _heroBaseSeriesKeys.first;
+    final started = h.copyWith(loading: true);
+    setState(() => _heroHistory = started);
+    final period = _period;
+    final offset = _periodOffset;
+    final tab = _tab;
+    final group = _groupFilter;
+    try {
+      final page = await _service.fetchHeroHistory(
+        before: before,
+        period: period,
+        offset: offset,
+        tab: tab,
+        group: group,
+      );
+      if (!mounted) return;
+      final cur = _heroHistory;
+      if (cur == null ||
+          cur.requestKey != reqKey ||
+          _heroHistoryRequestKey != reqKey) {
+        return;
+      }
+      final next = cur.prependPage(page);
+      final added = next.length - cur.length;
+      _heroHistoryRetryAt = null;
+      setState(() {
+        _heroHistory = next;
+        final sel = _heroPointIndex;
+        if (added > 0 && sel != null) _heroPointIndex = sel + added;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      final cur = _heroHistory;
+      if (cur == null || cur.requestKey != reqKey) return;
+      // 失败后 3 秒内不再自动重试，免得拖动的每一帧都去打接口。
+      _heroHistoryRetryAt = DateTime.now().add(const Duration(seconds: 3));
+      setState(() {
+        _heroHistory = cur.copyWith(
+          loading: false,
+          error: e.toString().replaceFirst('Exception: ', ''),
+        );
+      });
+    }
+  }
 
   /// 把整期 totals 换成第 i 点（日/周/月…粒度随当前区间）的值。
   ///
@@ -15380,6 +15935,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         },
       );
     }
+    // 不等人拖：主 Hero 一出来就把前一段历史先拉好，第一下拖动就有东西可看。
+    _scheduleHeroHistoryPreload();
     final preferVerified = _anchor == _LhAnchor.verified;
     final verified = _seriesForMetric('verifiedSales');
     final sales = _seriesForMetric('sales');
@@ -15443,6 +16000,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         }
         return _TrendChart(
           key: const ValueKey('hero-overview'),
+          viewportCount: _heroViewportCount,
+          historyCount: _heroHistoryCount,
+          historyLoading: _heroHistoryLoading,
+          historyHasMore: _heroHistoryHasMore,
+          onNeedHistory: _loadHeroHistory,
           onSelectedIndexChanged: _onHeroPointSelected,
           lastPointIsPeriod: _heroLastPointIsPeriod,
           selectedIndex: _heroPointIndex,
@@ -20067,7 +20629,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     if (metricKey == 'projectCost' && _detailKey == null) {
       final lines = lighthouseCostBillChartLines(
         typesRaw: _bundle?.metrics?['costBillTypes'],
-        seriesRaw: _bundle?.metrics?['costBillTypeSeries'],
+        seriesRaw: _heroSeriesMetrics['costBillTypeSeries'],
         category: 'PROJECT_COST',
       );
       if (lines.isNotEmpty) {
@@ -20123,6 +20685,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
     return _TrendChart(
       key: ValueKey('hero-swap-$metricKey'),
+      viewportCount: _heroViewportCount,
+      historyCount: _heroHistoryCount,
+      historyLoading: _heroHistoryLoading,
+      historyHasMore: _heroHistoryHasMore,
+      onNeedHistory: _loadHeroHistory,
       onSelectedIndexChanged: _onHeroPointSelected,
       lastPointIsPeriod: _heroLastPointIsPeriod,
       selectedIndex: _heroPointIndex,
@@ -20186,6 +20753,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final labels = _heroTrendLabels(n);
     return _TrendChart(
       key: const ValueKey('hero-swap-projectCost-l3'),
+      viewportCount: _heroViewportCount,
+      historyCount: _heroHistoryCount,
+      historyLoading: _heroHistoryLoading,
+      historyHasMore: _heroHistoryHasMore,
+      onNeedHistory: _loadHeroHistory,
       onSelectedIndexChanged: _onHeroPointSelected,
       lastPointIsPeriod: _heroLastPointIsPeriod,
       selectedIndex: _heroPointIndex,
@@ -20965,7 +21537,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       if (n == 2) return const ['上期', '本期'];
       return List<String>.generate(n, (i) => '${i + 1}', growable: false);
     }
-    final raw = _bundle?.metrics['heroSeriesLabels'];
+    final raw = _heroSeriesMetrics['heroSeriesLabels'];
     if (raw is List && raw.isNotEmpty) {
       return raw.map((e) => e.toString()).toList(growable: false);
     }
@@ -21513,7 +22085,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   List<double> _readMetricSeries(String seriesKey) {
-    final mtr = _bundle?.metrics ?? const <String, dynamic>{};
+    final mtr = _heroSeriesMetrics;
     final raw = mtr[seriesKey];
     if (raw is! List || raw.isEmpty) return const <double>[];
     return raw
@@ -21591,7 +22163,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
     if (lighthouseIsCostBillMetric(key)) {
       return lighthouseCostBillTypeSeries(
-        _bundle?.metrics?['costBillTypeSeries'],
+        _heroSeriesMetrics['costBillTypeSeries'],
         key,
       );
     }
@@ -23789,7 +24361,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   List<String> _biSeriesLabels(String metricsKey) {
-    final raw = _bundle?.metrics[metricsKey];
+    // 与 _readMetricSeries 同一份视图，否则拼了历史的序列和标签长度对不上。
+    final raw = _heroSeriesMetrics[metricsKey];
     if (raw is! List || raw.isEmpty) return const <String>[];
     return raw.map((e) => e.toString()).toList(growable: false);
   }

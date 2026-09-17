@@ -308,6 +308,11 @@ void main() {
   });
 
   testWidgets('汇总卡超过 8 人时默认收起', (tester) async {
+    tester.view.physicalSize = const Size(400, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final rows = [
       for (var i = 0; i < 10; i++)
         KpiScoreSummaryRow(
@@ -383,5 +388,103 @@ void main() {
     expect(find.text('部门绩效系数'), findsNothing);
     expect(find.text('最高分'), findsNothing);
     expect(find.text('项目得分 8.95'), findsOneWidget);
+  });
+
+  test('转发结构化数据带上人员和月份，聊天才能点进明细', () {
+    const person = WorkProfileKpiPerson(
+      userId: 9,
+      userName: '李四',
+      departmentName: '能源板块',
+      position: '售前',
+      mainScore: 88,
+      bonus: 0,
+      telecomWeight: 0,
+      energyWeight: 1,
+      telecomScore: 0,
+      energyScore: 88,
+    );
+    const score = WorkProfileKpiScore(
+      month: '2026-08',
+      prevMonth: '2026-07',
+      people: [person],
+    );
+    final data = kpiScoreSummaryData(score);
+    expect(data.month, '2026-08');
+    expect(data.rows.single.userId, 9);
+    expect(data.toJson()['month'], '2026-08');
+    expect(data.toJson()['rows'], [
+      isA<Map>().having((m) => m['userId'], 'userId', 9),
+    ]);
+
+    final parsed = KpiScoreSummaryData.fromMessage({
+      'robotMarkdown': true,
+      'kpiScoreSummary': true,
+      'month': '2026-08',
+      'kpiSummary': data.toJson(),
+    }, 'ignored');
+    expect(parsed!.month, '2026-08');
+    expect(parsed.rows.single.userId, 9);
+  });
+
+  test('旧 Markdown 转发也能从标题找回月份，但没有 userId', () {
+    final data = KpiScoreSummaryData.fromMessage(
+      const {'robotMarkdown': true, 'kpiScoreSummary': true},
+      legacyMarkdown,
+    );
+    expect(data, isNotNull);
+    expect(data!.month, '2026-08');
+    expect(data.rows.every((r) => r.userId == 0), isTrue);
+  });
+
+  testWidgets('点有 userId 的人会打开明细，旧名单也能点但没有 userId', (tester) async {
+    tester.view.physicalSize = const Size(400, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final opened = <int>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ChatKpiScoreSummaryCard(
+              data: const KpiScoreSummaryData(
+                title: '2026年8月 月度绩效考评汇总',
+                month: '2026-08',
+                rows: [
+                  KpiScoreSummaryRow(
+                    rank: 1,
+                    name: '叶睿',
+                    userId: 11,
+                    department: '行政人事部',
+                    position: '行政经理',
+                    score: 86,
+                    gradeCode: '良',
+                    coefficient: 1,
+                  ),
+                  KpiScoreSummaryRow(
+                    rank: 2,
+                    name: '旧转发',
+                    department: '行政人事部',
+                    score: 80,
+                    gradeCode: '良',
+                    coefficient: 1,
+                  ),
+                ],
+              ),
+              onOpenPerson: (row) => opened.add(row.userId),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('kpi-summary-person-11')));
+    await tester.pump();
+    expect(opened, [11]);
+
+    await tester.tap(find.text('旧转发'));
+    await tester.pump();
+    expect(opened, [11, 0]);
   });
 }

@@ -13,8 +13,9 @@ import '../profile/work_profile_kpi.dart';
 // 这版把它当成一张给领导看的汇总卡：
 //   · 顶部三格总览：人数 / 均分 / 项目绩效系数（整体绩效评价表 10 分制得分按档取 0.7–1.1）
 //   · 等级分布条：优良中普改辅按人数分段上色，一眼看出结构
-//   · 按这个人计分的板块分组（运营商/能源看任务，不看名册部门）：序号 · 姓名 / 岗位 · 得分 + 等级 + 系数
+//   · 按通讯录板块分组（运营商/能源看能源板块、通信板块，不看任务产品）：序号 · 姓名 / 岗位 · 得分 + 等级 + 系数
 //   · 超过 [kKpiSummaryCollapsedRows] 人先收起，点「展开全部」
+//   · 点姓名打开这个人的绩效明细（payload 里有 userId + month 才行）
 //
 // 消息正文仍然是原来那段 Markdown（给会话列表预览、复制、老版本客户端兜底），
 // 结构化数据走 payload['kpiSummary']；老消息没有结构化数据时，从 Markdown
@@ -30,6 +31,7 @@ class KpiScoreSummaryRow {
   const KpiScoreSummaryRow({
     required this.rank,
     required this.name,
+    this.userId = 0,
     this.department = '',
     this.position = '',
     this.score = 0,
@@ -44,6 +46,7 @@ class KpiScoreSummaryRow {
 
   final int rank;
   final String name;
+  final int userId;
   final String department;
   final String position;
   final double score;
@@ -55,9 +58,12 @@ class KpiScoreSummaryRow {
   final String skipLabel;
   final double? projectScore;
 
+  bool get canOpenDetail => userId > 0;
+
   Map<String, dynamic> toJson() => <String, dynamic>{
     'rank': rank,
     'name': name,
+    if (userId > 0) 'userId': userId,
     'department': department,
     'position': position,
     'score': score,
@@ -77,6 +83,7 @@ class KpiScoreSummaryRow {
     return KpiScoreSummaryRow(
       rank: (json['rank'] as num?)?.toInt() ?? index + 1,
       name: '${json['name'] ?? ''}'.trim(),
+      userId: (json['userId'] as num?)?.toInt() ?? 0,
       department: '${json['department'] ?? ''}'.trim(),
       position: '${json['position'] ?? ''}'.trim(),
       score: (json['score'] as num?)?.toDouble() ?? 0,
@@ -95,11 +102,13 @@ class KpiScoreSummaryData {
   const KpiScoreSummaryData({
     required this.title,
     required this.rows,
+    this.month = '',
     this.projectScore,
     this.projectCoefficient,
   });
 
   final String title;
+  final String month;
   final List<KpiScoreSummaryRow> rows;
 
   /// 研发整体绩效评价表加权总分（满分 10）。行政 / 财务 / 业务板块没有。
@@ -166,6 +175,7 @@ class KpiScoreSummaryData {
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'title': title,
+    if (month.isNotEmpty) 'month': month,
     'rows': [for (final r in rows) r.toJson()],
     if (projectScore != null) 'projectScore': projectScore,
     if (projectCoefficient != null) 'projectCoefficient': projectCoefficient,
@@ -187,8 +197,13 @@ class KpiScoreSummaryData {
       if (parsed.name.isNotEmpty) rows.add(parsed);
     }
     if (rows.isEmpty) return null;
+    final title = '${json['title'] ?? ''}'.trim();
+    final month = '${json['month'] ?? ''}'.trim().isNotEmpty
+        ? '${json['month']}'.trim()
+        : kpiMonthFromSummaryTitle(title);
     return KpiScoreSummaryData(
-      title: '${json['title'] ?? ''}'.trim(),
+      title: title,
+      month: month,
       rows: rows,
       projectScore: _positiveSummaryNum(json['projectScore']),
       projectCoefficient: _positiveSummaryNum(json['projectCoefficient']),
@@ -204,7 +219,21 @@ class KpiScoreSummaryData {
     if (payload == null) return null;
     final flag = payload['kpiScoreSummary'];
     if (flag != true && '$flag'.toLowerCase() != 'true') return null;
-    return fromJson(payload['kpiSummary']) ?? parseMarkdown(text);
+    final data = fromJson(payload['kpiSummary']) ?? parseMarkdown(text);
+    if (data == null) return null;
+    final month = [
+      '${payload['month'] ?? ''}'.trim(),
+      data.month,
+      kpiMonthFromSummaryTitle(data.title),
+    ].firstWhere((s) => s.isNotEmpty, orElse: () => '');
+    if (month.isEmpty || data.month == month) return data;
+    return KpiScoreSummaryData(
+      title: data.title,
+      month: month,
+      rows: data.rows,
+      projectScore: data.projectScore,
+      projectCoefficient: data.projectCoefficient,
+    );
   }
 
   /// 解析 [kpiScoreSummaryMarkdown] 生成的表格（兼容「业务绩效汇总」旧标题）。
@@ -261,8 +290,19 @@ class KpiScoreSummaryData {
     if (header == null || !header!.contains('姓名') || rows.isEmpty) {
       return null;
     }
-    return KpiScoreSummaryData(title: title, rows: rows);
+    return KpiScoreSummaryData(
+      title: title,
+      month: kpiMonthFromSummaryTitle(title),
+      rows: rows,
+    );
   }
+}
+
+/// 「2026年8月 月度绩效考评汇总」→ `2026-08`。
+String kpiMonthFromSummaryTitle(String title) {
+  final m = RegExp(r'(\d{4})年(\d{1,2})月').firstMatch(title);
+  if (m == null) return '';
+  return '${m.group(1)}-${m.group(2)!.padLeft(2, '0')}';
 }
 
 /// 「辅（专项改进）」→「辅」。
@@ -283,6 +323,7 @@ KpiScoreSummaryData kpiScoreSummaryData(
   final team = kpiSummaryProjectTeamOf(score, people: list);
   return KpiScoreSummaryData(
     title: monthTitle.isEmpty ? '月度绩效考评汇总' : '$monthTitle 月度绩效考评汇总',
+    month: score.month.trim(),
     projectScore: team?.projectScore,
     projectCoefficient: team?.coefficient,
     rows: [
@@ -290,6 +331,7 @@ KpiScoreSummaryData kpiScoreSummaryData(
         KpiScoreSummaryRow(
           rank: i + 1,
           name: list[i].userName.trim(),
+          userId: list[i].userId,
           department: kpiPersonShareDepartment(list[i]),
           position: list[i].position.trim(),
           score: list[i].mainScore,
@@ -375,11 +417,7 @@ WorkProfileKpiTeam? kpiSummaryProjectTeamForPerson(
   return best;
 }
 
-bool kpiSummaryTeamMatches(
-  WorkProfileKpiTeam team,
-  String key,
-  String sector,
-) {
+bool kpiSummaryTeamMatches(WorkProfileKpiTeam team, String key, String sector) {
   final name = team.departmentName.trim();
   if (name.isEmpty) return false;
   switch (sector) {
@@ -431,9 +469,14 @@ String _fmtCoef(double v) {
 }
 
 class ChatKpiScoreSummaryCard extends StatefulWidget {
-  const ChatKpiScoreSummaryCard({super.key, required this.data});
+  const ChatKpiScoreSummaryCard({
+    super.key,
+    required this.data,
+    this.onOpenPerson,
+  });
 
   final KpiScoreSummaryData data;
+  final ValueChanged<KpiScoreSummaryRow>? onOpenPerson;
 
   @override
   State<ChatKpiScoreSummaryCard> createState() =>
@@ -683,10 +726,11 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
             '人数',
             '${data.rows.length}',
             unit: '人',
-            sub: [
-              if (data.pendingCount > 0) '${data.pendingCount} 人待录入',
-              if (data.skippedCount > 0) '${data.skippedCount} 人不考核',
-            ].isEmpty
+            sub:
+                [
+                  if (data.pendingCount > 0) '${data.pendingCount} 人待录入',
+                  if (data.skippedCount > 0) '${data.skippedCount} 人不考核',
+                ].isEmpty
                 ? null
                 : [
                     if (data.pendingCount > 0) '${data.pendingCount} 人待录入',
@@ -701,7 +745,8 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
             project == null || project <= 0
                 ? '—'
                 : formatKpiProjectCoefficient(project),
-            sub: data.projectScore != null &&
+            sub:
+                data.projectScore != null &&
                     kpiProjectScoreOnTenScale(data.projectScore!)
                 ? '项目得分 ${_fmtProject(data.projectScore!)}'
                 : null,
@@ -905,142 +950,169 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
   Widget _personRow(KpiScoreSummaryRow r, {required bool last}) {
     final (gradeFg, gradeBg) = kpiSummaryGradeColors(r.gradeCode);
     final topThree = r.rank <= 3 && !r.pending && !r.skipped && r.score > 0;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 9, 14, 9),
-      decoration: BoxDecoration(
-        border: last
-            ? null
-            : const Border(
-                bottom: BorderSide(color: DunesColors.borderSoft, width: 0.6),
-              ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 20,
-            height: 20,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: topThree
-                  ? DunesColors.brandPurple
-                  : DunesColors.bgSoft,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              '${r.rank}',
-              style: DunesTypography.mono(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
-                color: topThree ? Colors.white : DunesColors.text3,
-                height: 1.0,
-              ),
-            ),
-          ),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  r.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: DunesTypography.sans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: DunesColors.text,
-                    height: 1.25,
-                  ),
-                ),
-                if (r.position.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    r.position,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: DunesTypography.sans(
-                      fontSize: 10.5,
-                      color: DunesColors.text3,
-                      height: 1.25,
+    final open = widget.onOpenPerson;
+    final tappable =
+        open != null && (r.canOpenDetail || widget.data.month.isNotEmpty);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: Key(
+          r.userId > 0
+              ? 'kpi-summary-person-${r.userId}'
+              : 'kpi-summary-person-rank-${r.rank}',
+        ),
+        onTap: tappable ? () => open(r) : null,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 9, 14, 9),
+          decoration: BoxDecoration(
+            border: last
+                ? null
+                : const Border(
+                    bottom: BorderSide(
+                      color: DunesColors.borderSoft,
+                      width: 0.6,
                     ),
                   ),
-                ],
-              ],
-            ),
           ),
-          const SizedBox(width: 8),
-          if (r.skipped)
-            Text(
-              r.skipLabel.isEmpty ? '不考核' : r.skipLabel,
-              style: DunesTypography.sans(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: DunesColors.text2,
-                height: 1.0,
-              ),
-            )
-          else if (r.pending)
-            Text(
-              '待录入',
-              style: DunesTypography.sans(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: DunesColors.amber,
-                height: 1.0,
-              ),
-            )
-          else ...[
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  r.score.toStringAsFixed(2),
-                  style: DunesTypography.mono(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: DunesColors.text,
-                    letterSpacing: -0.4,
-                    height: 1.1,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '系数 ${_fmtCoef(r.coefficient)}',
-                  style: DunesTypography.sans(
-                    fontSize: 10,
-                    color: DunesColors.text3,
-                    height: 1.1,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(width: 9),
-            Tooltip(
-              message: r.gradeLabel.isEmpty ? r.gradeCode : r.gradeLabel,
-              child: Container(
-                width: 26,
-                height: 26,
+          child: Row(
+            children: [
+              Container(
+                width: 20,
+                height: 20,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: gradeBg,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: gradeFg.withValues(alpha: 0.25)),
+                  color: topThree
+                      ? DunesColors.brandPurple
+                      : DunesColors.bgSoft,
+                  borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  r.gradeCode.isEmpty ? '—' : r.gradeCode,
-                  style: DunesTypography.sans(
-                    fontSize: 13,
+                  '${r.rank}',
+                  style: DunesTypography.mono(
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w700,
-                    color: gradeFg,
+                    color: topThree ? Colors.white : DunesColors.text3,
                     height: 1.0,
                   ),
                 ),
               ),
-            ),
-          ],
-        ],
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      r.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: DunesTypography.sans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: DunesColors.text,
+                        height: 1.25,
+                      ),
+                    ),
+                    if (r.position.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        r.position,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: DunesTypography.sans(
+                          fontSize: 10.5,
+                          color: DunesColors.text3,
+                          height: 1.25,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (r.skipped)
+                Text(
+                  r.skipLabel.isEmpty ? '不考核' : r.skipLabel,
+                  style: DunesTypography.sans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: DunesColors.text2,
+                    height: 1.0,
+                  ),
+                )
+              else if (r.pending)
+                Text(
+                  '待录入',
+                  style: DunesTypography.sans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: DunesColors.amber,
+                    height: 1.0,
+                  ),
+                )
+              else ...[
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      r.score.toStringAsFixed(2),
+                      style: DunesTypography.mono(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: DunesColors.text,
+                        letterSpacing: -0.4,
+                        height: 1.1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '系数 ${_fmtCoef(r.coefficient)}',
+                      style: DunesTypography.sans(
+                        fontSize: 10,
+                        color: DunesColors.text3,
+                        height: 1.1,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 9),
+                Tooltip(
+                  message: r.gradeLabel.isEmpty ? r.gradeCode : r.gradeLabel,
+                  child: Container(
+                    width: 26,
+                    height: 26,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: gradeBg,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: gradeFg.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Text(
+                      r.gradeCode.isEmpty ? '—' : r.gradeCode,
+                      style: DunesTypography.sans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: gradeFg,
+                        height: 1.0,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              if (tappable) ...[
+                const SizedBox(width: 4),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: DunesColors.text3,
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

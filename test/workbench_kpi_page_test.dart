@@ -107,6 +107,7 @@ class _FakeKpiService extends WorkbenchKpiService {
         WorkProfileKpiPerson(
           userId: 9,
           userName: '李四',
+          departmentName: '能源板块',
           mainScore: 88,
           bonus: 0,
           telecomWeight: 0,
@@ -454,7 +455,7 @@ void main() {
     await tester.pump();
     expect(picked, 1);
     expect(sentId, 42);
-    expect(sentMd, contains('| 能源 | 1. 李四 | — | 88.00 | 良（达到预期） | 1.0 |'));
+    expect(sentMd, contains('| 能源板块 | 1. 李四 | — | 88.00 | 良（达到预期） | 1.0 |'));
     expect(find.text('已转发到会话'), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
   });

@@ -205,7 +205,7 @@ class ConversationService {
     return (body['totalUnread'] as num?)?.toInt();
   }
 
-  Future<String> fetchImStatus() async {
+  Future<ImUserStatusValue> fetchImStatus() async {
     final resp = await _client.get(
       _uri('/conversations/im-status'),
       headers: _headers,
@@ -216,30 +216,50 @@ class ConversationService {
     return _imStatusFromBody(resp.body);
   }
 
-  Future<String> putImStatus(String status) async {
+  Future<ImUserStatusValue> putImStatus(ImUserStatusValue status) async {
     final resp = await _client.put(
       _uri('/conversations/im-status'),
       headers: _headers,
       body: jsonEncode(<String, String>{
-        'status': ImUserStatusCatalog.normalize(status),
+        'status': status.key,
+        'text': status.text,
+        'icon': status.icon,
+        'color': status.color,
       }),
     );
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception('状态更新失败: HTTP ${resp.statusCode}');
+      throw Exception(_imStatusError(resp.body, '状态更新失败: HTTP ${resp.statusCode}'));
     }
     return _imStatusFromBody(resp.body);
   }
 
-  String _imStatusFromBody(String raw) {
+  String _imStatusError(String raw, String fallback) {
+    try {
+      final body = _decode(raw);
+      final message = (body['message'] ?? '').toString().trim();
+      if (message == 'invalid status') {
+        return '自定义状态最多 ${ImUserStatusCatalog.textMaxChars} 个字';
+      }
+      if (message.isNotEmpty) return message;
+    } catch (_) {}
+    return fallback;
+  }
+
+  ImUserStatusValue _imStatusFromBody(String raw) {
     final body = _decode(raw);
     if (body['success'] == false) {
       throw Exception((body['message'] ?? '状态加载失败').toString());
     }
     final data = body['data'];
     if (data is Map) {
-      return ImUserStatusCatalog.normalize(data['status']?.toString());
+      return ImUserStatusCatalog.parse(
+        status: data['status']?.toString(),
+        text: data['text']?.toString(),
+        icon: data['icon']?.toString(),
+        color: data['color']?.toString(),
+      );
     }
-    return ImUserStatusCatalog.online;
+    return ImUserStatusValue.online;
   }
 
   /// 仅查找已有私聊，不创建。用于打开聊天窗口；真正建会话放到首次发消息时。
@@ -2274,6 +2294,15 @@ class ConversationService {
         : (peerName?.isNotEmpty ?? false)
         ? peerName!
         : '会话';
+    final peerStatus = ImUserStatusCatalog.parse(
+      status: (raw['peerImStatus'] ?? peerMap['imStatus'] ?? '').toString(),
+      text: (raw['peerImStatusText'] ?? peerMap['imStatusText'] ?? '')
+          .toString(),
+      icon: (raw['peerImStatusIcon'] ?? peerMap['imStatusIcon'] ?? '')
+          .toString(),
+      color: (raw['peerImStatusColor'] ?? peerMap['imStatusColor'] ?? '')
+          .toString(),
+    );
     return NativeConversation(
       id: (raw['id'] as num?)?.toInt() ?? 0,
       kind: (raw['kind'] ?? '').toString(),
@@ -2320,9 +2349,10 @@ class ConversationService {
           .toString(),
       hasUnreadMention: ConversationMentionUtils.unreadMentionFromJson(raw),
       hasUnreadAtAll: ConversationMentionUtils.unreadAtAllFromJson(raw),
-      peerImStatus: ImUserStatusCatalog.normalize(
-        (raw['peerImStatus'] ?? peerMap['imStatus'] ?? '').toString(),
-      ),
+      peerImStatus: peerStatus.key,
+      peerImStatusText: peerStatus.text,
+      peerImStatusIcon: peerStatus.icon,
+      peerImStatusColor: peerStatus.color,
     );
   }
 

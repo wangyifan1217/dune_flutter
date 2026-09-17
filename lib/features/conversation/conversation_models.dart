@@ -26,6 +26,9 @@ class NativeConversation {
     this.hasUnreadMention = false,
     this.hasUnreadAtAll = false,
     this.peerImStatus = '',
+    this.peerImStatusText = '',
+    this.peerImStatusIcon = '',
+    this.peerImStatusColor = '',
   });
 
   final int id;
@@ -60,8 +63,11 @@ class NativeConversation {
   /// 群聊未读 @所有人。有 @我 时优先展示 [@了你]。
   final bool hasUnreadAtAll;
 
-  /// 私聊对端自定义状态（busy/dnd/meeting/trip/rest/leave）；空或 online 不展示徽章。
+  /// 私聊对端自定义状态（busy/dnd/meeting/trip/rest/leave/custom）；空或 online 不展示徽章。
   final String peerImStatus;
+  final String peerImStatusText;
+  final String peerImStatusIcon;
+  final String peerImStatusColor;
 
   // 文件传输助手是单用户会话，前端交互按私聊呈现，但不包含对端在线状态。
   bool get isPrivate => kind == 'PRIVATE' || kind == 'SELF_MEMO';

@@ -24,6 +24,18 @@ IconData digitalEmployeeIcon(String? key) {
   }
 }
 
+bool isDigitalEmployeeChatScreen(String? screenId) {
+  switch (screenId) {
+    case 'QJMA':
+    case 'QJTO':
+    case 'QJAM':
+    case 'QJDE':
+      return true;
+    default:
+      return false;
+  }
+}
+
 class DigitalEmployeeItem {
   const DigitalEmployeeItem({
     required this.employeeKey,
@@ -49,16 +61,22 @@ class DigitalEmployeeItem {
   bool get isAmSettlement =>
       screenId == 'QJAM' || employeeKey == 'am-settlement';
 
+  bool get isSanyoutongFarm =>
+      screenId == 'QJDE' || employeeKey == 'sanyoutong-farm';
+
   DigitalAutoAssistantConfig get chatConfig {
     final defaults = isMeetingMinutes
         ? DigitalAutoConfig.meetingMinutes
         : isAmSettlement
         ? DigitalAutoConfig.amSettlement
+        : isSanyoutongFarm
+        ? DigitalAutoConfig.sanyoutongFarm
         : DigitalAutoConfig.channelDock;
     return DigitalAutoAssistantConfig.fromJson(
       assistantConfig,
       defaults: defaults,
       employeeKey: employeeKey,
+      displayName: name,
     );
   }
 

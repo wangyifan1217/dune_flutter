@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -275,7 +273,6 @@ class _NovaAiPartnerWelcomeViewState extends State<NovaAiPartnerWelcomeView>
       ),
     );
   }
-
 }
 
 /// 快捷问答卡片项定义
@@ -402,50 +399,14 @@ class _PromptCardState extends State<_PromptCard> {
   }
 }
 
-/// 小饕拟人形象：高清开眼静帧，间歇切 wink 眨眼。
-class NovaBlinkingAvatar extends StatefulWidget {
+/// 小饕拟人形象：会话页和电话页固定 wink 静帧。
+class NovaBlinkingAvatar extends StatelessWidget {
   const NovaBlinkingAvatar({super.key, this.size = 114});
 
   final double size;
 
   @override
-  State<NovaBlinkingAvatar> createState() => _NovaBlinkingAvatarState();
-}
-
-class _NovaBlinkingAvatarState extends State<NovaBlinkingAvatar> {
-  Timer? _blinkTimer;
-  bool _wink = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _scheduleBlink();
-  }
-
-  @override
-  void dispose() {
-    _blinkTimer?.cancel();
-    super.dispose();
-  }
-
-  void _scheduleBlink() {
-    _blinkTimer?.cancel();
-    _blinkTimer = Timer(const Duration(milliseconds: 2800), _blink);
-  }
-
-  void _blink() {
-    if (!mounted) return;
-    setState(() => _wink = true);
-    _blinkTimer = Timer(const Duration(milliseconds: 140), () {
-      if (!mounted) return;
-      setState(() => _wink = false);
-      _scheduleBlink();
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final size = widget.size;
     return Container(
       width: size,
       height: size,
@@ -465,7 +426,7 @@ class _NovaBlinkingAvatarState extends State<NovaBlinkingAvatar> {
         child: NovaPersonAvatarImage(
           width: size,
           height: size,
-          wink: _wink,
+          wink: true,
         ),
       ),
     );

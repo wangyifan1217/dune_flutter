@@ -41,6 +41,14 @@ class NovaMcpServicesView extends StatefulWidget {
       screenId: 'QJAM',
       comingSoon: false,
     ),
+    DigitalEmployeeItem(
+      employeeKey: 'sanyoutong-farm',
+      name: '三桶油.AI助理',
+      subtitle: '运营查询 · 产品链路 / 供应商 / 预警 / 导出',
+      iconKey: 'oil_barrel',
+      screenId: 'QJDE',
+      comingSoon: false,
+    ),
   ];
 
   @override
@@ -102,6 +110,7 @@ class _NovaMcpServicesViewState extends State<NovaMcpServicesView> {
       case 'QJMA':
       case 'QJTO':
       case 'QJAM':
+      case 'QJDE':
         widget.onOpenDigitalEmployee!(item);
         return;
       default:

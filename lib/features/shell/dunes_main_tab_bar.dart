@@ -22,6 +22,9 @@ const double kDunesAppBottomNavMinGap = 14;
 /// 列表滚到末尾时，在金刚位上方再留出的空隙。
 const double kDunesAppBottomNavContentGap = 12;
 
+/// APP 金刚位胶囊描边宽度。
+const double _kAppTabCapsuleBorderWidth = 1.5;
+
 /// PC 端左侧导航栏宽度（Win / macOS）。
 const double kDunesMainSideRailWidth = 64;
 
@@ -184,23 +187,26 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
                 const SizedBox(width: 12),
               ],
               Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(28),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF9F8FF).withValues(alpha: 0.40),
-                        borderRadius: BorderRadius.circular(28),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.62),
+                child: CustomPaint(
+                  key: const ValueKey('app_tab_capsule_gradient_border'),
+                  foregroundPainter: const _AppTabCapsuleBorderPainter(),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(28),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: const Color(
+                            0xFFF9F8FF,
+                          ).withValues(alpha: 0.40),
+                          borderRadius: BorderRadius.circular(28),
                         ),
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Row(children: _tabs),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Row(children: _tabs),
+                          ),
                         ),
                       ),
                     ),
@@ -407,6 +413,45 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
     }
     return Expanded(child: body);
   }
+}
+
+/// 只描胶囊轮廓，不填充内部，避免半透明毛玻璃把渐变铺满整块。
+class _AppTabCapsuleBorderPainter extends CustomPainter {
+  const _AppTabCapsuleBorderPainter();
+
+  static const _gradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xFFD4C4F5),
+      DunesColors.brandPurple,
+      DunesColors.brandPurpleDeep,
+      DunesColors.brandPurpleLine,
+    ],
+    stops: [0.0, 0.38, 0.72, 1.0],
+  );
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final inset = _kAppTabCapsuleBorderWidth / 2;
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        inset,
+        inset,
+        size.width - _kAppTabCapsuleBorderWidth,
+        size.height - _kAppTabCapsuleBorderWidth,
+      ),
+      Radius.circular(28 - inset),
+    );
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _kAppTabCapsuleBorderWidth
+      ..shader = _gradient.createShader(Offset.zero & size);
+    canvas.drawRRect(rrect, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 /// 底部 / 侧栏未读小红点。不用呼吸脉冲：循环动画会拖着整窗按刷新率重画。

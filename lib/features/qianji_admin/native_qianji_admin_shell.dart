@@ -788,7 +788,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
       if (!_session.isExternalUser && _canSeeDailyRecon == true)
         _WorkbenchTile(
           title: '每日对账',
-          subtitle: '账期快照 · 分板块核对',
+          subtitle: '日清月结 · 点开核对',
           icon: Icons.sync_alt_outlined,
           color: const Color(0xFF5B6FC4),
           enabled: true,

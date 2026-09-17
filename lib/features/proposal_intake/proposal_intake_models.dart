@@ -25,12 +25,49 @@ String proposalIntakeUntitledTitle(String kind) =>
 String proposalIntakeKindEyebrow(String kind) =>
     proposalIntakeIsPurchase(kind) ? '采购业务提案' : '销售业务提案';
 
+String proposalIntakeKindShortLabel(String kind) =>
+    proposalIntakeIsPurchase(kind) ? '采购提案' : '销售提案';
+
+/// 按销售/采购过滤。空 [kind] 表示不过滤（全部）。
+List<ProposalIntakeRow> proposalIntakeRowsOfKind(
+  Iterable<ProposalIntakeRow> rows,
+  String kind,
+) {
+  if (kind.trim().isEmpty) return List<ProposalIntakeRow>.from(rows);
+  final want = normalizeProposalIntakeKind(kind);
+  return [
+    for (final row in rows)
+      if (normalizeProposalIntakeKind(row.kind) == want) row,
+  ];
+}
+
 /// 市场部产品类型展示名。
 const kProposalMainProductLabel = '主产品';
 const kProposalChildProductLabel = '子产品';
 
 String proposalIntakeProductKindLabel({required bool child}) =>
     child ? kProposalChildProductLabel : kProposalMainProductLabel;
+
+/// 产品在业务平台上的配置进度。先只展示，后续再接操作。
+const kProposalSkuPlatformStatusPending = 'pending';
+
+String normalizeProposalSkuPlatformStatus(String raw) {
+  final value = raw.trim();
+  if (value.isEmpty ||
+      value == kProposalSkuPlatformStatusPending ||
+      value == '待配置') {
+    return kProposalSkuPlatformStatusPending;
+  }
+  return value;
+}
+
+String proposalSkuPlatformStatusLabel(String raw) {
+  final code = normalizeProposalSkuPlatformStatus(raw);
+  return switch (code) {
+    kProposalSkuPlatformStatusPending => '待配置',
+    _ => code,
+  };
+}
 
 class ProposalIntakeAccess {
   const ProposalIntakeAccess({
@@ -335,6 +372,7 @@ class ProposalIntakeRow {
 
   ProposalIntakeRow copyWith({
     String? title,
+    String? kind,
     String? status,
     Map<String, dynamic>? form,
     Map<String, dynamic>? review,
@@ -345,7 +383,7 @@ class ProposalIntakeRow {
     id: id,
     code: code,
     title: title ?? this.title,
-    kind: kind,
+    kind: kind == null ? this.kind : normalizeProposalIntakeKind(kind),
     status: status ?? this.status,
     form: form ?? this.form,
     review: review ?? this.review,
@@ -1822,14 +1860,14 @@ String proposalIntakeActionLabel(
 
   return switch (action) {
     'fill' => withName('待填写', row?.initiatorDisplayName(people) ?? ''),
-    'fill_tech' => withOwner('待填写科技', 'technologyOwner'),
+    'fill_tech' => withName('待填写科技', row?.initiatorDisplayName(people) ?? ''),
     'fill_finance_interface' => withOwner('待填写财务技术接口', 'financeOwner2'),
     'start_review' => '待重新提交复核',
     'review_market' => withReviewer('marketOwner1', fallback: '待复核市场部'),
-    'review_tech' => withReviewer('marketOwner2', fallback: '待复核科技'),
+    'review_tech' => withReviewer('technologyOwner', fallback: '待复核科技'),
     'review_finance' => withReviewer('financeOwner2', fallback: '待复核财务'),
     'review_finance_interface' => withReviewer(
-      'marketOwner2',
+      'technologyOwner',
       fallback: '待复核财务技术接口',
     ),
     'review_finance_module' => withReviewer(
@@ -1872,7 +1910,6 @@ bool proposalIntakeFinanceLineItemsReviewed(ProposalIntakeRow row) {
     'costItems',
     'operatingCost',
     'taxCost',
-    'rollback',
     'proposalSubtitle',
     ...proposalIntakeLaunchModuleReviewKeys(row.form),
     ...proposalIntakeSkuSettleReviewKeys(row.form),
@@ -1958,7 +1995,6 @@ String proposalIntakeListActionText(
 
 const kProposalTechnologyReviewFields = <String>[
   'technologyPlatform',
-  'technologyCapabilities',
   'outputForms',
   'developmentTypes',
   'hasRdCost',
@@ -1967,15 +2003,17 @@ const kProposalTechnologyReviewFields = <String>[
   'financeInterfaces',
 ];
 
+const kProposalSkuProductsReviewKey = 'skuProducts';
+
 const kProposalTechnologyReviewLabels = <String, String>{
   'technologyPlatform': 'τ-标签一',
-  'technologyCapabilities': 'τ-标签二',
   'outputForms': '能力输出/输入形式',
   'developmentTypes': '研发类型',
   'hasRdCost': '是否涉及研发费用',
   'rdAmount': '研发费用金额',
   'deliveryDate': '交付时间',
   'financeInterfaces': '财务技术接口',
+  kProposalSkuProductsReviewKey: '产品相关',
 };
 
 List<String> proposalIntakeTechnologyReviewGaps(
@@ -2032,6 +2070,27 @@ String proposalIntakeNavSectionLabel(ProposalIntakeNavSection section) {
   };
 }
 
+/// 定位条右上角勾：该板块内容对应的复核都已完成。
+bool proposalIntakeNavSectionComplete({
+  required ProposalIntakeRow row,
+  required ProposalIntakeNavSection section,
+}) {
+  bool flag(String key) => row.review[key] == true;
+  final purchase = proposalIntakeIsPurchase(row.kind);
+  final market = flag('marketCompleted');
+  final tech = flag('technologyCompleted');
+  final finance = purchase
+      ? flag('purchaseContractCompleted')
+      : flag('financeCompleted');
+  return switch (section) {
+    ProposalIntakeNavSection.toc => market && tech && (purchase || finance),
+    ProposalIntakeNavSection.market => market,
+    ProposalIntakeNavSection.tech => tech,
+    ProposalIntakeNavSection.finance => finance,
+    ProposalIntakeNavSection.flow => !purchase && tech && finance,
+  };
+}
+
 bool proposalIntakeActionIsModuleReview(String action) {
   return action == 'review_market' || action == 'review_finance_module';
 }
@@ -2046,6 +2105,82 @@ bool proposalIntakeAwaitingModuleConfirm(
       proposalIntakeTechnologyReviewGaps(review, form: form).isEmpty;
 }
 
+bool proposalIntakeActionIsWrite(String action) {
+  return action == 'fill' ||
+      action == 'fill_tech' ||
+      action == 'fill_finance_interface' ||
+      action == 'revise' ||
+      action == 'revise_module' ||
+      action == 'start_tech_revision';
+}
+
+/// 定位条待办角标：当前该去这个板块填还是核。
+String proposalIntakeNavTodoBadge(String action) {
+  if (proposalIntakeActionIsWrite(action)) return '填';
+  if (action.startsWith('review')) return '核';
+  if (action == 'submit_president' ||
+      action == 'president_confirm' ||
+      action == 'start_review') {
+    return '办';
+  }
+  return '';
+}
+
+String proposalIntakeSectionTaskCue(String action) {
+  if (proposalIntakeActionIsWrite(action)) return '请在本板块填写';
+  if (action.startsWith('review')) return '请在本板块复核';
+  if (action == 'submit_president' || action == 'president_confirm') {
+    return '请到页面底部确认';
+  }
+  if (action == 'start_review') return '请修改后重新提交复核';
+  return '';
+}
+
+int proposalIntakeTaskRemainingCount(
+  String action,
+  Map<String, dynamic> review, {
+  Map<String, dynamic>? form,
+}) {
+  if (action == 'review_tech') {
+    return proposalIntakeTechnologyReviewGaps(review, form: form).length;
+  }
+  if (action == 'review_finance' && form != null) {
+    final raw = review['financeItems'];
+    final items = raw is Map ? raw : const {};
+    var left = 0;
+    for (final key in [
+      'salesScale',
+      'revenue',
+      'couponProcurementCost',
+      'profit',
+      'margin',
+      'turnoverCash',
+      'turnoverTimes',
+      'supplySettleMode',
+      'supplySettleCycle',
+      'supplyPayer',
+      'supplyPayAccount',
+      'channelSettleMode',
+      'channelSettleCycle',
+      'channelPayee',
+      'channelReceiveAccount',
+      'generalBusinessAccount',
+      'prepaidAccount',
+      'financeRemark',
+      'costItems',
+      'operatingCost',
+      'taxCost',
+      'proposalSubtitle',
+      ...proposalIntakeLaunchModuleReviewKeys(form),
+      ...proposalIntakeSkuSettleReviewKeys(form),
+    ]) {
+      if (items[key] != true) left++;
+    }
+    return left;
+  }
+  return 0;
+}
+
 String proposalIntakeTaskBannerTitle(
   String action, {
   bool awaitingModuleConfirm = false,
@@ -2054,6 +2189,14 @@ String proposalIntakeTaskBannerTitle(
     return '逐条已完成，请确认科技部板块';
   }
   return switch (action) {
+    'fill' => '待你填写市场、科技与产品',
+    'fill_tech' => '待你填写科技与产品',
+    'fill_finance_interface' => '待你填写财务技术接口',
+    'revise' => '最终人已驳回，请从头填写',
+    'revise_module' => '板块已驳回，请修改后重新提交复核',
+    'start_review' => '待你重新提交复核',
+    'start_tech_revision' => '可发起科技变更',
+    'submit_president' => '各环节已复核完成，请通知最终人',
     'review_market' => '待你整板块复核市场部',
     'review_finance_module' => '待你整板块复核财务部',
     'review_tech' => '待你逐条复核科技部',
@@ -2081,6 +2224,14 @@ String proposalIntakeTaskBannerBody(
     'review_finance_interface' => '到财务技术接口处点复核。',
     'review_contract' => '到合同处点复核。也可直接整板块驳回。',
     'president_confirm' => '审批进度和其他人看到的一样。看完各板块后，到页面底部点「确认通过」或「驳回」。',
+    'fill' => '先填市场部和产品，科技字段一并填。填完后点右上角「通知科技」。定位条带「填」的就是当前板块。',
+    'fill_tech' => '到科技部填写平台、能力和产品。财务技术接口由财务部负责人二填写。定位条带「填」的就是当前板块。',
+    'fill_finance_interface' => '到科技部勾选财务技术接口。定位条带「填」的就是当前板块。',
+    'revise' => '最终人驳回后流程从头开始。改完后重新通知科技负责人。',
+    'revise_module' => '按驳回意见改对应板块，改完后点右上角重新提交复核。',
+    'start_review' => '内容改完后点右上角重新提交复核。',
+    'start_tech_revision' => '如需改科技内容，点右上角发起科技变更。',
+    'submit_president' => '各板块已复核完。到页面底部通知最终人。',
     _ => '',
   };
 }
@@ -2091,7 +2242,8 @@ String proposalIntakeNavJumpLabel(
 }) {
   if (awaitingModuleConfirm ||
       proposalIntakeActionIsModuleReview(action) ||
-      action == 'president_confirm') {
+      action == 'president_confirm' ||
+      action == 'submit_president') {
     return '去底部确认';
   }
   final section = proposalIntakeNavSectionForAction(action);
@@ -2135,19 +2287,17 @@ class ProposalIntakeProgressStep {
   final String time;
   final ProposalIntakeProgressState state;
 
-  ProposalIntakeProgressStep copyWith({
-    String? statusText,
-    String? time,
-  }) => ProposalIntakeProgressStep(
-    id: id,
-    title: title,
-    role: role,
-    name: name,
-    action: action,
-    statusText: statusText ?? this.statusText,
-    time: time ?? this.time,
-    state: state,
-  );
+  ProposalIntakeProgressStep copyWith({String? statusText, String? time}) =>
+      ProposalIntakeProgressStep(
+        id: id,
+        title: title,
+        role: role,
+        name: name,
+        action: action,
+        statusText: statusText ?? this.statusText,
+        time: time ?? this.time,
+        state: state,
+      );
 }
 
 int proposalIntakeStageRank(String stage) {
@@ -2369,7 +2519,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       id: 'initiate',
       role: '提交人',
       name: initiatorName,
-      action: leftFilling ? '填写' : '发起',
+      action: leftFilling ? '填写市场、科技与产品' : '发起',
       title: initiatorName.isEmpty ? '提交人 发起' : '$initiatorName 发起',
       state: initiateState,
       doneStatus: '已发起',
@@ -2381,9 +2531,9 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
     ),
     person(
       id: 'fill_tech',
-      role: '科技部负责人',
-      name: ownerName('technologyOwner'),
-      action: '填写科技',
+      role: '填写人',
+      name: initiatorName,
+      action: '填写科技与产品',
       state: fillState(current: inTechFill),
       time: handoffAt,
       currentTime: handoffAt,
@@ -2416,9 +2566,9 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
     ),
     person(
       id: 'review_tech',
-      role: '市场部负责人二',
-      name: ownerName('marketOwner2'),
-      action: '逐条复核科技（含财务技术接口）',
+      role: '科技部负责人',
+      name: ownerName('technologyOwner'),
+      action: '复核科技与产品（含财务技术接口）',
       state: reviewerState('technologyCompleted', techRound: true),
       time: reviewedAt,
     ),
@@ -2610,8 +2760,8 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeNotifyRecipients({
     if (has('technologyCompleted') || has('financeInterfaceCompleted')) {
       add(
         owner(
-          'marketOwner2',
-          '市场部负责人二',
+          'technologyOwner',
+          '科技部负责人',
           '请复核科技部内容（含财务技术接口）',
           fallback: row.createdBy,
         ),
@@ -2638,7 +2788,7 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeNotifyRecipients({
     case 'notify_tech':
       return _dedupeNotifyRecipients(
         [
-          owner('technologyOwner', '科技部负责人', '请填写科技部内容'),
+          owner('technologyOwner', '科技部负责人', '请复核科技部内容'),
           owner('financeOwner2', '财务部负责人二', '请填写财务技术接口'),
         ].whereType<ProposalIntakeNotifyRecipient>().toList(),
       );
@@ -2654,9 +2804,14 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeNotifyRecipients({
       return reviewers();
     case 'confirm_tech_revision':
       return _dedupeNotifyRecipients(
-        [owner('marketOwner2', '市场部负责人二', '请复核本轮科技变更', fallback: row.createdBy)]
-            .whereType<ProposalIntakeNotifyRecipient>()
-            .toList(),
+        [
+          owner(
+            'technologyOwner',
+            '科技部负责人',
+            '请复核本轮科技变更',
+            fallback: row.createdBy,
+          ),
+        ].whereType<ProposalIntakeNotifyRecipient>().toList(),
       );
     case 'start_tech_revision':
       return _dedupeNotifyRecipients(
@@ -3151,7 +3306,6 @@ void _tallyContractFill(
 
 void _tallyTechFill(_ProposalFillTally tally, Map<String, dynamic> form) {
   tally.text(form, 'technologyPlatform');
-  tally.list(form, 'technologyCapabilities');
   tally.list(form, 'outputForms');
   tally.list(form, 'developmentTypes');
   tally.text(form, 'hasRdCost');
@@ -3184,7 +3338,7 @@ void _tallySalesFill(_ProposalFillTally tally, Map<String, dynamic> form) {
   }
   _tallyContractFill(tally, form, 'sales');
   _tallyTechFill(tally, form);
-  if (proposalIntakeHasChildProducts(form)) {
+  if (kProposalChildTechEnabled && proposalIntakeHasChildProducts(form)) {
     _tallyTechFill(tally, proposalIntakeChildTechnology(form));
   }
   final derivedFinance = proposalIntakeHasProductSalesScale(form);
@@ -3228,18 +3382,20 @@ void _tallySkuGroupFill(
   List<ProposalSkuDetailRow> channel,
   bool existingBuilt,
 ) {
-  if (existingBuilt) {
+  final useExisting = kProposalExistingBuiltEnabled && existingBuilt;
+  if (useExisting) {
     tally.slot(channel.isNotEmpty);
   }
   for (final sku in channel) {
-    if (existingBuilt || sku.isExistingBuilt) {
+    if (kProposalExistingBuiltEnabled &&
+        (existingBuilt || sku.isExistingBuilt)) {
       tally.slot(sku.syncSourceCode.isNotEmpty);
       tally.slot(sku.assetProduct != null && sku.assetProduct!.isNotEmpty);
     }
   }
   for (final sku in channel) {
-    if (!existingBuilt &&
-        !sku.isExistingBuilt &&
+    if (!(kProposalExistingBuiltEnabled &&
+            (existingBuilt || sku.isExistingBuilt)) &&
         !proposalIntakeSkuStarted(sku)) {
       continue;
     }
@@ -4510,6 +4666,36 @@ bool proposalIntakeHasSupplySettleRatio(Map<String, dynamic> form) {
 /// 暂时关闭「共用结算」入口，产品各自填结算。旧数据仍可参与测算。
 const kProposalSharedSettleEnabled = false;
 
+/// 暂时关闭「是否已经建产品」勾选与资管已建产品搜索。旧数据仍可展示名称。
+const kProposalExistingBuiltEnabled = false;
+
+/// 暂时关闭产品卡片上的渠道设置（业务平台 / 渠道 / 我方供给 / 标签三 / 中油好客）。
+const kProposalSkuChannelSettingsEnabled = false;
+
+/// 暂时关闭销售产品卡片上的生效 / 失效日期。
+const kProposalSkuDateFieldsEnabled = false;
+
+/// 新增主产品 / 子产品不再单独长出一套科技字段，共用科技部原表单。
+const kProposalChildTechEnabled = false;
+
+/// 产品基础「是否回滚」未填时的默认值。
+const kProposalDefaultRollback = '不回滚';
+
+String proposalIntakeRollbackValue(Map<String, dynamic> form) {
+  final value = '${form['rollback'] ?? ''}'.trim();
+  return value.isEmpty ? kProposalDefaultRollback : value;
+}
+
+String proposalIntakeSkuRollbackValue(
+  ProposalSkuDetailRow sku, {
+  Map<String, dynamic>? form,
+}) {
+  final value = sku.rollback.trim();
+  if (value.isNotEmpty) return value;
+  if (form != null) return proposalIntakeRollbackValue(form);
+  return kProposalDefaultRollback;
+}
+
 /// 规模口径暂时只按年填，不开放按月。
 const kProposalScalePeriodLockedToYear = true;
 
@@ -4670,8 +4856,7 @@ ProposalChannelPacketFill proposalIntakeFillFromChannelPacket(
         ? null
         : (syncSourceOf?.call(sourceCode) ??
               CatalogRef(code: sourceCode, name: sourceCode));
-    final childFormulas =
-        formulasOf?.call(sourceCode) ?? const <CatalogRef>[];
+    final childFormulas = formulasOf?.call(sourceCode) ?? const <CatalogRef>[];
     final childBillTypes =
         billTypesOf?.call(sourceCode) ?? const <CatalogRef>[];
     children.add(
@@ -4727,9 +4912,7 @@ ChannelProductPacketItem proposalIntakeHydratePacketItemSettlements(
 }
 
 bool proposalIntakeSkuHasFilledSettlements(ProposalSkuDetailRow row) {
-  return proposalIntakeSkuSettlements(
-    row,
-  ).any((item) => !item.terms.isBlank);
+  return proposalIntakeSkuSettlements(row).any((item) => !item.terms.isBlank);
 }
 
 bool proposalIntakeIsExistingBuilt(Map<String, dynamic> form) {
@@ -4871,13 +5054,14 @@ List<String> _proposalIntakeSkuGroupIssues({
   required Set<String> covered,
 }) {
   final issues = <String>[];
-  if (existingBuilt && rows.isEmpty) {
+  if (kProposalExistingBuiltEnabled && existingBuilt && rows.isEmpty) {
     issues.add(emptyExistingLabel);
   }
   for (var i = 0; i < rows.length; i++) {
     final sku = rows[i];
     final name = rowLabel(i, sku);
-    if (existingBuilt || sku.isExistingBuilt) {
+    if (kProposalExistingBuiltEnabled &&
+        (existingBuilt || sku.isExistingBuilt)) {
       if (sku.syncSourceCode.isEmpty) {
         issues.add('$name请选择业务平台');
       }
@@ -4889,8 +5073,8 @@ List<String> _proposalIntakeSkuGroupIssues({
   if (!includeSettlements) return issues;
   for (var i = 0; i < rows.length; i++) {
     final sku = rows[i];
-    if (!existingBuilt &&
-        !sku.isExistingBuilt &&
+    if (!(kProposalExistingBuiltEnabled &&
+            (existingBuilt || sku.isExistingBuilt)) &&
         !proposalIntakeSkuStarted(sku)) {
       continue;
     }
@@ -4928,6 +5112,8 @@ class ProposalSkuDetailRow {
     this.existingBuilt = '',
     this.assetProduct,
     this.parentSkuId = '',
+    this.rollback = '',
+    this.platformStatus = '',
     this.settlements = const [],
   });
 
@@ -4953,6 +5139,12 @@ class ProposalSkuDetailRow {
 
   /// 子产品关联的主产品 id。主产品自身保持为空。
   final String parentSkuId;
+
+  /// 该产品是否回滚，缺省按 [kProposalDefaultRollback]。
+  final String rollback;
+
+  /// 业务平台配置状态，缺省为待配置。
+  final String platformStatus;
   final List<ProposalSkuSettleRow> settlements;
 
   String get syncSourceCode => (syncSourceRef?.code ?? '').trim();
@@ -5019,6 +5211,8 @@ class ProposalSkuDetailRow {
     String? existingBuilt,
     Object? assetProduct = _catalogUnset,
     String? parentSkuId,
+    String? rollback,
+    String? platformStatus,
     List<ProposalSkuSettleRow>? settlements,
   }) => ProposalSkuDetailRow(
     id: id,
@@ -5053,6 +5247,8 @@ class ProposalSkuDetailRow {
         ? this.assetProduct
         : assetProduct as ChannelProductHit?,
     parentSkuId: parentSkuId ?? this.parentSkuId,
+    rollback: rollback ?? this.rollback,
+    platformStatus: platformStatus ?? this.platformStatus,
     settlements: settlements ?? this.settlements,
   );
 
@@ -5128,6 +5324,8 @@ class ProposalSkuDetailRow {
     'existingBuilt': existingBuilt,
     'assetProduct': assetProduct?.toJson(),
     'parentSkuId': parentSkuId,
+    'rollback': rollback.trim(),
+    'platformStatus': normalizeProposalSkuPlatformStatus(platformStatus),
     'settlements': [
       for (final item in settlements)
         item
@@ -5194,6 +5392,10 @@ class ProposalSkuDetailRow {
       existingBuilt: proposalIntakeExistingBuiltText(raw),
       assetProduct: asset,
       parentSkuId: '${raw['parentSkuId'] ?? ''}'.trim(),
+      rollback: '${raw['rollback'] ?? ''}'.trim(),
+      platformStatus: normalizeProposalSkuPlatformStatus(
+        '${raw['platformStatus'] ?? ''}',
+      ),
       settlements: [
         for (final item
             in raw['settlements'] is List
@@ -5388,7 +5590,13 @@ const kProposalChildTechReviewPrefix = 'children:';
 
 List<String> proposalIntakeTechnologyReviewItemKeys(Map<String, dynamic> form) {
   final keys = [...kProposalTechnologyReviewFields];
-  if (!proposalIntakeHasChildProducts(form)) return keys;
+  if (proposalIntakeSkuDetails(form).isNotEmpty ||
+      proposalIntakeHasChildProducts(form)) {
+    keys.add(kProposalSkuProductsReviewKey);
+  }
+  if (!kProposalChildTechEnabled || !proposalIntakeHasChildProducts(form)) {
+    return keys;
+  }
   return [
     ...keys,
     for (final key in kProposalTechnologyReviewFields)
@@ -5823,7 +6031,6 @@ const kProposalSalesFinanceFillFields = <(String, String)>[
   ('generalBusinessAccount', '结算账户一'),
   ('prepaidAccount', '结算账户二'),
   ('financeRemark', '财务备注'),
-  ('rollback', '是否回滚'),
 ];
 
 List<String> proposalIntakeContractFillIssues(
@@ -5935,7 +6142,6 @@ List<String> proposalIntakeTechFillIssues(
   }
 
   need('technologyPlatform', 'τ-标签一');
-  needList('technologyCapabilities', 'τ-标签二');
   needList('outputForms', purchase ? '能力输入形式' : '能力输出形式');
   needList('developmentTypes', '研发类型');
   need('hasRdCost', '是否涉及研发费用');
@@ -5948,7 +6154,9 @@ List<String> proposalIntakeTechFillIssues(
 }
 
 List<String> proposalIntakeChildTechFillIssues(Map<String, dynamic> form) {
-  if (!proposalIntakeHasChildProducts(form)) return const [];
+  if (!kProposalChildTechEnabled || !proposalIntakeHasChildProducts(form)) {
+    return const [];
+  }
   return [
     for (final issue in proposalIntakeTechFillIssues(
       proposalIntakeChildTechnology(form),

@@ -65,7 +65,6 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
   final _focus = FocusNode();
   final _controller = TextEditingController();
   final _tapGroup = Object();
-  final _layerLink = LayerLink();
   OverlayEntry? _overlay;
   Timer? _queryDebounce;
   Timer? _ensureVisibleTimer;
@@ -191,6 +190,11 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
     });
   }
 
+  OverlayState _hostOverlay() {
+    final inPopup = ModalRoute.of(context) is PopupRoute;
+    return Overlay.of(context, rootOverlay: !inPopup);
+  }
+
   void _showOverlay() {
     if (_overlay != null) {
       _rebuildOverlay();
@@ -198,9 +202,8 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_focus.hasFocus || _overlay != null) return;
-      final overlay = Overlay.of(context, rootOverlay: true);
       _overlay = OverlayEntry(builder: _buildOverlay);
-      overlay.insert(_overlay!);
+      _hostOverlay().insert(_overlay!);
       _listenScroll();
     });
   }
@@ -248,10 +251,7 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
 
   Widget _buildOverlay(BuildContext _) {
     final fieldBox = context.findRenderObject();
-    final overlayBox = Overlay.of(
-      context,
-      rootOverlay: true,
-    ).context.findRenderObject();
+    final overlayBox = _hostOverlay().context.findRenderObject();
     if (fieldBox is! RenderBox ||
         !fieldBox.hasSize ||
         overlayBox is! RenderBox ||
@@ -273,10 +273,18 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
     final usableHeight = overlaySize.height - keyboardInset;
     final spaceBelow = usableHeight - origin.dy - fieldSize.height - padding;
     final spaceAbove = origin.dy - padding;
-    final openAbove = spaceBelow < 120 && spaceAbove > spaceBelow;
+    final inPopup = ModalRoute.of(context) is PopupRoute;
+    final openAbove =
+        spaceBelow < (inPopup ? 180 : 120) && spaceAbove > spaceBelow;
     const preferred = 280.0;
     final available = openAbove ? spaceAbove : spaceBelow;
     final maxHeight = available.clamp(80.0, preferred).toDouble();
+    final left = origin.dx
+        .clamp(
+          padding,
+          math.max(padding, overlaySize.width - menuWidth - padding),
+        )
+        .toDouble();
     final matched = _matched;
     final emptyText = () {
       if ((widget.emptyText ?? '').trim().isNotEmpty) {
@@ -293,145 +301,139 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
       }
       return '没有匹配的选项';
     }();
-    return CompositedTransformFollower(
-      link: _layerLink,
-      showWhenUnlinked: false,
-      targetAnchor: openAbove ? Alignment.topLeft : Alignment.bottomLeft,
-      followerAnchor: openAbove ? Alignment.bottomLeft : Alignment.topLeft,
-      offset: Offset(0, openAbove ? -4 : 4),
-      child: UnconstrainedBox(
-        alignment: Alignment.topLeft,
-        child: SizedBox(
-          width: menuWidth,
-          child: TextFieldTapRegion(
-            child: TapRegion(
-              groupId: _tapGroup,
-              child: Material(
-                key: const ValueKey('proposal-select-menu'),
-                color: Colors.white,
-                elevation: 10,
-                shadowColor: const Color(0x334E3A6C),
-                borderRadius: BorderRadius.circular(10),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (matched.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 14,
+    return Positioned(
+      left: left,
+      width: menuWidth,
+      top: openAbove ? null : origin.dy + fieldSize.height + 4,
+      bottom: openAbove ? overlaySize.height - origin.dy + 4 : null,
+      child: TextFieldTapRegion(
+        child: TapRegion(
+          groupId: _tapGroup,
+          child: Material(
+            key: const ValueKey('proposal-select-menu'),
+            color: Colors.white,
+            elevation: 10,
+            shadowColor: const Color(0x334E3A6C),
+            borderRadius: BorderRadius.circular(10),
+            clipBehavior: Clip.antiAlias,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: maxHeight),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (matched.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 14,
+                      ),
+                      child: Text(
+                        emptyText,
+                        style: const TextStyle(
+                          color: ProposalPalette.text3,
+                          fontSize: 12,
                         ),
-                        child: Text(
-                          emptyText,
-                          style: const TextStyle(
-                            color: ProposalPalette.text3,
-                            fontSize: 12,
-                          ),
-                        ),
-                      )
-                    else
-                      ConstrainedBox(
-                        constraints: BoxConstraints(maxHeight: maxHeight),
-                        child: ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
-                          shrinkWrap: true,
-                          itemCount: matched.length,
-                          itemBuilder: (_, index) {
-                            final option = matched[index];
-                            final active = option.value == widget.value;
-                            return InkWell(
-                              borderRadius: BorderRadius.circular(8),
-                              onTap: () => _choose(option.value),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 8,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            option.label,
-                                            maxLines: 3,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              color: ProposalPalette.text,
-                                              fontSize: 13,
-                                              height: 1.35,
-                                              fontWeight: active
-                                                  ? FontWeight.w700
-                                                  : FontWeight.w500,
+                      ),
+                    )
+                  else
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxHeight: maxHeight),
+                      child: ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+                        shrinkWrap: true,
+                        itemCount: matched.length,
+                        itemBuilder: (_, index) {
+                          final option = matched[index];
+                          final active = option.value == widget.value;
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () => _choose(option.value),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          option.label,
+                                          maxLines: 3,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: ProposalPalette.text,
+                                            fontSize: 13,
+                                            height: 1.35,
+                                            fontWeight: active
+                                                ? FontWeight.w700
+                                                : FontWeight.w500,
+                                          ),
+                                        ),
+                                        if ((option.meta ?? '').isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              top: 2,
+                                            ),
+                                            child: Text(
+                                              option.meta!,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: ProposalPalette.text3,
+                                                fontSize: 11,
+                                                height: 1.3,
+                                              ),
                                             ),
                                           ),
-                                          if ((option.meta ?? '').isNotEmpty)
-                                            Padding(
-                                              padding: const EdgeInsets.only(
-                                                top: 2,
-                                              ),
-                                              child: Text(
-                                                option.meta!,
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  color: ProposalPalette.text3,
-                                                  fontSize: 11,
-                                                  height: 1.3,
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
+                                      ],
                                     ),
-                                    if (active)
-                                      const Icon(
-                                        Icons.check_rounded,
-                                        size: 16,
-                                        color: ProposalPalette.purple,
-                                      ),
-                                  ],
-                                ),
+                                  ),
+                                  if (active)
+                                    const Icon(
+                                      Icons.check_rounded,
+                                      size: 16,
+                                      color: ProposalPalette.purple,
+                                    ),
+                                ],
                               ),
-                            );
-                          },
-                        ),
-                      ),
-                    if (widget.onAdd != null && widget.addLabel != null)
-                      InkWell(
-                        onTap: () {
-                          _focus.unfocus();
-                          _hideOverlay();
-                          widget.onAdd!();
+                            ),
+                          );
                         },
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
+                      ),
+                    ),
+                  if (widget.onAdd != null && widget.addLabel != null)
+                    InkWell(
+                      onTap: () {
+                        _focus.unfocus();
+                        _hideOverlay();
+                        widget.onAdd!();
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            top: BorderSide(color: ProposalPalette.borderSoft),
                           ),
-                          decoration: const BoxDecoration(
-                            border: Border(
-                              top: BorderSide(
-                                color: ProposalPalette.borderSoft,
-                              ),
-                            ),
-                          ),
-                          child: Text(
-                            '+ ${widget.addLabel}',
-                            style: const TextStyle(
-                              color: ProposalPalette.purpleDeep,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
+                        ),
+                        child: Text(
+                          '+ ${widget.addLabel}',
+                          style: const TextStyle(
+                            color: ProposalPalette.purpleDeep,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
             ),
           ),
@@ -479,12 +481,26 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
                     icon: const Icon(Icons.close_rounded, size: 16),
                     color: ProposalPalette.text3,
                   ),
-                Icon(
-                  _enabled
-                      ? Icons.expand_more_rounded
-                      : Icons.lock_outline_rounded,
-                  size: _enabled ? 19 : 15,
-                  color: ProposalPalette.text3,
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                  onPressed: _enabled
+                      ? () {
+                          if (!_focus.hasFocus) _focus.requestFocus();
+                          _showOverlay();
+                        }
+                      : null,
+                  icon: Icon(
+                    _enabled
+                        ? Icons.expand_more_rounded
+                        : Icons.lock_outline_rounded,
+                    size: _enabled ? 19 : 15,
+                    color: ProposalPalette.text3,
+                  ),
                 ),
                 const SizedBox(width: 8),
               ],
@@ -498,18 +514,15 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
           : null,
       onChanged: _canSearch ? (_) => setState(() {}) : null,
     );
-    return CompositedTransformTarget(
-      link: _layerLink,
-      child: TapRegion(
-        groupId: _tapGroup,
-        onTapOutside: (_) {
-          if (_focus.hasFocus) {
-            _focus.unfocus();
-            _hideOverlay();
-          }
-        },
-        child: field,
-      ),
+    return TapRegion(
+      groupId: _tapGroup,
+      onTapOutside: (_) {
+        if (_focus.hasFocus) {
+          _focus.unfocus();
+          _hideOverlay();
+        }
+      },
+      child: field,
     );
   }
 }

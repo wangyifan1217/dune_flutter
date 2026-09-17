@@ -40,6 +40,7 @@ void main() {
     expect(find.text('会议纪要'), findsOneWidget);
     expect(find.text('三桶油.渠道对接'), findsOneWidget);
     expect(find.text('资管.AI助理'), findsOneWidget);
+    expect(find.text('三桶油.AI助理'), findsOneWidget);
     expect(find.text('花呗'), findsNothing);
     expect(find.text('资产'), findsNothing);
 

@@ -92,8 +92,61 @@ void main() {
     await tester.tap(find.byType(TextField));
     await tester.pumpAndSettle();
     final field = tester.getRect(find.byType(TextField));
-    final menu = tester.getRect(find.byKey(const ValueKey('proposal-select-menu')));
+    final menu = tester.getRect(
+      find.byKey(const ValueKey('proposal-select-menu')),
+    );
     expect(menu.top, greaterThanOrEqualTo(field.bottom - 2));
     expect((menu.left - field.left).abs(), lessThan(24));
+  });
+
+  testWidgets('dropdown inside a dialog can pick an option', (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    String? picked;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            return Scaffold(
+              body: TextButton(
+                onPressed: () {
+                  showDialog<void>(
+                    context: context,
+                    builder: (_) {
+                      return AlertDialog(
+                        content: SizedBox(
+                          width: 420,
+                          child: ProposalSelectField<String>(
+                            value: picked,
+                            hint: '请选择',
+                            options: const [
+                              ProposalSelectOption(value: '同步', label: '同步'),
+                              ProposalSelectOption(value: '不同步', label: '不同步'),
+                            ],
+                            onSelected: (value) => picked = value,
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+                child: const Text('open'),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('proposal-select-menu')), findsOneWidget);
+    await tester.tap(find.text('同步').last);
+    await tester.pumpAndSettle();
+    expect(picked, '同步');
   });
 }

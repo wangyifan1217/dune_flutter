@@ -114,6 +114,7 @@ class _ReconChannelConfirmCardState extends State<ReconChannelConfirmCard> {
           border: Border.all(color: DunesColors.borderSoft),
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(

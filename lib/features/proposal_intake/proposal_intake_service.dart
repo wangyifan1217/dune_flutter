@@ -207,6 +207,7 @@ class ProposalIntakeService {
         headers: _headers,
         body: jsonEncode({
           'title': row.title,
+          'kind': normalizeProposalIntakeKind(row.kind),
           'status': row.status,
           'form': row.form,
           'review': row.review,
@@ -235,6 +236,7 @@ class ProposalIntakeService {
       return save(
         latest.copyWith(
           title: row.title,
+          kind: row.kind,
           form: merged,
           status: row.status,
         ),
@@ -277,7 +279,11 @@ class ProposalIntakeService {
     return ProposalIntakeWriteResult.fromJson(_asMap(data));
   }
 
-  Future<ProposalIntakeWriteResult> handoff(int id, String action, int version) async {
+  Future<ProposalIntakeWriteResult> handoff(
+    int id,
+    String action,
+    int version,
+  ) async {
     final data = _unwrap(
       await http.post(
         _uri('/proposal-intakes/$id/handoff'),

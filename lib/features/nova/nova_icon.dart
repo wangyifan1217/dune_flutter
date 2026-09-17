@@ -6,11 +6,12 @@ abstract final class NovaIcon {
   static const tabAssetPath = 'assets/images/tau_tab_icon.png';
 }
 
-/// 小饕拟人形象资源。开眼帧更清晰，眨眼时切 wink。
+/// 小饕拟人形象资源。会话页 / 电话头像默认用 wink 静帧，不再播 GIF、也不切开眼。
 abstract final class NovaPersonAvatar {
   static const openAsset = 'assets/images/ai_avatar_open.png';
   static const winkAsset = 'assets/images/ai_avatar_wink.png';
-  static const asset = openAsset;
+  static const blinkAsset = 'assets/images/ai_avatar_blink.gif';
+  static const asset = winkAsset;
 }
 
 /// 按设备像素把 512 原图解到足够清晰的缓存，避免会话头像发糊。

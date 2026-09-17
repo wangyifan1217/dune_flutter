@@ -1160,7 +1160,7 @@ String reconCardTitle(String cardType) {
     case 'TRAVEL':
       return '标签三-出行金';
     case 'TAG3_DAILY':
-      return '业财一体-日清';
+      return '业财一体-日清月结';
     default:
       return cardType;
   }

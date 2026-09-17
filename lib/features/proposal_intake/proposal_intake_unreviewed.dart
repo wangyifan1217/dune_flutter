@@ -42,13 +42,11 @@ const _kFinanceReviewKeys = {
   'financeRemark',
   'costItems',
   'operatingCost',
-  'rollback',
   'proposalSubtitle',
 };
 
 const _kTechnologyReviewKeys = {
   'technologyPlatform',
-  'technologyCapabilities',
   'outputForms',
   'developmentTypes',
   'hasRdCost',
@@ -107,6 +105,10 @@ bool proposalIntakeFormKeyLocked(
     return _reviewFlag(review, 'financeCompleted');
   }
   if (key == 'hunId') return _reviewFlag(review, 'marketCompleted');
+  if (key == 'rollback') {
+    return _reviewFlag(review, 'technologyCompleted') ||
+        _itemReviewed(review, 'technologyItems', 'skuProducts');
+  }
   if (_kTechnologyReviewKeys.contains(key) || key == 'technologyRecords') {
     if (_reviewFlag(review, 'technologyCompleted')) return true;
     if (key == 'technologyRecords') {

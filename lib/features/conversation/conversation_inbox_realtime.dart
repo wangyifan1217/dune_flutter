@@ -334,6 +334,9 @@ abstract final class ConversationInboxRealtime {
     bool? hasUnreadMention,
     bool? hasUnreadAtAll,
     String? peerImStatus,
+    String? peerImStatusText,
+    String? peerImStatusIcon,
+    String? peerImStatusColor,
   }) {
     return NativeConversation(
       id: c.id,
@@ -362,6 +365,9 @@ abstract final class ConversationInboxRealtime {
       hasUnreadMention: hasUnreadMention ?? c.hasUnreadMention,
       hasUnreadAtAll: hasUnreadAtAll ?? c.hasUnreadAtAll,
       peerImStatus: peerImStatus ?? c.peerImStatus,
+      peerImStatusText: peerImStatusText ?? c.peerImStatusText,
+      peerImStatusIcon: peerImStatusIcon ?? c.peerImStatusIcon,
+      peerImStatusColor: peerImStatusColor ?? c.peerImStatusColor,
     );
   }
 }

@@ -309,4 +309,30 @@ void main() {
       14,
     );
   });
+
+  testWidgets('APP tab capsule uses a stroke-only purple gradient border', (
+    tester,
+  ) async {
+    final navigation = DunesNavigationController();
+    addTearDown(navigation.dispose);
+    await _pumpBar(tester, navigation: navigation);
+
+    final border = tester.widget<CustomPaint>(
+      find.byKey(const ValueKey('app_tab_capsule_gradient_border')),
+    );
+    expect(border.foregroundPainter, isNotNull);
+    expect(
+      tester
+          .widgetList<DecoratedBox>(
+            find.descendant(
+              of: find.byType(DunesMainTabBar),
+              matching: find.byType(DecoratedBox),
+            ),
+          )
+          .map((box) => box.decoration)
+          .whereType<BoxDecoration>()
+          .any((decoration) => decoration.gradient != null),
+      isFalse,
+    );
+  });
 }

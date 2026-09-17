@@ -326,6 +326,55 @@ class ProposalFormulaHint extends StatelessWidget {
   }
 }
 
+class ProposalFormulaQuestionMark extends StatelessWidget {
+  const ProposalFormulaQuestionMark({
+    super.key,
+    required this.title,
+    required this.formula,
+    this.detail = '',
+  });
+
+  final String title;
+  final String formula;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: '查看测算公式',
+      child: InkWell(
+        onTap: () => unawaited(
+          showProposalCostFormulaHelp(
+            context,
+            title: title,
+            formula: formula,
+            substitution: detail,
+          ),
+        ),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: 16,
+          height: 16,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: ProposalPalette.purpleDeep),
+          ),
+          child: const Text(
+            '?',
+            style: TextStyle(
+              color: ProposalPalette.purpleDeep,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              height: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class ProposalField extends StatelessWidget {
   const ProposalField({
     super.key,
@@ -413,18 +462,17 @@ class ProposalField extends StatelessWidget {
                           fontSize: 12,
                         ),
                       ),
+                    if ((formula ?? '').trim().isNotEmpty)
+                      ProposalFormulaQuestionMark(
+                        title: label,
+                        formula: formula!.trim(),
+                        detail: formulaDetail ?? '',
+                      ),
                     if (source != null)
                       ProposalStatusChip(label: source!, kind: chipKind),
                     ?trailing,
                   ],
                 ),
-                if ((formula ?? '').trim().isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  ProposalFormulaHint(
-                    formula: formula!.trim(),
-                    detail: formulaDetail ?? '',
-                  ),
-                ],
                 const SizedBox(height: 2),
                 child,
                 if (footer != null) ...[const SizedBox(height: 6), footer!],
@@ -1101,13 +1149,13 @@ class ProposalNextPendingFooter extends StatelessWidget {
 }
 
 const proposalIntakeProcessSteps = <(String, String)>[
-  ('1', '提交人新建提案，填写市场、合同、财务，并指定市场部负责人二等审核人。'),
-  ('2', '提交人通知科技部负责人填写科技内容，同时通知财务部负责人二填写财务技术接口。'),
-  ('3', '科技部负责人填写完成后提交复核（必选财务技术接口须已勾选）。'),
+  ('1', '提交人新建提案，填写市场、合同、财务、科技与产品，并指定科技部负责人等审核人。'),
+  ('2', '提交人通知财务部负责人二填写财务技术接口。'),
+  ('3', '填写人完成科技与产品后提交复核（必选财务技术接口须已勾选）。'),
   ('4', '提交人提交各板块进入复核。'),
   (
     '5',
-    '市场部负责人一复核市场板块；市场部负责人二逐条复核科技（含财务技术接口），底部确认前会检查遗漏；财务部负责人二复核采购/销售合同并逐条复核财务，财务部负责人一整板块复核财务。发现问题可对单条点「驳回」，也可直接整板块驳回，不必先逐条点完复核。',
+    '市场部负责人一复核市场板块；科技部负责人复核科技（含财务技术接口）并对产品相关整板块复核，底部确认前会检查遗漏；财务部负责人二复核采购/销售合同并逐条复核财务，财务部负责人一整板块复核财务。发现问题可对单条点「驳回」，也可直接整板块驳回，不必先逐条点完复核。',
   ),
   ('6', '各板块复核完成后，提交人通知最终确认人。'),
   ('7', '最终确认人通过即完成；整单驳回则退回提交人重填。板块驳回后，填写人修改再点「重新提交并通知审核人」，系统会通知该板块审核人。'),
@@ -1116,14 +1164,14 @@ const proposalIntakeProcessSteps = <(String, String)>[
 const proposalIntakePurchaseProcessSteps = <(String, String)>[
   (
     '1',
-    '提交人新建采购提案，填写供给、采购合同，并指定市场部负责人一、二等审核人，以及财务部负责人一、二（财务板块暂不复核）。',
+    '提交人新建采购提案，填写供给、采购合同、科技与产品，并指定科技部负责人、市场部负责人一、二等审核人，以及财务部负责人一、二（财务板块暂不复核）。',
   ),
-  ('2', '提交人通知科技部负责人填写科技内容，同时通知财务部负责人二填写财务技术接口。'),
-  ('3', '科技部负责人填写完成后提交复核（必选财务技术接口须已勾选）。'),
+  ('2', '提交人通知财务部负责人二填写财务技术接口。'),
+  ('3', '填写人完成科技与产品后提交复核（必选财务技术接口须已勾选）。'),
   ('4', '提交人提交各板块进入复核。'),
   (
     '5',
-    '市场部负责人一复核市场板块，并可填写 HUN ID；市场部负责人二逐条复核科技（含财务技术接口），底部确认前会检查遗漏；财务部负责人二复核采购合同。财务板块暂不复核。发现问题可对单条点「驳回」，也可直接整板块驳回，不必先逐条点完复核。',
+    '市场部负责人一复核市场板块，并可填写 HUN ID；科技部负责人复核科技（含财务技术接口）并对产品相关整板块复核，底部确认前会检查遗漏；财务部负责人二复核采购合同。财务板块暂不复核。发现问题可对单条点「驳回」，也可直接整板块驳回，不必先逐条点完复核。',
   ),
   ('6', '各板块复核完成后，提交人通知最终确认人。'),
   ('7', '最终确认人通过即完成；整单驳回则退回提交人重填。板块驳回后，填写人修改再点「重新提交并通知审核人」，系统会通知该板块审核人。'),
@@ -1386,9 +1434,8 @@ class ProposalIntakeProcessHelpButton extends StatelessWidget {
         minWidth: compact ? 36 : 40,
         minHeight: compact ? 36 : 40,
       ),
-      onPressed: () => unawaited(
-        showProposalIntakeProcessHelp(context, purchase: purchase),
-      ),
+      onPressed: () =>
+          unawaited(showProposalIntakeProcessHelp(context, purchase: purchase)),
       icon: Icon(
         Icons.help_outline_rounded,
         size: compact ? 20 : 22,
@@ -1442,8 +1489,7 @@ class _ProposalIntakeProgressTimelineState
         step.state == ProposalIntakeProgressState.rejected) {
       return true;
     }
-    return step.id == 'end' &&
-        step.state == ProposalIntakeProgressState.done;
+    return step.id == 'end' && step.state == ProposalIntakeProgressState.done;
   }
 
   @override
@@ -1636,8 +1682,7 @@ class _ProposalProgressRow extends StatelessWidget {
                             ),
                             if (step.id == 'initiate' &&
                                 step.statusText.isNotEmpty &&
-                                step.state !=
-                                    ProposalIntakeProgressState.done)
+                                step.state != ProposalIntakeProgressState.done)
                               Text(
                                 step.statusText,
                                 style: TextStyle(
@@ -1655,7 +1700,8 @@ class _ProposalProgressRow extends StatelessWidget {
                           child: Text(
                             step.time,
                             style: TextStyle(
-                              color: step.state ==
+                              color:
+                                  step.state ==
                                       ProposalIntakeProgressState.current
                                   ? ProposalPalette.purpleDeep
                                   : ProposalPalette.text3,

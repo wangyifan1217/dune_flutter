@@ -118,6 +118,9 @@ NativeConversation applySelfAvatarToConversation(
     hasUnreadMention: c.hasUnreadMention,
     hasUnreadAtAll: c.hasUnreadAtAll,
     peerImStatus: c.peerImStatus,
+    peerImStatusText: c.peerImStatusText,
+    peerImStatusIcon: c.peerImStatusIcon,
+    peerImStatusColor: c.peerImStatusColor,
   );
 }
 
@@ -165,6 +168,9 @@ NativeConversation _mergeKeepingAvatars(
     hasUnreadMention: false,
     hasUnreadAtAll: false,
     peerImStatus: server.peerImStatus,
+    peerImStatusText: server.peerImStatusText,
+    peerImStatusIcon: server.peerImStatusIcon,
+    peerImStatusColor: server.peerImStatusColor,
   );
   final withMention = _withStickyMention(prev, merged);
   if (selfAvatar != null && selfAvatar.userId > 0) {
@@ -211,6 +217,9 @@ NativeConversation _withStickyMention(
     hasUnreadMention: mention,
     hasUnreadAtAll: atAll,
     peerImStatus: server.peerImStatus,
+    peerImStatusText: server.peerImStatusText,
+    peerImStatusIcon: server.peerImStatusIcon,
+    peerImStatusColor: server.peerImStatusColor,
   );
 }
 

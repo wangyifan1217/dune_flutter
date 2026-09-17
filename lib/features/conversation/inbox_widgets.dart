@@ -1,4 +1,6 @@
+import 'package:characters/characters.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../ai_summary/ai_summary_sparkle_icon.dart';
@@ -19,7 +21,7 @@ class ChatInboxHeader extends StatelessWidget {
     this.onOpenAiSummary,
     this.onOpenFavorites,
     this.onSelectImStatus,
-    this.selfImStatus = ImUserStatusCatalog.online,
+    this.selfImStatus = ImUserStatusValue.online,
     this.novaThinking = false,
     this.novaUnread = false,
     this.showNovaLeading = true,
@@ -32,29 +34,39 @@ class ChatInboxHeader extends StatelessWidget {
   final VoidCallback? onOpenNova;
   final VoidCallback? onOpenAiSummary;
   final VoidCallback? onOpenFavorites;
-  final ValueChanged<String>? onSelectImStatus;
-  final String selfImStatus;
+  final ValueChanged<ImUserStatusValue>? onSelectImStatus;
+  final ImUserStatusValue selfImStatus;
   final bool novaThinking;
   final bool novaUnread;
   final bool showNovaLeading;
 
   @override
   Widget build(BuildContext context) {
+    final showStatusBadge = selfImStatus.showsBadge;
     return Container(
       color: const Color(0xFFF5F5F5),
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 3),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
       child: SizedBox(
-        height: 40,
+        height: showStatusBadge ? 52 : 40,
         child: Stack(
           alignment: Alignment.center,
           children: [
-            Text(
-              '消息',
-              style: DunesTypography.sans(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF1C1C1C),
-              ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '消息',
+                  style: DunesTypography.sans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF1C1C1C),
+                  ),
+                ),
+                if (showStatusBadge) ...[
+                  const SizedBox(height: 1),
+                  ImStatusBadge.fromValue(selfImStatus),
+                ],
+              ],
             ),
             if (showNovaLeading && onOpenNova != null)
               Align(
@@ -100,15 +112,15 @@ class _InboxHeaderActions extends StatefulWidget {
     this.onOpenAiSummary,
     this.onOpenFavorites,
     this.onSelectImStatus,
-    this.selfImStatus = ImUserStatusCatalog.online,
+    this.selfImStatus = ImUserStatusValue.online,
   });
 
   final VoidCallback onOpenContacts;
   final VoidCallback? onNewChat;
   final VoidCallback? onOpenAiSummary;
   final VoidCallback? onOpenFavorites;
-  final ValueChanged<String>? onSelectImStatus;
-  final String selfImStatus;
+  final ValueChanged<ImUserStatusValue>? onSelectImStatus;
+  final ImUserStatusValue selfImStatus;
 
   @override
   State<_InboxHeaderActions> createState() => _InboxHeaderActionsState();
@@ -277,7 +289,7 @@ class _InboxActionsDropdown extends StatelessWidget {
     required this.showFavorites,
     required this.onContacts,
     this.showSetStatus = false,
-    this.selfImStatus = ImUserStatusCatalog.online,
+    this.selfImStatus = ImUserStatusValue.online,
     this.onAiSummary,
     this.onNewChat,
     this.onFavorites,
@@ -288,7 +300,7 @@ class _InboxActionsDropdown extends StatelessWidget {
   final bool showNewChat;
   final bool showFavorites;
   final bool showSetStatus;
-  final String selfImStatus;
+  final ImUserStatusValue selfImStatus;
   final VoidCallback? onAiSummary;
   final VoidCallback onContacts;
   final VoidCallback? onNewChat;
@@ -297,7 +309,7 @@ class _InboxActionsDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statusDef = ImUserStatusCatalog.of(selfImStatus);
+    final statusDef = selfImStatus.def;
     return _InboxMenuCard(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -307,7 +319,7 @@ class _InboxActionsDropdown extends StatelessWidget {
             _DropdownItem(
               leading: Icon(statusDef.icon, size: 20, color: statusDef.color),
               label: '设置状态',
-              trailing: ImUserStatusCatalog.showsBadge(selfImStatus)
+              trailing: selfImStatus.showsBadge
                   ? Text(
                       statusDef.label,
                       style: DunesTypography.sans(
@@ -369,49 +381,332 @@ class _InboxActionsDropdown extends StatelessWidget {
   }
 }
 
-class _InboxStatusPicker extends StatelessWidget {
+class _InboxStatusPicker extends StatefulWidget {
   const _InboxStatusPicker({
     required this.currentStatus,
     required this.onSelect,
   });
 
-  final String currentStatus;
-  final ValueChanged<String> onSelect;
+  final ImUserStatusValue currentStatus;
+  final ValueChanged<ImUserStatusValue> onSelect;
+
+  @override
+  State<_InboxStatusPicker> createState() => _InboxStatusPickerState();
+}
+
+class _InboxStatusPickerState extends State<_InboxStatusPicker> {
+  bool _customizing = false;
+  late String _customIcon;
+  late String _customColor;
+  late final TextEditingController _textCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    final current = widget.currentStatus;
+    _customIcon = current.icon.isNotEmpty
+        ? current.icon
+        : ImUserStatusCatalog.customIcons.first;
+    _customColor = ImUserStatusCatalog.normalizeColor(current.color).isNotEmpty
+        ? ImUserStatusCatalog.normalizeColor(current.color)
+        : ImUserStatusCatalog.customColors[4];
+    _textCtrl = TextEditingController(
+      text: current.key == ImUserStatusCatalog.custom ? current.text : '',
+    );
+    _textCtrl.addListener(_onCustomTextChanged);
+  }
+
+  void _onCustomTextChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _textCtrl.removeListener(_onCustomTextChanged);
+    _textCtrl.dispose();
+    super.dispose();
+  }
+
+  String _committedCustomText() {
+    final value = _textCtrl.value;
+    var text = value.text;
+    if (value.composing.isValid && !value.composing.isCollapsed) {
+      text = text.replaceRange(value.composing.start, value.composing.end, '');
+    }
+    return text.replaceAll('\n', '');
+  }
+
+  bool get _isComposing {
+    final composing = _textCtrl.value.composing;
+    return composing.isValid && !composing.isCollapsed;
+  }
+
+  void _submitCustom() {
+    final text = ImUserStatusCatalog.clampText(_committedCustomText());
+    final icon = ImUserStatusCatalog.normalizeIcon(_customIcon);
+    final color = ImUserStatusCatalog.normalizeColor(_customColor);
+    if (text.isEmpty || icon.isEmpty) return;
+    widget.onSelect(
+      ImUserStatusValue(
+        key: ImUserStatusCatalog.custom,
+        text: text,
+        icon: icon,
+        color: color,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final current = ImUserStatusCatalog.normalize(currentStatus);
     return _InboxMenuCard(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 168),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (ImUserStatusCatalog.showsBadge(current))
-              _DropdownItem(
-                leading: const Icon(
-                  Icons.remove_circle_outline,
-                  size: 20,
-                  color: Color(0xFF6B7280),
+      child: SizedBox(
+        width: 260,
+        child: _customizing ? _buildCustomEditor() : _buildPresetList(),
+      ),
+    );
+  }
+
+  Widget _buildPresetList() {
+    final current = widget.currentStatus;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (current.showsBadge)
+          _DropdownItem(
+            leading: const Icon(
+              Icons.remove_circle_outline,
+              size: 20,
+              color: Color(0xFF6B7280),
+            ),
+            label: '取消状态',
+            onTap: () => widget.onSelect(ImUserStatusValue.online),
+          ),
+        for (final item in ImUserStatusCatalog.all)
+          _DropdownItem(
+            leading: Icon(item.icon, size: 20, color: item.color),
+            label: item.label,
+            trailing: item.key == current.key
+                ? const Icon(
+                    Icons.check_rounded,
+                    size: 18,
+                    color: Color(0xFF07A957),
+                  )
+                : null,
+            onTap: () => widget.onSelect(ImUserStatusValue(key: item.key)),
+          ),
+        _DropdownItem(
+          leading: Icon(
+            current.key == ImUserStatusCatalog.custom
+                ? current.def.icon
+                : Icons.edit_outlined,
+            size: 20,
+            color: current.key == ImUserStatusCatalog.custom
+                ? current.def.color
+                : DunesColors.brandPurple,
+          ),
+          label: current.key == ImUserStatusCatalog.custom
+              ? current.def.label
+              : '自定义',
+          trailing: current.key == ImUserStatusCatalog.custom
+              ? const Icon(
+                  Icons.check_rounded,
+                  size: 18,
+                  color: Color(0xFF07A957),
+                )
+              : const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: Color(0xFF9CA3AF),
                 ),
-                label: '取消状态',
-                onTap: () => onSelect(ImUserStatusCatalog.online),
+          onTap: () => setState(() => _customizing = true),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCustomEditor() {
+    final committed = _committedCustomText();
+    final committedCount = committed.characters.length;
+    final canSubmit =
+        !_isComposing &&
+        ImUserStatusCatalog.clampText(committed).isNotEmpty &&
+        _customIcon.isNotEmpty;
+    final iconColor =
+        ImUserStatusCatalog.colorOf(_customColor) ?? DunesColors.brandPurple;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _customizing = false),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.chevron_left_rounded,
+                    size: 20,
+                    color: Color(0xFF4B5563),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '自定义状态',
+                    style: DunesTypography.sans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF1C1C1C),
+                    ),
+                  ),
+                ],
               ),
-            for (final item in ImUserStatusCatalog.all)
-              _DropdownItem(
-                leading: Icon(item.icon, size: 20, color: item.color),
-                label: item.label,
-                trailing: item.key == current
-                    ? const Icon(
-                        Icons.check_rounded,
-                        size: 18,
-                        color: Color(0xFF07A957),
-                      )
-                    : null,
-                onTap: () => onSelect(item.key),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final key in ImUserStatusCatalog.customIcons)
+                _StatusIconChip(
+                  iconKey: key,
+                  selected: _customIcon == key,
+                  color: iconColor,
+                  onTap: () => setState(() => _customIcon = key),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final hex in ImUserStatusCatalog.customColors)
+                _StatusColorChip(
+                  color: ImUserStatusCatalog.colorOf(hex)!,
+                  selected: _customColor == hex,
+                  onTap: () => setState(() => _customColor = hex),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _textCtrl,
+            autofocus: true,
+            maxLength: ImUserStatusCatalog.textMaxChars,
+            maxLengthEnforcement:
+                MaxLengthEnforcement.truncateAfterCompositionEnds,
+            decoration: InputDecoration(
+              hintText: '最多${ImUserStatusCatalog.textMaxChars}个字',
+              isDense: true,
+              counterText:
+                  '$committedCount/${ImUserStatusCatalog.textMaxChars}',
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 10,
               ),
-          ],
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+              ),
+            ),
+            style: DunesTypography.sans(fontSize: 14, color: DunesColors.text),
+            onSubmitted: (_) {
+              if (canSubmit) _submitCustom();
+            },
+          ),
+          const SizedBox(height: 8),
+          FilledButton(
+            onPressed: canSubmit ? _submitCustom : null,
+            style: FilledButton.styleFrom(
+              backgroundColor: DunesColors.brandPurple,
+              disabledBackgroundColor: const Color(0xFFE5E7EB),
+              minimumSize: const Size.fromHeight(36),
+            ),
+            child: const Text('完成'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusIconChip extends StatelessWidget {
+  const _StatusIconChip({
+    required this.iconKey,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String iconKey;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = ImUserStatusCatalog.iconData[iconKey];
+    if (icon == null) return const SizedBox.shrink();
+    return Material(
+      color: selected ? color.withValues(alpha: 0.14) : const Color(0xFFF5F5F5),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          width: 32,
+          height: 32,
+          child: Icon(
+            icon,
+            size: 18,
+            color: selected ? color : color.withValues(alpha: 0.72),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusColorChip extends StatelessWidget {
+  const _StatusColorChip({
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: selected ? const Color(0xFF111827) : Colors.white,
+              width: selected ? 2 : 1.5,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x14000000),
+                blurRadius: 4,
+                offset: Offset(0, 1),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -694,6 +989,9 @@ class ChatInboxRow extends StatelessWidget {
     this.robotAvatar,
     this.mentionLabel,
     this.imStatus,
+    this.imStatusText,
+    this.imStatusIcon,
+    this.imStatusColor,
   });
 
   final ChatInboxRowKind kind;
@@ -726,6 +1024,9 @@ class ChatInboxRow extends StatelessWidget {
 
   /// 私聊对端自定义状态；空/在线不展示。
   final String? imStatus;
+  final String? imStatusText;
+  final String? imStatusIcon;
+  final String? imStatusColor;
 
   Color get _rowBg {
     if (selected) return DunesColors.accentSoft;
@@ -830,7 +1131,12 @@ class ChatInboxRow extends StatelessWidget {
                                     imStatus,
                                   )) ...[
                                     const SizedBox(width: 6),
-                                    ImStatusBadge(status: imStatus!),
+                                    ImStatusBadge(
+                                      status: imStatus!,
+                                      text: imStatusText ?? '',
+                                      iconKey: imStatusIcon ?? '',
+                                      color: imStatusColor ?? '',
+                                    ),
                                   ],
                                   if (showAiMark) ...[
                                     const SizedBox(width: 6),

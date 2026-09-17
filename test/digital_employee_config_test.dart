@@ -104,4 +104,36 @@ void main() {
       expect(item.chatConfig.chatPath, '/qianji/am-settlement/chat');
     },
   );
+
+  test('uses sanyoutong-farm catalog paths and system prompt', () {
+    final item = DigitalEmployeeItem.fromApi({
+      'employeeKey': 'sanyoutong-farm',
+      'name': '三桶油.AI助理',
+      'screenId': 'QJDE',
+      'assistantConfig': {
+        'intro': {
+          'title': '你好，自定义AI助理',
+          'body': '查链路。',
+          'headerSubtitle': '运营查询',
+        },
+        'prompts': ['查广东供应商'],
+        'systemPrompt': '把用户原话放入 query。',
+        'runtime': {
+          'mcpServerName': 'sanyoutong-farm',
+          'mcpPath': '/qianji/sanyoutong-farm/mcp',
+          'chatPath': '/qianji/sanyoutong-farm/chat',
+          'historyPath': '/qianji/sanyoutong-farm/history',
+          'scope': 'sanyoutong.farm.read',
+        },
+      },
+    });
+
+    expect(item.isSanyoutongFarm, isTrue);
+    expect(isDigitalEmployeeChatScreen('QJDE'), isTrue);
+    expect(item.chatConfig.welcomeTitle, '你好，自定义AI助理');
+    expect(item.chatConfig.headerTitle, '三桶油.AI助理');
+    expect(item.chatConfig.systemPrompt, '把用户原话放入 query。');
+    expect(item.chatConfig.mcpPath, '/qianji/sanyoutong-farm/mcp');
+    expect(item.chatConfig.historyPath, '/qianji/sanyoutong-farm/history');
+  });
 }

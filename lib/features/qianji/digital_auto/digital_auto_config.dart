@@ -67,6 +67,27 @@ abstract final class DigitalAutoConfig {
         '能源积分和能源返费的平台码都是 POINTS_REBATE，用名称区分；主产品 DIGITALG 与积分/返费影子要分别用各自产品 id 查结算行。'
         'productSource 只能是 CHANNEL 或 SUPPLIER。缺省参数先问再调工具；调用前用中文简述你要做的事。',
   );
+
+  static const sanyoutongFarm = DigitalAutoAssistantConfig(
+    employeeKey: 'sanyoutong-farm',
+    welcomeTitle: '你好，我是三桶油.AI助理',
+    welcomeBody:
+        '可以查产品链路、省份供应商健康度、预警原因，以及申请导出订单或产品清单。导出需完整摘要后回复「确认提交」。',
+    headerTitle: '三桶油.AI助理',
+    headerSubtitle: '对话查询链路、库存资金与预警',
+    welcomePrompts: <String>[
+      '检查产品编码 DEMO-PRODUCT-1001 的当前链路状态',
+      '查一下广东省当前的供应商健康度',
+      '导出 2026 年 9 月中国石化渠道的订单明细，申请人是张三',
+    ],
+    mcpPath: '/qianji/sanyoutong-farm/mcp',
+    chatPath: '/qianji/sanyoutong-farm/chat',
+    historyPath: '/qianji/sanyoutong-farm/history',
+    systemPrompt:
+        '你是三桶油.AI助理。必须通过 function calling 调用当前提供的查询工具，把用户原话放入 query，'
+        '不要编造产品链路、资金、库存或预警结论。工具若追问缺失项、列出候选或要求「确认提交」，把原文转述给用户；'
+        '用户补充或回复「选择第 N 个」「确认提交」时再次调用同一工具。不要声称可以补发、撤单、退款或改配置。',
+  );
 }
 
 class DigitalAutoAssistantConfig {
@@ -98,6 +119,7 @@ class DigitalAutoAssistantConfig {
     Map<String, dynamic>? json, {
     required DigitalAutoAssistantConfig defaults,
     String? employeeKey,
+    String? displayName,
   }) {
     final source = json ?? const <String, dynamic>{};
     final intro = source['intro'] is Map
@@ -134,6 +156,12 @@ class DigitalAutoAssistantConfig {
               .where((value) => value.isNotEmpty)
               .toList()
         : defaults.welcomePrompts;
+    final headerFallback =
+        (source['intro'] is Map || source['runtime'] is Map) &&
+            displayName != null &&
+            displayName.trim().isNotEmpty
+        ? displayName.trim()
+        : defaults.headerTitle;
     return DigitalAutoAssistantConfig(
       employeeKey: employeeKey?.trim().isNotEmpty == true
           ? employeeKey!.trim()
@@ -148,7 +176,7 @@ class DigitalAutoAssistantConfig {
         'body',
         stringValue(source, 'welcomeBody', defaults.welcomeBody),
       ),
-      headerTitle: stringValue(source, 'headerTitle', defaults.headerTitle),
+      headerTitle: stringValue(source, 'headerTitle', headerFallback),
       headerSubtitle: stringValue(
         intro,
         'headerSubtitle',

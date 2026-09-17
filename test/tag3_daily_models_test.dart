@@ -1,10 +1,11 @@
 import 'package:dunes_app/features/reconciliation/reconciliation_shucai_models.dart';
 import 'package:dunes_app/features/reconciliation/tag3_daily_models.dart';
+import 'package:dunes_app/features/reconciliation/tag3_daily_preview.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('reconCardTitle names tag3 daily', () {
-    expect(reconCardTitle('TAG3_DAILY'), '业财一体-日清');
+    expect(reconCardTitle('TAG3_DAILY'), '业财一体-日清月结');
     expect(isTag3DailyCard('tag3_daily'), isTrue);
   });
 
@@ -87,8 +88,8 @@ void main() {
     expect(sorted.last.period, 'MONTH');
     expect(tag3DailyPercent(0.0051), '0.51%');
     expect(tag3DailyMoney(15), '15.00');
-    expect(tag3DailyConfirmButtonLabel('BUSINESS'), '业务确认');
-    expect(tag3DailyConfirmButtonLabel('OPERATION'), '运营确认');
+    expect(tag3DailyConfirmButtonLabel('BUSINESS'), '确认');
+    expect(tag3DailyConfirmButtonLabel('OPERATION'), '确认');
     final empty = tag3DailyAuditLanes(
       assignee: snap.assigneeFor('多渠道|亿科景信'),
     );
@@ -123,5 +124,23 @@ void main() {
     );
     expect(confirmed[0].done, isTrue);
     expect(confirmed[1].done, isFalse);
+  });
+
+  test('today preview injects TAG3_DAILY card with 日清 and 月结 rows', () {
+    final asOf = tag3DailyPreviewAsOfDate(DateTime(2026, 9, 17));
+    expect(asOf, '2026-09-17');
+    final snap = tag3DailyPreviewSnapshot(asOfDate: asOf);
+    expect(snap.asOfDate, '2026-09-17');
+    expect(snap.rows.where((r) => r.period == 'DAY'), hasLength(4));
+    expect(snap.rows.where((r) => r.isMonthCumulative), hasLength(2));
+    expect(snap.rows.where((r) => r.isMonthCumulative).every((r) => !r.showConfirmAction), isTrue);
+    final injected = withTag3DailyPreview(const [], asOfDate: asOf);
+    if (kTag3DailyStaticPreview) {
+      expect(injected, hasLength(1));
+      expect(injected.single.payload?['cardType'], 'TAG3_DAILY');
+      expect(injected.single.payload?['asOfDate'], '2026-09-17');
+    } else {
+      expect(injected, isEmpty);
+    }
   });
 }

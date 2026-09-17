@@ -174,7 +174,7 @@ function canConfirm(row) {
   return me === row.biz || me === row.ops;
 }
 function confirmLabel(row) {
-  return me === row.ops && me !== row.biz ? '运营确认' : '业务确认';
+  return '确认';
 }
 function auditHtml(row) {
   const hist = historyOf(row.id);
@@ -215,9 +215,8 @@ function openDialog(id, confirm) {
   pending = { id, confirm };
   if (confirm) {
     dlgStep = 2;
-    const stageLabel = me === row.ops && me !== row.biz ? '运营' : '业务';
     document.getElementById('dlgTitle').textContent = '二次确认';
-    document.getElementById('dlgHint').textContent = `确定以${stageLabel}身份确认「${row.proj} · ${row.period}」？`;
+    document.getElementById('dlgHint').textContent = `确定确认「${row.proj} · ${row.period}」？`;
     document.getElementById('dlgText').classList.add('hidden');
     document.getElementById('dlgPreview').classList.add('hidden');
     document.getElementById('dlgOk').textContent = '确定确认';

@@ -17,7 +17,6 @@ import '../auth/auth_session.dart';
 import '../contacts/contact_models.dart';
 import '../contacts/contact_service.dart';
 import '../shell/dunes_main_tab_bar.dart';
-import '../shell/dunes_main_tab_bar.dart';
 import '../workbench/workbench_badge_notifier.dart';
 import 'comm_unread_notifier.dart';
 import 'conversation_inbox_cache.dart';
@@ -236,9 +235,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   int _contactSearchSeq = 0;
   Map<String, String> _novaStorage = const {};
   Map<String, InboxHiddenEntry> _hiddenConversations = const {};
-  String _selfImStatus = ImUserStatusCatalog.online;
+  ImUserStatusValue _selfImStatus = ImUserStatusValue.online;
 
-  // IM 通讯主页整体左滑跳到 AI 会话页面
+  // IM 通讯主页整体右滑进入小饕。
   double? _swipeStartX;
   double? _swipeStartY;
   int _swipeStartTime = 0;
@@ -265,17 +264,19 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     final dx = event.position.dx - _swipeStartX!;
     final dy = event.position.dy - _swipeStartY!;
     final elapsed = DateTime.now().millisecondsSinceEpoch - _swipeStartTime;
-
-    final isLeftSwipe = !_swipeIsVertical &&
-        dx < -55 &&
-        dx.abs() > dy.abs() * 1.3 &&
-        (elapsed < 650 || dx < -110);
+    final wasVertical = _swipeIsVertical;
 
     _swipeStartX = null;
     _swipeStartY = null;
     _swipeIsVertical = false;
 
-    if (isLeftSwipe) {
+    if (isDesktopCommOnly || widget.session.isExternalUser) return;
+    if (inboxSwipeOpensNova(
+      dx: dx,
+      dy: dy,
+      elapsedMs: elapsed,
+      isVertical: wasVertical,
+    )) {
       _openNovaConversation();
     }
   }
@@ -757,27 +758,34 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     } catch (_) {}
   }
 
-  Future<void> _setSelfImStatus(String status) async {
-    final next = ImUserStatusCatalog.normalize(status);
-    if (next == _selfImStatus) return;
+  Future<void> _setSelfImStatus(ImUserStatusValue status) async {
+    if (status == _selfImStatus) return;
     final prev = _selfImStatus;
-    setState(() => _selfImStatus = next);
+    setState(() => _selfImStatus = status);
     try {
-      final saved = await _service.putImStatus(next);
+      final saved = await _service.putImStatus(status);
       if (!mounted) return;
       if (saved != _selfImStatus) {
         setState(() => _selfImStatus = saved);
       }
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() => _selfImStatus = prev);
+      showDunesToast(
+        context,
+        friendlyErrorText(error, fallback: '状态更新失败'),
+        kind: DunesToastKind.error,
+      );
     }
   }
 
   void _applyImStatusEvent(ConversationRealtimeEvent event) {
     final userId = (event.raw['userId'] as num?)?.toInt() ?? 0;
-    final status = ImUserStatusCatalog.normalize(
-      event.raw['status']?.toString(),
+    final status = ImUserStatusCatalog.parse(
+      status: event.raw['status']?.toString(),
+      text: event.raw['text']?.toString(),
+      icon: event.raw['icon']?.toString(),
+      color: event.raw['color']?.toString(),
     );
     if (userId <= 0 || !mounted) return;
     if (userId == widget.session.userId) {
@@ -792,12 +800,18 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       if (item.isPrivate &&
           !item.isSelfMemo &&
           (item.peerUserId ?? 0) == userId &&
-          item.peerImStatus != status) {
+          (item.peerImStatus != status.key ||
+              item.peerImStatusText != status.text ||
+              item.peerImStatusIcon != status.icon ||
+              item.peerImStatusColor != status.color)) {
         changed = true;
         next.add(
           ConversationInboxRealtime.copyConversation(
             item,
-            peerImStatus: status,
+            peerImStatus: status.key,
+            peerImStatusText: status.text,
+            peerImStatusIcon: status.icon,
+            peerImStatusColor: status.color,
           ),
         );
       } else {
@@ -1613,6 +1627,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       sysTag: c.businessType,
       mentionLabel: selected ? null : c.unreadMentionLabel,
       imStatus: c.isPrivate && !c.isSelfMemo ? c.peerImStatus : null,
+      imStatusText: c.isPrivate && !c.isSelfMemo ? c.peerImStatusText : null,
+      imStatusIcon: c.isPrivate && !c.isSelfMemo ? c.peerImStatusIcon : null,
+      imStatusColor: c.isPrivate && !c.isSelfMemo ? c.peerImStatusColor : null,
       showDivider: true,
       onTap: onTap,
     );
@@ -2107,4 +2124,15 @@ class _ErrorPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+/// APP 通讯列表右滑进入小饕的手势判定。
+bool inboxSwipeOpensNova({
+  required double dx,
+  required double dy,
+  required int elapsedMs,
+  required bool isVertical,
+}) {
+  if (isVertical) return false;
+  return dx > 55 && dx.abs() > dy.abs() * 1.3 && (elapsedMs < 650 || dx > 110);
 }

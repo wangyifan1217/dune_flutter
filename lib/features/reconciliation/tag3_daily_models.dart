@@ -137,14 +137,7 @@ List<Tag3DailyAuditLane> tag3DailyAuditLanes({
 }
 
 String tag3DailyConfirmButtonLabel(String? stage) {
-  switch ((stage ?? '').trim().toUpperCase()) {
-    case 'OPERATION':
-      return '运营确认';
-    case 'BUSINESS':
-      return '业务确认';
-    default:
-      return '确认';
-  }
+  return '确认';
 }
 
 String tag3DailyStatDateDay(String raw) {

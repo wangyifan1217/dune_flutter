@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/horizontal_drag_scroll_view.dart';
 import 'tag3_daily_models.dart';
+
+const _kTag3DailyTableWidth = 1384.0;
 
 class Tag3DailyTable extends StatelessWidget {
   const Tag3DailyTable({
@@ -43,11 +46,9 @@ class Tag3DailyTable extends StatelessWidget {
       );
     }
     final sorted = sortTag3DailyRows(rows);
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 1120),
-        child: Table(
+    final table = SizedBox(
+      width: _kTag3DailyTableWidth,
+      child: Table(
           defaultVerticalAlignment: TableCellVerticalAlignment.middle,
           border: TableBorder(
             horizontalInside: BorderSide(color: DunesColors.border.withValues(alpha: 0.7)),
@@ -96,7 +97,10 @@ class Tag3DailyTable extends StatelessWidget {
               _dataRow(sorted, i),
           ],
         ),
-      ),
+    );
+    return HorizontalDragScrollView(
+      showScrollbar: true,
+      child: table,
     );
   }
 
@@ -390,7 +394,6 @@ Future<String?> showTag3DailyActionDialog({
   required bool confirm,
 }) {
   if (confirm) {
-    final stageLabel = row.canConfirmStage == 'OPERATION' ? '运营' : '业务';
     return showDialog<String>(
       context: context,
       barrierDismissible: false,
@@ -398,7 +401,7 @@ Future<String?> showTag3DailyActionDialog({
         return AlertDialog(
           title: const Text('二次确认'),
           content: Text(
-            '确定以$stageLabel身份确认「${row.projectName} · ${row.periodLabel}」？',
+            '确定确认「${row.projectName} · ${row.periodLabel}」？',
           ),
           actions: [
             TextButton(

@@ -16,6 +16,7 @@ import '../conversation/conversation_realtime_hub.dart';
 import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
 import '../desktop/windows_desktop_tray.dart';
+import '../shell/dunes_toast.dart';
 import '../task_assistant/recon_channel_confirm_card.dart';
 import '../task_assistant/recon_channel_confirm_preview.dart';
 import 'recon_gfm.dart';
@@ -24,6 +25,7 @@ import 'reconciliation_shucai_models.dart';
 import 'reconciliation_shucai_service.dart';
 import 'shucai_report_table.dart';
 import 'tag3_daily_models.dart';
+import 'tag3_daily_preview.dart';
 import 'tag3_daily_table.dart';
 
 /// 对账助手：真实 RECONCILIATION_ASSISTANT 会话，保留原名片/评价/确认风格。
@@ -64,9 +66,11 @@ class _NativeReconciliationAssistantPageState
   final Map<String, ReconCardStatus> _status = {};
   ShucaiSnapshot? _snapshot;
   Tag3DailySnapshot? _tag3Daily;
+  bool _tag3DailyPreview = false;
   final Set<String> _tag3ConfirmingKeys = {};
   String? _error;
   bool _loading = true;
+  bool _clearing = false;
   bool _confirming = false;
   bool _savingRows = false;
   final Map<String, ReconRowDecision> _rowDecisions = {};
@@ -239,7 +243,7 @@ class _NativeReconciliationAssistantPageState
               latest: page.items,
             )
           : page.items;
-      final displayed = withReconChannelPreview(next);
+      final displayed = withTag3DailyPreview(withReconChannelPreview(next));
       final messagesChanged = !_sameMessageIds(_messages, displayed);
       if (messagesChanged) {
         setState(() {
@@ -411,6 +415,7 @@ class _NativeReconciliationAssistantPageState
       _showDetails = false;
       _selectedRowKeys.clear();
       _tag3Daily = null;
+      _tag3DailyPreview = false;
       _tag3ConfirmingKeys.clear();
     });
     _scrollToLatestOnEnter();
@@ -505,17 +510,69 @@ class _NativeReconciliationAssistantPageState
       _detailCardType = 'TAG3_DAILY';
       _detailAsOfDate = card.asOfDate;
       _showDetails = true;
+      _tag3DailyPreview = false;
       if (!refresh) _tag3Daily = null;
       _error = null;
     });
     try {
       final snap = await _shucai.fetchTag3Daily(asOfDate: card.asOfDate);
       if (!mounted) return;
-      setState(() => _tag3Daily = snap);
+      final usePreview = kTag3DailyStaticPreview &&
+          card.asOfDate.trim() == tag3DailyPreviewAsOfDate() &&
+          snap.rows.isEmpty;
+      setState(() {
+        _tag3Daily = usePreview
+            ? tag3DailyPreviewSnapshot(asOfDate: card.asOfDate)
+            : snap;
+        _tag3DailyPreview = usePreview;
+      });
     } catch (e) {
       if (!mounted) return;
+      if (kTag3DailyStaticPreview &&
+          card.asOfDate.trim() == tag3DailyPreviewAsOfDate()) {
+        setState(() {
+          _tag3Daily = tag3DailyPreviewSnapshot(asOfDate: card.asOfDate);
+          _tag3DailyPreview = true;
+          _error = null;
+        });
+        return;
+      }
       setState(() => _error = friendlyErrorText(e));
     }
+  }
+
+  void _appendPreviewComment(
+    Tag3DailyRow row, {
+    required bool confirm,
+    required String body,
+  }) {
+    final current = _tag3Daily;
+    if (current == null) return;
+    final now = DateTime.now();
+    final item = Tag3DailyComment(
+      id: now.millisecondsSinceEpoch,
+      rowKey: row.rowKey,
+      period: row.period,
+      statDate: row.statDateDay,
+      periodLabel: row.periodLabel,
+      projectName: row.projectName,
+      userId: widget.session.userId,
+      userName: (widget.session.displayName ?? '').trim().isEmpty
+          ? '我'
+          : widget.session.displayName!.trim(),
+      kind: confirm ? 'CONFIRM' : 'COMMENT',
+      stage: (row.canConfirmStage ?? '').trim(),
+      body: body,
+      createdAt: now.toIso8601String(),
+    );
+    setState(() {
+      _tag3Daily = Tag3DailySnapshot(
+        asOfDate: current.asOfDate,
+        rows: current.rows,
+        assignees: current.assignees,
+        comments: [...current.comments, item],
+      );
+    });
   }
 
   Future<void> _confirmTag3Daily(Tag3DailyRow row) async {
@@ -542,6 +599,21 @@ class _NativeReconciliationAssistantPageState
     if (remark == null || !mounted) return;
     setState(() => _tag3ConfirmingKeys.add(row.actionId));
     try {
+      if (_tag3DailyPreview) {
+        _appendPreviewComment(row, confirm: confirm, body: remark);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              confirm
+                  ? '已确认 ${row.projectName} · ${row.periodLabel}'
+                  : '已记录 ${row.projectName} · ${row.periodLabel} 的意见',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
       if (confirm) {
         await _shucai.confirmTag3Daily(
           asOfDate: _detailAsOfDate,
@@ -655,7 +727,7 @@ class _NativeReconciliationAssistantPageState
         ),
         titleSpacing: 0,
         title: Text(
-          '业财一体-日清',
+          '业财一体-日清月结',
           style: DunesTypography.sans(
             fontSize: 17,
             fontWeight: FontWeight.w600,
@@ -692,67 +764,79 @@ class _NativeReconciliationAssistantPageState
       ),
       body: SafeArea(
         bottom: false,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _CardSurface(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$_dateLabel · 日清标签三',
-                    style: DunesTypography.sans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: DunesColors.text,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: _CardSurface(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$_dateLabel · 日清月结',
+                      style: DunesTypography.sans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: DunesColors.text,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    confirmable.isEmpty
-                        ? '当前没有需要你确认的日行。可以只填意见；业务和运营同时审核，记录按人保留。'
-                        : '业务和运营一起审、不排队。轮到你名下的行点确认即可，不用填内容。意见另填。本月累计只展示。',
-                    style: DunesTypography.sans(
-                      fontSize: 12.5,
-                      color: DunesColors.text2,
+                    const SizedBox(height: 6),
+                    Text(
+                      confirmable.isEmpty
+                          ? '当前没有需要你确认的日行。可以只填意见；业务和运营同时审核，记录按人保留。'
+                          : '业务和运营一起审、不排队。轮到你名下的行点确认即可，不用填内容。意见另填。本月累计只展示。',
+                      style: DunesTypography.sans(
+                        fontSize: 12.5,
+                        color: DunesColors.text2,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 14),
-            if (_error != null) ...[
-              Text(
-                _error!,
-                style: DunesTypography.sans(fontSize: 13, color: DunesColors.coral),
-              ),
-              const SizedBox(height: 12),
-            ],
-            if (snap == null)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-              )
-            else
-              Tag3DailyTable(
-                rows: snap.rows,
-                assignees: snap.assignees,
-                comments: snap.comments,
-                myUserId: widget.session.userId,
-                busyKeys: _tag3ConfirmingKeys,
-                onProjectTap: (row) => unawaited(
-                  _openTag3DailyDrilldown(row: row, metricKey: 'provinceSplit'),
-                ),
-                onReceivableTap: (row) => unawaited(
-                  _openTag3DailyDrilldown(
-                    row: row,
-                    metricKey: 'receivableAmount',
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Text(
+                  _error!,
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    color: DunesColors.coral,
                   ),
                 ),
-                onConfirm: _confirmTag3Daily,
-                onComment: _commentTag3Daily,
-                onViewComments: _viewTag3DailyComments,
               ),
+            Expanded(
+              child: snap == null
+                  ? const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
+                      child: Tag3DailyTable(
+                        rows: snap.rows,
+                        assignees: snap.assignees,
+                        comments: snap.comments,
+                        myUserId: widget.session.userId,
+                        busyKeys: _tag3ConfirmingKeys,
+                        onProjectTap: (row) => unawaited(
+                          _openTag3DailyDrilldown(
+                            row: row,
+                            metricKey: 'provinceSplit',
+                          ),
+                        ),
+                        onReceivableTap: (row) => unawaited(
+                          _openTag3DailyDrilldown(
+                            row: row,
+                            metricKey: 'receivableAmount',
+                          ),
+                        ),
+                        onConfirm: _confirmTag3Daily,
+                        onComment: _commentTag3Daily,
+                        onViewComments: _viewTag3DailyComments,
+                      ),
+                    ),
+            ),
           ],
         ),
       ),
@@ -1087,6 +1171,19 @@ class _NativeReconciliationAssistantPageState
               leadingAvatar: const _ReconciliationAssistantAvatar(size: 45),
               actions: [
                 IconButton(
+                  tooltip: '清空通知记录',
+                  onPressed: (_clearing || _loading || _convId <= 0)
+                      ? null
+                      : _confirmClearHistory,
+                  icon: _clearing
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.delete_outline_rounded, size: 21),
+                ),
+                IconButton(
                   tooltip: '刷新',
                   onPressed: _loading ? null : () => _reload(),
                   icon: const Icon(Icons.refresh_rounded, size: 21),
@@ -1419,13 +1516,59 @@ class _NativeReconciliationAssistantPageState
     return '$hh:$mm';
   }
 
+  Future<void> _confirmClearHistory() async {
+    if (_clearing || _convId <= 0) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('清空通知记录'),
+        content: const Text(
+          '将清空对账助手里的历史推送（仅自己不可见），日清数据和确认记录不受影响。确定清空吗？',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFC44949),
+            ),
+            child: const Text('清空'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _clearing = true);
+    try {
+      await _convService.clearConversationHistory(_convId);
+      if (!mounted) return;
+      setState(() {
+        _messages.clear();
+        _awayFromLatest = false;
+        _hasMore = false;
+        _error = null;
+        _showDetails = false;
+      });
+      showDunesCenterToast(context, '已清空通知记录');
+    } catch (e) {
+      if (mounted) {
+        showDunesCenterToast(context, friendlyErrorText(e));
+      }
+    } finally {
+      if (mounted) setState(() => _clearing = false);
+    }
+  }
+
   void _showInfo() {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('对账助手'),
         content: const Text(
-          '日清在对账助手里点开查看。日行、上月行可逐条确认并填建议；本月累计只展示。没有驳回。',
+          '对账助手只推送日清月结。点卡片打开同一张表：日行可确认和填意见，本月累计只展示。没有驳回。',
         ),
         actions: [
           TextButton(

@@ -1351,14 +1351,25 @@ class _NativeChatViewState extends State<NativeChatView>
     final userId = (event.raw['userId'] as num?)?.toInt() ?? 0;
     final peerId = conv.peerUserId ?? 0;
     if (userId <= 0 || peerId <= 0 || userId != peerId) return;
-    final status = ImUserStatusCatalog.normalize(
-      event.raw['status']?.toString(),
+    final parsed = ImUserStatusCatalog.parse(
+      status: event.raw['status']?.toString(),
+      text: event.raw['text']?.toString(),
+      icon: event.raw['icon']?.toString(),
+      color: event.raw['color']?.toString(),
     );
-    if (status == conv.peerImStatus) return;
+    if (parsed.key == conv.peerImStatus &&
+        parsed.text == conv.peerImStatusText &&
+        parsed.icon == conv.peerImStatusIcon &&
+        parsed.color == conv.peerImStatusColor) {
+      return;
+    }
     setState(() {
       _conversation = ConversationInboxRealtime.copyConversation(
         conv,
-        peerImStatus: status,
+        peerImStatus: parsed.key,
+        peerImStatusText: parsed.text,
+        peerImStatusIcon: parsed.icon,
+        peerImStatusColor: parsed.color,
       );
     });
   }
@@ -3309,6 +3320,9 @@ class _NativeChatViewState extends State<NativeChatView>
       peerAvatarObjectKey: current?.peerAvatarObjectKey,
       peerAvatarUrl: current?.peerAvatarUrl,
       peerImStatus: current?.peerImStatus ?? '',
+      peerImStatusText: current?.peerImStatusText ?? '',
+      peerImStatusIcon: current?.peerImStatusIcon ?? '',
+      peerImStatusColor: current?.peerImStatusColor ?? '',
     );
     final enriched = await _enrichPrivateConversation(fresh);
     if (!mounted) return enriched;
@@ -3374,6 +3388,9 @@ class _NativeChatViewState extends State<NativeChatView>
       hasUnreadMention: conv.hasUnreadMention,
       hasUnreadAtAll: conv.hasUnreadAtAll,
       peerImStatus: conv.peerImStatus,
+      peerImStatusText: conv.peerImStatusText,
+      peerImStatusIcon: conv.peerImStatusIcon,
+      peerImStatusColor: conv.peerImStatusColor,
     );
   }
 
@@ -8894,6 +8911,15 @@ class _NativeChatViewState extends State<NativeChatView>
                                   : widget.onOpenGroupInfo,
                               imStatus: _isPrivate && !conv.isSelfMemo
                                   ? conv.peerImStatus
+                                  : null,
+                              imStatusText: _isPrivate && !conv.isSelfMemo
+                                  ? conv.peerImStatusText
+                                  : null,
+                              imStatusIcon: _isPrivate && !conv.isSelfMemo
+                                  ? conv.peerImStatusIcon
+                                  : null,
+                              imStatusColor: _isPrivate && !conv.isSelfMemo
+                                  ? conv.peerImStatusColor
                                   : null,
                               showOnlineDot:
                                   _isPrivate &&

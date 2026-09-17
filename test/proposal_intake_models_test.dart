@@ -253,6 +253,19 @@ void main() {
     expect(proposalIntakeUntitledTitle('purchase'), '未命名采购业务提案');
     expect(ProposalIntakeRow.fromJson({'kind': 'purchase'}).kind, 'purchase');
     expect(ProposalIntakeRow.fromJson({}).kind, 'sales');
+    expect(proposalIntakeKindShortLabel('purchase'), '采购提案');
+    expect(proposalIntakeKindShortLabel('sales'), '销售提案');
+    final mixed = [
+      ProposalIntakeRow.fromJson({'id': 1, 'kind': 'sales'}),
+      ProposalIntakeRow.fromJson({'id': 2, 'kind': 'purchase'}),
+      ProposalIntakeRow.fromJson({'id': 3, 'kind': 'procurement'}),
+    ];
+    expect(proposalIntakeRowsOfKind(mixed, 'purchase').map((row) => row.id), [
+      2,
+      3,
+    ]);
+    expect(proposalIntakeRowsOfKind(mixed, 'sales').map((row) => row.id), [1]);
+    expect(proposalIntakeRowsOfKind(mixed, '').length, 3);
   });
 
   test('proposal options parse linked choices and rating thresholds', () {
@@ -323,6 +336,47 @@ void main() {
     expect(options.rebateModes, ['消费返', '核销返']);
   });
 
+  test('sku keeps per-product rollback', () {
+    final sku = ProposalSkuDetailRow.fromJson({
+      'id': 'sku-1',
+      'productName': '中石油100元',
+      'rollback': '按季度回滚',
+    });
+    expect(proposalIntakeSkuRollbackValue(sku), '按季度回滚');
+    expect(sku.toJson()['rollback'], '按季度回滚');
+    expect(
+      proposalIntakeSkuRollbackValue(
+        const ProposalSkuDetailRow(id: 'sku-2'),
+        form: {'rollback': '按年度回滚'},
+      ),
+      '按年度回滚',
+    );
+    expect(
+      proposalIntakeSkuRollbackValue(const ProposalSkuDetailRow(id: 'sku-3')),
+      kProposalDefaultRollback,
+    );
+  });
+
+  test('sku platform status defaults to pending', () {
+    final blank = ProposalSkuDetailRow.fromJson({
+      'id': 'sku-1',
+      'productName': '测试',
+    });
+    expect(
+      normalizeProposalSkuPlatformStatus(blank.platformStatus),
+      kProposalSkuPlatformStatusPending,
+    );
+    expect(proposalSkuPlatformStatusLabel(blank.platformStatus), '待配置');
+    expect(blank.toJson()['platformStatus'], kProposalSkuPlatformStatusPending);
+    expect(
+      ProposalSkuDetailRow.fromJson({
+        'id': 'sku-2',
+        'platformStatus': '待配置',
+      }).toJson()['platformStatus'],
+      kProposalSkuPlatformStatusPending,
+    );
+  });
+
   test('sku keeps institution snapshot', () {
     final sku = ProposalSkuDetailRow.fromJson({
       'id': 'sku-1',
@@ -365,14 +419,25 @@ void main() {
   });
 
   test('existing built sku requires catalog product instead of name', () {
-    expect(
-      proposalIntakeSkuSettleIssues({
-        'skuDetails': [
-          {'id': 'sku-1', 'existingBuilt': '是'},
-        ],
-      }),
-      contains('渠道产品第1条请搜索并选择已建产品'),
-    );
+    if (kProposalExistingBuiltEnabled) {
+      expect(
+        proposalIntakeSkuSettleIssues({
+          'skuDetails': [
+            {'id': 'sku-1', 'existingBuilt': '是'},
+          ],
+        }),
+        contains('渠道产品第1条请搜索并选择已建产品'),
+      );
+    } else {
+      expect(
+        proposalIntakeSkuSettleIssues({
+          'skuDetails': [
+            {'id': 'sku-1', 'existingBuilt': '是'},
+          ],
+        }),
+        isNot(contains('请搜索并选择已建产品')),
+      );
+    }
     final sku = ProposalSkuDetailRow.fromJson({
       'id': 'sku-1',
       'existingBuilt': '是',
@@ -388,15 +453,27 @@ void main() {
     expect(sku.productName, '中石油100');
     expect(sku.toJson()['assetProduct']['productCode'], 'CP001');
 
-    expect(
-      proposalIntakeSkuSettleIssues({
-        'isExistingBuilt': true,
-        'skuDetails': [
-          {'id': 'sku-1'},
-        ],
-      }),
-      containsAll(['渠道产品第1条请选择业务平台', '渠道产品第1条请搜索并选择已建产品']),
-    );
+    if (kProposalExistingBuiltEnabled) {
+      expect(
+        proposalIntakeSkuSettleIssues({
+          'isExistingBuilt': true,
+          'skuDetails': [
+            {'id': 'sku-1'},
+          ],
+        }),
+        containsAll(['渠道产品第1条请选择业务平台', '渠道产品第1条请搜索并选择已建产品']),
+      );
+    } else {
+      expect(
+        proposalIntakeSkuSettleIssues({
+          'isExistingBuilt': true,
+          'skuDetails': [
+            {'id': 'sku-1'},
+          ],
+        }),
+        isNot(contains('请选择业务平台')),
+      );
+    }
 
     final outbound = ProposalSkuDetailRow.fromJson({
       'id': 'sku-2',
@@ -641,58 +718,61 @@ void main() {
     expect(merged.map((item) => item.id).toList(), ['keep', 'child-1']);
   });
 
-  test('packet child settlements can be hydrated from product settlement api', () {
-    final empty = ChannelProductPacketItem.fromJson({
-      'itemProductId': 10,
-      'productName': '中石油100',
-      'syncSource': 'DIGITALG',
-      'num': 1,
-    });
-    expect(empty.settlementItems, isEmpty);
-    final fromAlias = ChannelProductPacketItem.fromJson({
-      'itemProductId': 10,
-      'productName': '中石油100',
-      'settlements': [
-        {
-          'billTypeL3Code': 'E_COUPON_SALES',
-          'taxRateCode': '13%',
-          'settleMethod': 1,
-          'settlementRatio': 98.5,
-        },
-      ],
-    });
-    expect(fromAlias.settlementItems.single.taxRateCode, '13%');
-
-    final hydrated = proposalIntakeHydratePacketItemSettlements(
-      empty,
-      ChannelProductSettlement.fromJson({
-        'id': 10,
+  test(
+    'packet child settlements can be hydrated from product settlement api',
+    () {
+      final empty = ChannelProductPacketItem.fromJson({
+        'itemProductId': 10,
         'productName': '中石油100',
-        'settlementItems': [
+        'syncSource': 'DIGITALG',
+        'num': 1,
+      });
+      expect(empty.settlementItems, isEmpty);
+      final fromAlias = ChannelProductPacketItem.fromJson({
+        'itemProductId': 10,
+        'productName': '中石油100',
+        'settlements': [
           {
             'billTypeL3Code': 'E_COUPON_SALES',
-            'billTypeL3Name': '电子券销售款',
+            'taxRateCode': '13%',
             'settleMethod': 1,
             'settlementRatio': 98.5,
-            'taxRateCode': '13%',
-            'invoiceTypeCode': '专票',
           },
         ],
-      }),
-    );
-    expect(hydrated.settlementItems, hasLength(1));
-    var nextId = 0;
-    final fill = proposalIntakeFillFromChannelPacket(
-      ChannelProductPacket(parent: hydrated.asSettlement, items: [hydrated]),
-      parentSkuId: 'sku-main',
-      newChildId: () => 'child-${++nextId}',
-    );
-    expect(fill.children.single.settlements.single.terms.taxRate, '13%');
-    expect(
-      fill.children.single.settlements.single.terms.billTypeRef?.name,
-      '电子券销售款',
-    );
-  });
+      });
+      expect(fromAlias.settlementItems.single.taxRateCode, '13%');
+
+      final hydrated = proposalIntakeHydratePacketItemSettlements(
+        empty,
+        ChannelProductSettlement.fromJson({
+          'id': 10,
+          'productName': '中石油100',
+          'settlementItems': [
+            {
+              'billTypeL3Code': 'E_COUPON_SALES',
+              'billTypeL3Name': '电子券销售款',
+              'settleMethod': 1,
+              'settlementRatio': 98.5,
+              'taxRateCode': '13%',
+              'invoiceTypeCode': '专票',
+            },
+          ],
+        }),
+      );
+      expect(hydrated.settlementItems, hasLength(1));
+      var nextId = 0;
+      final fill = proposalIntakeFillFromChannelPacket(
+        ChannelProductPacket(parent: hydrated.asSettlement, items: [hydrated]),
+        parentSkuId: 'sku-main',
+        newChildId: () => 'child-${++nextId}',
+      );
+      expect(fill.children.single.settlements.single.terms.taxRate, '13%');
+      expect(
+        fill.children.single.settlements.single.terms.billTypeRef?.name,
+        '电子券销售款',
+      );
+    },
+  );
 
   test('packet without children only fills parent settlements', () {
     final fill = proposalIntakeFillFromChannelPacket(
@@ -1827,7 +1907,7 @@ void main() {
       row: row,
     );
     expect(items.map((item) => item.line).toList(), [
-      '科技部负责人 张科技 · 请填写科技部内容',
+      '科技部负责人 张科技 · 请复核科技部内容',
       '财务部负责人二 李财务 · 请填写财务技术接口',
     ]);
     expect(proposalIntakeNotifiedToast(items), '已通知：张科技（科技部负责人）、李财务（财务部负责人二）');
@@ -1957,7 +2037,7 @@ void main() {
       proposalIntakeActionLabel(
         'review_tech',
         row: ProposalIntakeRow.fromJson({
-          'form': {'marketOwner2UserId': 9},
+          'form': {'technologyOwnerUserId': 9},
         }),
         people: const [
           ProposalPerson(userId: 9, name: '李市场', positionName: ''),
@@ -2021,7 +2101,7 @@ void main() {
       proposalIntakeListActionText(
         ProposalIntakeRow.fromJson({
           'status': 'reviewing',
-          'form': {'marketOwner1': '王一凡', 'marketOwner2': '刘雨滴'},
+          'form': {'marketOwner1': '王一凡', 'technologyOwner': '刘雨滴'},
           'review': {
             'stage': 'reviewing',
             'marketCompleted': false,
@@ -2703,10 +2783,7 @@ void main() {
     );
     expect(shouldSave(row(status: 'draft', title: '')), isFalse);
     expect(proposalIntakeIsWriteDeniedMessage('当前用户不是该提案填写人'), isTrue);
-    expect(
-      proposalIntakeIsConflictMessage('提案已被其他协作者更新，请刷新后重试'),
-      isTrue,
-    );
+    expect(proposalIntakeIsConflictMessage('提案已被其他协作者更新，请刷新后重试'), isTrue);
     expect(
       proposalIntakeShouldLeaveDespiteSaveError('提案已被其他协作者更新，请刷新后重试'),
       isTrue,
@@ -2980,10 +3057,17 @@ void main() {
       }),
       isEmpty,
     );
-    expect(
-      proposalIntakeSkuSettleIssues({'isExistingBuilt': true}),
-      contains('已勾选已建产品，请至少添加一条渠道产品并搜索选择已建产品'),
-    );
+    if (kProposalExistingBuiltEnabled) {
+      expect(
+        proposalIntakeSkuSettleIssues({'isExistingBuilt': true}),
+        contains('已勾选已建产品，请至少添加一条渠道产品并搜索选择已建产品'),
+      );
+    } else {
+      expect(
+        proposalIntakeSkuSettleIssues({'isExistingBuilt': true}),
+        isNot(contains('已勾选已建产品')),
+      );
+    }
     expect(
       proposalIntakeSkuSettleIssues({
         'skuDetails': [
@@ -3058,13 +3142,23 @@ void main() {
       proposalIntakeSkuSettleIssues(form),
       contains('渠道产品「中石油100元」结算二未填完结算方式对应金额、计算公式、税率'),
     );
-    expect(
-      proposalIntakeSkuSettleIssues({
-        'isExistingBuilt': true,
-        'isCouponPack': true,
-      }),
-      contains('已勾选已建产品，请至少添加一条渠道产品并搜索选择已建产品'),
-    );
+    if (kProposalExistingBuiltEnabled) {
+      expect(
+        proposalIntakeSkuSettleIssues({
+          'isExistingBuilt': true,
+          'isCouponPack': true,
+        }),
+        contains('已勾选已建产品，请至少添加一条渠道产品并搜索选择已建产品'),
+      );
+    } else {
+      expect(
+        proposalIntakeSkuSettleIssues({
+          'isExistingBuilt': true,
+          'isCouponPack': true,
+        }),
+        isNot(contains('已勾选已建产品')),
+      );
+    }
     expect(
       proposalIntakeSkuSettleIssues({
         'isCouponPack': true,
@@ -3619,6 +3713,7 @@ void main() {
       ProposalIntakeProgressState.current,
     );
     expect(_progressById(steps, 'initiate').statusText, '填写中');
+    expect(_progressById(steps, 'initiate').action, '填写市场、科技与产品');
     expect(
       _progressById(steps, 'initiate').time,
       formatProposalIntakeProgressTime('2026-09-04T02:48:00Z'),
@@ -3629,12 +3724,54 @@ void main() {
     );
     expect(_progressById(steps, 'review_finance_module').role, '财务部负责人一');
     expect(steps.any((item) => item.id == 'review_finance_interface'), isFalse);
-    expect(_progressById(steps, 'review_tech').action, '逐条复核科技（含财务技术接口）');
+    expect(_progressById(steps, 'review_tech').action, '复核科技与产品（含财务技术接口）');
     expect(
       steps
           .where((item) => item.state == ProposalIntakeProgressState.current)
           .length,
       1,
+    );
+  });
+
+  test('nav section check follows completed reviews', () {
+    final row = ProposalIntakeRow.fromJson({
+      'id': 18,
+      'kind': 'sales',
+      'status': 'reviewing',
+      'review': {
+        'stage': 'reviewing',
+        'marketCompleted': true,
+        'technologyCompleted': true,
+        'financeCompleted': false,
+      },
+    });
+    expect(
+      proposalIntakeNavSectionComplete(
+        row: row,
+        section: ProposalIntakeNavSection.market,
+      ),
+      isTrue,
+    );
+    expect(
+      proposalIntakeNavSectionComplete(
+        row: row,
+        section: ProposalIntakeNavSection.tech,
+      ),
+      isTrue,
+    );
+    expect(
+      proposalIntakeNavSectionComplete(
+        row: row,
+        section: ProposalIntakeNavSection.finance,
+      ),
+      isFalse,
+    );
+    expect(
+      proposalIntakeNavSectionComplete(
+        row: row,
+        section: ProposalIntakeNavSection.toc,
+      ),
+      isFalse,
     );
   });
 
@@ -3678,7 +3815,7 @@ void main() {
         _progressById(steps, 'review_tech').state,
         ProposalIntakeProgressState.current,
       );
-      expect(_progressById(steps, 'review_tech').name, '刘雨滴');
+      expect(_progressById(steps, 'review_tech').name, '李思');
       expect(
         _progressById(steps, 'president').state,
         ProposalIntakeProgressState.pending,
@@ -3738,14 +3875,8 @@ void main() {
       _progressById(steps, 'notify_president').state,
       ProposalIntakeProgressState.pending,
     );
-    expect(
-      proposalIntakePendingReviewLabels(row),
-      ['待石淼复核', '待邓艳丽复核'],
-    );
-    expect(
-      proposalIntakeProgressHeadline(steps),
-      '市场部负责人一 · 石淼、财务部负责人一 · 邓艳丽',
-    );
+    expect(proposalIntakePendingReviewLabels(row), ['待石淼复核', '待邓艳丽复核']);
+    expect(proposalIntakeProgressHeadline(steps), '市场部负责人一 · 石淼、财务部负责人一 · 邓艳丽');
   });
 
   test('finance module review waits until finance owner 2 is done', () {
@@ -3921,7 +4052,7 @@ void main() {
       'review': {'stage': 'awaiting_tech'},
     });
     final steps = proposalIntakeProgressSteps(row: row);
-    expect(proposalIntakeProgressHeadline(steps), '科技部负责人 · 李思、财务部负责人二 · 胡珏');
+    expect(proposalIntakeProgressHeadline(steps), '填写人 · 朱子姝、财务部负责人二 · 胡珏');
   });
 
   test('configured presidents are recognized without hiding progress', () {
@@ -3971,6 +4102,21 @@ void main() {
     expect(proposalIntakeNavJumpLabel('review_market'), '去底部确认');
     expect(proposalIntakeNavJumpLabel('review_finance_module'), '去底部确认');
     expect(proposalIntakeNavJumpLabel('fill'), '去市场部填写');
+    expect(proposalIntakeTaskBannerTitle('fill'), '待你填写市场、科技与产品');
+    expect(proposalIntakeTaskBannerTitle('fill_tech'), '待你填写科技与产品');
+    expect(
+      proposalIntakeTaskBannerTitle('fill_finance_interface'),
+      '待你填写财务技术接口',
+    );
+    expect(proposalIntakeNavTodoBadge('fill'), '填');
+    expect(proposalIntakeNavTodoBadge('review_tech'), '核');
+    expect(proposalIntakeSectionTaskCue('fill'), '请在本板块填写');
+    expect(proposalIntakeSectionTaskCue('review_tech'), '请在本板块复核');
+    expect(
+      proposalIntakeTaskBannerTitle('submit_president'),
+      contains('通知最终人'),
+    );
+    expect(proposalIntakeNavJumpLabel('submit_president'), '去底部确认');
     expect(proposalIntakeActionIsModuleReview('review_market'), isTrue);
     expect(proposalIntakeActionIsModuleReview('review_tech'), isFalse);
     expect(proposalIntakeTaskBannerTitle('review_market'), '待你整板块复核市场部');
@@ -4056,11 +4202,15 @@ void main() {
       ]);
       expect(
         proposalIntakeTechnologyReviewItemKeys(form),
-        contains('children:technologyPlatform'),
+        kProposalChildTechEnabled
+            ? contains('children:technologyPlatform')
+            : isNot(contains('children:technologyPlatform')),
       );
       expect(
         proposalIntakeTechnologyReviewGaps(const {}, form: form),
-        contains('${kProposalChildProductLabel}τ-标签一'),
+        kProposalChildTechEnabled
+            ? contains('${kProposalChildProductLabel}τ-标签一')
+            : isNot(contains('${kProposalChildProductLabel}τ-标签一')),
       );
       final synced = proposalIntakeSyncChildProductMeta(form);
       expect(synced['isCouponPack'], isTrue);

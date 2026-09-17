@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>销售提案 · 流程状态静态页</title>
+<style>
+  :root {
+    --page: #F3F0F7;
+    --app: #FBFAFD;
+    --card: #fff;
+    --border: #E1D9EA;
+    --border-soft: #EEE8F3;
+    --border-strong: #D8CBE6;
+    --text: #292530;
+    --text2: #66606D;
+    --text3: #958E9E;
+    --text4: #C5BFCE;
+    --purple: #7B5CD8;
+    --purple-deep: #4F3488;
+    --purple-soft: #E8DCF7;
+    --purple-line: #9B7AD4;
+    --green: #3F7A38;
+    --green-soft: #D7E8C8;
+    --coral: #BC5C40;
+    --coral-soft: #F5E5DC;
+    --amber: #B07A2B;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #e8e4f0;
+    color: var(--text);
+  }
+  button { font-family: inherit; cursor: pointer; }
+  .shell {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    height: 100%;
+  }
+  .rail {
+    background: #2B243C;
+    color: #fff;
+    padding: 20px 14px 28px;
+    overflow: auto;
+  }
+  .rail .kicker {
+    font-size: 11px;
+    letter-spacing: .08em;
+    color: #b9a8d8;
+    margin-bottom: 8px;
+  }
+  .rail h1 { font-size: 16px; margin: 0 0 6px; }
+  .rail .note {
+    font-size: 12px;
+    color: #c5bfce;
+    line-height: 1.5;
+    margin: 0 0 18px;
+  }
+  .rail button.tab {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: transparent;
+    color: #e8e2f4;
+    padding: 10px 12px;
+    border-radius: 10px;
+    margin-bottom: 4px;
+  }
+  .rail button.tab small {
+    display: block;
+    color: #b9a8d8;
+    font-size: 11px;
+    margin-top: 2px;
+  }
+  .rail button.tab.on {
+    background: #7B5CD8;
+    color: #fff;
+  }
+  .rail button.tab.on small { color: #efe8ff; }
+  .stage {
+    padding: 18px 22px 28px;
+    overflow: auto;
+  }
+  .hint {
+    font-size: 12px;
+    color: var(--text3);
+    margin: 0 0 12px;
+  }
+  .window {
+    max-width: 1080px;
+    background: var(--app);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: 0 18px 40px rgba(79, 52, 136, .12);
+    overflow: hidden;
+  }
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-soft);
+    background: #fff;
+  }
+  .topbar .title { font-weight: 700; font-size: 14px; flex: 1; }
+  .chip {
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 4px 10px;
+    border: 1px solid var(--border-strong);
+    background: var(--page);
+    color: var(--text2);
+  }
+  .chip.filling { color: var(--amber); background: #F4E8D2; border-color: #E0CBA0; }
+  .chip.reviewing { color: var(--purple-deep); background: var(--purple-soft); border-color: var(--purple-line); }
+  .chip.done { color: var(--green); background: var(--green-soft); border-color: #A9C99A; }
+  .chip.warn { color: var(--coral); background: var(--coral-soft); border-color: #E7C2B0; }
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    height: 48px;
+    background: var(--app);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .nav .loc {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--purple);
+    font-size: 12px;
+    font-weight: 700;
+    margin-right: 6px;
+  }
+  .nav-chip {
+    position: relative;
+    border: 1px solid var(--border-strong);
+    background: #fff;
+    color: var(--purple-deep);
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .nav-chip.active {
+    background: var(--purple);
+    color: #fff;
+    border-color: var(--purple);
+    font-weight: 700;
+  }
+  .nav-chip.mine {
+    background: var(--purple-soft);
+    border-color: var(--purple);
+    font-weight: 700;
+  }
+  .nav-chip .ok {
+    position: absolute;
+    right: -2px;
+    top: -5px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--green);
+    color: #fff;
+    font-size: 10px;
+    line-height: 14px;
+    text-align: center;
+  }
+  .nav-chip .todo {
+    position: absolute;
+    right: -4px;
+    top: -6px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--amber);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 800;
+    line-height: 16px;
+    text-align: center;
+  }
+  .cue {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .cue.on { display: flex; }
+  .cue.fill { background: #F4E8D2; border: 1px solid var(--amber); color: var(--amber); }
+  .cue.review { background: var(--purple-soft); border: 1px solid var(--purple); color: var(--purple-deep); }
+  .banner {
+    margin: 14px 16px 0;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: var(--purple-soft);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .banner.hidden { display: none; }
+  .banner h3 { margin: 0; font-size: 13px; }
+  .banner p { margin: 4px 0 0; font-size: 12px; color: var(--text2); line-height: 1.45; }
+  .banner button {
+    flex: 0 0 auto;
+    height: 32px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--purple);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 0 12px;
+  }
+  .body {
+    display: grid;
+    grid-template-columns: 1.15fr .85fr;
+    gap: 16px;
+    padding: 14px 16px 18px;
+  }
+  .panel {
+    background: #fff;
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    padding: 14px;
+  }
+  .panel h2 { margin: 0 0 4px; font-size: 13px; }
+  .muted { font-size: 11px; color: var(--text3); line-height: 1.45; margin: 0 0 10px; }
+  .add {
+    float: right;
+    border: 0;
+    background: none;
+    color: var(--green);
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .product {
+    border: 1px solid var(--purple-line);
+    background: rgba(232, 220, 247, .24);
+    border-radius: 12px;
+    padding: 10px 12px;
+  }
+  .product .row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .product b { font-size: 12px; }
+  .product .meta { font-size: 11px; color: var(--text3); margin-top: 4px; }
+  .actions button {
+    border: 0;
+    background: none;
+    color: var(--purple-deep);
+    font-size: 13px;
+    padding: 6px 4px 0 0;
+  }
+  .review {
+    border: 1px solid var(--purple);
+    background: var(--purple-soft);
+    color: var(--purple-deep);
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 5px 9px;
+    white-space: nowrap;
+  }
+  .review.done {
+    background: var(--green-soft);
+    border-color: var(--green);
+    color: var(--green);
+  }
+  .review.off {
+    background: var(--page);
+    border-color: var(--border-strong);
+    color: var(--text3);
+    cursor: default;
+  }
+  .field { margin-top: 12px; }
+  .field label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 6px; }
+  .select {
+    position: relative;
+    border: 1px solid var(--purple-line);
+    background: #f7f4fb;
+    border-radius: 12px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    color: var(--text3);
+  }
+  .select.has { color: var(--text); font-weight: 600; }
+  .select:focus, .select.open { outline: 2px solid rgba(123,92,216,.25); }
+  .menu {
+    display: none;
+    position: absolute;
+    left: 0; right: 0; top: 44px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 10px 24px rgba(78,58,108,.2);
+    overflow: hidden;
+    z-index: 5;
+  }
+  .menu.open { display: block; }
+  .menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: #fff;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  .menu button:hover { background: var(--page); }
+  .progress h2 { font-size: 13px; color: var(--text2); }
+  .progress .head {
+    background: var(--page);
+    margin: -14px -14px 12px;
+    padding: 10px 14px;
+    border-radius: 12px 12px 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .step { display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; min-height: 52px; }
+  .rail-dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1.6px solid var(--text4);
+    background: #fff;
+    color: var(--text4);
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+  }
+  .line { width: 2px; height: calc(100% - 24px); margin: 2px auto 0; background: var(--border-soft); }
+  .step.current .rail-dot, .step.done .rail-dot { background: var(--purple-deep); border-color: var(--purple-deep); color: #fff; }
+  .step.rejected .rail-dot { background: var(--coral); border-color: var(--coral); color: #fff; }
+  .step.current .line, .step.done .line { background: var(--purple-deep); }
+  .step .who { font-size: 13px; font-weight: 700; }
+  .step.pending .who, .step.pending .act, .step.pending .name { color: var(--text3); }
+  .step .act, .step .name { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .step .name { color: var(--text); font-weight: 600; }
+  .step .right { font-size: 11px; color: var(--text3); }
+  .step.current .right { color: var(--purple-deep); font-weight: 700; }
+  .step.current .who { color: var(--purple-deep); }
+  .foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 0 16px 16px;
+  }
+  .ghost, .solid {
+    height: 36px;
+    border-radius: 999px;
+    padding: 0 18px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .ghost { border: 0; background: transparent; color: var(--text2); }
+  .solid { border: 0; background: #2F6B5D; color: #fff; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="kicker">LOCAL STATIC</div>
+    <h1>销售提案流程状态</h1>
+    <p class="note">纯本地静态页，不请求接口、不写库。点左侧切换，看定位勾、产品复核和审批进度。</p>
+    <div id="tabs"></div>
+  </aside>
+  <main class="stage">
+    <p class="hint" id="hint"></p>
+    <div class="window">
+      <div class="topbar">
+        <div class="title" id="title">王奕凡 · 销售业务提案</div>
+        <span class="chip" id="statusChip">填写中</span>
+      </div>
+      <div class="nav" id="nav"></div>
+      <div class="banner" id="banner">
+        <div>
+          <h3 id="bannerTitle"></h3>
+          <p id="bannerBody"></p>
+        </div>
+        <button type="button" id="bannerJump"></button>
+      </div>
+      <div class="body">
+        <section class="panel">
+          <button class="add" type="button">+ 新增主产品</button>
+          <h2>主产品</h2>
+          <div class="cue" id="cue"></div>
+          <p class="muted">点新增后在弹框中填写。新增子产品时需选择对应主产品和关联数量。</p>
+          <div class="product">
+            <div class="row">
+              <div>
+                <b>主产品 1 · 测试</b>
+                <div class="meta">面值 100 · 库存 12 · 是 · 不回滚</div>
+              </div>
+              <button class="review off" type="button" id="reviewBtn">科技部负责人复核</button>
+            </div>
+            <div class="actions">
+              <button type="button">复制</button>
+              <button type="button">粘贴</button>
+              <button type="button">编辑</button>
+              <button type="button">删除</button>
+              <button type="button">填写结算</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>是否同步中油好客</label>
+            <div class="select" id="select" tabindex="0">
+              <span id="selectValue">请选择</span>
+              <span>▾</span>
+              <div class="menu" id="menu">
+                <button type="button" data-v="是">是</button>
+                <button type="button" data-v="否">否</button>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="panel progress">
+          <div class="head">
+            <div>
+              <h2>审批进度</h2>
+              <div class="muted" id="headline" style="margin:2px 0 0"></div>
+            </div>
+            <button class="ghost" type="button" id="toggleSteps" style="height:auto;padding:0">收起步骤</button>
+          </div>
+          <div id="steps"></div>
+        </section>
+      </div>
+      <div class="foot">
+        <button class="ghost" type="button">取消</button>
+        <button class="solid" type="button" id="primaryBtn">确定</button>
+      </div>
+    </div>
+  </main>
+</div>
+<script>
+const STAGES = [
+  {
+    id: "filling",
+    tab: "01 填写中",
+    desc: "提交人填市场、科技与产品",
+    chip: "填写中",
+    chipClass: "filling",
+    hint: "当前：提交人填写。定位「市场部」右上角是「填」，点「去市场部填写」会跳到该板块。产品卡还不出现复核按钮。下拉可点开选「是 / 否」。",
+    banner: { title: "待你填写市场、科技与产品", body: "先填市场部和产品，科技字段一并填。填完后点右上角「通知科技」。定位条带「填」的就是当前板块。", jump: "去市场部填写" },
+    nav: { active: "market", mine: "market", done: [], todo: "market", todoText: "填" },
+    review: "hidden",
+    headline: "提交人 · 王奕凡",
+    primary: "通知科技",
+    steps: [
+      ["王奕凡 发起", "填写市场、科技与产品", "填写中", "当前", "current"],
+      ["填写人", "填写科技与产品", "王奕凡 待处理", "", "pending"],
+      ["财务部负责人二", "填写财务技术接口", "待处理", "", "pending"],
+      ["提交人", "提交复核", "王奕凡 待处理", "", "pending"],
+      ["市场部负责人一", "整板块复核市场", "待处理", "", "pending"],
+      ["科技部负责人", "复核科技与产品（含财务技术接口）", "待处理", "", "pending"],
+      ["财务部负责人二", "复核合同与财务", "待处理", "", "pending"],
+      ["财务部负责人一", "整板块复核财务", "待处理", "", "pending"],
+      ["提交人", "通知最终人", "待处理", "", "pending"],
+      ["最终确认人", "最终确认", "待处理", "", "pending"]
+    ]
+  },
+  {
+    id: "awaiting_tech",
+    tab: "02 待填科技与接口",
+    desc: "填写人 + 财务二并行",
+    chip: "填写中",
+    chipClass: "filling",
+    hint: "提交人已通知科技。填写人补科技与产品，财务二填财务技术接口。定位仍无勾，因为还没进入复核。",
+    banner: { title: "待你填写科技与产品", body: "财务技术接口由财务部负责人二填写。完成后由科技部负责人复核。", jump: "去科技部" },
+    nav: { active: "tech", mine: "tech", done: [], todo: "tech", todoText: "填" },
+    review: "hidden",
+    headline: "填写人 · 王奕凡",
+    primary: "提交复核",
+    steps: [
+      ["王奕凡 发起", "填写市场、科技与产品", "已发起", "", "done"],
+      ["填写人", "填写科技与产品", "王奕凡", "当前", "current"],
+      ["财务部负责人二", "填写财务技术接口", "", "当前", "current"],
+      ["提交人", "提交复核", "王奕凡 待处理", "", "pending"],
+      ["市场部负责人一", "整板块复核市场", "待处理", "", "pending"],
+      ["科技部负责人", "复核科技与产品（含财务技术接口）", "待处理", "", "pending"],
+      ["财务部负责人二", "复核合同与财务", "待处理", "", "pending"],
+      ["财务部负责人一", "整板块复核财务", "待处理", "", "pending"]
+    ]
+  },
+  {
+    id: "reviewing",
+    tab: "03 复核中 · 全未勾",
+    desc: "市场 / 科技 / 财务并行复核",
+    chip: "复核中",
+    chipClass: "reviewing",
+    hint: "进入复核。定位「科技部」右上角是「核」。产品卡可点复核。顶部黄/紫条和定位角标都指向当前该做的板块。",
+    banner: { title: "待你逐条复核科技部", body: "还剩若干条未复核。到各字段旁点复核，财务技术接口也算科技一条。定位条带「核」的就是当前板块。", jump: "去科技部复核" },
+    nav: { active: "tech", mine: "tech", done: [], todo: "tech", todoText: "核" },
+    headline: "科技部负责人 · 王奕凡",
+    primary: "确认科技部",
+    steps: [
+      ["王奕凡 发起", "发起", "已发起", "", "done"],
+      ["填写人", "填写科技与产品", "王奕凡", "", "done"],
+      ["财务部负责人二", "填写财务技术接口", "", "", "done"],
+      ["提交人", "提交复核", "王奕凡", "", "done"],
+      ["市场部负责人一", "整板块复核市场", "待复核", "当前", "current"],
+      ["科技部负责人", "复核科技与产品（含财务技术接口）", "待复核", "当前", "current"],
+      ["财务部负责人二", "复核合同与财务", "待复核", "当前", "current"],
+      ["财务部负责人一", "整板块复核财务", "待处理", "", "pending"]
+    ]
+  },
+  {
+    id: "market_done",
+    tab: "04 市场已复核",
+    desc: "定位「市场部」打勾",
+    chip: "复核中",
+    chipClass: "reviewing",
+    hint: "市场整板块已通过，右上角绿勾出现在「市场部」。科技、财务还没完，目录和四流也不打勾。",
+    banner: { title: "待你逐条复核科技部", body: "市场部已完成。继续勾科技字段和产品相关，财务技术接口也算科技一条。", jump: "去科技部复核" },
+    nav: { active: "market", mine: "tech", done: ["market"], todo: "tech", todoText: "核" },
+    review: "pending",
+    headline: "科技部负责人 · 王奕凡",
+    primary: "确认科技部",
+    steps: [
+      ["王奕凡 发起", "发起", "已发起", "", "done"],
+      ["填写人", "填写科技与产品", "王奕凡", "", "done"],
+      ["财务部负责人二", "填写财务技术接口", "", "", "done"],
+      ["提交人", "提交复核", "王奕凡", "", "done"],
+      ["市场部负责人一", "整板块复核市场", "已通过", "", "done"],
+      ["科技部负责人", "复核科技与产品（含财务技术接口）", "待复核", "当前", "current"],
+      ["财务部负责人二", "复核合同与财务", "待复核", "当前", "current"],
+      ["财务部负责人一", "整板块复核财务", "待处理", "", "pending"]
+    ]
+  },
+  {
+    id: "tech_done",
+    tab: "05 市场+科技已复核",
+    desc: "市场部、科技部打勾",
+    chip: "复核中",
+    chipClass: "reviewing",
+    hint: "科技（含产品相关）也过了。财务还没完，所以财务部 / 四流 / 目录仍无勾。产品卡显示已复核。",
+    banner: { title: "待你复核合同与财务", body: "科技与产品已完成。财务部负责人二逐条复核财务和合同后，财务部负责人一整板块确认。", jump: "去财务部复核" },
+    nav: { active: "finance", mine: "finance", done: ["market", "tech"], todo: "finance", todoText: "核" },
+    review: "done",
+    headline: "财务部负责人二 · 王奕凡",
+    primary: "确认财务",
+    steps: [
+      ["王奕凡 发起", "发起", "已发起", "", "done"],
+      ["填写人", "填写科技与产品", "王奕凡", "", "done"],
+      ["财务部负责人二", "填写财务技术接口", "", "", "done"],
+      ["提交人", "提交复核", "王奕凡", "", "done"],
+      ["市场部负责人一", "整板块复核市场", "已通过", "", "done"],
+      ["科技部负责人", "复核科技与产品（含财务技术接口）", "已通过", "", "done"],
+      ["财务部负责人二", "复核合同与财务", "待复核", "当前", "current"],
+      ["财务部负责人一", "整板块复核财务", "待处理", "", "pending"]
+    ]
+  },
+  {
+    id: "awaiting_submit",
+    tab: "06 待通知最终人",
+    desc: "全部板块勾完",
+    chip: "待通知最终人",
+    chipClass: "reviewing",
+    hint: "市场、科技、财务都过了。目录和四流也打勾。提交人通知最终人。",
+    banner: { title: "各环节已复核完成，请通知最终人", body: "点底部通知最终人后进入待最终确认。", jump: "去底部确认" },
+    nav: { active: "toc", mine: "", done: ["toc", "market", "tech", "finance", "flow"] },
+    review: "done",
+    headline: "提交人 · 王奕凡",
+    primary: "通知最终人",
+    steps: [
+      ["王奕凡 发起", "发起", "已发起", "", "done"],
+      ["填写人", "填写科技与产品", "王奕凡", "", "done"],
+      ["财务部负责人二", "填写财务技术接口", "", "", "done"],
+      ["提交人", "提交复核", "王奕凡", "", "done"],
+      ["市场部负责人一", "整板块复核市场", "已通过", "", "done"],
+      ["科技部负责人", "复核科技与产品（含财务技术接口）", "已通过", "", "done"],
+      ["财务部负责人二", "复核合同与财务", "已通过", "", "done"],
+      ["财务部负责人一", "整板块复核财务", "已通过", "", "done"],
+      ["提交人", "通知最终人", "", "当前", "current"],
+      ["最终确认人", "最终确认", "待处理", "", "pending"]
+    ]
+  },
+  {
+    id: "pending_president",
+    tab: "07 待最终确认",
+    desc: "终审人看整单",
+    chip: "待最终确认",
+    chipClass: "reviewing",
+    hint: "表单只读。定位勾仍在。最终人通过后变成已完成。",
+    banner: { title: "待你最终确认", body: "看完整单后通过或驳回。驳回会退回提交人，流程从头填写。", jump: "去底部确认" },
+    nav: { active: "toc", mine: "toc", done: ["toc", "market", "tech", "finance", "flow"] },
+    review: "done",
+    headline: "最终确认人",
+    primary: "通过",
+    steps: [
+      ["王奕凡 发起", "发起", "已发起", "", "done"],
+      ["填写人", "填写科技与产品", "王奕凡", "", "done"],
+      ["财务部负责人二", "填写财务技术接口", "", "", "done"],
+      ["提交人", "提交复核", "王奕凡", "", "done"],
+      ["市场部负责人一", "整板块复核市场", "已通过", "", "done"],
+      ["科技部负责人", "复核科技与产品（含财务技术接口）", "已通过", "", "done"],
+      ["财务部负责人二", "复核合同与财务", "已通过", "", "done"],
+      ["财务部负责人一", "整板块复核财务", "已通过", "", "done"],
+      ["提交人", "通知最终人", "王奕凡", "", "done"],
+      ["最终确认人", "最终确认", "", "当前", "current"]
+    ]
+  },
+  {
+    id: "done",
+    tab: "08 已完成",
+    desc: "终审通过，可发起科技变更",
+    chip: "已完成",
+    chipClass: "done",
+    hint: "全部完成。定位勾保留。科技部负责人可以发起科技变更。",
+    banner: null,
+    nav: { active: "toc", mine: "", done: ["toc", "market", "tech", "finance", "flow"] },
+    review: "done",
+    headline: "已完成",
+    primary: "关闭",
+    steps: [
+      ["王奕凡 发起", "发起", "已发起", "", "done"],
+      ["填写人", "填写科技与产品", "王奕凡", "", "done"],
+      ["财务部负责人二", "填写财务技术接口", "", "", "done"],
+      ["提交人", "提交复核", "王奕凡", "", "done"],
+      ["市场部负责人一", "整板块复核市场", "已通过", "", "done"],
+      ["科技部负责人", "复核科技与产品（含财务技术接口）", "已通过", "", "done"],
+      ["财务部负责人二", "复核合同与财务", "已通过", "", "done"],
+      ["财务部负责人一", "整板块复核财务", "已通过", "", "done"],
+      ["提交人", "通知最终人", "王奕凡", "", "done"],
+      ["最终确认人", "最终确认", "已通过", "", "done"]
+    ]
+  },
+  {
+    id: "rejected",
+    tab: "09 板块驳回",
+    desc: "市场整板块驳回后改内容",
+    chip: "填写中",
+    chipClass: "warn",
+    hint: "市场部负责人一整板块驳回。提交人改完后重新提交复核，不必再走通知科技。",
+    banner: { title: "板块已驳回请修改", body: "驳回意见：执行计划需补试点省节奏。改完后重新提交复核。", jump: "去市场部" },
+    nav: { active: "market", mine: "market", done: [], todo: "market", todoText: "填" },
+    review: "hidden",
+    headline: "提交人 · 王奕凡",
+    primary: "重新提交复核",
+    steps: [
+      ["王奕凡 发起", "填写市场、科技与产品", "填写中", "当前", "current"],
+      ["填写人", "填写科技与产品", "王奕凡 待处理", "", "pending"],
+      ["财务部负责人二", "填写财务技术接口", "待处理", "", "pending"],
+      ["提交人", "提交复核", "王奕凡 待处理", "", "pending"],
+      ["市场部负责人一", "整板块复核市场", "已驳回", "", "rejected"],
+      ["科技部负责人", "复核科技与产品（含财务技术接口）", "待处理", "", "pending"]
+    ]
+  }
+];
+
+const NAVS = [
+  ["toc", "目录"],
+  ["market", "市场部"],
+  ["tech", "科技部"],
+  ["finance", "财务部"],
+  ["flow", "四流"]
+];
+
+const tabsEl = document.getElementById("tabs");
+STAGES.forEach((stage, i) => {
+  const btn = document.createElement("button");
+  btn.className = "tab" + (i === 0 ? " on" : "");
+  btn.type = "button";
+  btn.innerHTML = `${stage.tab}<small>${stage.desc}</small>`;
+  btn.onclick = () => select(i);
+  tabsEl.appendChild(btn);
+});
+
+let expanded = true;
+let reviewed = false;
+document.getElementById("toggleSteps").onclick = () => {
+  expanded = !expanded;
+  document.getElementById("toggleSteps").textContent = expanded ? "收起步骤" : "展开步骤";
+  renderSteps(STAGES[current]);
+};
+
+const selectEl = document.getElementById("select");
+const menuEl = document.getElementById("menu");
+const selectValue = document.getElementById("selectValue");
+selectEl.onclick = (e) => {
+  if (e.target.closest(".menu")) return;
+  menuEl.classList.toggle("open");
+  selectEl.classList.toggle("open", menuEl.classList.contains("open"));
+};
+menuEl.querySelectorAll("button").forEach((btn) => {
+  btn.onclick = () => {
+    selectValue.textContent = btn.dataset.v;
+    selectEl.classList.add("has");
+    menuEl.classList.remove("open");
+    selectEl.classList.remove("open");
+  };
+});
+document.addEventListener("click", (e) => {
+  if (!selectEl.contains(e.target)) {
+    menuEl.classList.remove("open");
+    selectEl.classList.remove("open");
+  }
+});
+
+const reviewBtn = document.getElementById("reviewBtn");
+reviewBtn.onclick = () => {
+  if (reviewBtn.classList.contains("off")) return;
+  reviewed = !reviewed;
+  reviewBtn.classList.toggle("done", reviewed);
+  reviewBtn.textContent = reviewed ? "已复核" : "点此复核";
+};
+
+let current = 0;
+function select(i) {
+  current = i;
+  [...tabsEl.children].forEach((el, idx) => el.classList.toggle("on", idx === i));
+  render(STAGES[i]);
+}
+
+function render(stage) {
+  document.getElementById("hint").textContent = stage.hint;
+  document.getElementById("statusChip").textContent = stage.chip;
+  document.getElementById("statusChip").className = "chip " + stage.chipClass;
+  document.getElementById("headline").textContent = "提交人：" + (stage.headline || "");
+  document.getElementById("primaryBtn").textContent = stage.primary;
+  const banner = document.getElementById("banner");
+  if (!stage.banner) {
+    banner.classList.add("hidden");
+  } else {
+    banner.classList.remove("hidden");
+    document.getElementById("bannerTitle").textContent = stage.banner.title;
+    document.getElementById("bannerBody").textContent = stage.banner.body;
+    document.getElementById("bannerJump").textContent = stage.banner.jump;
+  }
+  document.getElementById("nav").innerHTML =
+    `<div class="loc">◎ 定位</div>` +
+    NAVS.map(([id, label]) => {
+      const cls = [
+        "nav-chip",
+        stage.nav.active === id ? "active" : "",
+        stage.nav.mine === id && stage.nav.active !== id ? "mine" : ""
+      ].filter(Boolean).join(" ");
+      const ok = stage.nav.done.includes(id) ? `<span class="ok">✓</span>` : "";
+      const todo = !ok && stage.nav.todo === id
+        ? `<span class="todo">${stage.nav.todoText || "办"}</span>`
+        : "";
+      return `<button class="${cls}" type="button">${label}${ok}${todo}</button>`;
+    }).join("");
+  if (stage.review === "hidden") {
+    reviewBtn.className = "review off";
+    reviewBtn.textContent = "科技部负责人复核";
+    reviewed = false;
+  } else if (stage.review === "done") {
+    reviewBtn.className = "review done";
+    reviewBtn.textContent = "已复核";
+    reviewed = true;
+  } else {
+    reviewBtn.className = "review";
+    reviewBtn.textContent = "点此复核";
+    reviewed = false;
+  }
+  const cue = document.getElementById("cue");
+  const todoText = stage.nav.todoText;
+  if (!todoText || !stage.nav.todo) {
+    cue.className = "cue";
+    cue.textContent = "";
+  } else if (todoText === "填") {
+    cue.className = "cue on fill";
+    cue.textContent = "请在本板块填写";
+  } else {
+    cue.className = "cue on review";
+    cue.textContent = todoText === "核" ? "请在本板块复核" : "请到这里办理";
+  }
+  renderSteps(stage);
+}
+
+function renderSteps(stage) {
+  const list = expanded ? stage.steps : stage.steps.filter((s) => s[4] === "current" || s[4] === "rejected");
+  document.getElementById("steps").innerHTML = list.map((step, i) => {
+    const [who, act, name, right, state] = step;
+    return `<div class="step ${state}">
+      <div>
+        <div class="rail-dot">${state === "rejected" ? "×" : "人"}</div>
+        ${i === list.length - 1 ? "" : '<div class="line"></div>'}
+      </div>
+      <div>
+        <div class="who">${who}${state === "current" && who.includes("发起") ? " 填写中" : ""}</div>
+        <div class="act">${act}</div>
+        <div class="name">${name}</div>
+      </div>
+      <div class="right">${right}</div>
+    </div>`;
+  }).join("");
+}
+
+select(0);
+</script>
+</body>
+</html>

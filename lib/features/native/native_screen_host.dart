@@ -295,6 +295,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   /// Keep 手机端会话列表 alive：进 C2/C5 等会话页再返回时不 dispose，保留滚动位置。
   bool _inboxMounted = false;
+
+  /// APP：从通讯列表进小饕时，列表停在屏幕右侧，返回时再滑回来。
+  bool _inboxParkedForNova = false;
   final GlobalKey _inboxPageKey = GlobalKey(
     debugLabel: 'inbox-page-keep-alive',
   );
@@ -2797,6 +2800,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   Widget _buildApprovalAssistantProposalPage() {
     return NativeApprovalAssistantProposalPage(
+      key: ValueKey<String>('AA3-${_approvalAssistantProposalKind}'),
       session: widget.session,
       kind: _approvalAssistantProposalKind,
       onBack: () {
@@ -3429,6 +3433,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final fallbackKey = switch (screen) {
       'QJMA' => 'meeting-minutes',
       'QJAM' => 'am-settlement',
+      'QJDE' => 'sanyoutong-farm',
       _ => 'channel-dock',
     };
     final fallbackIcon = switch (screen) {
@@ -3439,13 +3444,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final fallbackConfig = switch (screen) {
       'QJMA' => DigitalAutoConfig.meetingMinutes,
       'QJAM' => DigitalAutoConfig.amSettlement,
+      'QJDE' => DigitalAutoConfig.sanyoutongFarm,
       _ => DigitalAutoConfig.channelDock,
     };
-    final matchesSelected = switch (screen) {
-      'QJMA' => item?.isMeetingMinutes == true,
-      'QJAM' => item?.isAmSettlement == true,
-      _ => item?.screenId == 'QJTO',
-    };
+    final matchesSelected = item != null && item.screenId == screen;
     return NativeDigitalAutoChatPage(
       key: ValueKey<String>(
         '${screen.toLowerCase()}-${item?.employeeKey ?? fallbackKey}',
@@ -3505,17 +3507,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenRobot: (role) => unawaited(_openRobotFromCatalog(role)),
           onOpenDigitalEmployee: (item) {
             setState(() => _selectedDigitalEmployee = item);
-            switch (item.screenId) {
-              case 'QJMA':
-              case 'QJTO':
-              case 'QJAM':
-                widget.navigation.go(item.screenId);
+            final screen = item.screenId.trim();
+            if (screen.isNotEmpty) {
+              widget.navigation.go(screen);
             }
           },
         );
       case 'QJMA':
       case 'QJTO':
       case 'QJAM':
+      case 'QJDE':
         return _buildDigitalEmployeeChat(widget.navigation.currentScreen);
       case 'QJR':
         if (!widget.session.effectiveRobotAccess) {
@@ -4465,11 +4466,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
           onOpenDigitalEmployee: (item) {
             setState(() => _selectedDigitalEmployee = item);
-            switch (item.screenId) {
-              case 'QJMA':
-              case 'QJTO':
-              case 'QJAM':
-                widget.navigation.go(item.screenId);
+            final screen = item.screenId.trim();
+            if (screen.isNotEmpty) {
+              widget.navigation.go(screen);
             }
           },
           focusConversationId: _novaFocusConversationId,
@@ -4706,6 +4705,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onBack: widget.navigation.back,
         );
       default:
+        if (isDigitalEmployeeChatScreen(widget.navigation.currentScreen) ||
+            _selectedDigitalEmployee?.screenId ==
+                widget.navigation.currentScreen) {
+          return _buildDigitalEmployeeChat(widget.navigation.currentScreen);
+        }
         final info = dunesScreenById(widget.navigation.currentScreen);
         return _NativeStubPage(
           title: info?.name ?? widget.navigation.currentScreen,
@@ -4853,6 +4857,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (isInbox && !isDesktopCommOnly) {
       _inboxMounted = true;
     }
+    if (!isDesktopCommOnly) {
+      if (screen == 'C4' && previousScreen == 'C1') {
+        _inboxParkedForNova = true;
+      } else if (isInbox) {
+        _inboxParkedForNova = false;
+      }
+    }
     if (isContacts) {
       _contactsMounted = true;
     }
@@ -4882,6 +4893,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     _lastScreen = screen;
     _lastHistoryDepth = depth;
 
+    final novaFromInbox =
+        !isDesktopCommOnly && screen == 'C4' && previousScreen == 'C1';
+    final novaBackToInbox =
+        !isDesktopCommOnly && screen == 'C1' && previousScreen == 'C4';
+
     final animatedContent = AnimatedSwitcher(
       duration: useSlide ? const Duration(milliseconds: 280) : Duration.zero,
       reverseDuration: useSlide
@@ -4903,12 +4919,20 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         final isIncoming = transitionChild.key == child.key;
         // AnimatedSwitcher 会反向驱动离场 child 的 animation：离场 Tween 必须
         // 以「目标位置 -> 原位」定义，才能从原位自然滑出而不是闪现/重复一帧。
-        final begin = !useSlide
-            ? Offset.zero
-            : isIncoming
-            ? (isBack ? const Offset(-0.18, 0) : const Offset(1, 0))
-            : (isBack ? const Offset(1, 0) : const Offset(-0.18, 0));
-        final end = Offset.zero;
+        // 通讯列表 ↔ 小饕：列表整体右移，小饕从左侧进入。
+        final Offset begin;
+        if (!useSlide) {
+          begin = Offset.zero;
+        } else if (novaFromInbox) {
+          begin = isIncoming ? const Offset(-1, 0) : const Offset(1, 0);
+        } else if (novaBackToInbox) {
+          begin = isIncoming ? const Offset(1, 0) : const Offset(-1, 0);
+        } else {
+          begin = isIncoming
+              ? (isBack ? const Offset(-0.18, 0) : const Offset(1, 0))
+              : (isBack ? const Offset(1, 0) : const Offset(-0.18, 0));
+        }
+        const end = Offset.zero;
         return SlideTransition(
           position: Tween<Offset>(begin: begin, end: end).animate(animation),
           child: transitionChild,
@@ -4942,14 +4966,28 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         if (_inboxMounted && !dualNow && !isDesktopCommOnly)
           Positioned.fill(
             child: TickerMode(
-              enabled: isInbox,
+              enabled: isInbox || (screen == 'C4' && _inboxParkedForNova),
               child: IgnorePointer(
                 ignoring: !isInbox,
-                child: Opacity(
-                  opacity: isInbox ? 1 : 0,
-                  child: _buildConversationListPage(
-                    listVisible: isInbox,
-                    useKeepAliveKey: true,
+                child: AnimatedSlide(
+                  duration: Duration(
+                    milliseconds:
+                        (isInbox || (screen == 'C4' && _inboxParkedForNova))
+                        ? 280
+                        : 0,
+                  ),
+                  curve: Curves.easeOutCubic,
+                  offset: _inboxParkedForNova
+                      ? const Offset(1, 0)
+                      : Offset.zero,
+                  child: Opacity(
+                    opacity: isInbox || (screen == 'C4' && _inboxParkedForNova)
+                        ? 1
+                        : 0,
+                    child: _buildConversationListPage(
+                      listVisible: isInbox,
+                      useKeepAliveKey: true,
+                    ),
                   ),
                 ),
               ),
@@ -5070,6 +5108,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJMA',
       'QJTO',
       'QJAM',
+      'QJDE',
       'QJSS',
       'QJKB',
       'QJEA',
@@ -5162,6 +5201,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'QJMA' ||
         screen == 'QJTO' ||
         screen == 'QJAM' ||
+        screen == 'QJDE' ||
         screen == 'QJSS' ||
         screen == 'QJKB' ||
         screen == 'QJEA' ||
@@ -5261,6 +5301,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJMA',
       'QJTO',
       'QJAM',
+      'QJDE',
       'QJSS',
       'QJKB',
       'QJEA',
@@ -5310,6 +5351,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJMA' => const ['QJ', 'QJMA'],
       'QJTO' => const ['QJ', 'QJTO'],
       'QJAM' => const ['QJ', 'QJAM'],
+      'QJDE' => const ['QJ', 'QJDE'],
       'QJSS' => const ['QJ', 'QJSS'],
       'QJKB' => const ['QJ', 'QJKB'],
       'QJEA' => const ['QJ', 'QJEA'],
@@ -6167,9 +6209,7 @@ class _NativeB2PageState extends State<_NativeB2Page> {
 
   void _openReleaseHistory() {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const AppReleaseHistoryPage(),
-      ),
+      MaterialPageRoute<void>(builder: (_) => const AppReleaseHistoryPage()),
     );
   }
 
@@ -6431,7 +6471,8 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                         _buildMenuItem(
                           icon: Icons.history_rounded,
                           title: '发版历史',
-                          desc: '${AppUpdateService.platformDisplayName()} 版本记录',
+                          desc:
+                              '${AppUpdateService.platformDisplayName()} 版本记录',
                           onTap: _openReleaseHistory,
                         ),
                       ]),
@@ -6551,7 +6592,8 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                         _buildMenuItem(
                           icon: Icons.history_rounded,
                           title: '发版历史',
-                          desc: '${AppUpdateService.platformDisplayName()} 版本记录',
+                          desc:
+                              '${AppUpdateService.platformDisplayName()} 版本记录',
                           onTap: _openReleaseHistory,
                         ),
                       ]),

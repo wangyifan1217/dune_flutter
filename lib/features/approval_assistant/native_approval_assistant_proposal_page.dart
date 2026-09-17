@@ -28,7 +28,7 @@ class _NativeApprovalAssistantProposalPageState
     extends State<NativeApprovalAssistantProposalPage> {
   TaskShellChrome _chrome = const TaskShellChrome();
 
-  String get _kindTitle => proposalIntakeKindEyebrow(widget.kind);
+  String get _kindTitle => proposalIntakeKindShortLabel(widget.kind);
 
   @override
   Widget build(BuildContext context) {

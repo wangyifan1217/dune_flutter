@@ -28,6 +28,9 @@ class ChatConvHeader extends StatelessWidget {
     this.showOnlineDot = false,
     this.showBackButton = true,
     this.imStatus,
+    this.imStatusText,
+    this.imStatusIcon,
+    this.imStatusColor,
   });
 
   final String title;
@@ -39,6 +42,9 @@ class ChatConvHeader extends StatelessWidget {
   final bool showOnlineDot;
   final bool showBackButton;
   final String? imStatus;
+  final String? imStatusText;
+  final String? imStatusIcon;
+  final String? imStatusColor;
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +90,12 @@ class ChatConvHeader extends StatelessWidget {
                       ),
                       if (ImUserStatusCatalog.showsBadge(imStatus)) ...[
                         const SizedBox(width: 6),
-                        ImStatusBadge(status: imStatus!),
+                        ImStatusBadge(
+                          status: imStatus!,
+                          text: imStatusText ?? '',
+                          iconKey: imStatusIcon ?? '',
+                          color: imStatusColor ?? '',
+                        ),
                       ],
                     ],
                   ),

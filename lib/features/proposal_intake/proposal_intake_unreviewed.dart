@@ -48,6 +48,8 @@ const _kFinanceReviewKeys = {
 const _kTechnologyReviewKeys = {
   'technologyPlatform',
   'outputForms',
+  'syncSourceRef',
+  'syncSource',
   'developmentTypes',
   'hasRdCost',
   'rdAmount',

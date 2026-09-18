@@ -46,7 +46,8 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
   TaskDailyReportBundle? _bundle;
   List<_DraftLine> _lines = [];
   final _blockers = TextEditingController();
-  final _summary = TextEditingController();
+  final _otherWork = TextEditingController();
+  final _nextPlan = TextEditingController();
   List<TaskDailyReport> _history = const [];
   bool _loading = true;
   bool _saving = false;
@@ -77,7 +78,8 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
   @override
   void dispose() {
     _blockers.dispose();
-    _summary.dispose();
+    _otherWork.dispose();
+    _nextPlan.dispose();
     for (final line in _lines) {
       line.work.dispose();
       line.next.dispose();
@@ -124,7 +126,8 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
         }
       }
       _blockers.text = submitted?.blockers ?? '';
-      _summary.text = submitted?.summary ?? '';
+      _otherWork.text = submitted?.summary ?? '';
+      _nextPlan.text = submitted?.nextPlan ?? '';
       setState(() {
         _bundle = bundle;
         _lines = lines;
@@ -174,9 +177,9 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
       });
     }
     if (items.isEmpty &&
-        _summary.text.trim().isEmpty &&
-        _blockers.text.trim().isEmpty) {
-      showDunesCenterToast(context, '请至少填写一条任务进展或其他工作');
+        _otherWork.text.trim().isEmpty &&
+        _nextPlan.text.trim().isEmpty) {
+      showDunesCenterToast(context, '请至少填写一条任务进展、其他工作或明日计划');
       return;
     }
     for (final line in _lines) {
@@ -214,9 +217,9 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
     try {
       await _api.submitDailyReport({
         'reportDate': formatTaskYmd(_date),
-        'summary': _summary.text.trim(),
+        'summary': _otherWork.text.trim(),
         'blockers': _blockers.text.trim(),
-        'nextPlan': '',
+        'nextPlan': _nextPlan.text.trim(),
         'items': items,
       });
       if (!mounted) return;
@@ -332,6 +335,7 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
     }
     final bundle = _bundle;
     final submitted = bundle?.report?.submitted == true;
+    final readOnly = submitted || bundle?.canSubmit != true;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
       children: [
@@ -366,6 +370,18 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
           ),
         ),
         const SizedBox(height: 12),
+        if (bundle != null && !bundle.isWorkday) ...[
+          _box(
+            '非工作日',
+            Text(
+              bundle.nonWorkReason.isEmpty
+                  ? '当前日期无需提交日报。'
+                  : bundle.nonWorkReason,
+              style: const TextStyle(color: DunesColors.text2, height: 1.4),
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
         if (_lines.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
@@ -375,14 +391,23 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
             ),
           ),
         for (final line in _lines) ...[
-          _lineCard(line, readOnly: submitted),
+          _lineCard(line, readOnly: readOnly),
           const SizedBox(height: 10),
         ],
+        if (!submitted && bundle?.canSubmit != true)
+          _box(
+            '填报状态',
+            const Text(
+              '当前日期不在可提交窗口内，请切换日期或查看历史日报。',
+              style: TextStyle(color: DunesColors.text2, height: 1.4),
+            ),
+          ),
+        if (!submitted && bundle?.canSubmit != true) const SizedBox(height: 10),
         _box(
           '阻塞',
           TextField(
             controller: _blockers,
-            readOnly: submitted,
+            readOnly: readOnly,
             maxLines: 3,
             decoration: _inputDecoration('卡住的事（选填）'),
           ),
@@ -391,10 +416,20 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
         _box(
           '其他工作',
           TextField(
-            controller: _summary,
-            readOnly: submitted,
+            controller: _otherWork,
+            readOnly: readOnly,
             maxLines: 3,
             decoration: _inputDecoration('未挂在主目标或子目标下的工作（选填）'),
+          ),
+        ),
+        const SizedBox(height: 10),
+        _box(
+          '明日计划',
+          TextField(
+            controller: _nextPlan,
+            readOnly: readOnly,
+            maxLines: 3,
+            decoration: _inputDecoration('明天准备继续推进什么（选填）'),
           ),
         ),
         if (!submitted && bundle?.canSubmit == true) ...[

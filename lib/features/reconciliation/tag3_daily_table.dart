@@ -1,7 +1,7 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
-import '../../core/widgets/horizontal_drag_scroll_view.dart';
 import 'tag3_daily_models.dart';
 
 const _kTag3DailyTableWidth = 1384.0;
@@ -98,10 +98,7 @@ class Tag3DailyTable extends StatelessWidget {
           ],
         ),
     );
-    return HorizontalDragScrollView(
-      showScrollbar: true,
-      child: table,
-    );
+    return _Tag3DailyBidirectionalScroll(child: table);
   }
 
   TableRow _dataRow(List<Tag3DailyRow> sorted, int i) {
@@ -148,11 +145,28 @@ class Tag3DailyTable extends StatelessWidget {
       assignee: _assigneeFor(row),
       comments: _commentsFor(row),
     );
+    final statusLabel = row.confirmationStatusLabel.trim();
+    final statusColor = switch (row.confirmationStatus) {
+      'ALL_CONFIRMED' || 'CONFIRMED' => DunesColors.green,
+      'WAIT_OPERATION' || 'WAIT_BUSINESS' => DunesColors.amber,
+      _ => DunesColors.text2,
+    };
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (statusLabel.isNotEmpty) ...[
+            Text(
+              statusLabel,
+              style: DunesTypography.sans(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: statusColor,
+              ),
+            ),
+            const SizedBox(height: 4),
+          ],
           for (var i = 0; i < lanes.length; i++) ...[
             if (i > 0) const SizedBox(height: 4),
             Text(
@@ -295,6 +309,81 @@ class Tag3DailyTable extends StatelessWidget {
   }
 }
 
+class _Tag3DailyBidirectionalScroll extends StatefulWidget {
+  const _Tag3DailyBidirectionalScroll({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_Tag3DailyBidirectionalScroll> createState() =>
+      _Tag3DailyBidirectionalScrollState();
+}
+
+class _Tag3DailyBidirectionalScrollState
+    extends State<_Tag3DailyBidirectionalScroll> {
+  final ScrollController _vertical = ScrollController();
+  final ScrollController _horizontal = ScrollController();
+
+  @override
+  void dispose() {
+    _vertical.dispose();
+    _horizontal.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final height = constraints.maxHeight.isFinite && constraints.maxHeight > 0
+            ? constraints.maxHeight
+            : 320.0;
+        return ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(
+            scrollbars: false,
+            dragDevices: const {
+              PointerDeviceKind.touch,
+              PointerDeviceKind.mouse,
+              PointerDeviceKind.trackpad,
+              PointerDeviceKind.stylus,
+              PointerDeviceKind.unknown,
+            },
+          ),
+          child: Scrollbar(
+            controller: _vertical,
+            thumbVisibility: true,
+            interactive: true,
+            notificationPredicate: (notification) =>
+                notification.metrics.axis == Axis.vertical,
+            child: Scrollbar(
+              controller: _horizontal,
+              thumbVisibility: true,
+              interactive: true,
+              notificationPredicate: (notification) =>
+                  notification.metrics.axis == Axis.horizontal,
+              child: SingleChildScrollView(
+                controller: _horizontal,
+                primary: false,
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: _kTag3DailyTableWidth,
+                  height: height,
+                  child: SingleChildScrollView(
+                    controller: _vertical,
+                    primary: false,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: widget.child,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class Tag3DailyDrilldownSheet extends StatelessWidget {
   const Tag3DailyDrilldownSheet({
     super.key,
@@ -312,7 +401,6 @@ class Tag3DailyDrilldownSheet extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
@@ -336,10 +424,24 @@ class Tag3DailyDrilldownSheet extends StatelessWidget {
               )
             else
               Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SingleChildScrollView(
-                    child: DataTable(
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(
+                    dragDevices: const {
+                      PointerDeviceKind.touch,
+                      PointerDeviceKind.mouse,
+                      PointerDeviceKind.trackpad,
+                      PointerDeviceKind.stylus,
+                      PointerDeviceKind.unknown,
+                    },
+                  ),
+                  child: Scrollbar(
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      primary: false,
+                      child: SingleChildScrollView(
+                        primary: false,
+                        scrollDirection: Axis.horizontal,
+                        child: DataTable(
                       headingRowHeight: 36,
                       dataRowMinHeight: 36,
                       dataRowMaxHeight: 44,
@@ -381,6 +483,8 @@ class Tag3DailyDrilldownSheet extends StatelessWidget {
                   ),
                 ),
               ),
+            ),
+          ),
           ],
         ),
       ),

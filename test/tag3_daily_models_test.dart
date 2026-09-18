@@ -143,4 +143,82 @@ void main() {
       expect(injected, isEmpty);
     }
   });
+
+  test('date list shows daily dispatch copy and confirm status', () {
+    expect(
+      tag3DailyDispatchBody('2026-09-06'),
+      '2026-09-06 业财一体-日清月结已生成，业务/运营请各自核对并确认',
+    );
+    expect(
+      tag3DailyDateStatusPill(myConfirmed: true, confirmRows: 0),
+      '你已确认',
+    );
+    expect(
+      tag3DailyDateStatusPill(myConfirmed: false, confirmRows: 2),
+      '已有确认',
+    );
+    expect(
+      tag3DailyDateStatusPill(myConfirmed: false, confirmRows: 0),
+      '待确认',
+    );
+    expect(
+      tag3DailyDateProgressLine(
+        businessConfirmRows: 2,
+        operationConfirmRows: 1,
+        commentCount: 3,
+      ),
+      '业务已确认 2 条 · 运营已确认 1 条 · 意见 3 条',
+    );
+    expect(
+      tag3DailySnapshotStatusLine([
+        Tag3DailyRow.fromJson({
+          'rowKey': 'a',
+          'period': 'DAY',
+          'confirmationStatus': 'WAIT_BUSINESS',
+        }),
+        Tag3DailyRow.fromJson({
+          'rowKey': 'a',
+          'period': 'DAY',
+          'confirmationStatus': 'WAIT_OPERATION',
+        }),
+        Tag3DailyRow.fromJson({
+          'rowKey': 'a',
+          'period': 'DAY',
+          'confirmationStatus': 'ALL_CONFIRMED',
+        }),
+        Tag3DailyRow.fromJson({
+          'rowKey': 'a',
+          'period': 'MONTH',
+          'confirmationStatus': 'WAIT_BUSINESS',
+        }),
+      ]),
+      '3 条日行 · 待业务确认 1 · 待运营确认 1 · 已完成 1',
+    );
+    expect(
+      ReconDateItem.fromJson({
+        'asOfDate': '2026-09-06',
+        'tag3ConfirmRows': 2,
+        'tag3BusinessConfirmRows': 2,
+        'tag3OperationConfirmRows': 1,
+        'tag3CommentCount': 4,
+        'tag3MyConfirmed': true,
+      }).tag3MyConfirmed,
+      isTrue,
+    );
+  });
+
+  test('date list pads through yesterday when snapshots stopped', () {
+    final padded = padTag3DailyDateItems(
+      const [
+        ReconDateItem(asOfDate: '2026-09-06'),
+        ReconDateItem(asOfDate: '2026-09-05'),
+      ],
+      now: DateTime(2026, 9, 18, 9, 44),
+    );
+    expect(padded.first.asOfDate, '2026-09-17');
+    expect(
+      padded.map((e) => e.asOfDate),
+      containsAll(['2026-09-17', '2026-09-07', '2026-09-06', '2026-09-05']),
+    );
+  });
 }

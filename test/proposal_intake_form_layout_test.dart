@@ -1165,6 +1165,24 @@ void main() {
     expect(find.textContaining('用户领取'), findsNothing);
   });
 
+  testWidgets('tech section has 业务平台 for product settlement catalogs', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_harness(1440));
+    await tester.pump();
+    await _scrollUntil(tester, '能力输出形式');
+    expect(find.text('能力输出形式'), findsWidgets);
+    expect(find.text('业务平台'), findsWidgets);
+    expect(
+      tester.widget<ProposalField>(_fieldOf('业务平台').first).required,
+      isTrue,
+    );
+  });
+
   testWidgets('four-flow entity fields are hidden', (tester) async {
     tester.view.physicalSize = const Size(760, 1400);
     tester.view.devicePixelRatio = 1;
@@ -1404,7 +1422,7 @@ void main() {
     expect(find.text('年度框架协议'), findsOneWidget);
   });
 
-  testWidgets('finance interface chips start unselected on an empty form', (
+  testWidgets('finance interface chips default the first four on an empty form', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1440, 1800);
@@ -1426,7 +1444,7 @@ void main() {
     final chip = tester.widget<ProposalChoiceChip>(
       find.widgetWithText(ProposalChoiceChip, '开票接口 *'),
     );
-    expect(chip.selected, isFalse);
+    expect(chip.selected, isTrue);
     expect(
       find.ancestor(
         of: find.widgetWithText(ProposalChoiceChip, '开票接口 *'),
@@ -1442,7 +1460,7 @@ void main() {
             find.widgetWithText(ProposalChoiceChip, '结算对账接口'),
           )
           .selected,
-      isFalse,
+      isTrue,
     );
   });
 
@@ -2106,7 +2124,7 @@ void main() {
     expect(find.text('是否已经建产品'), findsNothing);
     expect(find.text('已建产品'), findsNothing);
     expect(find.text('渠道设置'), findsNothing);
-    expect(find.text('业务平台'), findsNothing);
+    expect(find.text('业务平台'), findsWidgets);
     expect(find.text('标签三-一级'), findsNothing);
     expect(find.text('标签三-二级'), findsNothing);
     expect(find.text('产品生效日期'), findsNothing);
@@ -2243,7 +2261,13 @@ void main() {
       expect(find.text('是否同步中油好客'), findsOneWidget);
       expect(find.text('已建产品'), findsNothing);
       expect(find.text('渠道设置'), findsNothing);
-      expect(find.text('业务平台'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('业务平台'),
+        ),
+        findsNothing,
+      );
       expect(find.text('标签三-一级'), findsNothing);
       expect(find.text('标签三-二级'), findsNothing);
       expect(find.text('产品生效日期'), findsNothing);
@@ -3975,7 +3999,7 @@ void main() {
     expect(find.textContaining('满200减15'), findsWidgets);
     expect(find.textContaining('面值 15'), findsWidgets);
     expect(find.text('产品名称'), findsNothing);
-    expect(find.text('业务平台'), findsNothing);
+    expect(find.text('渠道设置'), findsNothing);
     expect(find.text('产品生效日期'), findsNothing);
     expect(find.text('产品失效日期'), findsNothing);
   });

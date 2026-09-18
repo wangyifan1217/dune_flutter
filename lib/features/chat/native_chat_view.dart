@@ -4413,7 +4413,7 @@ class _NativeChatViewState extends State<NativeChatView>
   Future<void> _onDesktopFilesDropped(DropDoneDetails detail) async {
     final conv = _conversation;
     if (!_supportsDesktopFileDrop ||
-        !TickerMode.valuesOf(context).enabled ||
+        !desktopDropLive(context) ||
         conv == null ||
         conv.dissolved ||
         _messageMultiSelectMode) {
@@ -8869,13 +8869,13 @@ class _NativeChatViewState extends State<NativeChatView>
       body: SafeArea(
         bottom: false,
         child: DropTarget(
-          // keep-alive 的 Offstage 会话仍会挂载 DropTarget；用 TickerMode
-          // 保证切到工作台/微盘时不会把拖入文件误发到 IM。
+          // keep-alive 的 Offstage 会话仍会挂载 DropTarget；desktop_drop 是
+          // 窗口级监听。TickerMode 关、或上面盖着提案 Dialog 时关掉，避免误收。
           enable:
               _supportsDesktopFileDrop &&
               !locked &&
               !selecting &&
-              TickerMode.valuesOf(context).enabled,
+              desktopDropLive(context),
           onDragEntered: (_) {
             if (!_fileDropHovering) setState(() => _fileDropHovering = true);
           },
@@ -8883,7 +8883,7 @@ class _NativeChatViewState extends State<NativeChatView>
             if (_fileDropHovering) setState(() => _fileDropHovering = false);
           },
           onDragDone: (detail) {
-            if (!TickerMode.valuesOf(context).enabled) return;
+            if (!desktopDropLive(context)) return;
             if (_fileDropHovering) setState(() => _fileDropHovering = false);
             unawaited(_onDesktopFilesDropped(detail));
           },

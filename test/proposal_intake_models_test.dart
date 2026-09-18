@@ -307,6 +307,42 @@ void main() {
     expect(options.ratingFor(499), 'C');
   });
 
+  test('output form options always include 业务平台', () {
+    expect(
+      proposalIntakeOutputFormOptions(['API接口', 'H5']),
+      contains(kProposalOutputFormBusinessPlatform),
+    );
+    expect(proposalIntakeOutputFormOptions(['API接口', '业务平台']), [
+      'API接口',
+      '业务平台',
+    ]);
+    expect(
+      proposalIntakeOutputFormOptions(const [], purchase: true),
+      containsAll(kPurchaseCapabilityInputForms),
+    );
+  });
+
+  test('form sync source drives product settlement when sku has none', () {
+    const source = CatalogRef(code: 'DIGITALG', name: '能源');
+    final form = proposalIntakeApplyFormSyncSource(
+      {
+        'skuDetails': [
+          {'id': 'sku-1', 'productName': '现金券'},
+        ],
+      },
+      source,
+    );
+    expect(proposalIntakeFormSyncSourceCode(form), 'DIGITALG');
+    expect(proposalIntakeSkuDetails(form).single.syncSourceCode, 'DIGITALG');
+    expect(
+      proposalIntakeResolvedSyncSourceCode(
+        form,
+        proposalIntakeSkuDetails(form).single,
+      ),
+      'DIGITALG',
+    );
+  });
+
   test('proposal options parse institution label and code', () {
     final options = ProposalIntakeOptions.fromJson({
       'market': {
@@ -1907,18 +1943,17 @@ void main() {
       row: row,
     );
     expect(items.map((item) => item.line).toList(), [
-      '科技部负责人 张科技 · 请复核科技部内容',
       '财务部负责人二 李财务 · 请填写财务技术接口',
     ]);
-    expect(proposalIntakeNotifiedToast(items), '已通知：张科技（科技部负责人）、李财务（财务部负责人二）');
+    expect(proposalIntakeNotifiedToast(items), '已通知：李财务（财务部负责人二）');
     final write = ProposalIntakeWriteResult.fromJson({
       'id': 8,
       'notified': [
-        {'userId': 3, 'role': '科技部负责人', 'name': '张科技', 'task': '请填写科技部内容'},
+        {'userId': 5, 'role': '财务部负责人二', 'name': '李财务', 'task': '请填写财务技术接口'},
       ],
     });
     expect(write.row.id, 8);
-    expect(write.notified.single.name, '张科技');
+    expect(write.notified.single.name, '李财务');
   });
 
   test('remind recipients skip finished reviewers', () {
@@ -1966,6 +2001,32 @@ void main() {
     final items = proposalIntakeRemindRecipients(row: row);
     expect(items.map((item) => item.userId).toSet(), {1});
     expect(items.single.line, '提交人 朱子姝 · 请填写');
+  });
+
+  test('remind awaiting tech no longer asks tech owner to fill', () {
+    final row = ProposalIntakeRow.fromJson({
+      'createdBy': 2,
+      'status': 'filling',
+      'form': {
+        'createdByName': '朱子姝',
+        'technologyOwner': '张科技',
+        'technologyOwnerUserId': 3,
+        'financeOwner2': '李财务',
+        'financeOwner2UserId': 5,
+      },
+      'review': {'stage': 'awaiting_tech'},
+    });
+    final items = proposalIntakeRemindRecipients(row: row);
+    expect(items.map((item) => item.line).toList(), [
+      '科技部负责人 张科技 · 请确认并提交复核',
+      '财务部负责人二 李财务 · 请填写财务技术接口',
+    ]);
+    expect(
+      proposalIntakeNotifyRecipients(action: 'notify_tech', row: row)
+          .map((item) => item.task)
+          .toList(),
+      ['请填写财务技术接口'],
+    );
   });
 
   test('remind pending president includes configured presidents', () {
@@ -2226,17 +2287,17 @@ void main() {
     expect(
       ApprovalChatShare.proposalIntakeInstruction(
         share: card,
-        bodyText: 'TA-20260820-000004 未命名提案：请填写科技部内容',
+        bodyText: 'TA-20260820-000004 未命名提案：请填写财务技术接口',
       ),
-      'TA-20260820-000004 未命名提案：请填写科技部内容',
+      'TA-20260820-000004 未命名提案：请填写财务技术接口',
     );
     expect(
       ApprovalChatShare.proposalIntakeInstruction(
         share: card,
         bodyText: '未命名提案',
-        payload: {'instruction': '请填写科技部内容。提案 TA-1「未命名提案」，请点下方名片进入。'},
+        payload: {'instruction': '请填写财务技术接口。提案 TA-1「未命名提案」，请点下方名片进入。'},
       ),
-      '请填写科技部内容。提案 TA-1「未命名提案」，请点下方名片进入。',
+      '请填写财务技术接口。提案 TA-1「未命名提案」，请点下方名片进入。',
     );
     expect(
       ApprovalChatShare.proposalIntakeInstruction(
@@ -2910,9 +2971,72 @@ void main() {
     );
   });
 
+  test('empty finance interfaces default to the first four options', () {
+    const options = [
+      ProposalFinanceInterface(
+        key: 'drain',
+        label: '引流金额',
+        required: false,
+        defaultChecked: false,
+      ),
+      ProposalFinanceInterface(
+        key: 'face',
+        label: '面值',
+        required: false,
+        defaultChecked: false,
+      ),
+      ProposalFinanceInterface(
+        key: 'writeoff',
+        label: '核销金额',
+        required: false,
+        defaultChecked: false,
+      ),
+      ProposalFinanceInterface(
+        key: 'sale',
+        label: '销售价格',
+        required: false,
+        defaultChecked: false,
+      ),
+      ProposalFinanceInterface(
+        key: 'subsidy',
+        label: '补贴金额',
+        required: false,
+        defaultChecked: false,
+      ),
+      ProposalFinanceInterface(
+        key: 'paid',
+        label: '用户实付金额',
+        required: false,
+        defaultChecked: false,
+      ),
+    ];
+    expect(proposalIntakeDefaultFinanceInterfaces(options), {
+      'drain': true,
+      'face': true,
+      'writeoff': true,
+      'sale': true,
+      'subsidy': false,
+      'paid': false,
+    });
+    expect(
+      proposalIntakeFormWithDefaultFinanceInterfaces(const {}, options)['financeInterfaces'],
+      {'drain': true, 'face': true, 'writeoff': true, 'sale': true, 'subsidy': false, 'paid': false},
+    );
+    expect(
+      proposalIntakeFormWithDefaultFinanceInterfaces(
+        {
+          'financeInterfaces': {'paid': true},
+        },
+        options,
+      )['financeInterfaces'],
+      {'paid': true},
+    );
+  });
+
   test('tech revision action labels', () {
     expect(proposalIntakeActionLabel('start_tech_revision'), '待发起科技变更');
     expect(proposalIntakeActionLabel('fill_tech'), '待填写科技');
+    expect(proposalIntakeActionLabel('notify_market2'), '待确认提交复核');
     expect(proposalIntakeActionLabel('fill_finance_interface'), '待填写财务技术接口');
     expect(proposalIntakeActionLabel('review_finance_interface'), '待复核财务技术接口');
   });

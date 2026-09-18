@@ -1861,6 +1861,7 @@ String proposalIntakeActionLabel(
   return switch (action) {
     'fill' => withName('待填写', row?.initiatorDisplayName(people) ?? ''),
     'fill_tech' => withName('待填写科技', row?.initiatorDisplayName(people) ?? ''),
+    'notify_market2' => '待确认提交复核',
     'fill_finance_interface' => withOwner('待填写财务技术接口', 'financeOwner2'),
     'start_review' => '待重新提交复核',
     'review_market' => withReviewer('marketOwner1', fallback: '待复核市场部'),
@@ -1996,6 +1997,7 @@ String proposalIntakeListActionText(
 const kProposalTechnologyReviewFields = <String>[
   'technologyPlatform',
   'outputForms',
+  'syncSourceRef',
   'developmentTypes',
   'hasRdCost',
   'rdAmount',
@@ -2008,6 +2010,7 @@ const kProposalSkuProductsReviewKey = 'skuProducts';
 const kProposalTechnologyReviewLabels = <String, String>{
   'technologyPlatform': 'τ-标签一',
   'outputForms': '能力输出/输入形式',
+  'syncSourceRef': '业务平台',
   'developmentTypes': '研发类型',
   'hasRdCost': '是否涉及研发费用',
   'rdAmount': '研发费用金额',
@@ -2049,6 +2052,7 @@ ProposalIntakeNavSection? proposalIntakeNavSectionForAction(String action) {
     'start_review' ||
     'review_market' => ProposalIntakeNavSection.market,
     'fill_tech' ||
+    'notify_market2' ||
     'fill_finance_interface' ||
     'review_tech' ||
     'review_finance_interface' ||
@@ -2120,7 +2124,8 @@ String proposalIntakeNavTodoBadge(String action) {
   if (action.startsWith('review')) return '核';
   if (action == 'submit_president' ||
       action == 'president_confirm' ||
-      action == 'start_review') {
+      action == 'start_review' ||
+      action == 'notify_market2') {
     return '办';
   }
   return '';
@@ -2133,6 +2138,7 @@ String proposalIntakeSectionTaskCue(String action) {
     return '请到页面底部确认';
   }
   if (action == 'start_review') return '请修改后重新提交复核';
+  if (action == 'notify_market2') return '请确认科技内容后提交复核';
   return '';
 }
 
@@ -2191,6 +2197,7 @@ String proposalIntakeTaskBannerTitle(
   return switch (action) {
     'fill' => '待你填写市场、科技与产品',
     'fill_tech' => '待你填写科技与产品',
+    'notify_market2' => '待你确认并提交复核',
     'fill_finance_interface' => '待你填写财务技术接口',
     'revise' => '最终人已驳回，请从头填写',
     'revise_module' => '板块已驳回，请修改后重新提交复核',
@@ -2226,6 +2233,7 @@ String proposalIntakeTaskBannerBody(
     'president_confirm' => '审批进度和其他人看到的一样。看完各板块后，到页面底部点「确认通过」或「驳回」。',
     'fill' => '先填市场部和产品，科技字段一并填。填完后点右上角「通知科技」。定位条带「填」的就是当前板块。',
     'fill_tech' => '到科技部填写平台、能力和产品。财务技术接口由财务部负责人二填写。定位条带「填」的就是当前板块。',
+    'notify_market2' => '科技部内容由填写人填写。确认无误后点右上角提交复核。',
     'fill_finance_interface' => '到科技部勾选财务技术接口。定位条带「填」的就是当前板块。',
     'revise' => '最终人驳回后流程从头开始。改完后重新通知科技负责人。',
     'revise_module' => '按驳回意见改对应板块，改完后点右上角重新提交复核。',
@@ -2788,7 +2796,6 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeNotifyRecipients({
     case 'notify_tech':
       return _dedupeNotifyRecipients(
         [
-          owner('technologyOwner', '科技部负责人', '请复核科技部内容'),
           owner('financeOwner2', '财务部负责人二', '请填写财务技术接口'),
         ].whereType<ProposalIntakeNotifyRecipient>().toList(),
       );
@@ -2887,12 +2894,42 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeRemindRecipients({
           ),
       ];
     case 'awaiting_tech':
+      return _dedupeNotifyRecipients(
+        [
+          proposalIntakeNotifyOwner(
+            form: row.form,
+            people: people,
+            prefix: 'technologyOwner',
+            role: '科技部负责人',
+            task: '请确认并提交复核',
+          ),
+          proposalIntakeNotifyOwner(
+            form: row.form,
+            people: people,
+            prefix: 'financeOwner2',
+            role: '财务部负责人二',
+            task: '请填写财务技术接口',
+          ),
+        ].whereType<ProposalIntakeNotifyRecipient>().toList(),
+      );
     case 'tech_revising':
-      return proposalIntakeNotifyRecipients(
-        action: 'notify_tech',
-        row: row,
-        people: people,
-        options: options,
+      return _dedupeNotifyRecipients(
+        [
+          proposalIntakeNotifyOwner(
+            form: row.form,
+            people: people,
+            prefix: 'technologyOwner',
+            role: '科技部负责人',
+            task: '请确认本轮科技变更',
+          ),
+          proposalIntakeNotifyOwner(
+            form: row.form,
+            people: people,
+            prefix: 'financeOwner2',
+            role: '财务部负责人二',
+            task: '请填写财务技术接口',
+          ),
+        ].whereType<ProposalIntakeNotifyRecipient>().toList(),
       );
     case 'awaiting_start_review':
       final name = row.initiatorDisplayName(people);
@@ -3541,6 +3578,8 @@ const proposalTechnologySnapshotKeys = <String>[
   'technologyPlatform',
   'technologyCapabilities',
   'outputForms',
+  'syncSourceRef',
+  'syncSource',
   'developmentTypes',
   'hasRdCost',
   'rdAmount',
@@ -3627,6 +3666,64 @@ bool proposalIntakeFinanceInterfacesUnchanged({
   );
 }
 
+const kProposalDefaultFinanceInterfaceCount = 4;
+
+bool proposalIntakeShouldDefaultFinanceInterfaces(ProposalIntakeRow row) {
+  switch (row.resolvedStage) {
+    case 'filling':
+    case 'draft':
+    case 'awaiting_tech':
+    case 'tech_revising':
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool proposalIntakeFinanceInterfacesUnset(Object? raw) {
+  if (raw is! Map) return true;
+  return raw.isEmpty;
+}
+
+Map<String, dynamic> proposalIntakeDefaultFinanceInterfaces(
+  List<ProposalFinanceInterface> options, {
+  int count = kProposalDefaultFinanceInterfaceCount,
+}) {
+  final next = <String, dynamic>{};
+  var index = 0;
+  for (final item in options) {
+    final key = item.key.trim();
+    if (key.isEmpty) continue;
+    next[key] = index < count;
+    index++;
+  }
+  return next;
+}
+
+Map<String, dynamic> proposalIntakeResolvedFinanceInterfaces(
+  Map<String, dynamic> values,
+  List<ProposalFinanceInterface> options,
+) {
+  if (options.isEmpty || !proposalIntakeFinanceInterfacesUnset(values)) {
+    return values;
+  }
+  return proposalIntakeDefaultFinanceInterfaces(options);
+}
+
+Map<String, dynamic> proposalIntakeFormWithDefaultFinanceInterfaces(
+  Map<String, dynamic> form,
+  List<ProposalFinanceInterface> options,
+) {
+  if (options.isEmpty ||
+      !proposalIntakeFinanceInterfacesUnset(form['financeInterfaces'])) {
+    return form;
+  }
+  return {
+    ...form,
+    'financeInterfaces': proposalIntakeDefaultFinanceInterfaces(options),
+  };
+}
+
 bool _proposalJsonEqual(Object? left, Object? right) {
   return jsonEncode(left ?? <String, dynamic>{}) ==
       jsonEncode(right ?? <String, dynamic>{});
@@ -3679,6 +3776,47 @@ ProposalIntakeRow? nextProposalIntake({
 
 CatalogRef? proposalIntakeFormRef(Map<String, dynamic> form, String key) =>
     catalogRefOrNull(form[key]);
+
+/// 提案表单级业务平台，供科技板块选择后驱动产品结算字典。
+CatalogRef? proposalIntakeFormSyncSourceRef(Map<String, dynamic> form) =>
+    proposalIntakeSyncSourceRefFromJson(form);
+
+String proposalIntakeFormSyncSourceCode(Map<String, dynamic> form) =>
+    (proposalIntakeFormSyncSourceRef(form)?.code ?? '').trim();
+
+/// 把科技板块选的业务平台写到表单，并补到还没选平台的产品上。
+Map<String, dynamic> proposalIntakeApplyFormSyncSource(
+  Map<String, dynamic> form,
+  CatalogRef? source, {
+  bool overwriteSkus = false,
+}) {
+  final next = Map<String, dynamic>.from(form);
+  next['syncSourceRef'] = catalogRefToJson(source);
+  next['syncSource'] = catalogRefToJson(source);
+  List<ProposalSkuDetailRow> stamp(List<ProposalSkuDetailRow> rows) => [
+    for (final row in rows)
+      (overwriteSkus || row.syncSourceCode.isEmpty)
+          ? row.copyWith(syncSourceRef: source)
+          : row,
+  ];
+  next['skuDetails'] = [
+    for (final row in stamp(proposalIntakeSkuDetails(next))) row.toJson(),
+  ];
+  next['childProducts'] = [
+    for (final row in stamp(proposalIntakeChildProducts(next))) row.toJson(),
+  ];
+  return next;
+}
+
+/// 产品自身业务平台优先，否则用科技板块选的平台。
+String proposalIntakeResolvedSyncSourceCode(
+  Map<String, dynamic> form, [
+  ProposalSkuDetailRow? sku,
+]) {
+  final fromSku = (sku?.syncSourceCode ?? '').trim();
+  if (fromSku.isNotEmpty) return fromSku;
+  return proposalIntakeFormSyncSourceCode(form);
+}
 
 /// 业务平台：优先 `syncSourceRef`，兼容对外 JSON 里的 `syncSource` 对象或纯 code。
 CatalogRef? proposalIntakeSyncSourceRefFromJson(Map raw) {
@@ -5720,6 +5858,8 @@ List<String> proposalIntakeLaunchModuleReviewKeys(Map<String, dynamic> form) {
 
 const kPurchaseProposalTypes = ['新增', '变更', '延续'];
 
+const kProposalOutputFormBusinessPlatform = '业务平台';
+
 const kPurchaseCapabilityInputForms = [
   'API接口',
   'H5',
@@ -5727,7 +5867,22 @@ const kPurchaseCapabilityInputForms = [
   '小程序',
   'APP',
   'MCP',
+  kProposalOutputFormBusinessPlatform,
 ];
+
+/// 能力输出/输入形式始终带上「业务平台」，否则产品结算字典无法选。
+List<String> proposalIntakeOutputFormOptions(
+  List<String> configured, {
+  bool purchase = false,
+}) {
+  final out = purchase
+      ? [...kPurchaseCapabilityInputForms]
+      : [...configured];
+  if (!out.contains(kProposalOutputFormBusinessPlatform)) {
+    out.add(kProposalOutputFormBusinessPlatform);
+  }
+  return out;
+}
 
 const kPurchaseDevelopmentTypes = ['运营配置', '标准接口对接', '涉及改造', '新增产品'];
 

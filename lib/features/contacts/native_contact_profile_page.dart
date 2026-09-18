@@ -10,6 +10,7 @@ import '../chat/group_info_widgets.dart';
 import '../chat/user_avatar_preview.dart';
 import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_service.dart';
+import '../conversation/im_user_status.dart';
 import '../shell/dunes_toast.dart';
 import 'contact_models.dart';
 import 'contact_service.dart';
@@ -102,7 +103,7 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
       }
       if (!mounted) return;
       setState(() {
-        _contact = fresh ?? hint;
+        _contact = _mergeContact(fresh, hint);
         _loading = false;
       });
     } catch (e) {
@@ -113,6 +114,19 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
         _loading = false;
       });
     }
+  }
+
+  NativeContact _mergeContact(NativeContact? fresh, NativeContact hint) {
+    if (fresh == null) return hint;
+    if (fresh.statusValue.showsBadge || !hint.statusValue.showsBadge) {
+      return fresh;
+    }
+    return fresh.copyWith(
+      imStatus: hint.imStatus,
+      imStatusText: hint.imStatusText,
+      imStatusIcon: hint.imStatusIcon,
+      imStatusColor: hint.imStatusColor,
+    );
   }
 
   Future<void> _onPhoneTap(String phone) async {
@@ -306,6 +320,7 @@ class _NativeContactProfilePageState extends State<NativeContactProfilePage> {
           department: department,
           roleTag: title,
           seed: c.userId,
+          status: c.statusValue,
           avatarPreset: c.avatarPreset,
           avatarObjectKey: c.avatarObjectKey,
           avatarService: _conversationService,
@@ -390,6 +405,7 @@ class _ProfileHero extends StatelessWidget {
     required this.department,
     required this.roleTag,
     required this.seed,
+    this.status = ImUserStatusValue.online,
     this.avatarPreset,
     this.avatarObjectKey,
     this.avatarService,
@@ -400,6 +416,7 @@ class _ProfileHero extends StatelessWidget {
   final String department;
   final String roleTag;
   final int seed;
+  final ImUserStatusValue status;
   final String? avatarPreset;
   final String? avatarObjectKey;
   final ConversationService? avatarService;
@@ -475,6 +492,10 @@ class _ProfileHero extends StatelessWidget {
                     color: const Color(0xFF191919),
                   ),
                 ),
+                if (status.showsBadge) ...[
+                  const SizedBox(height: 6),
+                  ImStatusBadge.fromValue(status, compact: false),
+                ],
                 if (subtitleBits.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Text(

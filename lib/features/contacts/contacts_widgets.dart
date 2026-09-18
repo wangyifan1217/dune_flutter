@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_service.dart';
+import '../conversation/im_user_status.dart';
 import 'contact_models.dart';
 
 /// 通讯录无自定义头像时的统一底色（与 [InboxFormat.personStyle] 一致）。
@@ -202,6 +203,7 @@ class ContactRowTile extends StatelessWidget {
     required this.onOpenProfile,
     required this.onMessage,
     this.showOnline = false,
+    this.imStatus,
     this.avatarService,
     this.pickMode = false,
     this.selected = false,
@@ -214,6 +216,7 @@ class ContactRowTile extends StatelessWidget {
   final VoidCallback onOpenProfile;
   final VoidCallback onMessage;
   final bool showOnline;
+  final ImUserStatusValue? imStatus;
   final ConversationService? avatarService;
   final bool pickMode;
   final bool selected;
@@ -228,6 +231,7 @@ class ContactRowTile extends StatelessWidget {
     final onTap = pickMode
         ? (disabled ? null : onToggleSelect)
         : onOpenProfile;
+    final status = imStatus ?? contact.statusValue;
     return Opacity(
       opacity: disabled ? 0.55 : 1,
       child: Material(
@@ -310,6 +314,10 @@ class ContactRowTile extends StatelessWidget {
                               ),
                             ),
                           ],
+                          if (status.showsBadge) ...[
+                            const SizedBox(width: 6),
+                            ImStatusBadge.fromValue(status),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 3),
@@ -357,6 +365,7 @@ class DeptBlockTile extends StatefulWidget {
     required this.onOpenContact,
     required this.onMessageContact,
     this.onlineUsers = const <int>{},
+    this.imStatuses = const <int, ImUserStatusValue>{},
     this.avatarService,
     this.pickMode = false,
     this.selectedUserIds = const <int>{},
@@ -369,6 +378,7 @@ class DeptBlockTile extends StatefulWidget {
   final ValueChanged<NativeContact> onOpenContact;
   final ValueChanged<NativeContact> onMessageContact;
   final Set<int> onlineUsers;
+  final Map<int, ImUserStatusValue> imStatuses;
   final ConversationService? avatarService;
   final bool pickMode;
   final Set<int> selectedUserIds;
@@ -478,6 +488,7 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
                     contact: dep.users[i],
                     currentUserId: widget.currentUserId,
                     showOnline: widget.onlineUsers.contains(dep.users[i].userId),
+                    imStatus: widget.imStatuses[dep.users[i].userId],
                     onOpenProfile: () => widget.onOpenContact(dep.users[i]),
                     onMessage: () => widget.onMessageContact(dep.users[i]),
                     avatarService: widget.avatarService,
@@ -496,6 +507,7 @@ class _DeptBlockTileState extends State<DeptBlockTile> {
                     onOpenContact: widget.onOpenContact,
                     onMessageContact: widget.onMessageContact,
                     onlineUsers: widget.onlineUsers,
+                    imStatuses: widget.imStatuses,
                     avatarService: widget.avatarService,
                     pickMode: widget.pickMode,
                     selectedUserIds: widget.selectedUserIds,

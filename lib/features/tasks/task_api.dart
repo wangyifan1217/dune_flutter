@@ -254,6 +254,20 @@ class TaskApi {
     return TaskItem.fromJson(Map<String, dynamic>.from(data as Map));
   }
 
+  Future<TaskItem> respondAssignment(
+    int id, {
+    required bool accept,
+    String comment = '',
+  }) async {
+    final resp = await http.post(
+      _uri('$id/${accept ? 'accept-assignment' : 'reject-assignment'}'),
+      headers: _headers,
+      body: jsonEncode({'comment': comment}),
+    );
+    final data = _unwrap(resp);
+    return TaskItem.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
   Future<void> deleteTask(int id) async {
     final resp = await http.delete(_uri('$id'), headers: _headers);
     _unwrap(resp);

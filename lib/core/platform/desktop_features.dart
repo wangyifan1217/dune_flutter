@@ -1,5 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+
+/// desktop_drop 是窗口级监听，看不见的 DropTarget 仍按屏幕矩形收拖放。
+/// keep-alive 切走（TickerMode 关）或上面盖着 Dialog 时不要挂监听。
+bool desktopDropLive(BuildContext context) {
+  if (!TickerMode.valuesOf(context).enabled) return false;
+  final route = ModalRoute.of(context);
+  if (route != null && !route.isCurrent) return false;
+  return true;
+}
 
 /// 桌面端（Windows / macOS）：与手机 APP 分 channel；侧栏含通讯 / NOVA / 灯塔 / 我的。
 bool get isDesktopCommOnly =>

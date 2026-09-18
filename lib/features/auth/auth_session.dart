@@ -24,6 +24,7 @@ class AuthSession {
     this.novaVoiceCallLang = 'zh',
     this.novaVoiceCallVoice = 'female',
     this.qianjiAdminAccess = false,
+    this.taskPermissions = const {},
     this.robotAccess = false,
     this.digitalEmployeeAccess = false,
     this.digitalEmployeeAccessKnown = false,
@@ -66,6 +67,7 @@ class AuthSession {
   final String novaVoiceCallLang;
   final String novaVoiceCallVoice;
   final bool qianjiAdminAccess;
+  final Map<String, bool> taskPermissions;
   final bool robotAccess;
   final bool digitalEmployeeAccess;
 
@@ -144,6 +146,26 @@ class AuthSession {
 
   bool get effectiveQianjiAdminAccess =>
       qianjiAdminAccess || DunesDefaults.localLighthouseAccessBypass;
+
+  bool _taskPermission(String key, bool fallback) {
+    if (DunesDefaults.localLighthouseAccessBypass) return true;
+    if (taskPermissions.containsKey(key)) return taskPermissions[key] == true;
+    return fallback;
+  }
+
+  bool get taskPendingAccess => _taskPermission('pending', true);
+
+  bool get taskTeamSummaryAccess => _taskPermission('teamSummary', hrbpAccess);
+
+  bool get taskRecurringAccess => _taskPermission('recurring', false);
+
+  bool get taskConfigAccess => _taskPermission('config', false);
+
+  bool get taskCalendarAccess => _taskPermission('calendar', false);
+
+  bool get taskImportAccess => _taskPermission('import', false);
+
+  bool get taskImportHistoryAccess => _taskPermission('importHistory', false);
 
   bool get effectiveRobotAccess =>
       robotAccess || DunesDefaults.localLighthouseAccessBypass;
@@ -268,6 +290,7 @@ class AuthSession {
     String? novaVoiceCallLang,
     String? novaVoiceCallVoice,
     bool? qianjiAdminAccess,
+    Map<String, bool>? taskPermissions,
     bool? robotAccess,
     bool? digitalEmployeeAccess,
     bool? digitalEmployeeAccessKnown,
@@ -311,6 +334,7 @@ class AuthSession {
       novaVoiceCallLang: novaVoiceCallLang ?? this.novaVoiceCallLang,
       novaVoiceCallVoice: novaVoiceCallVoice ?? this.novaVoiceCallVoice,
       qianjiAdminAccess: qianjiAdminAccess ?? this.qianjiAdminAccess,
+      taskPermissions: taskPermissions ?? this.taskPermissions,
       robotAccess: robotAccess ?? this.robotAccess,
       digitalEmployeeAccess:
           digitalEmployeeAccess ?? this.digitalEmployeeAccess,
@@ -395,6 +419,9 @@ class AuthSession {
       novaVoiceCallLang: (data['novaVoiceCallLang'] ?? 'zh').toString(),
       novaVoiceCallVoice: (data['novaVoiceCallVoice'] ?? 'female').toString(),
       qianjiAdminAccess: data['qianjiAdminAccess'] == true,
+      taskPermissions: data.containsKey('taskPermissions')
+          ? _parseTaskPermissions(data['taskPermissions'])
+          : session.taskPermissions,
       robotAccess: data['robotAccess'] == true,
       digitalEmployeeAccess: data['digitalEmployeeAccess'] == true,
       digitalEmployeeAccessKnown: data.containsKey('digitalEmployeeAccess'),
@@ -516,6 +543,7 @@ class AuthSession {
       'novaVoiceCallLang': novaVoiceCallLang,
       'novaVoiceCallVoice': novaVoiceCallVoice,
       'qianjiAdminAccess': qianjiAdminAccess,
+      'taskPermissions': taskPermissions,
       'robotAccess': robotAccess,
       'digitalEmployeeAccess': digitalEmployeeAccess,
       'digitalEmployeeAccessKnown': digitalEmployeeAccessKnown,
@@ -566,6 +594,7 @@ class AuthSession {
       novaVoiceCallLang: (json['novaVoiceCallLang'] ?? 'zh').toString(),
       novaVoiceCallVoice: (json['novaVoiceCallVoice'] ?? 'female').toString(),
       qianjiAdminAccess: json['qianjiAdminAccess'] == true,
+      taskPermissions: _parseTaskPermissions(json['taskPermissions']),
       robotAccess: json['robotAccess'] == true,
       digitalEmployeeAccess: json['digitalEmployeeAccess'] == true,
       digitalEmployeeAccessKnown:
@@ -599,5 +628,14 @@ class AuthSession {
       if (key is String && value != null) out[key] = value.toString();
     });
     return out.isEmpty ? null : out;
+  }
+
+  static Map<String, bool> _parseTaskPermissions(Object? raw) {
+    if (raw is! Map) return const {};
+    final out = <String, bool>{};
+    raw.forEach((key, value) {
+      if (key is String && value is bool) out[key] = value;
+    });
+    return out;
   }
 }

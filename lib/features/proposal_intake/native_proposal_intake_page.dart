@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/platform/desktop_features.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../tasks/native_task_home_pane.dart';
@@ -403,7 +404,9 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     'taxCostItemCodes': <String>[],
     'taxCostItemAmounts': <String, dynamic>{},
     'purchaseProducts': <String>[],
-    'financeInterfaces': <String, dynamic>{},
+    'financeInterfaces': proposalIntakeDefaultFinanceInterfaces(
+      _options?.financeInterfaces ?? const [],
+    ),
     'rollback': kProposalDefaultRollback,
   };
 
@@ -1397,6 +1400,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   final _financeModuleReviewKey = GlobalKey();
   String _activeChildProductId = '';
   final Map<String, GlobalKey> _fieldAnchorKeys = {};
+  final Map<String, int> _anchorUseCount = {};
   final Set<String> _flashFieldKeys = {};
   Timer? _flashTimer;
 
@@ -1542,8 +1546,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   @override
   void initState() {
     super.initState();
-    _row = widget.row;
-    _serverForm = proposalIntakeCloneForm(widget.row.form);
+    final form = proposalIntakeShouldDefaultFinanceInterfaces(widget.row)
+        ? proposalIntakeFormWithDefaultFinanceInterfaces(
+            widget.row.form,
+            widget.options.financeInterfaces,
+          )
+        : widget.row.form;
+    _row = identical(form, widget.row.form)
+        ? widget.row
+        : widget.row.copyWith(form: form);
+    _serverForm = proposalIntakeCloneForm(_row.form);
     _ownsCatalog = widget.catalog == null;
     _catalog = widget.catalog ?? SettlementCatalogService();
     unawaited(_loadMarketCatalog());
@@ -2058,6 +2070,38 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       review: review,
     );
     if ((rebuild || estimated) && mounted) setState(() {});
+    widget.onChanged(_row);
+  }
+
+  void _setTechSyncSource(CatalogRef? value) {
+    if (_moduleReviewed('technologyCompleted') &&
+        _review['reviewRejected'] != true) {
+      return;
+    }
+    if (_itemReviewed('technologyItem:syncSourceRef')) return;
+    var form = proposalIntakeApplyFormSyncSource(
+      _form,
+      value,
+      overwriteSkus: !kProposalSkuChannelSettingsEnabled,
+    );
+    form = _keepUnreviewed(form);
+    final review = Map<String, dynamic>.from(_review)
+      ..['technologyCompleted'] = false;
+    final items = review['technologyItems'];
+    if (items is Map) {
+      review['technologyItems'] = Map<String, dynamic>.from(items)
+        ..remove('syncSourceRef');
+    }
+    _markFormDirty();
+    _row = _row.copyWith(
+      status: _statusAfterEdit,
+      form: form,
+      review: review,
+    );
+    if (value != null && value.isNotEmpty) {
+      _prefetchSettle(value.code, 'CHANNEL');
+    }
+    if (mounted) setState(() {});
     widget.onChanged(_row);
   }
 
@@ -3601,7 +3645,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   Widget _anchor(String key, Widget child) {
-    final gk = _fieldAnchorKeys.putIfAbsent(key, GlobalKey.new);
+    // LayoutBuilder / 栅格会在一次 build 里把同一字段挂两次。
+    // putIfAbsent 复用同一把 GlobalKey 时，Column 会直接红屏。
+    final n = _anchorUseCount.update(key, (value) => value + 1, ifAbsent: () => 0);
+    final slot = n == 0 ? key : '$key#$n';
+    final gk = _fieldAnchorKeys.putIfAbsent(slot, GlobalKey.new);
     return KeyedSubtree(
       key: gk,
       child: _FlowFieldFlash(
@@ -3904,7 +3952,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     final (title, message, confirmLabel) = switch (action) {
       'notify_tech' => (
         '确认通知科技负责人',
-        '确认后将通知科技部负责人关注科技复核，并通知财务部负责人二填写财务技术接口。这是本步骤的最终确认。',
+        '确认后将通知财务部负责人二填写财务技术接口。科技部内容由填写人填写，科技部负责人稍后确认并提交复核。这是本步骤的最终确认。',
         '确认通知',
       ),
       'notify_market2' => (
@@ -4120,6 +4168,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       behavior: HitTestBehavior.translucent,
       child: LayoutBuilder(
         builder: (context, constraints) {
+          _anchorUseCount.clear();
           final wide = !ProposalLayout.isMedium(constraints.maxWidth);
           final compact = ProposalLayout.isCompact(constraints.maxWidth);
           return ColoredBox(
@@ -5769,9 +5818,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   Widget _techSection(bool wide) {
-    final interfaces = _form['financeInterfaces'] is Map
-        ? Map<String, dynamic>.from(_form['financeInterfaces'])
-        : <String, dynamic>{};
+    final interfaces = proposalIntakeShouldDefaultFinanceInterfaces(_row)
+        ? proposalIntakeResolvedFinanceInterfaces(
+            _form['financeInterfaces'] is Map
+                ? Map<String, dynamic>.from(_form['financeInterfaces'])
+                : <String, dynamic>{},
+            widget.options.financeInterfaces,
+          )
+        : (_form['financeInterfaces'] is Map
+              ? Map<String, dynamic>.from(_form['financeInterfaces'])
+              : <String, dynamic>{});
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -5823,9 +5879,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 _multiField(
                   _isPurchase ? '能力输入形式' : '能力输出形式',
                   'outputForms',
-                  _isPurchase
-                      ? kPurchaseCapabilityInputForms
-                      : widget.options.outputForms,
+                  proposalIntakeOutputFormOptions(
+                    widget.options.outputForms,
+                    purchase: _isPurchase,
+                  ),
                   _isPurchase ? '新增形式' : null,
                   required: true,
                   writable: _canEditTech,
@@ -5834,6 +5891,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   reviewLabel: _techReviewLabel,
                 ),
               ]),
+              const SizedBox(height: 10),
+              _fieldGrid(wide, [_techSyncSourceField()]),
               _anchor(
                 'financeInterfaces',
                 Container(
@@ -6026,9 +6085,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   Widget _childTechCard(bool wide) {
     final snap = proposalIntakeChildTechnology(_form);
     final platformName = '${snap['technologyPlatform'] ?? ''}'.trim();
-    final interfaces = snap['financeInterfaces'] is Map
+    final storedInterfaces = snap['financeInterfaces'] is Map
         ? Map<String, dynamic>.from(snap['financeInterfaces'] as Map)
         : <String, dynamic>{};
+    final interfaces = proposalIntakeShouldDefaultFinanceInterfaces(_row)
+        ? proposalIntakeResolvedFinanceInterfaces(
+            storedInterfaces,
+            widget.options.financeInterfaces,
+          )
+        : storedInterfaces;
     Set<String> selectedOf(String key) {
       final value = snap[key];
       return value is List ? value.map((item) => '$item').toSet() : <String>{};
@@ -6089,7 +6154,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             _multiField(
               '能力输出形式',
               'outputForms',
-              widget.options.outputForms,
+              proposalIntakeOutputFormOptions(widget.options.outputForms),
               null,
               required: true,
               writable: _canEditTech,
@@ -6100,6 +6165,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               fieldKey: 'child-outputForms',
               onToggleOverride: (value) =>
                   _toggleChildTechList('outputForms', value),
+            ),
+          ]),
+          const SizedBox(height: 10),
+          _fieldGrid(wide, [
+            _techSyncSourceField(
+              fieldKey: 'child-syncSourceRef',
+              valueOverride: proposalIntakeFormSyncSourceRef(snap),
+              reviewSection: reviewOf('syncSourceRef'),
+              onSelected: (value) => _setChildTech(
+                'syncSourceRef',
+                catalogRefToJson(value),
+              ),
             ),
           ]),
           _anchor(
@@ -7965,16 +8042,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     required Future<void> Function(DropDoneDetails) onDrop,
     required Widget child,
   }) {
-    if (!_supportsDesktopDrop || !enabled) return child;
+    // keep-alive 切走后提案仍全屏布局；不卸掉 DropTarget 会按屏幕坐标抢走 IM 拖放。
+    if (!_supportsDesktopDrop || !enabled || !desktopDropLive(context)) {
+      return child;
+    }
     return DropTarget(
-      enable: TickerMode.valuesOf(context).enabled,
       onDragEntered: (_) {
-        if (!TickerMode.valuesOf(context).enabled) return;
+        if (!desktopDropLive(context)) return;
         if (!dragging) onHover(true);
       },
       onDragExited: (_) => onHover(false),
       onDragDone: (detail) {
-        if (!TickerMode.valuesOf(context).enabled) return;
+        if (!desktopDropLive(context)) return;
         unawaited(onDrop(detail));
       },
       child: child,
@@ -8020,6 +8099,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ? '是'
             : '否',
         rollback: kProposalDefaultRollback,
+        syncSourceRef: proposalIntakeFormSyncSourceRef(_form),
         settlements: [ProposalSkuSettleRow(id: proposalIntakeNewSkuSettleId())],
       );
 
@@ -8030,6 +8110,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ? '是'
             : '否',
         rollback: kProposalDefaultRollback,
+        syncSourceRef: proposalIntakeFormSyncSourceRef(_form),
         settlements: [ProposalSkuSettleRow(id: proposalIntakeNewSkuSettleId())],
       );
 
@@ -8222,7 +8303,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     settlements: proposalIntakeSkuSettlements(current),
                     wide: wide,
                     enabled: enabled,
-                    syncSource: current.syncSourceCode,
+                    syncSource: _skuSyncSource(current),
                     productSource: 'CHANNEL',
                     compact: false,
                     onAdd: () {
@@ -9186,7 +9267,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           _skuChannelCell(
             current: row.channelRef,
             locked: locked,
-            syncSource: row.syncSourceCode,
+            syncSource: _skuSyncSource(row),
             onSelected: (value) => patch(
               (current) => current.copyWith(
                 channelRef: value,
@@ -9405,7 +9486,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               _assetProductSearchCell(
                 rowId: row.id,
                 current: row.assetProduct,
-                syncSource: row.syncSourceCode,
+                syncSource: _skuSyncSource(row),
                 locked: locked,
                 label: '已建产品',
                 fallbackLabel: row.displayName,
@@ -9722,6 +9803,62 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       channelCategoryL1: proposalIntakeCategoryLabel(value, ''),
       channelCategoryL2Ref: keep ? current.channelCategoryL2Ref : null,
       channelCategoryL2: keep ? current.channelCategoryL2 : '',
+    );
+  }
+
+  Widget _techSyncSourceField({
+    String? fieldKey,
+    CatalogRef? valueOverride,
+    String? reviewSection,
+    ValueChanged<CatalogRef?>? onSelected,
+  }) {
+    final enabled = _fillEnabled(
+      _canEditTech,
+      resetReview: 'technologyCompleted',
+      reviewSection: reviewSection ?? 'technologyItem:syncSourceRef',
+    );
+    final current =
+        valueOverride ?? proposalIntakeFormSyncSourceRef(_form);
+    final selected =
+        _selectedCatalog(current, _syncSourceCatalog) ??
+        ((current != null && current.isNotEmpty) ? current : null);
+    final values = _withCurrent(_syncSourceCatalog, selected);
+    final display = (selected?.label ?? current?.label ?? '').trim();
+    final tone = proposalFieldTone(enabled: enabled);
+    final emptyCatalog = _syncSourceCatalog.isEmpty;
+    return _FullWidthField(
+      child: _anchor(
+        fieldKey ?? 'syncSourceRef',
+        ProposalField(
+          label: '业务平台',
+          required: true,
+          tone: tone,
+          trailing: _rowReviewToggle(
+            reviewSection ?? 'technologyItem:syncSourceRef',
+            _techReviewLabel,
+          ),
+          child: !enabled || _showSelectedAsText
+              ? _readonlySelectedText(display)
+              : ProposalSelectField<CatalogRef>(
+                  value: selected == null || selected.isEmpty ? null : selected,
+                  title: '业务平台',
+                  hint: emptyCatalog ? '字典加载中或暂无平台' : '请选择业务平台',
+                  searchable: true,
+                  emptyText: emptyCatalog ? '字典加载中或暂无平台' : '暂无业务平台',
+                  options: [
+                    for (final item in values)
+                      ProposalSelectOption(
+                        value: item,
+                        label: item.label,
+                        meta: item.code.isEmpty || item.code == item.name
+                            ? null
+                            : item.code,
+                      ),
+                  ],
+                  onSelected: onSelected ?? _setTechSyncSource,
+                ),
+        ),
+      ),
     );
   }
 
@@ -10048,7 +10185,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 settlements: proposalIntakeSkuSettlements(sku),
                 wide: wide,
                 enabled: enabled,
-                syncSource: sku.syncSourceCode,
+                syncSource: _skuSyncSource(sku),
                 productSource: 'CHANNEL',
                 onAdd: () => _addSkuSettle(sku.id),
                 onRemove: (settleId) => _removeSkuSettle(sku.id, settleId),
@@ -10135,7 +10272,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               settlements: proposalIntakeSkuSettlements(sku),
               wide: wide,
               enabled: enabled,
-              syncSource: sku.syncSourceCode,
+              syncSource: _skuSyncSource(sku),
               productSource: 'CHANNEL',
               onAdd: () => _addSkuSettle(sku.id),
               onRemove: (settleId) => _removeSkuSettle(sku.id, settleId),
@@ -10159,11 +10296,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   String _primarySyncSource() {
+    final fromForm = proposalIntakeFormSyncSourceCode(_form);
+    if (fromForm.isNotEmpty) return fromForm;
     for (final sku in proposalIntakeAllSellableSkus(_form)) {
       if (sku.syncSourceCode.isNotEmpty) return sku.syncSourceCode;
     }
     return '';
   }
+
+  String _skuSyncSource(ProposalSkuDetailRow sku) =>
+      proposalIntakeResolvedSyncSourceCode(_form, sku);
 
   Widget _skuSettleProductCard({
     required String skuId,
@@ -12808,7 +12950,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   Widget _gridRow(List<Widget> cells, int columns, {required bool lastRow}) {
     final spanAll =
-        cells.length == 1 && (columns <= 1 || cells.first is _FullWidthField);
+        cells.length == 1 &&
+        (columns <= 1 || _isFullWidthWidget(cells.first));
     if (spanAll) {
       return _gridCell(
         child: cells.first,
@@ -12842,12 +12985,30 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
+  /// [_FullWidthField] 常被 [_anchor] 包在 KeyedSubtree 里，类型检查要往里看一层。
+  bool _isFullWidthWidget(Widget field) {
+    Widget current = field;
+    for (var i = 0; i < 4; i++) {
+      if (current is _FullWidthField) return true;
+      if (current is KeyedSubtree) {
+        current = current.child;
+        continue;
+      }
+      if (current is _FlowFieldFlash) {
+        current = current.child;
+        continue;
+      }
+      return false;
+    }
+    return false;
+  }
+
   /// 按列数切分字段，[_FullWidthField] 独占一行。
   List<List<Widget>> _groupFields(List<Widget> fields, int columns) {
     final rows = <List<Widget>>[];
     var current = <Widget>[];
     for (final field in fields) {
-      if (field is _FullWidthField) {
+      if (_isFullWidthWidget(field)) {
         if (current.isNotEmpty) {
           rows.add(current);
           current = <Widget>[];

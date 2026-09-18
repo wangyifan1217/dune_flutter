@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>沙丘任务中心 · 静态展示</title>
+  <style>
+    :root {
+      --purple: #7655d6;
+      --purple-soft: #f0ebff;
+      --ink: #24222b;
+      --muted: #8d8998;
+      --line: #ebe8f0;
+      --canvas: #f7f7fa;
+      --green: #15845b;
+      --orange: #b46822;
+      --red: #c94b52;
+      --shadow: 0 18px 48px rgba(68, 52, 117, .10);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: #efedf5; font: 14px/1.5 "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    .app { display: grid; grid-template-columns: 238px minmax(0, 1fr); max-width: 1440px; min-height: 900px; margin: 0 auto; background: var(--canvas); box-shadow: var(--shadow); }
+    .sidebar { padding: 28px 16px; background: #fff; border-right: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 0 12px 30px; font-weight: 800; font-size: 19px; letter-spacing: .02em; }
+    .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; color: #fff; background: linear-gradient(145deg, #9a77ef, #5a3fc1); border-radius: 11px; }
+    .nav-label { margin: 18px 12px 8px; color: var(--muted); font-size: 11px; letter-spacing: .1em; }
+    .nav { display: grid; gap: 5px; }
+    .nav button { display: flex; align-items: center; gap: 11px; width: 100%; padding: 12px; color: #686373; text-align: left; background: transparent; border: 0; border-radius: 11px; }
+    .nav button:hover, .nav button.active { color: var(--purple); background: var(--purple-soft); font-weight: 700; }
+    .nav .badge { margin-left: auto; min-width: 20px; padding: 1px 6px; color: #fff; background: #da5a64; border-radius: 10px; font-size: 11px; text-align: center; }
+    .sidebar-note { margin: 42px 10px 0; padding: 14px; color: #777287; background: #f8f6ff; border: 1px solid #e9e1ff; border-radius: 12px; font-size: 12px; }
+    .main { min-width: 0; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px 32px; background: #fff; border-bottom: 1px solid var(--line); }
+    .crumb { color: var(--muted); font-size: 12px; }
+    h1 { margin: 3px 0 0; font-size: 25px; letter-spacing: -.03em; }
+    .role { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 12px; }
+    select { padding: 8px 30px 8px 10px; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 9px; }
+    .content { padding: 28px 32px 46px; }
+    .view { display: none; }
+    .view.active { display: block; }
+    .hero { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+    .hero p { margin: 5px 0 0; color: var(--muted); }
+    .button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 10px 14px; color: #fff; background: var(--purple); border: 0; border-radius: 9px; font-weight: 700; }
+    .button.secondary { color: var(--purple); background: var(--purple-soft); }
+    .button.ghost { color: #6e687b; background: #fff; border: 1px solid var(--line); }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+    .stat, .panel, .feature { background: #fff; border: 1px solid var(--line); border-radius: 14px; }
+    .stat { padding: 16px 18px; }
+    .stat strong { display: block; font-size: 24px; letter-spacing: -.04em; }
+    .stat span { color: var(--muted); font-size: 12px; }
+    .stat em { float: right; margin-top: 5px; color: var(--green); font-size: 12px; font-style: normal; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, .8fr); gap: 18px; }
+    .panel { padding: 20px; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 15px; }
+    .panel-head h2 { margin: 0; font-size: 16px; }
+    .panel-head a { color: var(--purple); font-size: 12px; cursor: pointer; }
+    .task { display: flex; align-items: flex-start; gap: 12px; padding: 14px 0; border-top: 1px solid var(--line); }
+    .task:first-of-type { border-top: 0; }
+    .task-icon { width: 34px; height: 34px; display: grid; place-items: center; color: var(--purple); background: var(--purple-soft); border-radius: 10px; }
+    .task-body { min-width: 0; flex: 1; }
+    .task-title { overflow: hidden; color: var(--ink); font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+    .task-meta { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .pill { display: inline-flex; padding: 3px 8px; border-radius: 7px; color: var(--purple); background: var(--purple-soft); font-size: 11px; white-space: nowrap; }
+    .pill.green { color: var(--green); background: #e9f8f1; }
+    .pill.orange { color: var(--orange); background: #fff4e7; }
+    .pill.red { color: var(--red); background: #fff0f1; }
+    .report-card { padding: 18px; background: linear-gradient(145deg, #7f5ce2, #6242bb); color: #fff; border: 0; }
+    .report-card .panel-head { margin-bottom: 8px; }
+    .report-card .panel-head h2, .report-card a { color: #fff; }
+    .report-card p { margin: 8px 0 18px; color: #e9e2ff; font-size: 12px; }
+    .report-card .button { color: #6346bd; background: #fff; }
+    .feature-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .feature { display: flex; align-items: center; gap: 12px; padding: 17px; transition: transform .15s, box-shadow .15s; cursor: pointer; }
+    .feature:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(68, 52, 117, .09); }
+    .feature-icon { width: 40px; height: 40px; display: grid; place-items: center; color: var(--purple); background: var(--purple-soft); border-radius: 12px; font-size: 19px; }
+    .feature strong { display: block; }
+    .feature small { display: block; margin-top: 3px; color: var(--muted); }
+    .feature .arrow { margin-left: auto; color: #aaa4b5; }
+    .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .toolbar input { flex: 1; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; outline: 0; }
+    .toolbar input:focus { border-color: #bca9f4; box-shadow: 0 0 0 3px #f0ebff; }
+    .table { overflow: hidden; background: #fff; border: 1px solid var(--line); border-radius: 14px; }
+    .row { display: grid; grid-template-columns: minmax(220px, 1.8fr) 1fr 1fr .8fr auto; align-items: center; gap: 14px; padding: 15px 18px; border-top: 1px solid var(--line); }
+    .row:first-child { border-top: 0; }
+    .row.header { color: var(--muted); background: #fbfbfc; font-size: 12px; }
+    .row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .empty { padding: 52px 20px; color: var(--muted); text-align: center; }
+    .empty .empty-icon { margin: 0 auto 12px; width: 48px; height: 48px; display: grid; place-items: center; color: var(--purple); background: var(--purple-soft); border-radius: 15px; font-size: 23px; }
+    .config-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .config-card { padding: 20px; background: #fff; border: 1px solid var(--line); border-radius: 14px; }
+    .config-card h3 { margin: 0 0 15px; font-size: 15px; }
+    .config-row { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 13px 0; border-top: 1px solid var(--line); }
+    .config-row:first-of-type { border-top: 0; }
+    .config-row small { display: block; margin-top: 2px; color: var(--muted); }
+    .switch { position: relative; width: 42px; height: 23px; flex: 0 0 auto; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; inset: 0; background: #d8d4df; border-radius: 20px; transition: .2s; }
+    .slider:before { content: ""; position: absolute; width: 17px; height: 17px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s; box-shadow: 0 1px 3px #aaa; }
+    input:checked + .slider { background: var(--purple); }
+    input:checked + .slider:before { transform: translateX(19px); }
+    .time-input { width: 82px; padding: 7px; text-align: center; border: 1px solid var(--line); border-radius: 8px; }
+    .upload { padding: 22px; text-align: center; background: #fcfbff; border: 1px dashed #c9baf3; border-radius: 14px; }
+    .upload strong { display: block; margin: 8px 0 4px; }
+    .upload p { margin: 0 0 15px; color: var(--muted); font-size: 12px; }
+    .preview { display: none; margin-top: 15px; padding: 15px; background: #fff; border: 1px solid var(--line); border-radius: 12px; text-align: left; }
+    .preview.show { display: block; }
+    .preview-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+    .preview-counts div { padding: 10px; background: var(--canvas); border-radius: 9px; text-align: center; }
+    .preview-counts strong { display: block; margin: 0; font-size: 18px; }
+    .toast { position: fixed; right: 22px; bottom: 22px; display: none; padding: 12px 16px; color: #fff; background: #282530; border-radius: 9px; box-shadow: var(--shadow); }
+    .toast.show { display: block; }
+    @media (max-width: 900px) { .app { display: block; min-height: 100vh; } .sidebar { display: none; } .topbar { padding: 18px; } .content { padding: 20px 18px 35px; } .stats { grid-template-columns: repeat(2, 1fr); } .layout, .config-grid { grid-template-columns: 1fr; } .row { grid-template-columns: minmax(160px, 1.5fr) 1fr auto; } .row > :nth-child(3), .row > :nth-child(4) { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">T</span>任务中心</div>
+      <div class="nav-label">任务工作区</div>
+      <nav class="nav">
+        <button class="active" data-view="home">▦ <span>我的任务</span></button>
+        <button data-view="pending">◷ <span>待我处理</span><span class="badge">3</span></button>
+        <button data-view="daily">✓ <span>日报</span></button>
+      </nav>
+      <div class="nav-label admin-only">任务管理</div>
+      <nav class="nav admin-only">
+        <button data-view="recurring">↻ <span>周期任务</span></button>
+        <button data-view="team">♧ <span>团队任务汇总</span></button>
+        <button data-view="config">⚙ <span>任务配置</span></button>
+        <button data-view="import">⇧ <span>任务导入</span></button>
+        <button data-view="history">⌁ <span>导入记录</span></button>
+      </nav>
+      <div class="sidebar-note">这是任务模块内的静态展示。任务以外的通讯、人事和报表功能不会出现在这里。</div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div><div class="crumb">工作台 / 任务</div><h1 id="pageTitle">我的任务</h1></div>
+        <label class="role">模拟角色
+          <select id="roleSelect"><option value="employee">普通员工</option><option value="manager">主管 / HRBP</option><option value="admin" selected>任务管理员</option></select>
+        </label>
+      </header>
+
+      <section class="content">
+        <div class="view active" id="view-home">
+          <div class="hero"><div><h2>今天的任务</h2><p>原有任务列表、详情和日报继续沿用。</p></div><button class="button" onclick="toast('新建主目标入口保持原流程')">＋ 新建主目标</button></div>
+          <div class="stats"><div class="stat"><strong>12</strong><span>进行中</span><em>+2</em></div><div class="stat"><strong>4</strong><span>今日待处理</span><em>需关注</em></div><div class="stat"><strong>86%</strong><span>本月完成率</span><em>良好</em></div><div class="stat"><strong>3</strong><span>待我确认</span><em>查看</em></div></div>
+          <div class="layout">
+            <div class="panel"><div class="panel-head"><h2>我的任务</h2><a onclick="openView('home')">查看全部</a></div>
+              <div class="task"><div class="task-icon">↗</div><div class="task-body"><div class="task-title">完成开票会需求确认与跟进</div><div class="task-meta">今天截止 · 进度 70% · 负责人 我</div></div><span class="pill orange">进行中</span></div>
+              <div class="task"><div class="task-icon">▤</div><div class="task-body"><div class="task-title">整理三季度客户回访数据</div><div class="task-meta">明天截止 · 子任务 2/4</div></div><span class="pill">进行中</span></div>
+              <div class="task"><div class="task-icon">✓</div><div class="task-body"><div class="task-title">提交本周重点工作日报</div><div class="task-meta">今天 22:00 前 · 日报</div></div><span class="pill green">待填写</span></div>
+            </div>
+            <div class="panel report-card"><div class="panel-head"><h2>今日任务日报</h2><a onclick="openView('daily')">历史</a></div><p>记录任务进展、阻塞事项和下一步计划。请假和非工作日由系统自动判断。</p><button class="button" onclick="openView('daily')">填写今日日报 →</button></div>
+          </div>
+          <div class="panel" style="margin-top:18px"><div class="panel-head"><h2>任务功能</h2><span class="muted">仅任务域功能</span></div><div class="feature-grid">
+            <div class="feature" onclick="openView('pending')"><div class="feature-icon">◷</div><div><strong>待我处理</strong><small>审批、指派确认和待办操作</small></div><span class="arrow">›</span></div>
+            <div class="feature admin-card" onclick="openView('recurring')"><div class="feature-icon">↻</div><div><strong>周期任务</strong><small>维护周期规则和执行范围</small></div><span class="arrow">›</span></div>
+            <div class="feature manager-card" onclick="openView('team')"><div class="feature-icon">♧</div><div><strong>团队任务汇总</strong><small>部门进度和日报完成情况</small></div><span class="arrow">›</span></div>
+            <div class="feature admin-card" onclick="openView('config')"><div class="feature-icon">⚙</div><div><strong>任务配置</strong><small>日报提醒、审批和任务规则</small></div><span class="arrow">›</span></div>
+            <div class="feature admin-card" onclick="openView('import')"><div class="feature-icon">⇧</div><div><strong>任务导入</strong><small>任务或试用期任务批量导入</small></div><span class="arrow">›</span></div>
+            <div class="feature admin-card" onclick="openView('history')"><div class="feature-icon">⌁</div><div><strong>导入记录</strong><small>查看文件、状态和结果</small></div><span class="arrow">›</span></div>
+          </div></div>
+        </div>
+
+        <div class="view" id="view-pending"><div class="hero"><div><h2>待我处理</h2><p>任务变更审批、指派确认和待办操作。</p></div></div><div class="table"><div class="row header"><span>任务</span><span>发起人</span><span>类型</span><span>时间</span><span></span></div><div class="row"><strong>完成开票会需求确认与跟进</strong><span class="muted">王小明</span><span class="pill orange">指派确认</span><span class="muted">10 分钟前</span><button class="button secondary" onclick="handlePending(this,'accept')">接受</button></div><div class="row"><strong>三季度客户回访数据整理</strong><span class="muted">李小满</span><span class="pill">变更审批</span><span class="muted">昨天</span><button class="button secondary" onclick="handlePending(this,'approve')">通过</button></div><div class="row"><strong>新客户资料补充</strong><span class="muted">赵晨</span><span class="pill">指派确认</span><span class="muted">昨天</span><button class="button secondary" onclick="handlePending(this,'accept')">接受</button></div></div></div>
+
+        <div class="view" id="view-daily">
+          <div class="hero"><div><h2>任务日报</h2><p>日报仍属于任务模块，通用汇报入口不受影响。</p></div><div style="display:flex;gap:8px"><button class="button ghost" onclick="saveDailyDraft()">保存草稿</button><button class="button" onclick="submitDailyDemo()">提交日报</button></div></div>
+          <div id="dailyAttendance" class="panel" style="margin-bottom:14px;padding:13px 16px;background:#fff8eb;border-color:#f4d9ae"><strong>今日出勤：正常出勤</strong><span class="muted" style="margin-left:10px">工作日可填写日报</span><select id="attendanceSelect" style="float:right;padding:5px 9px"><option value="normal">正常出勤</option><option value="half">半天请假</option><option value="leave">全天请假</option><option value="holiday">节假日</option></select></div>
+          <div class="layout"><div class="panel">
+            <div class="panel-head"><h2><input id="dailyDate" type="date" value="2026-09-18" style="padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-weight:700;color:var(--ink)"></h2><span id="dailyStatus" class="pill orange">待填写</span></div>
+            <div class="task"><div class="task-icon">1</div><div class="task-body"><div class="task-title">完成开票会需求确认与跟进</div><div class="task-meta">今天截止 · 负责人 我</div><div style="display:flex;align-items:center;gap:10px;margin-top:10px"><input class="daily-progress" type="range" min="0" max="100" value="70" style="flex:1"><strong class="progress-value">70%</strong></div><textarea class="daily-work" style="width:100%;min-height:70px;margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:9px;resize:vertical" placeholder="今天完成了什么？"></textarea><input class="daily-next" style="width:100%;margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:9px" placeholder="下一步（选填）"></div></div>
+            <div class="task"><div class="task-icon">2</div><div class="task-body"><div class="task-title">整理三季度客户回访数据</div><div class="task-meta">明天截止 · 子任务 2/4</div><div style="display:flex;align-items:center;gap:10px;margin-top:10px"><input class="daily-progress" type="range" min="0" max="100" value="50" style="flex:1"><strong class="progress-value">50%</strong></div><textarea class="daily-work" style="width:100%;min-height:70px;margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:9px;resize:vertical" placeholder="今天完成了什么？"></textarea><input class="daily-next" style="width:100%;margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:9px" placeholder="下一步（选填）"></div></div>
+            <label style="display:block;margin-top:14px;font-weight:700">其他工作</label><textarea id="dailyOther" style="width:100%;min-height:75px;margin-top:7px;padding:11px;border:1px solid var(--line);border-radius:9px;resize:vertical" placeholder="未挂在任务下的工作（选填）"></textarea>
+            <label style="display:block;margin-top:14px;font-weight:700">阻塞事项</label><textarea id="dailyBlockers" style="width:100%;min-height:65px;margin-top:7px;padding:11px;border:1px solid var(--line);border-radius:9px;resize:vertical" placeholder="卡住的事情（选填）"></textarea>
+            <label style="display:block;margin-top:14px;font-weight:700">明日计划</label><textarea id="dailyNextPlan" style="width:100%;min-height:75px;margin-top:7px;padding:11px;border:1px solid var(--line);border-radius:9px;resize:vertical" placeholder="明天准备继续推进什么（选填）"></textarea>
+          </div><div class="panel"><div class="panel-head"><h2>日报状态</h2></div><div class="task"><div class="task-icon">✓</div><div class="task-body"><div class="task-title">首次提醒</div><div class="task-meta">今天 18:10</div></div><span class="pill green">已提醒</span></div><div class="task"><div class="task-icon">!</div><div class="task-body"><div class="task-title">日报截止</div><div class="task-meta">今天 22:00</div></div><span class="pill orange">未提交</span></div><div class="panel" style="margin-top:14px;padding:13px;background:#f8f6ff;border-color:#e9e1ff"><strong>填写规则</strong><p class="muted" style="margin:7px 0 0">至少填写一条任务完成、其他工作或明日计划。仅填写阻塞事项不能提交。</p></div></div></div>
+        </div>
+
+        <div class="view" id="view-recurring"><div class="hero"><div><h2>周期任务</h2><p>周期规则独立维护，生成的任务仍进入原任务列表。</p></div><button class="button" onclick="openRuleDialog()">＋ 新建周期任务</button></div><div class="table" id="recurringTable"></div>
+
+        <div class="view" id="view-team"><div class="hero"><div><h2>团队任务汇总</h2><p>只读统计，不改变成员任务详情和进度操作。</p></div><button class="button ghost" onclick="toast('统计已刷新')">↻ 刷新</button></div><div class="stats"><div class="stat"><strong>42</strong><span>部门主目标</span></div><div class="stat"><strong>76%</strong><span>平均进度</span></div><div class="stat"><strong>5</strong><span>逾期目标</span></div><div class="stat"><strong>92%</strong><span>日报完成率</span></div></div><div class="table"><div class="row header"><span>部门</span><span>主目标</span><span>平均进度</span><span>日报完成率</span><span></span></div><div class="row"><strong>销售部</strong><span>16 个</span><span class="pill green">84%</span><span>96%</span><button class="button ghost" onclick="toast('已打开销售部详情')">查看</button></div><div class="row"><strong>产品部</strong><span>12 个</span><span class="pill">73%</span><span>92%</span><button class="button ghost" onclick="toast('已打开产品部详情')">查看</button></div><div class="row"><strong>运营部</strong><span>14 个</span><span class="pill orange">68%</span><span>87%</span><button class="button ghost" onclick="toast('已打开运营部详情')">查看</button></div></div></div>
+
+        <div class="view" id="view-config"><div class="hero"><div><h2>任务配置</h2><p>这里只配置任务规则，不修改人事、考勤和通用报表。</p></div><button class="button" onclick="saveConfigDemo()">保存配置</button></div><div class="config-grid"><div class="config-card"><h3>日报提醒</h3><div class="config-row"><div><strong>开启日报提醒</strong><small>工作日提醒未提交日报的成员</small></div><label class="switch"><input id="configReminderEnabled" type="checkbox" checked><span class="slider"></span></label></div><div class="config-row"><div><strong>首次提醒时间</strong><small>当天第一次提醒</small></div><input id="configFirstReminder" class="time-input" value="18:10"></div><div class="config-row"><div><strong>日报截止时间</strong><small>超过后标记为待补报</small></div><input id="configDeadline" class="time-input" value="22:00"></div></div><div class="config-card"><h3>任务规则</h3><div class="config-row"><div><strong>允许周期任务</strong><small>规则生成的任务进入任务列表</small></div><label class="switch"><input id="configRecurringEnabled" type="checkbox" checked><span class="slider"></span></label></div><div class="config-row"><div><strong>启用任务变更审批</strong><small>关键字段修改需审批</small></div><label class="switch"><input id="configApprovalEnabled" type="checkbox" checked><span class="slider"></span></label></div><div class="config-row"><div><strong>指派需要接收确认</strong><small>接收人可接受或拒绝</small></div><label class="switch"><input id="configAssignConfirm" type="checkbox" checked><span class="slider"></span></label></div></div></div></div>
+
+        <div class="view" id="view-import"><div class="hero"><div><h2>任务导入</h2><p>选择模板后先预览校验，再确认写入任务数据。</p></div></div><div class="panel"><div class="toolbar"><button class="button secondary" id="kindTask">任务模板</button><button class="button ghost" id="kindProbation">试用期任务模板</button></div><div class="upload"><div style="font-size:30px;color:var(--purple)">⇧</div><strong id="fileName">选择 Excel 文件</strong><p>支持 .xlsx / .csv，导入前会展示错误行，不会直接修改数据。</p><input id="fileInput" type="file" accept=".xlsx,.csv" hidden><button class="button ghost" onclick="document.getElementById('fileInput').click()">选择文件</button><div class="preview" id="preview"><strong>校验结果</strong><div class="preview-counts"><div><strong id="previewTotal">0</strong><span class="muted">总行数</span></div><div><strong id="previewValid" style="color:var(--green)">0</strong><span class="muted">可导入</span></div><div><strong id="previewInvalid" style="color:var(--red)">0</strong><span class="muted">错误</span></div></div><div class="muted" id="previewErrors">请先选择文件并预览</div><br><button id="commitImportButton" class="button" onclick="commitImportDemo()" disabled>确认导入</button></div></div><div style="text-align:center;margin-top:15px"><button class="button" onclick="showPreview()">预览并校验</button></div></div></div>
+
+        <div class="view" id="view-history"><div class="hero"><div><h2>导入记录</h2><p>任务导入和试用期任务导入共用记录查询。</p></div><button class="button ghost" onclick="renderHistory();toast('记录已刷新')">↻ 刷新</button></div><div class="table" id="historyTable"></div></div>
+      </section>
+    </main>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script>
+    const titles = {home:'我的任务',pending:'待我处理',daily:'任务日报',recurring:'周期任务',team:'团队任务汇总',config:'任务配置',import:'任务导入',history:'导入记录'};
+    const roleSelect = document.getElementById('roleSelect');
+    function openView(view) {
+      const role = roleSelect.value;
+      if ((['recurring','config','import','history'].includes(view) && role !== 'admin') || (view === 'team' && role === 'employee')) { toast('当前角色没有权限查看该任务功能'); return; }
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById('view-' + view).classList.add('active');
+      document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+      document.getElementById('pageTitle').textContent = titles[view];
+      window.scrollTo({top:0, behavior:'smooth'});
+    }
+    document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => openView(button.dataset.view)));
+    roleSelect.addEventListener('change', () => { const admin = roleSelect.value === 'admin'; const manager = roleSelect.value !== 'employee'; document.querySelectorAll('.admin-only,.admin-card').forEach(e => e.style.display = admin ? '' : 'none'); document.querySelectorAll('.manager-card').forEach(e => e.style.display = manager ? '' : 'none'); if (!admin && ['recurring','config','import','history'].some(v => document.getElementById('view-'+v).classList.contains('active'))) openView('home'); if (!manager && document.getElementById('view-team').classList.contains('active')) openView('home'); });
+    function toast(message) { const el = document.getElementById('toast'); el.textContent = message; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2300); }
+    const demoStoreKey = 'task-center-demo-state';
+    const defaultDemoState = {
+      rules: [
+        {id: 1, title: '月初填写部门目标', frequency: '每月前 2 个工作日', scope: '全体员工', enabled: true, executions: []},
+        {id: 2, title: '每周客户回访总结', frequency: '每周五', scope: '销售部', enabled: true, executions: []},
+        {id: 3, title: '月度经营复盘', frequency: '每月最后一个工作日', scope: '管理层', enabled: false, executions: []}
+      ],
+      history: [
+        {file: '2026-09-试用期任务.xlsx', kind: '试用期任务', time: '今天 15:32', status: '导入成功', total: 18, errors: []},
+        {file: '销售部月度任务.xlsx', kind: '任务', time: '昨天 17:08', status: '部分失败', total: 20, errors: ['第 6 行负责人为空', '第 14 行截止日期格式不正确']}
+      ],
+      config: {reminder: true, first: '18:10', deadline: '22:00', recurring: true, approval: true, assignConfirm: true}
+    };
+    let demoState;
+    try { demoState = JSON.parse(localStorage.getItem(demoStoreKey)) || defaultDemoState; } catch (_) { demoState = defaultDemoState; }
+    let demoImportKind = '任务';
+    function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+    function persistDemoState() { localStorage.setItem(demoStoreKey, JSON.stringify(demoState)); }
+    function renderRecurring() {
+      const table = document.getElementById('recurringTable');
+      if (!table) return;
+      table.innerHTML = '<div class="row header"><span>规则名称</span><span>周期</span><span>生效范围</span><span>状态</span><span>操作</span></div>' + demoState.rules.map(rule => `<div class="row"><strong>${escapeHtml(rule.title)}</strong><span>${escapeHtml(rule.frequency)}</span><span class="muted">${escapeHtml(rule.scope)}</span><span class="pill ${rule.enabled ? 'green' : 'orange'}">${rule.enabled ? '启用' : '暂停'}</span><span style="display:flex;gap:6px;flex-wrap:wrap"><button class="button ghost" onclick="toggleRule(${rule.id})">${rule.enabled ? '停用' : '启用'}</button><button class="button ghost" onclick="executeRule(${rule.id})">立即执行</button><button class="button ghost" onclick="showRuleHistory(${rule.id})">记录</button></span></div>`).join('');
+    }
+    function openRuleDialog() {
+      const title = prompt('请输入周期任务名称', '新周期任务'); if (!title || !title.trim()) return;
+      const frequency = prompt('请输入周期，例如：每周五 / 每月', '每周五') || '每周';
+      const scope = prompt('请输入生效范围', '全体员工') || '全体员工';
+      demoState.rules.push({id: Date.now(), title: title.trim(), frequency: frequency.trim(), scope: scope.trim(), enabled: true, executions: []});
+      persistDemoState(); renderRecurring(); toast('周期任务已创建');
+    }
+    function toggleRule(id) { const rule = demoState.rules.find(item => item.id === id); if (!rule) return; rule.enabled = !rule.enabled; persistDemoState(); renderRecurring(); toast(rule.enabled ? '周期规则已启用' : '周期规则已停用'); }
+    function executeRule(id) { const rule = demoState.rules.find(item => item.id === id); if (!rule) return; if (!rule.enabled) { toast('请先启用周期规则'); return; } const today = new Date().toISOString().slice(0,10); if ((rule.executions || []).some(item => item.date === today)) { toast('该规则今天已经执行'); return; } rule.executions = rule.executions || []; rule.executions.unshift({date: today, status: 'success', task: rule.title}); persistDemoState(); renderRecurring(); toast('已生成一条任务并记录执行结果'); }
+    function showRuleHistory(id) { const rule = demoState.rules.find(item => item.id === id); if (!rule) return; const rows = (rule.executions || []).map(item => `${item.date} · ${item.status === 'success' ? '执行成功' : '执行失败'}`).join('\n'); alert(`${rule.title}\n\n${rows || '暂无执行记录'}`); }
+    function loadConfigDemo() { const c = demoState.config; document.getElementById('configReminderEnabled').checked = c.reminder; document.getElementById('configFirstReminder').value = c.first; document.getElementById('configDeadline').value = c.deadline; document.getElementById('configRecurringEnabled').checked = c.recurring; document.getElementById('configApprovalEnabled').checked = c.approval; document.getElementById('configAssignConfirm').checked = c.assignConfirm; }
+    function saveConfigDemo() { demoState.config = {reminder: document.getElementById('configReminderEnabled').checked, first: document.getElementById('configFirstReminder').value, deadline: document.getElementById('configDeadline').value, recurring: document.getElementById('configRecurringEnabled').checked, approval: document.getElementById('configApprovalEnabled').checked, assignConfirm: document.getElementById('configAssignConfirm').checked}; persistDemoState(); toast('任务配置已保存'); }
+    function renderHistory() { const table = document.getElementById('historyTable'); if (!table) return; table.innerHTML = '<div class="row header"><span>文件</span><span>类型</span><span>提交时间</span><span>状态</span><span>操作</span></div>' + demoState.history.map((item, index) => `<div class="row"><strong>${escapeHtml(item.file)}</strong><span>${escapeHtml(item.kind)}</span><span class="muted">${escapeHtml(item.time)}</span><span class="pill ${item.status === '导入成功' ? 'green' : 'orange'}">${escapeHtml(item.status)}</span><button class="button ghost" onclick="showImportDetails(${index})">详情</button></div>`).join(''); }
+    function showImportDetails(index) { const item = demoState.history[index]; if (!item) return; alert(`${item.file}\n总行数：${item.total}\n状态：${item.status}\n${(item.errors || []).join('\n') || '没有错误'}`); }
+    function handlePending(button, action) { const row = button.closest('.row'); if (!row) return; row.remove(); const badge = document.querySelector('[data-view="pending"] .badge'); if (badge) badge.textContent = Math.max(0, Number(badge.textContent || 0) - 1); toast(action === 'accept' ? '已接受指派' : '审批已通过'); }
+    function showPreview() { const file = document.getElementById('fileInput').files[0]; if (!file) { toast('请先选择 Excel 文件'); return; } const total = Math.max(1, Math.min(30, Math.round(file.size / 180) || 1)); const invalid = demoImportKind === '试用期任务' ? Math.min(2, total) : Math.min(1, total); document.getElementById('previewTotal').textContent = total; document.getElementById('previewValid').textContent = total - invalid; document.getElementById('previewInvalid').textContent = invalid; document.getElementById('previewErrors').textContent = invalid ? `演示校验：第 ${Math.max(2, total - 1)} 行需要补充负责人或日期` : '全部数据通过校验'; document.getElementById('preview').classList.add('show'); document.getElementById('commitImportButton').disabled = invalid > 0; toast('已生成导入预览'); }
+    function commitImportDemo() { const file = document.getElementById('fileInput').files[0]; if (!file) return; const total = Number(document.getElementById('previewTotal').textContent) || 0; demoState.history.unshift({file: file.name, kind: demoImportKind, time: '刚刚', status: '导入成功', total, errors: []}); persistDemoState(); renderHistory(); document.getElementById('preview').classList.remove('show'); document.getElementById('fileName').textContent = '选择 Excel 文件'; document.getElementById('fileInput').value = ''; toast('导入成功，已写入任务数据'); }
+    function updateDailyProgress(input) { input.parentElement.querySelector('.progress-value').textContent = input.value + '%'; }
+    function dailyHasContent() { return [...document.querySelectorAll('.daily-work')].some(input => input.value.trim()) || document.getElementById('dailyOther').value.trim() || document.getElementById('dailyNextPlan').value.trim(); }
+    function saveDailyDraft() { localStorage.setItem('task-daily-demo', JSON.stringify({ other: document.getElementById('dailyOther').value, blockers: document.getElementById('dailyBlockers').value, nextPlan: document.getElementById('dailyNextPlan').value })); toast('日报草稿已保存'); }
+    function submitDailyDemo() { if (document.getElementById('attendanceSelect').value === 'leave' || document.getElementById('attendanceSelect').value === 'holiday') { toast('全天请假或节假日无需填写日报'); return; } if (!dailyHasContent()) { toast('请至少填写任务完成、其他工作或明日计划'); return; } document.getElementById('dailyStatus').textContent = '已提交'; document.getElementById('dailyStatus').className = 'pill green'; toast('日报提交成功（静态演示）'); }
+    document.querySelectorAll('.daily-progress').forEach(input => input.addEventListener('input', () => updateDailyProgress(input)));
+    document.getElementById('attendanceSelect').addEventListener('change', e => { const value = e.target.value; const card = document.getElementById('dailyAttendance'); const labels = {normal:['今日出勤：正常出勤','工作日可填写日报'],half:['今日出勤：半天请假','仍可填写当日工作内容'],leave:['今日出勤：全天请假','无需填写日报，任务继续按实际情况维护'],holiday:['今日状态：节假日','无需填写日报']}; const [title, hint] = labels[value]; const locked = value === 'leave' || value === 'holiday'; card.querySelector('strong').textContent = title; card.querySelector('.muted').textContent = hint; card.style.background = value === 'normal' ? '#fff8eb' : '#f3f5f7'; document.querySelectorAll('.daily-progress,.daily-work,.daily-next,#dailyOther,#dailyBlockers,#dailyNextPlan').forEach(input => input.disabled = locked); });
+    document.getElementById('dailyDate').addEventListener('change', e => toast('已切换到 ' + e.target.value + '，静态页使用演示数据'));
+    document.getElementById('fileInput').addEventListener('change', e => { document.getElementById('fileName').textContent = e.target.files[0]?.name || '选择 Excel 文件'; });
+    document.getElementById('kindTask').addEventListener('click', () => { demoImportKind = '任务'; document.getElementById('kindTask').className = 'button secondary'; document.getElementById('kindProbation').className = 'button ghost'; toast('当前为任务模板'); });
+    document.getElementById('kindProbation').addEventListener('click', () => { demoImportKind = '试用期任务'; document.getElementById('kindProbation').className = 'button secondary'; document.getElementById('kindTask').className = 'button ghost'; toast('已切换到试用期任务模板'); });
+    renderRecurring(); renderHistory(); loadConfigDemo();
+    roleSelect.dispatchEvent(new Event('change'));
+  </script>
+</body>
+</html>

@@ -245,6 +245,26 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
     }
   }
 
+  Future<void> _respondAssignment({required bool accept}) async {
+    final task = _detail?.task;
+    if (task == null) return;
+    final result = await confirmTaskApproval(context, pass: accept);
+    if (!result.confirmed || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await _api.respondAssignment(
+        task.id,
+        accept: accept,
+        comment: result.comment,
+      );
+      widget.onBack();
+    } catch (e) {
+      if (mounted) showDunesCenterToast(context, '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _markComplete() async {
     final task = _detail?.task;
     if (task == null) return;
@@ -514,7 +534,29 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
 
   Widget _buildActionPanel(TaskDetail d) {
     final actions = <Widget>[];
-    if (d.task.isPending && d.task.approverUserId == widget.session.userId) {
+    if (d.task.status == 'pending_assignment' &&
+        d.task.ownerUserId == widget.session.userId) {
+      actions.add(
+        OutlinedButton.icon(
+          onPressed: _busy
+              ? null
+              : () => _respondAssignment(accept: false),
+          icon: const Icon(Icons.close, size: 17),
+          label: const Text('拒绝接收'),
+        ),
+      );
+      actions.add(
+        FilledButton.icon(
+          style: FilledButton.styleFrom(backgroundColor: _themePurple),
+          onPressed: _busy
+              ? null
+              : () => _respondAssignment(accept: true),
+          icon: const Icon(Icons.check, size: 17),
+          label: const Text('接受任务'),
+        ),
+      );
+    } else if (d.task.isPending &&
+        d.task.approverUserId == widget.session.userId) {
       actions.add(
         OutlinedButton.icon(
           onPressed: _busy ? null : () => _approve(pass: false),

@@ -1607,6 +1607,11 @@ class ReconDateItem {
     this.pendingCount = 0,
     this.hasReject = false,
     this.pushedAt = '',
+    this.tag3ConfirmRows = 0,
+    this.tag3BusinessConfirmRows = 0,
+    this.tag3OperationConfirmRows = 0,
+    this.tag3CommentCount = 0,
+    this.tag3MyConfirmed = false,
   });
 
   final String asOfDate;
@@ -1615,6 +1620,11 @@ class ReconDateItem {
   final int pendingCount;
   final bool hasReject;
   final String pushedAt;
+  final int tag3ConfirmRows;
+  final int tag3BusinessConfirmRows;
+  final int tag3OperationConfirmRows;
+  final int tag3CommentCount;
+  final bool tag3MyConfirmed;
 
   bool get fullyConfirmed => expectedCount > 0 && pendingCount <= 0;
 
@@ -1626,8 +1636,64 @@ class ReconDateItem {
       pendingCount: (json['pendingCount'] as num?)?.toInt() ?? 0,
       hasReject: json['hasReject'] == true,
       pushedAt: (json['pushedAt'] ?? '').toString(),
+      tag3ConfirmRows: (json['tag3ConfirmRows'] as num?)?.toInt() ?? 0,
+      tag3BusinessConfirmRows:
+          (json['tag3BusinessConfirmRows'] as num?)?.toInt() ?? 0,
+      tag3OperationConfirmRows:
+          (json['tag3OperationConfirmRows'] as num?)?.toInt() ?? 0,
+      tag3CommentCount: (json['tag3CommentCount'] as num?)?.toInt() ?? 0,
+      tag3MyConfirmed: json['tag3MyConfirmed'] == true,
     );
   }
+}
+
+DateTime tag3DailyCalendarDay(DateTime value) {
+  final local = value.toLocal();
+  return DateTime(local.year, local.month, local.day);
+}
+
+String tag3DailyYmd(DateTime value) {
+  final day = tag3DailyCalendarDay(value);
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${day.year}-${two(day.month)}-${two(day.day)}';
+}
+
+/// 日清月结按 T+1。旧数采快照停更后，把缺口补到昨天，否则 17 号不会出现在列表里。
+List<ReconDateItem> padTag3DailyDateItems(
+  List<ReconDateItem> items, {
+  DateTime? now,
+  int offsetDays = 1,
+  int emptyLookbackDays = 13,
+  int maxItems = 60,
+}) {
+  final byDate = <String, ReconDateItem>{
+    for (final item in items)
+      if (item.asOfDate.trim().isNotEmpty) item.asOfDate.trim(): item,
+  };
+  final latest = tag3DailyCalendarDay(now ?? DateTime.now())
+      .subtract(Duration(days: offsetDays < 0 ? 0 : offsetDays));
+  DateTime start = latest.subtract(Duration(days: emptyLookbackDays));
+  if (byDate.isNotEmpty) {
+    final maxExisting = byDate.keys.reduce((a, b) => a.compareTo(b) > 0 ? a : b);
+    final parsed = DateTime.tryParse(maxExisting);
+    if (parsed != null) {
+      start = tag3DailyCalendarDay(parsed).add(const Duration(days: 1));
+    }
+  }
+  var day = start;
+  while (!day.isAfter(latest)) {
+    final key = tag3DailyYmd(day);
+    byDate.putIfAbsent(key, () => ReconDateItem(asOfDate: key));
+    day = day.add(const Duration(days: 1));
+  }
+  byDate.putIfAbsent(
+    tag3DailyYmd(latest),
+    () => ReconDateItem(asOfDate: tag3DailyYmd(latest)),
+  );
+  final out = byDate.values.toList()
+    ..sort((a, b) => b.asOfDate.compareTo(a.asOfDate));
+  if (out.length <= maxItems) return out;
+  return out.sublist(0, maxItems);
 }
 
 class ReconSectorOverview {

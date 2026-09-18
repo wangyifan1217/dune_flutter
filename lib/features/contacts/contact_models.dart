@@ -1,3 +1,5 @@
+import '../conversation/im_user_status.dart';
+
 class NativeContact {
   const NativeContact({
     required this.userId,
@@ -10,6 +12,10 @@ class NativeContact {
     this.enabled = true,
     this.avatarPreset,
     this.avatarObjectKey,
+    this.imStatus = '',
+    this.imStatusText = '',
+    this.imStatusIcon = '',
+    this.imStatusColor = '',
   });
 
   final int userId;
@@ -22,6 +28,51 @@ class NativeContact {
   final bool enabled;
   final String? avatarPreset;
   final String? avatarObjectKey;
+  final String imStatus;
+  final String imStatusText;
+  final String imStatusIcon;
+  final String imStatusColor;
+
+  ImUserStatusValue get statusValue => ImUserStatusCatalog.parse(
+        status: imStatus,
+        text: imStatusText,
+        icon: imStatusIcon,
+        color: imStatusColor,
+      );
+
+  NativeContact copyWith({
+    int? userId,
+    String? displayName,
+    String? phone,
+    String? department,
+    String? title,
+    String? roleLabel,
+    List<String>? roleCodes,
+    bool? enabled,
+    String? avatarPreset,
+    String? avatarObjectKey,
+    String? imStatus,
+    String? imStatusText,
+    String? imStatusIcon,
+    String? imStatusColor,
+  }) {
+    return NativeContact(
+      userId: userId ?? this.userId,
+      displayName: displayName ?? this.displayName,
+      phone: phone ?? this.phone,
+      department: department ?? this.department,
+      title: title ?? this.title,
+      roleLabel: roleLabel ?? this.roleLabel,
+      roleCodes: roleCodes ?? this.roleCodes,
+      enabled: enabled ?? this.enabled,
+      avatarPreset: avatarPreset ?? this.avatarPreset,
+      avatarObjectKey: avatarObjectKey ?? this.avatarObjectKey,
+      imStatus: imStatus ?? this.imStatus,
+      imStatusText: imStatusText ?? this.imStatusText,
+      imStatusIcon: imStatusIcon ?? this.imStatusIcon,
+      imStatusColor: imStatusColor ?? this.imStatusColor,
+    );
+  }
 
   String get displayLabel {
     if (!enabled) return '$displayName-停用';

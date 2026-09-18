@@ -91,6 +91,7 @@ class _NativeDailyReconciliationPageState
     widget.onChromeChanged?.call(
       TaskShellChrome(
         onBack: _level == _ReconLevel.dates ? null : _popLevel,
+        lockPageSwipe: _level == _ReconLevel.table,
       ),
     );
   }
@@ -116,7 +117,7 @@ class _NativeDailyReconciliationPageState
     try {
       final items = await _api.fetchDates();
       if (!mounted) return;
-      final dates = [...items]
+      final dates = padTag3DailyDateItems(items)
         ..sort((a, b) => b.asOfDate.compareTo(a.asOfDate));
       setState(() {
         _dates = dates;
@@ -330,18 +331,14 @@ class _NativeDailyReconciliationPageState
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
+    final body = ColoredBox(
       color: const Color(0xFFF5F6F8),
-      child: RefreshIndicator(
-        onRefresh: () async {
-          if (_level == _ReconLevel.dates) {
-            await _loadDates();
-          } else {
-            await _openDate(_asOfDate);
-          }
-        },
-        child: _buildBody(),
-      ),
+      child: _buildBody(),
+    );
+    if (_level != _ReconLevel.dates) return body;
+    return RefreshIndicator(
+      onRefresh: _loadDates,
+      child: body,
     );
   }
 
@@ -407,20 +404,58 @@ class _NativeDailyReconciliationPageState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                shucaiDisplayDate(item.asOfDate),
+                                style: DunesTypography.sans(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: DunesColors.text,
+                                ),
+                              ),
+                            ),
+                            _Tag3DailyDateStatusPill(
+                              label: tag3DailyDateStatusPill(
+                                myConfirmed: item.tag3MyConfirmed,
+                                confirmRows: item.tag3ConfirmRows,
+                              ),
+                              done: item.tag3MyConfirmed,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
                         Text(
-                          shucaiDisplayDate(item.asOfDate),
+                          reconCardTitle('TAG3_DAILY'),
                           style: DunesTypography.sans(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
                             color: DunesColors.text,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '业财一体-日清月结 · 日行确认，本月累计只展示',
+                          tag3DailyDispatchBody(item.asOfDate),
                           style: DunesTypography.sans(
                             fontSize: 13,
                             color: DunesColors.text2,
+                            height: 1.35,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          tag3DailyDateProgressLine(
+                            businessConfirmRows: item.tag3BusinessConfirmRows,
+                            operationConfirmRows: item.tag3OperationConfirmRows,
+                            commentCount: item.tag3CommentCount,
+                          ),
+                          style: DunesTypography.sans(
+                            fontSize: 12,
+                            color: item.tag3ConfirmRows > 0 ||
+                                    item.tag3CommentCount > 0
+                                ? DunesColors.accent
+                                : DunesColors.text3,
                           ),
                         ),
                       ],
@@ -467,10 +502,30 @@ class _NativeDailyReconciliationPageState
                   ),
                   const SizedBox(height: 6),
                   Text(
+                    tag3DailyDispatchBody(_asOfDate),
+                    style: DunesTypography.sans(
+                      fontSize: 13,
+                      color: DunesColors.text2,
+                      height: 1.35,
+                    ),
+                  ),
+                  if (snap != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      tag3DailySnapshotStatusLine(snap.rows),
+                      style: DunesTypography.sans(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: DunesColors.accent,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 6),
+                  Text(
                     '业务和运营一起审、不排队。轮到你名下的行点确认即可，不用填内容。意见另填。本月累计只展示。',
                     style: DunesTypography.sans(
                       fontSize: 12.5,
-                      color: DunesColors.text2,
+                      color: DunesColors.text3,
                     ),
                   ),
                 ],
@@ -531,6 +586,35 @@ class _NativeDailyReconciliationPageState
                 ),
         ),
       ],
+    );
+  }
+}
+
+class _Tag3DailyDateStatusPill extends StatelessWidget {
+  const _Tag3DailyDateStatusPill({
+    required this.label,
+    required this.done,
+  });
+
+  final String label;
+  final bool done;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: done ? DunesColors.greenSoft : DunesColors.amberSoft,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: DunesTypography.sans(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: done ? DunesColors.green : DunesColors.amber,
+        ),
+      ),
     );
   }
 }

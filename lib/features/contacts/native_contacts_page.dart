@@ -7,10 +7,12 @@ import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import '../chat/user_avatar_widget.dart';
+import '../conversation/conversation_inbox_cache.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_realtime_hub.dart';
 import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
+import '../conversation/im_user_status.dart';
 import 'contact_models.dart';
 import 'contact_service.dart';
 import 'contacts_widgets.dart';
@@ -74,6 +76,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounce;
   StreamSubscription<Set<int>>? _onlineSub;
+  StreamSubscription<ConversationRealtimeEvent>? _rtSub;
 
   bool _loading = true;
   bool _searchOpen = false;
@@ -86,6 +89,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
   List<NativeContact> _externalContacts = const <NativeContact>[];
   int _externalTotal = 0;
   Set<int> _onlineUsers = <int>{};
+  Map<int, ImUserStatusValue> _imStatuses = <int, ImUserStatusValue>{};
   Set<int> _selectedUserIds = <int>{};
   /// 跨搜索保留已见过的联系人，避免已选成员头像/姓名退化成 userId。
   final Map<int, NativeContact> _knownContacts = <int, NativeContact>{};
@@ -102,7 +106,10 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
     _convService = ConversationService(session: widget.session);
     _realtime = ConversationRealtimeHub.instance.of(widget.session);
     _load();
+    _seedStatusesFromInboxCache();
     unawaited(_bootRealtime());
+    unawaited(_hydrateSelfImStatus());
+    unawaited(_hydratePeerStatuses());
   }
 
   @override
@@ -147,6 +154,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
   void dispose() {
     _debounce?.cancel();
     _onlineSub?.cancel();
+    _rtSub?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -158,7 +166,98 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
         if (!mounted) return;
         setState(() => _onlineUsers = ids);
       });
+      _rtSub = _realtime.events.listen(_onRealtimeEvent);
     } catch (_) {}
+  }
+
+  void _onRealtimeEvent(ConversationRealtimeEvent event) {
+    if (event.type != 'im_status') return;
+    final userId = (event.raw['userId'] as num?)?.toInt() ?? 0;
+    final status = ImUserStatusCatalog.parse(
+      status: event.raw['status']?.toString(),
+      text: event.raw['text']?.toString(),
+      icon: event.raw['icon']?.toString(),
+      color: event.raw['color']?.toString(),
+    );
+    _putImStatus(userId, status);
+  }
+
+  void _putImStatus(int userId, ImUserStatusValue status) {
+    if (userId <= 0 || !mounted) return;
+    if (_imStatuses[userId] == status) return;
+    setState(() {
+      _imStatuses = Map<int, ImUserStatusValue>.from(_imStatuses)
+        ..[userId] = status;
+    });
+  }
+
+  bool _seedStatusesFromInboxCache() {
+    final snap = ConversationInboxCache.instance.peek(widget.session.userId);
+    if (snap == null) return false;
+    final next = Map<int, ImUserStatusValue>.from(_imStatuses);
+    var changed = false;
+    for (final item in snap.conversations) {
+      if (!item.isPrivate || item.isSelfMemo) continue;
+      final peerId = item.peerUserId ?? 0;
+      if (peerId <= 0 || next.containsKey(peerId)) continue;
+      final status = ImUserStatusCatalog.parse(
+        status: item.peerImStatus,
+        text: item.peerImStatusText,
+        icon: item.peerImStatusIcon,
+        color: item.peerImStatusColor,
+      );
+      if (!status.showsBadge) continue;
+      next[peerId] = status;
+      changed = true;
+    }
+    if (changed) {
+      _imStatuses = next;
+    }
+    return changed;
+  }
+
+  Future<void> _hydrateSelfImStatus() async {
+    try {
+      final status = await _convService.fetchImStatus();
+      _putImStatus(widget.session.userId, status);
+    } catch (_) {}
+  }
+
+  Future<void> _hydratePeerStatuses() async {
+    try {
+      final rows = await _convService.fetchConversations();
+      if (!mounted) return;
+      final next = Map<int, ImUserStatusValue>.from(_imStatuses);
+      var changed = false;
+      for (final item in rows) {
+        if (!item.isPrivate || item.isSelfMemo) continue;
+        final peerId = item.peerUserId ?? 0;
+        if (peerId <= 0 || next.containsKey(peerId)) continue;
+        final status = ImUserStatusCatalog.parse(
+          status: item.peerImStatus,
+          text: item.peerImStatusText,
+          icon: item.peerImStatusIcon,
+          color: item.peerImStatusColor,
+        );
+        if (!status.showsBadge) continue;
+        next[peerId] = status;
+        changed = true;
+      }
+      if (changed) {
+        setState(() => _imStatuses = next);
+      }
+    } catch (_) {}
+  }
+
+  NativeContact _withLiveStatus(NativeContact contact) {
+    final live = _imStatuses[contact.userId];
+    if (live == null) return contact;
+    return contact.copyWith(
+      imStatus: live.key,
+      imStatusText: live.text,
+      imStatusIcon: live.icon,
+      imStatusColor: live.color,
+    );
   }
 
   Future<void> _load() async {
@@ -191,6 +290,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
         _rememberContacts(data.searchItems);
         _rememberDepartments(data.departments);
         _rememberContacts(external);
+        _seedStatusesFromInboxCache();
         _loading = false;
       });
     } catch (e) {
@@ -680,8 +780,9 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                         currentUserId: widget.session.userId,
                         showOnline:
                             _onlineUsers.contains(_searchItems[i].userId),
+                        imStatus: _imStatuses[_searchItems[i].userId],
                         onOpenProfile: () =>
-                            widget.onOpenContact(_searchItems[i]),
+                            widget.onOpenContact(_withLiveStatus(_searchItems[i])),
                         onMessage: () => _startPrivateChat(_searchItems[i]),
                         avatarService: _convService,
                         pickMode: _groupPickMode,
@@ -724,7 +825,9 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                       department: _departments[i],
                       currentUserId: widget.session.userId,
                       onlineUsers: _onlineUsers,
-                      onOpenContact: widget.onOpenContact,
+                      imStatuses: _imStatuses,
+                      onOpenContact: (c) =>
+                          widget.onOpenContact(_withLiveStatus(c)),
                       onMessageContact: _startPrivateChat,
                       avatarService: _convService,
                       pickMode: _groupPickMode,
@@ -760,8 +863,10 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                       showOnline: _onlineUsers.contains(
                         _externalContacts[i].userId,
                       ),
-                      onOpenProfile: () =>
-                          widget.onOpenContact(_externalContacts[i]),
+                      imStatus: _imStatuses[_externalContacts[i].userId],
+                      onOpenProfile: () => widget.onOpenContact(
+                        _withLiveStatus(_externalContacts[i]),
+                      ),
                       onMessage: () =>
                           _startPrivateChat(_externalContacts[i]),
                       avatarService: _convService,

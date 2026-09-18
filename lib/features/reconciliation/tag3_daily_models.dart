@@ -442,6 +442,64 @@ class Tag3DailyDrilldown {
 bool isTag3DailyCard(String cardType) =>
     cardType.trim().toUpperCase() == 'TAG3_DAILY';
 
+String tag3DailyDispatchBody(String asOfDate) {
+  const suffix = '业财一体-日清月结已生成，业务/运营请各自核对并确认';
+  final date = asOfDate.trim();
+  return date.isEmpty ? suffix : '$date $suffix';
+}
+
+String tag3DailyDateStatusPill({
+  required bool myConfirmed,
+  required int confirmRows,
+}) {
+  if (myConfirmed) return '你已确认';
+  if (confirmRows > 0) return '已有确认';
+  return '待确认';
+}
+
+String tag3DailyDateProgressLine({
+  required int businessConfirmRows,
+  required int operationConfirmRows,
+  required int commentCount,
+}) {
+  final bits = <String>[
+    if (businessConfirmRows > 0) '业务已确认 $businessConfirmRows 条',
+    if (operationConfirmRows > 0) '运营已确认 $operationConfirmRows 条',
+    if (commentCount > 0) '意见 $commentCount 条',
+  ];
+  if (bits.isEmpty) return '日行可确认，本月累计只展示';
+  return bits.join(' · ');
+}
+
+String tag3DailySnapshotStatusLine(List<Tag3DailyRow> rows) {
+  final day = [for (final row in rows) if (!row.isMonthCumulative) row];
+  if (day.isEmpty) {
+    return rows.isEmpty ? '暂无日清月结明细' : '本月累计只展示，暂无日行';
+  }
+  var waitBiz = 0;
+  var waitOps = 0;
+  var done = 0;
+  for (final row in day) {
+    switch (row.confirmationStatus) {
+      case 'ALL_CONFIRMED':
+      case 'CONFIRMED':
+        done++;
+        break;
+      case 'WAIT_OPERATION':
+        waitOps++;
+        break;
+      default:
+        waitBiz++;
+    }
+  }
+  return [
+    '${day.length} 条日行',
+    if (waitBiz > 0) '待业务确认 $waitBiz',
+    if (waitOps > 0) '待运营确认 $waitOps',
+    if (done > 0) '已完成 $done',
+  ].join(' · ');
+}
+
 List<Tag3DailyRow> sortTag3DailyRows(List<Tag3DailyRow> rows) {
   final out = [...rows];
   out.sort((a, b) {

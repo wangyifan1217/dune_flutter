@@ -90,7 +90,8 @@ class TaskItem {
   final String displayStatus;
 
   bool get isMain => parentId == null;
-  bool get isPending => status == 'pending_approval';
+  bool get isPending =>
+      status == 'pending_approval' || status == 'pending_assignment';
   bool get hasEval =>
       evalBy != null ||
       evalLevel.trim().isNotEmpty ||
@@ -502,6 +503,8 @@ String taskStatusLabel(String status) {
       return '待开始';
     case 'pending_approval':
       return '待确认';
+    case 'pending_assignment':
+      return '待接收';
     case 'completed':
       return '已完成';
     case 'cancelled':
@@ -702,6 +705,8 @@ class TaskDailyReportBundle {
     this.canBackfill = false,
     this.businessDate = '',
     this.backfillUntil = '',
+    this.isWorkday = true,
+    this.nonWorkReason = '',
   });
 
   final TaskDailyReport? report;
@@ -710,6 +715,8 @@ class TaskDailyReportBundle {
   final bool canBackfill;
   final String businessDate;
   final String backfillUntil;
+  final bool isWorkday;
+  final String nonWorkReason;
 
   factory TaskDailyReportBundle.fromJson(Map<String, dynamic> json) {
     return TaskDailyReportBundle(
@@ -728,6 +735,8 @@ class TaskDailyReportBundle {
       canBackfill: json['canBackfill'] == true,
       businessDate: '${json['businessDate'] ?? ''}',
       backfillUntil: '${json['backfillUntil'] ?? ''}',
+      isWorkday: json['isWorkday'] != false,
+      nonWorkReason: '${json['nonWorkReason'] ?? ''}',
     );
   }
 }

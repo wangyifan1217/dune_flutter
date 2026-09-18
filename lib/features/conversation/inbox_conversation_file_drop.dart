@@ -70,9 +70,7 @@ class _InboxConversationFileDropTargetState
   var _hovering = false;
 
   bool get _dropEnabled =>
-      widget.enabled &&
-      isDesktopCommOnly &&
-      TickerMode.valuesOf(context).enabled;
+      widget.enabled && isDesktopCommOnly && desktopDropLive(context);
 
   void _toast(String message, {bool error = false}) {
     if (!mounted) return;

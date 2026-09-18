@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../auth/auth_session.dart';
+import '../conversation/im_user_status.dart';
 import 'contact_models.dart';
 
 class ContactService {
@@ -132,6 +133,7 @@ class ContactService {
     final roleCodes = roleCodesRaw is List
         ? roleCodesRaw.map((e) => e.toString()).toList(growable: false)
         : const <String>[];
+    final status = _mapImStatus(raw);
     return NativeContact(
       userId: (raw['userId'] as num?)?.toInt() ?? 0,
       displayName: (raw['displayName'] ?? raw['name'] ?? '').toString(),
@@ -151,6 +153,39 @@ class ContactService {
       avatarObjectKey: (raw['avatarObjectKey'] ?? '').toString().trim().isEmpty
           ? null
           : (raw['avatarObjectKey'] ?? '').toString(),
+      imStatus: status.key,
+      imStatusText: status.text,
+      imStatusIcon: status.icon,
+      imStatusColor: status.color,
+    );
+  }
+
+  ImUserStatusValue _mapImStatus(Map<String, dynamic> raw) {
+    final nested = raw['peer'];
+    final peerMap = nested is Map
+        ? nested.map((key, value) => MapEntry(key.toString(), value))
+        : const <String, dynamic>{};
+    return ImUserStatusCatalog.parse(
+      status: (raw['imStatus'] ??
+              raw['peerImStatus'] ??
+              peerMap['imStatus'] ??
+              '')
+          .toString(),
+      text: (raw['imStatusText'] ??
+              raw['peerImStatusText'] ??
+              peerMap['imStatusText'] ??
+              '')
+          .toString(),
+      icon: (raw['imStatusIcon'] ??
+              raw['peerImStatusIcon'] ??
+              peerMap['imStatusIcon'] ??
+              '')
+          .toString(),
+      color: (raw['imStatusColor'] ??
+              raw['peerImStatusColor'] ??
+              peerMap['imStatusColor'] ??
+              '')
+          .toString(),
     );
   }
 }

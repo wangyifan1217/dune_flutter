@@ -9,13 +9,14 @@ import 'native_task_action_page.dart';
 import 'native_task_daily_report_page.dart';
 import 'native_task_detail_page.dart';
 import 'native_task_form.dart';
+import 'native_task_management_pane.dart';
 import 'task_api.dart';
 import 'task_approval_confirm.dart';
 import 'task_first_use_guide.dart';
 import 'task_models.dart';
 import 'task_widgets.dart';
 
-enum _TaskPage { list, detail, action, daily }
+enum _TaskPage { list, detail, action, daily, management }
 
 class TaskShellChrome {
   const TaskShellChrome({
@@ -147,7 +148,8 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   void _publishChrome() {
     if (_page == _TaskPage.detail ||
         _page == _TaskPage.action ||
-        _page == _TaskPage.daily) {
+        _page == _TaskPage.daily ||
+        _page == _TaskPage.management) {
       widget.onChromeChanged?.call(
         TaskShellChrome(
           hideShellHeader: true,
@@ -155,6 +157,8 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
               ? _backFromAction
               : _page == _TaskPage.daily
               ? _backFromDaily
+              : _page == _TaskPage.management
+              ? _backFromManagement
               : _backFromDetail,
         ),
       );
@@ -165,6 +169,15 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            IconButton(
+              tooltip: '任务功能',
+              onPressed: _openManagement,
+              icon: const Icon(
+                Icons.widgets_outlined,
+                color: DunesColors.text2,
+              ),
+            ),
+            const SizedBox(width: 2),
             IconButton(
               tooltip: '使用指引',
               onPressed: () => unawaited(_showGuide(force: true)),
@@ -357,6 +370,23 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     unawaited(_reload());
   }
 
+  void _openManagement() {
+    setState(() {
+      _pageNavBack = false;
+      _page = _TaskPage.management;
+    });
+    _publishChrome();
+  }
+
+  void _backFromManagement() {
+    setState(() {
+      _pageNavBack = true;
+      _page = _TaskPage.list;
+    });
+    _publishChrome();
+    unawaited(_reload());
+  }
+
   Future<void> _openCreate({int? parentId, TaskItem? parentTask}) async {
     final created = await openTaskEditor(
       context,
@@ -481,6 +511,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     _TaskPage.detail => ValueKey('task-detail-$_detailId-$_detailReloadTick'),
     _TaskPage.action => ValueKey('task-action-$_actionMode-${_actionTask?.id}'),
     _TaskPage.daily => const ValueKey('task-daily'),
+    _TaskPage.management => const ValueKey('task-management'),
   };
 
   Widget _pageBody() {
@@ -500,6 +531,15 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         return NativeTaskDailyReportPage(
           session: widget.session,
           onBack: _backFromDaily,
+        );
+      case _TaskPage.management:
+        return NativeTaskManagementPane(
+          session: widget.session,
+          onBack: _backFromManagement,
+          onOpenTask: (id) {
+            _backFromManagement();
+            _openDetail(id);
+          },
         );
       case _TaskPage.detail:
         final id = _detailId;

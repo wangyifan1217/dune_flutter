@@ -605,6 +605,7 @@ class TaskNameCard extends StatelessWidget {
     if (task.overdue) return const Color(0xFFB45309);
     return switch (task.status) {
       'pending_approval' => const Color(0xFF5B8DEF),
+      'pending_assignment' => const Color(0xFF8B5CF6),
       'completed' => const Color(0xFF22A06B),
       'rejected' => const Color(0xFFE35D6A),
       'cancelled' => const Color(0xFF6B7280),
@@ -786,6 +787,7 @@ class TaskWorkbenchCard extends StatelessWidget {
     return switch (task.status) {
       'completed' => const Color(0xFF23856D),
       'pending_approval' => const Color(0xFF2563A9),
+      'pending_assignment' => const Color(0xFF7C3AED),
       'rejected' => const Color(0xFFC24156),
       _ => kTaskPurple,
     };

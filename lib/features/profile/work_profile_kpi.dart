@@ -703,7 +703,7 @@ bool kpiIsOfficeDept(String departmentName) {
   return name.contains('行政') || name.contains('人事') || name.contains('财务');
 }
 
-/// 业务名单按通讯录「能源板块 / 通信板块」归类，不看灯塔任务是运营商还是能源。
+/// 业务名单：通讯录挂在「能源板块 / 通信板块」时跟板块。
 String kpiOrgMarketSector(
   String departmentName, [
   String parentDepartmentName = '',
@@ -713,6 +713,22 @@ String kpiOrgMarketSector(
     if (name.contains('能源板块')) return 'energy';
     if (name.contains('通信板块')) return 'telecom';
   }
+  return '';
+}
+
+/// 没挂板块时按灯塔任务落到能源 / 运营商（吕宙在运营中心）。
+String kpiTaskMarketSector(WorkProfileKpiPerson person) {
+  final hasEnergy = person.categories.any((c) => c.category == 'energy');
+  final hasTelecom = person.categories.any((c) => c.category == 'telecom');
+  if (hasEnergy && !hasTelecom) return 'energy';
+  if (hasTelecom && !hasEnergy) return 'telecom';
+  if (hasEnergy && hasTelecom) {
+    return person.energyWeight >= person.telecomWeight ? 'energy' : 'telecom';
+  }
+  if (person.energyWeight > 0 && person.energyWeight >= person.telecomWeight) {
+    return 'energy';
+  }
+  if (person.telecomWeight > 0) return 'telecom';
   return '';
 }
 
@@ -731,6 +747,8 @@ String kpiPrimarySectorOf(WorkProfileKpiPerson person) {
     person.parentDepartmentName,
   );
   if (market.isNotEmpty) return market;
+  final fromTasks = kpiTaskMarketSector(person);
+  if (fromTasks.isNotEmpty) return fromTasks;
   return 'none';
 }
 

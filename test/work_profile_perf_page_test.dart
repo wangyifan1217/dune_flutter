@@ -1,7 +1,6 @@
 import 'package:dunes_app/features/auth/auth_session.dart';
 import 'package:dunes_app/features/kpi/kpi_score_summary_card.dart';
 import 'package:dunes_app/features/profile/native_work_profile_perf_page.dart';
-import 'package:dunes_app/features/profile/native_work_profile_perf_page.dart';
 import 'package:dunes_app/features/profile/work_profile_kpi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -244,6 +243,57 @@ void main() {
     expect(kpiPersonInSector(he, 'energy'), isTrue);
     expect(kpiPersonInSector(he, 'telecom'), isFalse);
     expect(kpiPersonShareDepartment(he), '能源板块');
+  });
+
+  test('ops-center energy people stay in energy via tasks', () {
+    const lv = WorkProfileKpiPerson(
+      userId: 65,
+      userName: '吕宙',
+      departmentName: '运营中心',
+      position: '售前顾问',
+      mainScore: 91.38,
+      bonus: 0,
+      telecomWeight: 0,
+      energyWeight: 1,
+      telecomScore: 0,
+      energyScore: 91.38,
+      categories: [
+        WorkProfileKpiCategory(
+          category: 'energy',
+          categoryLabel: '能源',
+          categoryWeight: 1,
+          score: 91.38,
+          tasks: [
+            WorkProfileKpiTask(
+              taskId: 65,
+              taskName: '中石油现金券',
+              province: '全国',
+              bucketLabel: '能源',
+              weightPct: 100,
+              taskTotal: 91.38,
+              curRevenue: 1,
+              prevRevenue: 1,
+              curProfit: 1,
+              prevProfit: 1,
+            ),
+          ],
+        ),
+      ],
+    );
+    expect(kpiOrgMarketSector('运营中心'), '');
+    expect(kpiPrimarySectorOf(lv), 'energy');
+    expect(kpiPersonInSector(lv, 'energy'), isTrue);
+    expect(kpiPersonInSector(lv, 'telecom'), isFalse);
+    expect(kpiPersonShareDepartment(lv), '运营中心');
+    final md = kpiScoreSummaryMarkdown(
+      const WorkProfileKpiScore(
+        month: '2026-08',
+        prevMonth: '2026-07',
+        people: [lv],
+      ),
+    );
+    expect(md, contains('吕宙'));
+    expect(md, isNot(contains('未分板块')));
   });
 
   const session = AuthSession(

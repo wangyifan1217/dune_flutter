@@ -124,8 +124,7 @@ class GlobalSearchSnapshot {
   final String queryHint;
 
   GlobalSearchGroupState group(GlobalSearchCategory category) {
-    return groups[category] ??
-        GlobalSearchGroupState(category: category);
+    return groups[category] ?? GlobalSearchGroupState(category: category);
   }
 
   GlobalSearchSnapshot replaceGroup(GlobalSearchGroupState group) {
@@ -162,6 +161,10 @@ class GlobalMessageHit {
     required this.conversationTitle,
     required this.messageId,
     required this.senderName,
+    this.senderUserId = 0,
+    this.senderAvatarPreset,
+    this.senderAvatarObjectKey,
+    this.senderAvatarUrl,
     required this.bodyText,
     required this.kind,
     this.createdAt,
@@ -173,6 +176,10 @@ class GlobalMessageHit {
   final String conversationTitle;
   final int messageId;
   final String senderName;
+  final int senderUserId;
+  final String? senderAvatarPreset;
+  final String? senderAvatarObjectKey;
+  final String? senderAvatarUrl;
   final String bodyText;
   final String kind;
   final DateTime? createdAt;

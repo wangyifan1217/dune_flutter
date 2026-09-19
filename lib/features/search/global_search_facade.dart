@@ -93,7 +93,9 @@ class GlobalSearchFacade {
 
     final runMessages =
         q.isNotEmpty &&
-        (q.length >= 2 || _hasIdeograph(q) || tab == GlobalSearchCategory.messages);
+        (q.length >= 2 ||
+            _hasIdeograph(q) ||
+            tab == GlobalSearchCategory.messages);
     final runOtherWave2 =
         q.length >= 2 ||
         (tab.isWave2 && tab != GlobalSearchCategory.messages && q.isNotEmpty);
@@ -224,10 +226,7 @@ class GlobalSearchFacade {
   }
 
   List<GlobalSearchHit> recentApps({int limit = 6}) {
-    return _appCatalog()
-        .take(limit)
-        .map(_appHit)
-        .toList(growable: false);
+    return _appCatalog().take(limit).map(_appHit).toList(growable: false);
   }
 
   static String? queryHint(String query) {
@@ -334,11 +333,7 @@ class GlobalSearchFacade {
             GlobalSearchGroupState(
               category: GlobalSearchCategory.contacts,
               status: GlobalSearchGroupStatus.loading,
-              items: _limit(
-                privateHits,
-                tab,
-                GlobalSearchCategory.contacts,
-              ),
+              items: _limit(privateHits, tab, GlobalSearchCategory.contacts),
               total: privateHits.length,
             ),
             emit,
@@ -478,17 +473,15 @@ class GlobalSearchFacade {
         rows = rows.where((item) {
           final st = item.status.toUpperCase();
           return switch (filter) {
-            'pending' => item.isPending,
-            'mine' => true,
-            'done' => !item.isPending,
-            _ => true,
-          } &&
+                'pending' => item.isPending,
+                'mine' => true,
+                'done' => !item.isPending,
+                _ => true,
+              } &&
               (filter != 'mine' || st.isNotEmpty);
         }).toList();
       }
-      final hits = <GlobalSearchHit>[
-        ...rows.map(_approvalHit),
-      ];
+      final hits = <GlobalSearchHit>[...rows.map(_approvalHit)];
       try {
         final intakes = await _withTimeout(
           _proposals.fetchList(keyword: query, pageSize: 12),
@@ -550,9 +543,7 @@ class GlobalSearchFacade {
     required GlobalSearchEmit emit,
   }) async {
     try {
-      final size = tab == GlobalSearchCategory.documents
-          ? deepPageSize
-          : 6;
+      final size = tab == GlobalSearchCategory.documents ? deepPageSize : 6;
       final kbFuture = _withTimeout(
         _kb.listDocuments(keyword: query, size: size),
       );
@@ -562,10 +553,7 @@ class GlobalSearchFacade {
       try {
         driveHits = await driveFuture;
       } catch (_) {}
-      final hits = <GlobalSearchHit>[
-        ...kb.items.map(_kbHit),
-        ...driveHits,
-      ];
+      final hits = <GlobalSearchHit>[...kb.items.map(_kbHit), ...driveHits];
       _patch(
         seq,
         GlobalSearchCategory.documents,
@@ -619,9 +607,7 @@ class GlobalSearchFacade {
       final page = await _withTimeout(
         _meetings.fetchListPage(
           keyword: query,
-          size: tab == GlobalSearchCategory.meetings
-              ? deepPageSize
-              : 8,
+          size: tab == GlobalSearchCategory.meetings ? deepPageSize : 8,
         ),
       );
       final hits = page.items
@@ -719,7 +705,9 @@ class GlobalSearchFacade {
   }
 
   List<NativeConversation> _localConversations() {
-    return ConversationInboxCache.instance.peek(session.userId)?.conversations ??
+    return ConversationInboxCache.instance
+            .peek(session.userId)
+            ?.conversations ??
         const <NativeConversation>[];
   }
 
@@ -811,7 +799,8 @@ class GlobalSearchFacade {
       id: '${c.id}',
       title: c.displayTitle,
       subtitle: [
-        if ((c.peerDepartment ?? '').trim().isNotEmpty) c.peerDepartment!.trim(),
+        if ((c.peerDepartment ?? '').trim().isNotEmpty)
+          c.peerDepartment!.trim(),
         if ((c.peerRoleLabel ?? '').trim().isNotEmpty) c.peerRoleLabel!.trim(),
       ].join(' · '),
       raw: c,
@@ -837,12 +826,16 @@ class GlobalSearchFacade {
         if (m.matchCount > total) total = m.matchCount;
       }
       final real = list.where((m) => m.messageId > 0).toList(growable: false);
-      hits.add(_threadHit(MessageThreadGroup(
-        conversationId: entry.key,
-        title: list.first.conversationTitle,
-        hits: real.isNotEmpty ? real : list,
-        totalCount: total,
-      )));
+      hits.add(
+        _threadHit(
+          MessageThreadGroup(
+            conversationId: entry.key,
+            title: list.first.conversationTitle,
+            hits: real.isNotEmpty ? real : list,
+            totalCount: total,
+          ),
+        ),
+      );
     }
     hits.sort((a, b) {
       final at = a.time?.millisecondsSinceEpoch ?? 0;
@@ -900,6 +893,9 @@ class GlobalSearchFacade {
                   conversationTitle: thread.title,
                   messageId: m.id,
                   senderName: m.senderName,
+                  senderUserId: m.senderUserId,
+                  senderAvatarPreset: m.senderAvatarPreset,
+                  senderAvatarObjectKey: m.senderAvatarObjectKey,
                   bodyText: m.bodyText,
                   kind: m.kind,
                   createdAt: m.createdAt,
@@ -908,21 +904,21 @@ class GlobalSearchFacade {
               )
               .toList(growable: false);
           if (rows.isEmpty) return hit;
-          return _threadHit(MessageThreadGroup(
-            conversationId: thread.conversationId,
-            title: thread.title,
-            hits: rows,
-            totalCount: page.hasMore ? rows.length + 1 : rows.length,
-          ));
+          return _threadHit(
+            MessageThreadGroup(
+              conversationId: thread.conversationId,
+              title: thread.title,
+              hits: rows,
+              totalCount: page.hasMore ? rows.length + 1 : rows.length,
+            ),
+          );
         } catch (_) {
           return hit;
         }
       }),
     );
     final byId = {for (final h in extras) h.id: h};
-    return [
-      for (final h in hits) byId[h.id] ?? h,
-    ];
+    return [for (final h in hits) byId[h.id] ?? h];
   }
 
   List<GlobalSearchHit> _previewMessageHits(
@@ -956,6 +952,10 @@ class GlobalSearchFacade {
       conversationTitle: c.displayTitle,
       messageId: 0,
       senderName: sender,
+      senderUserId: c.peerUserId ?? 0,
+      senderAvatarPreset: c.peerAvatarPreset,
+      senderAvatarObjectKey: c.peerAvatarObjectKey,
+      senderAvatarUrl: c.peerAvatarUrl,
       bodyText: body,
       kind: 'TEXT',
       createdAt: c.updatedAt,
@@ -1000,13 +1000,19 @@ class GlobalSearchFacade {
       size: 40,
     );
     return page.items
-        .where((m) => kind.trim().isEmpty || m.kind.toUpperCase() == kind.toUpperCase())
+        .where(
+          (m) =>
+              kind.trim().isEmpty || m.kind.toUpperCase() == kind.toUpperCase(),
+        )
         .map(
           (m) => GlobalMessageHit(
             conversationId: conversationId,
             conversationTitle: conversationTitle,
             messageId: m.id,
             senderName: m.senderName,
+            senderUserId: m.senderUserId,
+            senderAvatarPreset: m.senderAvatarPreset,
+            senderAvatarObjectKey: m.senderAvatarObjectKey,
             bodyText: m.bodyText,
             kind: m.kind,
             createdAt: m.createdAt,
@@ -1088,7 +1094,8 @@ class GlobalSearchFacade {
     Object error,
     GlobalSearchEmit emit,
   ) {
-    final timeout = error is _SearchTimeout ||
+    final timeout =
+        error is _SearchTimeout ||
         error.toString().contains('TimeoutException');
     _patch(
       seq,
@@ -1141,7 +1148,6 @@ class GlobalSearchFacade {
       onTimeout: () => throw const _SearchTimeout(),
     );
   }
-
 }
 
 class _SearchTimeout implements Exception {

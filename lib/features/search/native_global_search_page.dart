@@ -101,8 +101,12 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
   ];
 
   bool get _desktop => isDesktopCommOnly;
-  EdgeInsets get _listInsets =>
-      EdgeInsets.fromLTRB(_desktop ? 20 : 12, 8, _desktop ? 20 : 12, _desktop ? 72 : 48);
+  EdgeInsets get _listInsets => EdgeInsets.fromLTRB(
+    _desktop ? 20 : 12,
+    8,
+    _desktop ? 20 : 12,
+    _desktop ? 72 : 48,
+  );
 
   @override
   void initState() {
@@ -155,17 +159,21 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
       _thread = null;
       _threadHits = const [];
     });
-    unawaited(_facade.search(
-      query: q,
-      tab: _tab,
-      messageKind: _messageKind,
-      approvalFilter: _approvalFilter,
-      emit: _onSnap,
-    ));
+    unawaited(
+      _facade.search(
+        query: q,
+        tab: _tab,
+        messageKind: _messageKind,
+        approvalFilter: _approvalFilter,
+        emit: _onSnap,
+      ),
+    );
     if (persist) {
-      unawaited(GlobalSearchHistoryStore.add(q).then((rows) {
-        if (mounted) setState(() => _history = rows);
-      }));
+      unawaited(
+        GlobalSearchHistoryStore.add(q).then((rows) {
+          if (mounted) setState(() => _history = rows);
+        }),
+      );
     }
   }
 
@@ -207,22 +215,26 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
   }
 
   void _retry(GlobalSearchCategory category) {
-    unawaited(_facade.retry(
-      category: category,
-      query: _controller.text.trim(),
-      tab: _tab,
-      messageKind: _messageKind,
-      approvalFilter: _approvalFilter,
-      emit: _onSnap,
-    ));
+    unawaited(
+      _facade.retry(
+        category: category,
+        query: _controller.text.trim(),
+        tab: _tab,
+        messageKind: _messageKind,
+        approvalFilter: _approvalFilter,
+        emit: _onSnap,
+      ),
+    );
   }
 
   void _rememberQuery() {
     final q = _controller.text.trim();
     if (q.isEmpty) return;
-    unawaited(GlobalSearchHistoryStore.add(q).then((rows) {
-      if (mounted) setState(() => _history = rows);
-    }));
+    unawaited(
+      GlobalSearchHistoryStore.add(q).then((rows) {
+        if (mounted) setState(() => _history = rows);
+      }),
+    );
   }
 
   void _openHit(GlobalSearchHit hit) {
@@ -342,7 +354,12 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
 
   Widget _buildBar() {
     return Padding(
-      padding: EdgeInsets.fromLTRB(_desktop ? 20 : 12, 14, _desktop ? 12 : 8, 10),
+      padding: EdgeInsets.fromLTRB(
+        _desktop ? 20 : 12,
+        14,
+        _desktop ? 12 : 8,
+        10,
+      ),
       child: Row(
         children: [
           Expanded(
@@ -589,7 +606,8 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                     icon: Icons.person_outline_rounded,
                     title: c.displayTitle,
                     subtitle: [
-                      if ((c.peerDepartment ?? '').isNotEmpty) c.peerDepartment!,
+                      if ((c.peerDepartment ?? '').isNotEmpty)
+                        c.peerDepartment!,
                       if ((c.peerRoleLabel ?? '').isNotEmpty) c.peerRoleLabel!,
                     ].join(' · '),
                     leading: _conversationAvatar(c),
@@ -676,10 +694,7 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
             GlobalSearchGroupStatus.loading) {
       children.add(_emptyAll());
     }
-    return ListView(
-      padding: _listInsets,
-      children: children,
-    );
+    return ListView(padding: _listInsets, children: children);
   }
 
   Widget _buildCategory(GlobalSearchCategory cat) {
@@ -745,6 +760,7 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                   title: m.senderName.isEmpty ? '消息' : m.senderName,
                   subtitle: m.bodyText,
                   query: q,
+                  leading: _messageSenderAvatar(m),
                   trailingText: _formatTime(m.createdAt),
                   onTap: () {
                     _rememberQuery();
@@ -1061,9 +1077,7 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                   style: DunesTypography.sans(
                     fontSize: 11,
                     fontWeight: badge ? FontWeight.w700 : FontWeight.w400,
-                    color: badge
-                        ? DunesColors.brandPurple
-                        : DunesColors.text3,
+                    color: badge ? DunesColors.brandPurple : DunesColors.text3,
                   ),
                 ),
               ),
@@ -1086,10 +1100,26 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
     return null;
   }
 
+  Widget _messageSenderAvatar(GlobalMessageHit message) {
+    const size = 36.0;
+    final name = message.senderName.trim();
+    return ImUserAvatar(
+      initial: _initial(name),
+      seed: message.senderUserId > 0 ? message.senderUserId : message.messageId,
+      size: size,
+      avatarPreset: message.senderAvatarPreset,
+      avatarObjectKey: message.senderAvatarObjectKey,
+      avatarUrl: message.senderAvatarUrl,
+      avatarService: _avatarService,
+      borderRadius: size * 0.18,
+    );
+  }
+
   NativeConversation? _conversationById(int id) {
     if (id <= 0) return null;
-    final rows =
-        ConversationInboxCache.instance.peek(widget.session.userId)?.conversations;
+    final rows = ConversationInboxCache.instance
+        .peek(widget.session.userId)
+        ?.conversations;
     if (rows == null) return null;
     for (final c in rows) {
       if (c.id == id) return c;
@@ -1242,11 +1272,7 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
 }
 
 class _HoverSurface extends StatefulWidget {
-  const _HoverSurface({
-    required this.child,
-    required this.onTap,
-    this.radius,
-  });
+  const _HoverSurface({required this.child, required this.onTap, this.radius});
 
   final Widget child;
   final VoidCallback onTap;
@@ -1332,11 +1358,7 @@ class _HoverIcon extends StatelessWidget {
 
 /// 全局搜索覆盖层：从下往上展开，底下源页面保持可见。
 class SearchSlideLayer extends StatefulWidget {
-  const SearchSlideLayer({
-    super.key,
-    required this.open,
-    required this.child,
-  });
+  const SearchSlideLayer({super.key, required this.open, required this.child});
 
   final bool open;
   final Widget child;

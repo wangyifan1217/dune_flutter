@@ -140,7 +140,9 @@ class ConversationService {
     'Content-Type': 'application/json',
   };
 
-  Future<List<NativeConversation>> fetchConversations({String query = ''}) async {
+  Future<List<NativeConversation>> fetchConversations({
+    String query = '',
+  }) async {
     try {
       return await _fetchConversationsOnce(query: query);
     } catch (e) {
@@ -236,7 +238,9 @@ class ConversationService {
       }),
     );
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw Exception(_imStatusError(resp.body, '状态更新失败: HTTP ${resp.statusCode}'));
+      throw Exception(
+        _imStatusError(resp.body, '状态更新失败: HTTP ${resp.statusCode}'),
+      );
     }
     return _imStatusFromBody(resp.body);
   }
@@ -1618,7 +1622,11 @@ class ConversationService {
         }
       }
     } catch (_) {}
-    final fanout = await _searchMessagesFanout(query: q, kind: kind, limit: limit);
+    final fanout = await _searchMessagesFanout(
+      query: q,
+      kind: kind,
+      limit: limit,
+    );
     return _dedupeMessageHits([...api, ...fanout]);
   }
 
@@ -1631,7 +1639,10 @@ class ConversationService {
         ConversationInboxCache.instance.peek(_session.userId)?.conversations ??
         const <NativeConversation>[];
     final usable = cached
-        .where((c) => c.id > 0 && (c.isPrivate || c.isGroup || c.isWorkgroupApproval))
+        .where(
+          (c) =>
+              c.id > 0 && (c.isPrivate || c.isGroup || c.isWorkgroupApproval),
+        )
         .toList();
     final q = query.toLowerCase();
     final matched = <NativeConversation>[];
@@ -1690,6 +1701,9 @@ class ConversationService {
           conversationTitle: conversation.displayTitle,
           messageId: m.id,
           senderName: m.senderName,
+          senderUserId: m.senderUserId,
+          senderAvatarPreset: m.senderAvatarPreset,
+          senderAvatarObjectKey: m.senderAvatarObjectKey,
           bodyText: _messageDisplayText(m),
           kind: m.kind,
           createdAt: m.createdAt,
@@ -1711,9 +1725,7 @@ class ConversationService {
     if (needScan) {
       try {
         final recent = await fetchMessages(conversation.id, size: 80);
-        addAll(
-          recent.where((m) => _messageMatchesQuery(m, query)),
-        );
+        addAll(recent.where((m) => _messageMatchesQuery(m, query)));
       } catch (_) {}
     }
     return hits.values.toList(growable: false);
@@ -1761,7 +1773,12 @@ class ConversationService {
     if (body.isNotEmpty) return body;
     final url = _payloadString(m.payload, const ['url', 'href', 'link', 'src']);
     if (url.isNotEmpty) return url;
-    final title = _payloadString(m.payload, const ['title', 'name', 'fileName', 'file_name']);
+    final title = _payloadString(m.payload, const [
+      'title',
+      'name',
+      'fileName',
+      'file_name',
+    ]);
     if (title.isNotEmpty) return title;
     return '[${m.kind}]';
   }
@@ -1778,7 +1795,11 @@ class ConversationService {
     return buf.toString().toLowerCase();
   }
 
-  void _writePayloadHaystack(StringBuffer buf, Map<String, dynamic>? payload, int depth) {
+  void _writePayloadHaystack(
+    StringBuffer buf,
+    Map<String, dynamic>? payload,
+    int depth,
+  ) {
     if (payload == null || depth > 3) return;
     for (final value in payload.values) {
       if (value is String && value.trim().isNotEmpty) {
@@ -1789,7 +1810,11 @@ class ConversationService {
       } else if (value is List) {
         for (final item in value.take(12)) {
           if (item is Map) {
-            _writePayloadHaystack(buf, Map<String, dynamic>.from(item), depth + 1);
+            _writePayloadHaystack(
+              buf,
+              Map<String, dynamic>.from(item),
+              depth + 1,
+            );
           } else if (item is String) {
             buf.write(item);
             buf.write(' ');
@@ -1829,6 +1854,21 @@ class ConversationService {
       messageId: (raw['id'] as num?)?.toInt() ?? 0,
       senderName: (senderMap['displayName'] ?? raw['senderName'] ?? '')
           .toString(),
+      senderUserId: _readInt(
+        senderMap['userId'] ??
+            senderMap['id'] ??
+            raw['senderUserId'] ??
+            raw['senderId'],
+      ),
+      senderAvatarPreset: _avatarField(
+        senderMap['avatarPreset'] ?? raw['senderAvatarPreset'],
+      ),
+      senderAvatarObjectKey: _avatarField(
+        senderMap['avatarObjectKey'] ?? raw['senderAvatarObjectKey'],
+      ),
+      senderAvatarUrl: _avatarField(
+        senderMap['avatarUrl'] ?? raw['senderAvatarUrl'],
+      ),
       bodyText: (raw['bodyText'] ?? raw['text'] ?? '').toString(),
       kind: (raw['kind'] ?? 'TEXT').toString(),
       createdAt: DateTime.tryParse((raw['createdAt'] ?? '').toString()),
@@ -1839,8 +1879,18 @@ class ConversationService {
     );
   }
 
+  int _readInt(Object? value) {
+    if (value is num) return value.toInt();
+    return int.tryParse('${value ?? ''}') ?? 0;
+  }
+
   int _readMatchCount(Map<String, dynamic> raw) {
-    for (final key in const ['matchCount', 'hitCount', 'relatedCount', 'messageCount']) {
+    for (final key in const [
+      'matchCount',
+      'hitCount',
+      'relatedCount',
+      'messageCount',
+    ]) {
       final v = raw[key];
       if (v is num && v.toInt() > 1) return v.toInt();
     }

@@ -20,6 +20,11 @@ import 'chat_widgets.dart';
 import 'cors_safe_image.dart';
 import 'user_avatar_widget.dart';
 
+bool chatSearchShouldShowFilters({
+  required bool keyboardVisible,
+  required bool inputFocused,
+}) => !keyboardVisible && !inputFocused;
+
 class NativeChatSearchPage extends StatefulWidget {
   const NativeChatSearchPage({
     super.key,
@@ -55,6 +60,7 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
 
   late final ConversationService _service;
   final TextEditingController _queryController = TextEditingController();
+  final FocusNode _queryFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
 
   bool _loading = false;
@@ -79,6 +85,9 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
     _service = ConversationService(session: widget.session);
     _scrollController.addListener(_onScroll);
     _queryController.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _queryFocusNode.addListener(() {
       if (mounted) setState(() {});
     });
     unawaited(_loadAvatarContext());
@@ -162,8 +171,22 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _queryFocusNode.dispose();
     _queryController.dispose();
     super.dispose();
+  }
+
+  void _dismissKeyboard() {
+    if (_queryFocusNode.hasFocus) _queryFocusNode.unfocus();
+  }
+
+  void _handleBack() {
+    if (_queryFocusNode.hasFocus ||
+        MediaQuery.viewInsetsOf(context).bottom > 0) {
+      _dismissKeyboard();
+      return;
+    }
+    widget.onBack();
   }
 
   void _onScroll() {
@@ -507,111 +530,137 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
   @override
   Widget build(BuildContext context) {
     final entries = _buildEntries();
+    final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final showFilters = chatSearchShouldShowFilters(
+      keyboardVisible: keyboardVisible,
+      inputFocused: _queryFocusNode.hasFocus,
+    );
     return Scaffold(
       backgroundColor: DunesColors.bgApp,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 6, 12, 8),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: widget.onBack,
-                    icon: const Icon(Icons.chevron_left_rounded, size: 28),
-                  ),
-                  Expanded(
-                    child: Text(
-                      '查找聊天内容',
-                      style: DunesTypography.sans(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: DunesColors.text,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: DunesColors.bgSoft,
-                  borderRadius: BorderRadius.circular(10),
-                ),
+      resizeToAvoidBottomInset: true,
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: _dismissKeyboard,
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 6, 12, 8),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.search,
-                      size: 16,
-                      color: DunesColors.text3,
+                    IconButton(
+                      onPressed: _handleBack,
+                      icon: const Icon(Icons.chevron_left_rounded, size: 28),
                     ),
-                    const SizedBox(width: 8),
                     Expanded(
-                      child: TextField(
-                        controller: _queryController,
-                        onSubmitted: (_) {
-                          setState(() => _selectedFilter = null);
-                          _search();
-                        },
-                        onChanged: (value) {
-                          if (value.trim().isEmpty && _selectedFilter == null) {
-                            _search();
-                          }
-                        },
+                      child: Text(
+                        '查找聊天内容',
                         style: DunesTypography.sans(
-                          fontSize: 13,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
                           color: DunesColors.text,
                         ),
-                        decoration: InputDecoration(
-                          isDense: true,
-                          border: InputBorder.none,
-                          hintText: '搜消息 / 文件 / @mention',
-                          hintStyle: DunesTypography.sans(
-                            fontSize: 13,
-                            color: DunesColors.text3,
-                          ),
-                          contentPadding: EdgeInsets.zero,
-                        ),
                       ),
                     ),
-                    if (_queryController.text.isNotEmpty)
-                      GestureDetector(
-                        onTap: () {
-                          _queryController.clear();
-                          setState(() => _selectedFilter = null);
-                          _search();
-                        },
-                        child: const Icon(
-                          Icons.close,
-                          size: 16,
-                          color: DunesColors.text3,
-                        ),
-                      ),
                   ],
                 ),
               ),
-            ),
-            _ChatHistoryCategoryGrid(
-              selected: _selectedFilter,
-              timeActive: _timeRange != null,
-              onSelect: _selectFilter,
-              onSelectTime: _openTimeRangeSheet,
-            ),
-            if (_timeRange != null)
-              _ChatHistoryTimeRangeChip(
-                label: _timeRange!.label,
-                onClear: () => _applyTimeRange(null),
-                onTap: _openTimeRangeSheet,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: DunesColors.bgSoft,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.search,
+                        size: 16,
+                        color: DunesColors.text3,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: _queryController,
+                          focusNode: _queryFocusNode,
+                          textInputAction: TextInputAction.search,
+                          onSubmitted: (_) {
+                            setState(() => _selectedFilter = null);
+                            _search();
+                          },
+                          onChanged: (value) {
+                            if (value.trim().isEmpty &&
+                                _selectedFilter == null) {
+                              _search();
+                            }
+                          },
+                          style: DunesTypography.sans(
+                            fontSize: 13,
+                            color: DunesColors.text,
+                          ),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            border: InputBorder.none,
+                            hintText: '搜消息 / 文件 / @mention',
+                            hintStyle: DunesTypography.sans(
+                              fontSize: 13,
+                              color: DunesColors.text3,
+                            ),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          onTapOutside: (_) => _dismissKeyboard(),
+                        ),
+                      ),
+                      if (_queryController.text.isNotEmpty)
+                        GestureDetector(
+                          onTap: () {
+                            _queryController.clear();
+                            setState(() => _selectedFilter = null);
+                            _search();
+                          },
+                          child: const Icon(
+                            Icons.close,
+                            size: 16,
+                            color: DunesColors.text3,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
-            Expanded(child: _buildResults(entries)),
-          ],
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 160),
+                child: showFilters
+                    ? Column(
+                        key: const ValueKey('chat-search-filters'),
+                        children: [
+                          _ChatHistoryCategoryGrid(
+                            selected: _selectedFilter,
+                            timeActive: _timeRange != null,
+                            onSelect: _selectFilter,
+                            onSelectTime: _openTimeRangeSheet,
+                          ),
+                          if (_timeRange != null)
+                            _ChatHistoryTimeRangeChip(
+                              label: _timeRange!.label,
+                              onClear: () => _applyTimeRange(null),
+                              onTap: _openTimeRangeSheet,
+                            ),
+                        ],
+                      )
+                    : const SizedBox(
+                        key: ValueKey('chat-search-filters-hidden'),
+                      ),
+              ),
+              Expanded(child: _buildResults(entries)),
+            ],
+          ),
         ),
       ),
     );
@@ -655,6 +704,7 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
       }
       return CustomScrollView(
         controller: _scrollController,
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         slivers: [
           for (final group in monthGroups.entries) ...[
             SliverToBoxAdapter(
@@ -709,6 +759,7 @@ class _NativeChatSearchPageState extends State<NativeChatSearchPage> {
     return ListView.builder(
       controller: _scrollController,
       physics: const ClampingScrollPhysics(),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.only(bottom: 12),
       itemCount: entries.length + (_loadingMore || _hasMore ? 1 : 0),
       itemBuilder: (_, index) {

@@ -1103,16 +1103,60 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
   Widget _messageSenderAvatar(GlobalMessageHit message) {
     const size = 36.0;
     final name = message.senderName.trim();
+    final source = _messageSenderAvatarSource(message);
     return ImUserAvatar(
       initial: _initial(name),
       seed: message.senderUserId > 0 ? message.senderUserId : message.messageId,
       size: size,
-      avatarPreset: message.senderAvatarPreset,
-      avatarObjectKey: message.senderAvatarObjectKey,
-      avatarUrl: message.senderAvatarUrl,
+      avatarPreset: source.preset,
+      avatarObjectKey: source.objectKey,
+      avatarUrl: source.url,
       avatarService: _avatarService,
       borderRadius: size * 0.18,
     );
+  }
+
+  ({String? preset, String? objectKey, String? url}) _messageSenderAvatarSource(
+    GlobalMessageHit message,
+  ) {
+    if (message.senderAvatarPreset?.trim().isNotEmpty == true ||
+        message.senderAvatarObjectKey?.trim().isNotEmpty == true ||
+        message.senderAvatarUrl?.trim().isNotEmpty == true) {
+      return (
+        preset: message.senderAvatarPreset,
+        objectKey: message.senderAvatarObjectKey,
+        url: message.senderAvatarUrl,
+      );
+    }
+    final conversation = _conversationById(message.conversationId);
+    if (conversation == null) {
+      return (preset: null, objectKey: null, url: null);
+    }
+    ConversationAvatarMember? member;
+    for (final candidate in conversation.avatarMembers) {
+      if (candidate.userId == message.senderUserId ||
+          (message.senderUserId <= 0 &&
+              candidate.displayName.trim() == message.senderName.trim())) {
+        member = candidate;
+        break;
+      }
+    }
+    if (member != null) {
+      return (
+        preset: member.avatarPreset,
+        objectKey: member.avatarObjectKey,
+        url: member.avatarUrl,
+      );
+    }
+    if (conversation.isPrivate &&
+        message.senderUserId != widget.session.userId) {
+      return (
+        preset: conversation.peerAvatarPreset,
+        objectKey: conversation.peerAvatarObjectKey,
+        url: conversation.peerAvatarUrl,
+      );
+    }
+    return (preset: null, objectKey: null, url: null);
   }
 
   NativeConversation? _conversationById(int id) {

@@ -297,7 +297,7 @@ class NovaMarkdownBody extends StatelessWidget {
     Set<String> shownUrls,
   ) {
     if (RegExp(r'^\s*#{1,3}\s', multiLine: true).hasMatch(raw) ||
-        RegExp(r'^\s*[-*•]\s', multiLine: true).hasMatch(raw)) {
+        RegExp(r'^\s*(?:[-*•]|\d+[.)])\s', multiLine: true).hasMatch(raw)) {
       return [
         _NovaMarkdownBlock(
           text: raw,
@@ -609,6 +609,35 @@ class _NovaMarkdownBlock extends StatelessWidget {
                 Expanded(
                   child: _NovaMarkdownInline(
                     text: lm.group(1)!,
+                    documentPreview: documentPreview,
+                    onImage: onImage,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        continue;
+      }
+      final ordered = RegExp(r'^(\d+)[.)]\s+(.+)$').firstMatch(trimmed);
+      if (ordered != null) {
+        listItems.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${ordered.group(1)}. ',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: DunesColors.text,
+                    height: 1.6,
+                  ),
+                ),
+                Expanded(
+                  child: _NovaMarkdownInline(
+                    text: ordered.group(2)!,
                     documentPreview: documentPreview,
                     onImage: onImage,
                   ),

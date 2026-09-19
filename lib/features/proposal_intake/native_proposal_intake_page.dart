@@ -8295,6 +8295,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   child: _skuSettleProductCard(
                     skuId: current.id,
                     childProduct: child,
+                    product: current,
                     title: titleBits,
                     emptyTitle: child
                         ? '未填写$kProposalChildProductLabel名称'
@@ -8894,6 +8895,17 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
+  Widget _skuPlatformStatusChip(
+    ProposalSkuDetailRow row, {
+    String slot = 'product',
+  }) {
+    return ProposalStatusChip(
+      key: ValueKey('proposal-sku-platform-status-${row.id}-$slot'),
+      label: proposalSkuPlatformStatusChipLabel(row),
+      kind: proposalSkuPlatformStatusChipKind(row.platformStatus),
+    );
+  }
+
   Widget _skuProductSummaryRow(
     ProposalSkuDetailRow row,
     int index, {
@@ -8973,16 +8985,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           const SizedBox(height: 6),
           Align(
             alignment: Alignment.centerLeft,
-            child: ProposalStatusChip(
-              key: ValueKey('proposal-sku-platform-status-${row.id}'),
-              label:
-                  '业务平台状态 ${proposalSkuPlatformStatusLabel(row.platformStatus)}',
-              kind:
-                  normalizeProposalSkuPlatformStatus(row.platformStatus) ==
-                      kProposalSkuPlatformStatusPending
-                  ? ProposalChipKind.draft
-                  : ProposalChipKind.ok,
-            ),
+            child: _skuPlatformStatusChip(row),
           ),
           const SizedBox(height: 4),
           Wrap(
@@ -10175,6 +10178,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               _skuSettleProductCard(
                 skuId: sku.id,
                 childProduct: true,
+                product: sku,
                 title: [
                   if (sku.productName.trim().isNotEmpty) sku.productName.trim(),
                   if (sku.faceValue.trim().isNotEmpty)
@@ -10262,6 +10266,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             _skuSettleProductCard(
               skuId: sku.id,
               childProduct: false,
+              product: sku,
               title: [
                 if (sku.productName.trim().isNotEmpty) sku.productName.trim(),
                 if (sku.faceValue.trim().isNotEmpty)
@@ -10334,6 +10339,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     bool compact = false,
     VoidCallback? onOpenEditor,
     VoidCallback? onClipboardChanged,
+    ProposalSkuDetailRow? product,
   }) {
     final summaryBits = <String>[
       if (settlements.isEmpty) '尚未填写' else '结算 ${settlements.length} 条',
@@ -10374,6 +10380,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   color: ProposalPalette.text,
                 ),
               ),
+              if (product != null)
+                _skuPlatformStatusChip(product, slot: 'settle'),
               if (compact && summaryBits.isNotEmpty)
                 Text(
                   summaryBits.join(' · '),

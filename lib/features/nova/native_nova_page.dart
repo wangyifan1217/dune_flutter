@@ -43,6 +43,8 @@ import 'nova_meeting_prd.dart';
 import 'nova_model_utils.dart';
 import 'nova_models_service.dart';
 import 'nova_side_drawer.dart';
+import 'nova_source_picker.dart';
+import 'nova_source_scope.dart';
 import 'nova_stream_parser.dart';
 import 'nova_web_storage.dart';
 import 'nova_welcome_view.dart';
@@ -61,6 +63,7 @@ class NativeNovaPage extends StatefulWidget {
     this.focusConversationId,
     this.focusMessageId,
     this.onClearHistoryFocus,
+    this.initialPrompt,
   });
 
   final AuthSession session;
@@ -72,6 +75,7 @@ class NativeNovaPage extends StatefulWidget {
   final int? focusConversationId;
   final int? focusMessageId;
   final VoidCallback? onClearHistoryFocus;
+  final String? initialPrompt;
 
   @override
   State<NativeNovaPage> createState() => _NativeNovaPageState();
@@ -81,6 +85,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   late final NativeNovaService _service;
   late final NativeKbService _kbService;
+  late final NativeMeetingService _meetingService;
   late final ConversationService _avatarService;
   late final NovaMediaResolver _mediaResolver;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -122,6 +127,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   String _selectedModel = '';
   List<NovaModelCatalogEntry> _modelCatalog = const <NovaModelCatalogEntry>[];
   List<NovaDraftAttachment> _drafts = const <NovaDraftAttachment>[];
+  List<NovaAnalysisSource> _analysisSources = const <NovaAnalysisSource>[];
   int _draftSeq = 0;
   bool _prdResumeInFlight = false;
   bool _prdNovaSendStarted = false;
@@ -147,6 +153,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     WidgetsBinding.instance.addObserver(this);
     _service = NovaBackgroundCoordinator.instance.serviceFor(widget.session);
     _kbService = NativeKbService(session: widget.session);
+    _meetingService = NativeMeetingService(session: widget.session);
     _avatarService = ConversationService(session: widget.session);
     _mediaResolver = NovaMediaResolver(widget.session, service: _service);
     _tabController = TabController(
@@ -159,6 +166,9 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     _scrollController.addListener(_onChatScroll);
     userAvatarRefresh.addListener(_onSelfAvatarUpdated);
     _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Tooltip.dismissAllToolTips();
+    });
     MeetingLiveController.instance.active.addListener(
       _onMeetingLiveActiveChanged,
     );
@@ -175,6 +185,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
   void _onNovaBackgroundUpdate() {
     if (!mounted || _conversationId <= 0) return;
+    if (_sending || _service.isStreamInFlight) return;
     if (!_serverGenerating && !_sending && !_hasActiveAssistantStream()) return;
     if (!_serverGenerating && !_sending && _hasActiveAssistantStream()) {
       return;
@@ -190,6 +201,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   }
 
   void _onNovaTabChanged() {
+    Tooltip.dismissAllToolTips();
     if (!mounted || _tabController.indexIsChanging) return;
     if (_tabController.index != _novaChatTabIndex) {
       FocusScope.of(context).unfocus();
@@ -553,9 +565,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         setState(() {
           _novaReady = false;
           _conversationId = 0;
-          _messages = [_welcomeMessage()];
-          _busyHint = readiness.message ?? 'NOVA账号尚未开通，请稍后再试';
-          _loading = false;
+        _messages = [_welcomeMessage()];
+        _analysisSources = const <NovaAnalysisSource>[];
+        _busyHint = readiness.message ?? 'NOVA账号尚未开通，请稍后再试';
+        _loading = false;
         });
         return;
       }
@@ -665,6 +678,11 @@ class _NativeNovaPageState extends State<NativeNovaPage>
                   : kNovaInputBusyHint)
             : '';
         _banner = banner;
+        _analysisSources = convId > 0
+            ? decodeNovaConversationScope(
+                novaStorage[novaKbScopeStorageKey(convId)],
+              )
+            : const <NovaAnalysisSource>[];
         _loading = false;
       });
       if (serverGenerating) {
@@ -685,6 +703,14 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         unawaited(_service.novaChatSessionId(convId));
       }
       unawaited(_maybeResumePrdGeneration());
+      final initialPrompt = widget.initialPrompt?.trim() ?? '';
+      if (initialPrompt.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_novaReady || _sending) return;
+          _inputController.text = initialPrompt;
+          unawaited(_submitInput());
+        });
+      }
       final focusId = widget.focusMessageId;
       if (focusId != null && focusId > 0) {
         WidgetsBinding.instance.addPostFrameCallback(
@@ -703,6 +729,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         _novaReady = true;
         _conversationId = 0;
         _messages = [_welcomeMessage()];
+        _analysisSources = const <NovaAnalysisSource>[];
         _banner = NativeNovaService.friendlyError(e);
         _loading = false;
       });
@@ -781,7 +808,9 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     bool repair = true,
   }) {
     final deduped = dedupeNovaHistoryMessages(rows);
-    return repairNovaConversationMessages(deduped);
+    return collapseNovaStreamingPlaceholders(
+      repairNovaConversationMessages(deduped),
+    );
   }
 
   List<NativeNovaMessage> _mergeGeneratingAndDraft({
@@ -899,7 +928,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       return _finalizeMergedMessages(out, repair: true);
     }
 
-    final pendingId = draft != null && draft.text.isNotEmpty
+    final pendingId = effectiveAfter > 0
         ? effectiveAfter + 1
         : DateTime.now().millisecondsSinceEpoch + 1;
     out.add(
@@ -1377,6 +1406,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
   Future<void> _syncStreamDraftFromStorage() async {
     if (!mounted || _conversationId <= 0) return;
+    if (_sending || _service.isStreamInFlight) return;
     final storage = await NovaWebStorage.load(widget.session.userId);
     final draft = readNovaStreamDraftFromStorage(storage, _conversationId);
     if (draft == null || !novaStreamDraftHasContent(draft)) {
@@ -1451,7 +1481,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   Future<void> _pollGenerating() async {
     if (_conversationId <= 0 || !_serverGenerating) return;
     // 流式生成中（尤其多模态直连 Nova）不要用服务端快照覆盖 UI，否则重发/附件气泡会被冲掉。
-    if (_service.isStreamInFlight) return;
+    if (_sending || _service.isStreamInFlight) return;
     try {
       final history = await _service.fetchFullHistory(_conversationId);
       if (!mounted) return;
@@ -1800,8 +1830,8 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       _stopGeneration();
       return;
     }
-    final text = _inputController.text.trim();
-    if (text.isEmpty && _drafts.isEmpty) return;
+    final userText = _inputController.text.trim();
+    if (userText.isEmpty && _drafts.isEmpty && _analysisSources.isEmpty) return;
     if (!_novaReady) return;
 
     final drafts = [..._drafts];
@@ -1815,7 +1845,13 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       _stickToBottom = true;
       _showJumpToLatest = false;
     });
-    await _sendMessage(text: text, drafts: drafts);
+    await _sendMessage(
+      text: novaSourceDisplayQuestion(
+        userText: userText,
+        sources: _analysisSources,
+      ),
+      drafts: drafts,
+    );
   }
 
   /// 有图片时要求用户手动切换到视觉模型，不再静默改派。
@@ -1991,10 +2027,180 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     await _persistSessionNow();
   }
 
+  Future<List<NovaAnalysisSource>> _resolveScopedSources(
+    List<NovaAnalysisSource> sources,
+  ) async {
+    final out = <NovaAnalysisSource>[];
+    for (final source in sources) {
+      if (source.kind == NovaSourceKind.kbFile ||
+          source.kind == NovaSourceKind.kbFolder) {
+        var ids = [...source.documentIds];
+        var ragIds = [...source.ragflowDocIds];
+        if (source.kind == NovaSourceKind.kbFolder &&
+            ids.isEmpty &&
+            ragIds.isEmpty) {
+          final folderDocs = await _loadKbFolderDocuments(source.id);
+          ids = novaKbLocalIds(folderDocs);
+          ragIds = novaKbRagflowIds(folderDocs);
+        }
+        final resolved = await _kbService.resolveLocalDocumentIds(
+          documentIds: ids,
+          ragflowDocIds: ragIds,
+          fallbackId: source.id,
+        );
+        out.add(
+          source.copyWith(
+            documentIds: resolved.isNotEmpty ? resolved : ids,
+            ragflowDocIds: ragIds,
+          ),
+        );
+        continue;
+      }
+      if (source.documentIds.isNotEmpty ||
+          source.kind != NovaSourceKind.meetingFile) {
+        out.add(source);
+        continue;
+      }
+      final meetingId = int.tryParse(source.id) ?? 0;
+      if (meetingId <= 0) {
+        out.add(source);
+        continue;
+      }
+      final doc = await _kbService.findMeetingMinutesDocument(
+        meetingId: meetingId,
+        kbFileName: MeetingMinutesExport.kbUploadFileNameFromSummary(
+          NativeMeetingSummary(
+            meetingId: meetingId,
+            title: source.title,
+            meetingDate: '',
+            createdAt: '',
+            updatedAt: '',
+            status: '',
+            asrProgress: 0,
+          ),
+        ),
+        kbTitle: source.title,
+      );
+      final localId = int.tryParse(doc?.dunesDocumentId ?? '') ?? 0;
+      out.add(
+        source.copyWith(
+          documentIds: localId > 0 ? <int>[localId] : source.documentIds,
+          ragflowDocIds: doc != null
+              ? novaKbRagflowIds([doc])
+              : source.ragflowDocIds,
+        ),
+      );
+    }
+    return out;
+  }
+
+  Future<List<NativeKbDocument>> _loadKbFolderDocuments(String folderId) async {
+    final id = folderId.trim().isEmpty ? 'uncategorized' : folderId.trim();
+    try {
+      final page = await _kbService.listDocuments(
+        folderId: id,
+        page: 0,
+        size: 80,
+      );
+      return page.items
+          .where((doc) => novaKbDocumentAllowedInPicker(doc))
+          .toList(growable: false);
+    } catch (_) {
+      return const <NativeKbDocument>[];
+    }
+  }
+
+  Future<List<NativeKbChunk>> _retrieveScopedChunks({
+    required String query,
+    required List<int> ids,
+  }) async {
+    if (ids.isEmpty) return const <NativeKbChunk>[];
+    Future<List<NativeKbChunk>> run(String q) async {
+      try {
+        return await _kbService.retrieveScoped(query: q, documentIds: ids);
+      } catch (_) {
+        return const <NativeKbChunk>[];
+      }
+    }
+
+    var chunks = await run(query);
+    if (chunks.isEmpty && query != '总结要点、结论和待办') {
+      chunks = await run('总结要点、结论和待办');
+    }
+    if (chunks.isEmpty) {
+      chunks = await _kbService.fetchDocumentInlineChunks(documentIds: ids);
+    }
+    return chunks;
+  }
+
+  Future<({String prompt, Map<String, dynamic> payload, String displayText})>
+  _bindConversationScope(String userText) async {
+    if (mounted) {
+      setState(() => _busyHint = '正在按所选材料检索…');
+    }
+    var sources = [..._analysisSources];
+    try {
+      sources = await _resolveScopedSources(sources).timeout(
+        const Duration(seconds: 8),
+        onTimeout: () => sources,
+      );
+      if (mounted) _replaceAnalysisSources(sources);
+    } catch (_) {}
+    final ids = novaSourceDocumentIds(sources);
+    final query = userText.trim().isEmpty ? '总结要点、结论和待办' : userText.trim();
+    var chunks = const <NativeKbChunk>[];
+    try {
+      chunks = await _retrieveScopedChunks(query: query, ids: ids).timeout(
+        const Duration(seconds: 8),
+        onTimeout: () => const <NativeKbChunk>[],
+      );
+    } catch (_) {}
+    var prompt = composeNovaRestrictedPrompt(
+      userText: userText,
+      sources: sources,
+      chunks: chunks,
+    );
+    if (prompt.isEmpty) {
+      prompt = composeNovaAnalysisPrompt(
+        userText: userText,
+        sources: sources,
+      );
+    }
+    if (prompt.isEmpty) {
+      prompt = userText.trim().isEmpty ? '请分析这些材料' : userText.trim();
+    }
+    return (
+      prompt: prompt,
+      payload: <String, dynamic>{
+        'kbRestricted': true,
+        if (ids.isNotEmpty) 'kbDocumentIds': ids,
+      },
+      displayText: novaSourceDisplayQuestion(
+        userText: userText,
+        sources: sources,
+      ),
+    );
+  }
+
+  void _replaceAnalysisSources(List<NovaAnalysisSource> sources) {
+    if (!mounted) return;
+    setState(() => _analysisSources = sources);
+    unawaited(_persistAnalysisSources());
+  }
+
+  Future<void> _persistAnalysisSources() async {
+    await persistNovaConversationScope(
+      userId: widget.session.userId,
+      conversationId: _conversationId,
+      sources: _analysisSources,
+    );
+  }
+
   Future<void> _sendMessage({
     required String text,
     String? novaPrompt,
     List<NovaDraftAttachment> drafts = const <NovaDraftAttachment>[],
+    Map<String, dynamic>? extraPayload,
     bool skipUserBubble = false,
     bool userAlreadyPersisted = false,
     String? assistantThinkStatus,
@@ -2015,10 +2221,13 @@ class _NativeNovaPageState extends State<NativeNovaPage>
 
     if (!_ensureVisionModelForDrafts(drafts)) return;
 
-    final promptSource = novaPrompt ?? text;
-    final prompt = novaDraftPrompt(promptSource, drafts);
-    final displayText = text.isNotEmpty
-        ? text
+    var scopedPrompt = novaPrompt;
+    var scopedPayload = extraPayload;
+    var scopedText = text;
+    var promptSource = scopedPrompt ?? scopedText;
+    var prompt = novaDraftPrompt(promptSource, drafts);
+    final displayText = scopedText.isNotEmpty
+        ? scopedText
         : (novaAttachmentSummary(drafts).isNotEmpty
               ? novaAttachmentSummary(drafts)
               : prompt);
@@ -2122,9 +2331,20 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     }
 
     try {
+      if (_analysisSources.isNotEmpty && novaPrompt == null) {
+        final bound = await _bindConversationScope(text);
+        scopedPrompt = bound.prompt;
+        scopedPayload = bound.payload;
+        scopedText = bound.displayText;
+        promptSource = scopedPrompt;
+        prompt = novaDraftPrompt(promptSource, drafts);
+      }
       await _ensureConversationId();
       if (_conversationId <= 0) {
         throw Exception('无法创建NOVA会话，请稍后重试');
+      }
+      if (_analysisSources.isNotEmpty) {
+        unawaited(_persistAnalysisSources());
       }
       final genStatus =
           assistantThinkStatus ?? (drafts.isNotEmpty ? '正在分析…' : '正在生成…');
@@ -2286,13 +2506,13 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         unawaited(_persistSessionNow());
       }
 
-      final userMetadata = attachments.isEmpty
-          ? null
-          : <String, dynamic>{
-              'attachments': attachments.map((a) => a.toJson()).toList(),
-              if (novaAttachmentIds.isNotEmpty)
-                'attachment_ids': novaAttachmentIds,
-            };
+      final userMetadata = <String, dynamic>{
+        if (attachments.isNotEmpty)
+          'attachments': attachments.map((a) => a.toJson()).toList(),
+        if (novaAttachmentIds.isNotEmpty) 'attachment_ids': novaAttachmentIds,
+        ...?scopedPayload,
+      };
+      final effectiveMetadata = userMetadata.isEmpty ? null : userMetadata;
 
       final userContent = drafts.isEmpty
           ? (promptSource.trim().isNotEmpty
@@ -2316,7 +2536,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         conversationId: _conversationId,
         userContent: effectiveContent,
         displayText: displayText,
-        userMetadata: userMetadata,
+        userMetadata: effectiveMetadata,
         attachmentIds: novaAttachmentIds,
         userMessageId: userMsgId,
         skipUserPersist: userPersistedToServer,
@@ -2325,6 +2545,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           final previous = _conversationId;
           unawaited(_service.remapConversationId(previous, id));
           setState(() => _conversationId = id);
+          unawaited(_persistAnalysisSources());
         },
         onUpdate: (update) {
           if (_service.userStoppedStream) return;
@@ -2350,11 +2571,17 @@ class _NativeNovaPageState extends State<NativeNovaPage>
             _busyHint = update.thinkStatus.isNotEmpty
                 ? update.thinkStatus
                 : kNovaInputBusyHint;
-            final idx = _messages.indexWhere((m) => m.id == assistantMsgId);
+            var idx = _messages.indexWhere((m) => m.id == assistantMsgId);
+            if (idx < 0) {
+              idx = _messages.lastIndexWhere(
+                (m) => m.role == 'assistant' && m.streaming,
+              );
+            }
             // 保留原 createdAt，避免流式/重新发送把回复刷到「现在」导致整段乱序。
             final prevAt = idx >= 0 ? _messages[idx].createdAt : null;
+            final keepId = idx >= 0 ? _messages[idx].id : assistantMsgId;
             final assistant = NativeNovaMessage(
-              id: assistantMsgId,
+              id: keepId,
               role: 'assistant',
               text: update.replyText,
               createdAt: prevAt ?? DateTime.now(),
@@ -2366,9 +2593,12 @@ class _NativeNovaPageState extends State<NativeNovaPage>
             if (idx >= 0) {
               final copy = [..._messages];
               copy[idx] = assistant;
-              _messages = copy;
+              _messages = collapseNovaStreamingPlaceholders(copy);
             } else if (!skipUserBubble) {
-              _messages = [..._messages, assistant];
+              _messages = collapseNovaStreamingPlaceholders([
+                ..._messages,
+                assistant,
+              ]);
             }
           });
           _scrollBottom();
@@ -2548,6 +2778,7 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       _loading = true;
       _conversationId = targetConvId;
       _messages = const [];
+      _analysisSources = const <NovaAnalysisSource>[];
       _banner = null;
       _busyHint = '';
       _sending = false;
@@ -2570,9 +2801,15 @@ class _NativeNovaPageState extends State<NativeNovaPage>
         applyViewSinceFilter: false,
       );
       if (!mounted || _loadToken != token) return;
+      final sources = await readNovaConversationScope(
+        userId: widget.session.userId,
+        conversationId: convId,
+      );
+      if (!mounted || _loadToken != token) return;
       setState(() {
         _conversationId = convId;
         _messages = repairNovaConversationMessages(_withWelcome(history.messages));
+        _analysisSources = sources;
         _loading = false;
       });
       if (_isEmptyConversation) {
@@ -2590,7 +2827,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     }
   }
 
-  Future<void> _startNewChat() async {
+  Future<void> _startNewChat({
+    NovaAnalysisSource? scopedSource,
+    bool announce = true,
+  }) async {
     _showNovaChatTab();
     if (_isGenerating) return;
     // 取消尚未完成的 `_load`，避免旧请求完成后覆盖新会话 ID 和消息列表。
@@ -2616,6 +2856,9 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       _serverGenerating = false;
       _sending = false;
       _drafts = const <NovaDraftAttachment>[];
+      _analysisSources = scopedSource == null
+          ? const <NovaAnalysisSource>[]
+          : <NovaAnalysisSource>[scopedSource];
       _conversationId = 0;
       _genAfterMessageId = 0;
       _messages = [_welcomeMessage()];
@@ -2636,18 +2879,24 @@ class _NativeNovaPageState extends State<NativeNovaPage>
       );
       await _service.novaChatSessionId(convId);
       setState(() => _conversationId = convId);
+      unawaited(_persistAnalysisSources());
     } else if (prevConvId > 0 &&
         await _service.validateNovaConversationId(prevConvId)) {
       final recovered = await _service.applyNewChatLocalFallback(
         userId: uid,
         previousConversationId: prevConvId,
       );
-      if (recovered > 0) setState(() => _conversationId = recovered);
+      if (recovered > 0) {
+        setState(() => _conversationId = recovered);
+        unawaited(_persistAnalysisSources());
+      }
       await NovaWebStorage.removeKeys(uid, ['dunes_nova_view_since']);
     } else if (uid > 0) {
       await NovaWebStorage.removeKeys(uid, ['dunes_nova_view_since']);
     }
-    _toast('已开启新对话，上一段可在右上角「历史」查看');
+    if (announce) {
+      _toast('已开启新对话，上一段可在右上角「历史」查看');
+    }
   }
 
   Future<void> _startAsrPcmCapture() async {
@@ -3267,6 +3516,48 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     });
   }
 
+  Future<void> _openKbSourcePicker() async {
+    if (!_novaReady || _isGenerating || _sending) return;
+    FocusScope.of(context).unfocus();
+    final source = await showNovaKbSourcePicker(
+      context,
+      kbService: _kbService,
+      meetingService: _meetingService,
+      onOpenLibrary: widget.onOpenKb,
+    );
+    if (!mounted || source == null) return;
+    await _enterScopedConversation(source);
+  }
+
+  Future<void> _openMeetingSourcePicker() async {
+    if (!_novaReady || _isGenerating || _sending) return;
+    FocusScope.of(context).unfocus();
+    final source = await showNovaMeetingSourcePicker(
+      context,
+      meetingService: _meetingService,
+      onOpenLibrary: widget.onOpenMeeting,
+    );
+    if (!mounted || source == null) return;
+    await _enterScopedConversation(source);
+  }
+
+  Future<void> _enterScopedConversation(NovaAnalysisSource source) async {
+    _showNovaChatTab();
+    if (_messages.any((m) => !m.isWelcome)) {
+      await _startNewChat(scopedSource: source, announce: false);
+      return;
+    }
+    _replaceAnalysisSources(mergeNovaAnalysisSources(_analysisSources, source));
+  }
+
+  void _removeAnalysisSource(NovaAnalysisSource source) {
+    _replaceAnalysisSources(
+      _analysisSources
+          .where((item) => item.scopeKey != source.scopeKey)
+          .toList(growable: false),
+    );
+  }
+
   Future<void> _openMeetingPrdFlow() async {
     if (!_novaReady || _isGenerating || _sending) return;
     int? prdAssistantMsgId;
@@ -3668,6 +3959,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
                     ),
                     if (_isNovaChatTab) ...[
                       NovaC4BusyHint(text: _busyHint),
+                      NovaSourceChipTray(
+                        sources: _analysisSources,
+                        onRemove: _removeAnalysisSource,
+                      ),
                       NovaDraftTray(items: _drafts, onRemove: _removeDraft),
                       ValueListenableBuilder<bool>(
                         valueListenable: MeetingLiveController.instance.active,
@@ -3704,9 +3999,9 @@ class _NativeNovaPageState extends State<NativeNovaPage>
                             onStop: _stopGeneration,
                             onCamera: _pickCamera,
                             onAlbum: _pickAlbum,
-                            onOpenMeeting: widget.onOpenMeeting,
+                            onOpenMeeting: _openMeetingSourcePicker,
                             onMeetingPrd: _openMeetingPrdFlow,
-                            onOpenKb: widget.onOpenKb,
+                            onOpenKb: _openKbSourcePicker,
                             onVoiceCall: _novaReady ? _openTauVoiceCall : null,
                             onNewChat: _novaReady ? _startNewChat : null,
                             onHistory: widget.onHistory,
@@ -3802,18 +4097,25 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   Widget _buildMessageList() {
     final items = _messageListItems();
     final bannerOffset = _banner != null ? 1 : 0;
+    final scopeOffset = _analysisSources.isNotEmpty ? 1 : 0;
     return ListView.builder(
       key: const ValueKey('nova-messages'),
       controller: _scrollController,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
       addAutomaticKeepAlives: false,
-      itemCount: bannerOffset + items.length,
+      itemCount: bannerOffset + scopeOffset + items.length,
       itemBuilder: (context, index) {
         if (_banner != null && index == 0) {
           return NovaStatusBanner(message: _banner!, onRetry: _load);
         }
-        final item = items[index - bannerOffset];
+        if (_analysisSources.isNotEmpty && index == bannerOffset) {
+          return NovaConversationScopeCard(
+            sources: _analysisSources,
+            margin: const EdgeInsets.only(bottom: 12),
+          );
+        }
+        final item = items[index - bannerOffset - scopeOffset];
         if (item.dividerLabel != null) {
           return NovaMsgDateDivider(label: item.dividerLabel!);
         }
@@ -3825,8 +4127,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
   List<_NovaTimelineItem> _messageListItems() {
     final items = <_NovaTimelineItem>[];
     DateTime? prevAt;
-    for (final m in _messages) {
-      if (!m.isWelcome) {
+    for (final m in collapseNovaStreamingPlaceholders(_messages)) {
+      if (m.isWelcome) {
+        if (_analysisSources.isNotEmpty) continue;
+      } else {
         final label = historyDayDividerLabel(m.createdAt, prevAt);
         if (label != null) {
           items.add(_NovaTimelineItem.divider(label));
@@ -3838,8 +4142,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
     return items;
   }
 
-  bool get _isEmptyConversation =>
-      _messages.isEmpty || _messages.every((message) => message.isWelcome);
+  bool get _isEmptyConversation => novaShouldShowWelcome(
+    hasRealTurns: _messages.any((message) => !message.isWelcome),
+    hasSources: _analysisSources.isNotEmpty,
+  );
 
   bool _canResendUserMessage(NativeNovaMessage m) {
     if (m.role != 'user') return false;
@@ -3876,8 +4182,9 @@ class _NativeNovaPageState extends State<NativeNovaPage>
             m.thinkText.isNotEmpty);
     final key = m.id > 0 ? _messageKeys.putIfAbsent(m.id, GlobalKey.new) : null;
     return KeyedSubtree(
-      key: key,
+      key: ValueKey('nova-msg-${m.id}-${m.role}'),
       child: RepaintBoundary(
+        key: key,
         child: NovaC4MessageRow(
           mine: mine,
           text: m.text,

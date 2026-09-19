@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_service.dart';
@@ -129,7 +130,11 @@ class NovaPageHeader extends StatelessWidget {
                   fontWeight: FontWeight.w500,
                 ),
                 tabs: [
-                  for (final label in tabLabels) Tab(text: label, height: 36),
+                  for (final label in tabLabels)
+                    Tab(
+                      height: 36,
+                      child: Text(label),
+                    ),
                 ],
               ),
             ),
@@ -205,7 +210,12 @@ class _HeaderCircleButton extends StatelessWidget {
         ),
         child: InkWell(
           customBorder: const CircleBorder(),
-          onTap: enabled ? onTap : null,
+          onTap: enabled
+              ? () {
+                  Tooltip.dismissAllToolTips();
+                  onTap?.call();
+                }
+              : null,
           child: Center(
             child: Transform.translate(
               offset: iconOffset,
@@ -572,8 +582,14 @@ class NovaC4BusyHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = text.trim();
-    // 「正在分析」类状态不再展示，避免输入栏上方多余灰字。
-    if (t.isEmpty || t.contains('正在分析')) {
+    // 检索/分析类状态不再展示，避免输入栏上方留下灰色小字。
+    if (t.isEmpty ||
+        t.contains('正在分析') ||
+        t.contains('正在按所选材料检索') ||
+        t.contains('正在检查知识库') ||
+        t.contains('正在加载') ||
+        t.contains('正在生成') ||
+        t.contains('请稍候')) {
       return const SizedBox.shrink();
     }
     return Padding(
@@ -1637,6 +1653,7 @@ class NovaC4MessageRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final body = mine ? _buildMineColumn(context) : _buildAiRow(context);
     return TweenAnimationBuilder<double>(
+      key: ValueKey('nova-anim-$messageId-$mine'),
       tween: Tween(begin: 0, end: 1),
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeOutCubic,
@@ -1761,44 +1778,57 @@ class _NovaTappableTime extends StatefulWidget {
 }
 
 class _NovaTappableTimeState extends State<_NovaTappableTime> {
-  bool _showTime = false;
+  bool _pinned = false;
+  bool _hovering = false;
+
+  bool get _showTime =>
+      widget.time.isNotEmpty && (_pinned || _hovering);
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.time.isEmpty
+    return MouseRegion(
+      onEnter: widget.time.isEmpty
           ? null
-          : () {
-              HapticFeedback.selectionClick();
-              setState(() => _showTime = !_showTime);
-            },
-      behavior: HitTestBehavior.deferToChild,
-      child: Column(
-        crossAxisAlignment:
-            widget.alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          widget.child,
-          AnimatedSize(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
-            child: _showTime && widget.time.isNotEmpty
-                ? Padding(
-                    padding: EdgeInsets.only(
-                      top: 4,
-                      left: widget.alignEnd ? 0 : 46,
-                      right: widget.alignEnd ? 46 : 0,
-                    ),
-                    child: Text(
-                      widget.time,
-                      style: DunesTypography.sans(
-                        fontSize: 11,
-                        color: const Color(0xFF86909C),
+          : (_) => setState(() => _hovering = true),
+      onExit: widget.time.isEmpty
+          ? null
+          : (_) => setState(() => _hovering = false),
+      child: GestureDetector(
+        onTap: widget.time.isEmpty
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                setState(() => _pinned = !_pinned);
+              },
+        behavior: HitTestBehavior.deferToChild,
+        child: Column(
+          crossAxisAlignment: widget.alignEnd
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
+          children: [
+            widget.child,
+            AnimatedSize(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              child: _showTime
+                  ? Padding(
+                      padding: EdgeInsets.only(
+                        top: 4,
+                        left: widget.alignEnd ? 0 : 46,
+                        right: widget.alignEnd ? 46 : 0,
                       ),
-                    ),
-                  )
-                : const SizedBox.shrink(),
-          ),
-        ],
+                      child: Text(
+                        widget.time,
+                        style: DunesTypography.sans(
+                          fontSize: 11,
+                          color: const Color(0xFF86909C),
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2090,6 +2120,7 @@ class NovaC4InputBar extends StatelessWidget {
           _NovaShortcutStrip(
             locked: locked,
             expanded: quickActionsOpen,
+            swipeExpand: !isDesktopCommOnly,
             onToggleMore: onToggleQuickActions,
             onOpenKb: onOpenKb,
             onOpenMeeting: onOpenMeeting,
@@ -2148,6 +2179,7 @@ class _NovaShortcutStrip extends StatelessWidget {
     required this.locked,
     required this.expanded,
     required this.onToggleMore,
+    this.swipeExpand = false,
     this.onOpenKb,
     this.onOpenMeeting,
     this.onVoiceCall,
@@ -2155,10 +2187,25 @@ class _NovaShortcutStrip extends StatelessWidget {
 
   final bool locked;
   final bool expanded;
+  final bool swipeExpand;
   final VoidCallback onToggleMore;
   final VoidCallback? onOpenKb;
   final VoidCallback? onOpenMeeting;
   final VoidCallback? onVoiceCall;
+
+  void _onVerticalDragEnd(DragEndDetails details) {
+    if (locked || !swipeExpand) return;
+    final velocity = details.primaryVelocity ?? 0;
+    if (!expanded && velocity < -220) {
+      HapticFeedback.selectionClick();
+      onToggleMore();
+      return;
+    }
+    if (expanded && velocity > 220) {
+      HapticFeedback.selectionClick();
+      onToggleMore();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2189,33 +2236,39 @@ class _NovaShortcutStrip extends StatelessWidget {
       ),
     ];
 
-    return Column(
-      children: [
-        Row(
-          children: [
-            for (final item in items)
-              Expanded(
-                child: _NovaCircleAction(
-                  icon: item.icon,
-                  label: item.label,
-                  onTap: item.onTap,
-                  active: item.active,
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onVerticalDragEnd: swipeExpand ? _onVerticalDragEnd : null,
+      child: Column(
+        children: [
+          Row(
+            children: [
+              for (final item in items)
+                Expanded(
+                  child: _NovaCircleAction(
+                    icon: item.icon,
+                    label: item.label,
+                    onTap: item.onTap,
+                    active: item.active,
+                  ),
                 ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Center(
+            child: Container(
+              width: expanded ? 46 : 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: expanded
+                    ? const Color(0xFFC4B5E8)
+                    : const Color(0xFFD8DCE6),
+                borderRadius: BorderRadius.circular(2),
               ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Center(
-          child: Container(
-            width: 36,
-            height: 3,
-            decoration: BoxDecoration(
-              color: const Color(0xFFD8DCE6),
-              borderRadius: BorderRadius.circular(2),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

@@ -31,6 +31,9 @@ import '../desktop/native_desktop_settings_page.dart';
 import '../chat/chat_foreground_sync.dart';
 import '../chat/desktop_composer_focus.dart';
 import '../chat/native_chat_search_page.dart';
+import '../search/global_search_models.dart';
+import '../search/native_global_search_page.dart';
+import '../tasks/native_task_detail_page.dart';
 import '../chat/native_favorites_page.dart';
 import '../chat/native_group_chat_page.dart';
 import '../chat/native_group_info_page.dart';
@@ -48,6 +51,7 @@ import '../xrxs/native_xrxs_pc_page.dart';
 import '../am_sso/native_am_sso_page.dart';
 import '../conversation/chat_dual_pane_shell.dart';
 import '../conversation/comm_unread_notifier.dart';
+import '../conversation/conversation_inbox_cache.dart';
 import '../conversation/conversation_inbox_realtime.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_mention_utils.dart';
@@ -149,7 +153,6 @@ import '../profile/native_user_work_profile_page.dart';
 import '../profile/native_work_profile_collaboration_page.dart';
 import '../profile/native_work_profile_detail_pages.dart';
 import '../profile/native_work_profile_perf_page.dart';
-import '../tasks/native_task_detail_page.dart';
 
 class NativeScreenHost extends StatefulWidget {
   const NativeScreenHost({
@@ -229,6 +232,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   NativeChatMessage? _focusMessageHint;
   int? _novaFocusConversationId;
   int? _novaFocusMessageId;
+  String? _novaInitialPrompt;
   int _mediaConversationId = 0;
   String _mediaTitle = '群聊';
   String? _kbSelectedDocId;
@@ -298,6 +302,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   /// APP：从通讯列表进小饕时，列表停在屏幕右侧，返回时再滑回来。
   bool _inboxParkedForNova = false;
+  bool _searchMounted = false;
+  String _searchUnderlayScreen = 'C1';
+  int _searchEpoch = 0;
   final GlobalKey _inboxPageKey = GlobalKey(
     debugLabel: 'inbox-page-keep-alive',
   );
@@ -1578,7 +1585,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
   }
 
-  void _openPrivateConversation(NativeConversation conv) {
+  void _openPrivateConversation(
+    NativeConversation conv, {
+    int? focusMessageId,
+    NativeChatMessage? focusHint,
+  }) {
     _approvalAssistantOpenGen++;
     setState(() {
       _selectedPrivate = conv;
@@ -1594,8 +1605,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
       _administrativeNoticeTargetId = null;
-      _focusMessageId = null;
-      _focusMessageHint = null;
+      _focusMessageId = focusMessageId;
+      _focusMessageHint = focusHint;
     });
     _markUserEnteredChat();
     if (conv.id > 0) {
@@ -1605,7 +1616,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     DesktopComposerFocus.request();
   }
 
-  void _openRobotConversation(NativeConversation conv) {
+  void _openRobotConversation(
+    NativeConversation conv, {
+    int? focusMessageId,
+    NativeChatMessage? focusHint,
+  }) {
     _approvalAssistantOpenGen++;
     setState(() {
       _selectedRobot = conv;
@@ -1621,8 +1636,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
       _administrativeNoticeTargetId = null;
-      _focusMessageId = null;
-      _focusMessageHint = null;
+      _focusMessageId = focusMessageId;
+      _focusMessageHint = focusHint;
     });
     _markUserEnteredChat();
     if (conv.id > 0) {
@@ -1670,7 +1685,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     widget.navigation.go('QJR');
   }
 
-  void _openGroupConversation(NativeConversation conv) {
+  void _openGroupConversation(
+    NativeConversation conv, {
+    int? focusMessageId,
+    NativeChatMessage? focusHint,
+  }) {
     _approvalAssistantOpenGen++;
     setState(() {
       _selectedGroup = conv;
@@ -1686,8 +1705,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _selectedReconciliation = null;
       _selectedAdministrativeNotice = null;
       _administrativeNoticeTargetId = null;
-      _focusMessageId = null;
-      _focusMessageHint = null;
+      _focusMessageId = focusMessageId;
+      _focusMessageHint = focusHint;
     });
     _markUserEnteredChat();
     if (conv.id > 0) {
@@ -1720,6 +1739,200 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     _markUserEnteredChat();
     _goChatScreen('C5');
     DesktopComposerFocus.request();
+  }
+
+  NativeConversation? _conversationById(int id) {
+    if (id <= 0) return null;
+    final rows =
+        ConversationInboxCache.instance.peek(widget.session.userId)?.conversations;
+    if (rows == null) return null;
+    for (final c in rows) {
+      if (c.id == id) return c;
+    }
+    return null;
+  }
+
+  void _openConversationFromSearch(
+    NativeConversation conv, {
+    int? focusMessageId,
+    NativeChatMessage? focusHint,
+  }) {
+    if (conv.isRobot) {
+      _openRobotConversation(
+        conv,
+        focusMessageId: focusMessageId,
+        focusHint: focusHint,
+      );
+      return;
+    }
+    if (conv.isApprovalAssistant) {
+      unawaited(_openApprovalAssistant(conv));
+      return;
+    }
+    if (conv.isTaskAssistant) {
+      unawaited(_openTaskAssistant(conv));
+      return;
+    }
+    if (conv.isKpiAssistant) {
+      unawaited(_openKpiAssistant(conv));
+      return;
+    }
+    if (conv.isDriveAssistant) {
+      unawaited(_openDriveAssistant(conv));
+      return;
+    }
+    if (conv.isXrxsAssistant) {
+      unawaited(_openXrxsAssistant(conv));
+      return;
+    }
+    if (conv.isWeeklySummary) {
+      unawaited(_openWeeklySummary(conv));
+      return;
+    }
+    if (conv.isAdministrativeNotice) {
+      _openAdministrativeNotice(conv);
+      return;
+    }
+    if (conv.isReconciliationAssistant) {
+      _openReconciliationAssistant(conv);
+      return;
+    }
+    if (conv.isGroup || conv.isWorkgroupApproval) {
+      _openGroupConversation(
+        conv,
+        focusMessageId: focusMessageId,
+        focusHint: focusHint,
+      );
+      return;
+    }
+    if (conv.isAiAssistant) {
+      setState(() {
+        _novaFocusConversationId = conv.id;
+        _novaFocusMessageId = focusMessageId;
+        _novaInitialPrompt = null;
+      });
+      widget.navigation.go('C4');
+      return;
+    }
+    _openPrivateConversation(
+      conv,
+      focusMessageId: focusMessageId,
+      focusHint: focusHint,
+    );
+  }
+
+  void _openMessageFromSearch(GlobalMessageHit hit) {
+    final hint = NativeChatMessage(
+      id: hit.messageId,
+      senderUserId: 0,
+      senderName: hit.senderName,
+      kind: hit.kind,
+      bodyText: hit.bodyText,
+      createdAt: hit.createdAt,
+      payload: hit.payload,
+    );
+    final existing = _conversationById(hit.conversationId);
+    final conv =
+        existing ??
+        NativeConversation(
+          id: hit.conversationId,
+          kind: 'GROUP',
+          title: hit.conversationTitle,
+          unreadCount: 0,
+          preview: hit.bodyText,
+          updatedAt: hit.createdAt,
+        );
+    _openConversationFromSearch(
+      conv,
+      focusMessageId: hit.messageId,
+      focusHint: hint,
+    );
+  }
+
+  void _openNovaWithPrompt(String prompt) {
+    if (widget.session.isExternalUser) return;
+    NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
+    setState(() {
+      _novaFocusConversationId = null;
+      _novaFocusMessageId = null;
+      _novaInitialPrompt = prompt.trim();
+    });
+    widget.navigation.go('C4');
+  }
+
+  void _openTaskFromSearch(int taskId) {
+    if (taskId <= 0) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (routeContext) => Scaffold(
+          body: SafeArea(
+            child: NativeTaskDetailView(
+              session: widget.session,
+              taskId: taskId,
+              onBack: () => Navigator.of(routeContext).pop(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openAppFromSearch(GlobalSearchAppTarget app) {
+    final template = app.templateKey.trim();
+    if (template.isNotEmpty) {
+      _openProposalEntry(templateKey: template, backScreen: 'Z4');
+      return;
+    }
+    final screen = app.screenId.trim();
+    if (screen.isEmpty) return;
+    if (screen == 'C4') {
+      _openNovaWithPrompt('');
+      return;
+    }
+    widget.navigation.go(screen);
+  }
+
+  Widget _buildGlobalSearchPage() {
+    return NativeGlobalSearchPage(
+      key: ValueKey<String>('z4-$_searchEpoch'),
+      session: widget.session,
+      onBack: () => widget.navigation.popTo('C1'),
+      onOpenContact: (contact) {
+        if (contact.userId > 0) {
+          _openPrivateByPeerId(contact.userId);
+        }
+      },
+      onOpenConversation: _openConversationFromSearch,
+      onOpenMessage: _openMessageFromSearch,
+      onOpenApproval: (item) => _openProposalDetail(item, from: 'Z4'),
+      onOpenProposalIntake: (id) {
+        if (id <= 0) return;
+        unawaited(
+          showProposalIntakeOverlay(
+            context: context,
+            session: widget.session,
+            proposalId: id,
+          ),
+        );
+      },
+      onOpenTask: _openTaskFromSearch,
+      onOpenKb: (doc) {
+        setState(() {
+          _kbSelectedDocId = doc.id;
+          _kbSelectedDoc = doc;
+        });
+        widget.navigation.go('K3');
+      },
+      onOpenDrive: _openDriveItemFromChat,
+      onOpenMeeting: (id) {
+        if (id <= 0) return;
+        setState(() => _meetingId = id);
+        widget.navigation.go('MM');
+      },
+      onOpenApp: _openAppFromSearch,
+      onOpenNova: _openNovaWithPrompt,
+      onOpenContacts: () => widget.navigation.go('C3'),
+    );
   }
 
   void _openContactProfile(int userId, String displayName) {
@@ -2208,6 +2421,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         setState(_clearContactsGroupPickState);
         _openGroupConversation(conv);
       },
+      onOpenGlobalSearch: () => widget.navigation.go('Z4'),
     );
   }
 
@@ -2234,6 +2448,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       onOpenGroup: _openGroupConversation,
       onOpenRobot: _openRobotConversation,
       onStartPrivateChat: _openPrivateByPeerId,
+      onOpenGlobalSearch: () => widget.navigation.go('Z4'),
       onOpenContacts: () {
         setState(_clearContactsGroupPickState);
         widget.navigation.go('C3');
@@ -2244,6 +2459,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         setState(() {
           _novaFocusConversationId = null;
           _novaFocusMessageId = null;
+          _novaInitialPrompt = null;
         });
         widget.navigation.go('C4');
       },
@@ -3341,14 +3557,17 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     );
   }
 
-  Widget _buildCommDualKeepAlive({required bool active}) {
+  Widget _buildCommDualKeepAlive({required bool active, bool ignoring = false}) {
     return Offstage(
       offstage: !active,
       child: TickerMode(
         enabled: active,
-        child: KeyedSubtree(
-          key: _commDualKeepAliveKey,
-          child: _buildChatDualPane(),
+        child: IgnorePointer(
+          ignoring: ignoring || !active,
+          child: KeyedSubtree(
+            key: _commDualKeepAliveKey,
+            child: _buildChatDualPane(),
+          ),
         ),
       ),
     );
@@ -4448,14 +4667,18 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             );
           },
         );
+      case 'Z4':
+        return const SizedBox.shrink();
       case 'C4':
         return NativeNovaPage(
           session: widget.session,
+          initialPrompt: _novaInitialPrompt,
           onBack: () {
             NovaBackgroundCoordinator.instance.clearPendingCommBadgeBump();
             setState(() {
               _novaFocusConversationId = null;
               _novaFocusMessageId = null;
+              _novaInitialPrompt = null;
             });
             widget.navigation.popTo('C1');
           },
@@ -4760,12 +4983,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                 }
               : null,
           onClearCache: () => unawaited(_clearDesktopLocalCache()),
-          onStartProposal: !widget.session.isExternalUser
-              ? () {
-                  _leaveDesktopSettingsForChild();
-                  _goB3();
-                }
-              : null,
           onLogout: widget.onLogout == null
               ? null
               : () => unawaited(_confirmDesktopLogout()),
@@ -4795,6 +5012,21 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
 
     final wide = isWideChatLayout(context);
+    final isSearch = screen == 'Z4';
+    if (isSearch &&
+        previousScreen != null &&
+        previousScreen != 'Z4') {
+      _searchUnderlayScreen = previousScreen;
+      if (previousScreen == 'C1' ||
+          previousScreen == 'C3' ||
+          previousScreen == 'B2') {
+        _searchEpoch++;
+      }
+    }
+    if (isSearch) _searchMounted = true;
+    final searchOverDual =
+        isSearch && wide && _isDualPaneChatRoute(_searchUnderlayScreen);
+
     final dualNow = wide && _isDualPaneChatRoute(screen);
     final dualPrev =
         previousScreen != null && wide && _isDualPaneChatRoute(previousScreen);
@@ -4809,7 +5041,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
     // 宽屏双栏内部（C1↔C2↔C5↔C6↔C12↔C13↔AS*↔会话内C9）仍瞬时切换聊天窗；
     // 进出通讯子页（通知/通讯录等）走整页滑动。
-    if (dualNow) {
+    if (dualNow || searchOverDual) {
       _commDualMounted = true;
     }
     // 双栏内部切会话：仍走统一 Stack，保留灯塔/双栏 keep-alive，避免 dispose。
@@ -4836,6 +5068,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               ),
             ),
           if (_workbenchMounted) _buildWorkbenchKeepAlive(active: false),
+          if (_searchMounted)
+            SearchSlideLayer(
+              open: false,
+              child: _buildGlobalSearchPage(),
+            ),
         ],
       );
     }
@@ -4854,7 +5091,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (isLighthouse) {
       _lighthouseMounted = true;
     }
-    if (isInbox && !isDesktopCommOnly) {
+    if ((isInbox || (isSearch && _searchUnderlayScreen == 'C1')) &&
+        !isDesktopCommOnly) {
       _inboxMounted = true;
     }
     if (!isDesktopCommOnly) {
@@ -4864,7 +5102,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         _inboxParkedForNova = false;
       }
     }
-    if (isContacts) {
+    if (isContacts ||
+        (isSearch &&
+            _searchUnderlayScreen == 'C3' &&
+            !_contactsGroupPickMode)) {
       _contactsMounted = true;
     }
     if (isWorkbench) {
@@ -4872,12 +5113,17 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
     // 双栏 / 灯塔 / 会话列表 / 通讯录 / 工作台由 keep-alive 承载；此处占位避免 AnimatedSwitcher 再造一份。
     // APP 打开工作台时 AnimatedSwitcher 继续渲染「我的」底页，配合右侧滑入。
-    final switcherScreenId = workbenchAsSlideOver ? 'B2' : screen;
+    final switcherScreenId = workbenchAsSlideOver
+        ? 'B2'
+        : (isSearch ? _searchUnderlayScreen : screen);
+    final switcherIsInbox = switcherScreenId == 'C1';
+    final switcherIsContacts =
+        switcherScreenId == 'C3' && !_contactsGroupPickMode;
     final currentScreen = dualNow
         ? const SizedBox.shrink()
         : (isLighthouse ||
-              isInbox ||
-              isContacts ||
+              switcherIsInbox ||
+              switcherIsContacts ||
               (isWorkbench && isDesktopCommOnly))
         ? const SizedBox.shrink()
         : workbenchAsSlideOver
@@ -4898,9 +5144,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final novaBackToInbox =
         !isDesktopCommOnly && screen == 'C1' && previousScreen == 'C4';
 
+    final involveSearch = screen == 'Z4' || previousScreen == 'Z4';
     final animatedContent = AnimatedSwitcher(
-      duration: useSlide ? const Duration(milliseconds: 280) : Duration.zero,
-      reverseDuration: useSlide
+      duration: useSlide && !involveSearch
+          ? const Duration(milliseconds: 280)
+          : Duration.zero,
+      reverseDuration: useSlide && !involveSearch
           ? const Duration(milliseconds: 240)
           : Duration.zero,
       switchInCurve: Curves.easeOutCubic,
@@ -4944,7 +5193,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final body = Stack(
       fit: StackFit.expand,
       children: [
-        if (_commDualMounted) _buildCommDualKeepAlive(active: dualNow),
+        if (_commDualMounted)
+          _buildCommDualKeepAlive(
+            active: dualNow || searchOverDual,
+            ignoring: isSearch,
+          ),
         if (_lighthouseMounted)
           Offstage(
             offstage: !isLighthouse,
@@ -4966,7 +5219,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         if (_inboxMounted && !dualNow && !isDesktopCommOnly)
           Positioned.fill(
             child: TickerMode(
-              enabled: isInbox || (screen == 'C4' && _inboxParkedForNova),
+              enabled:
+                  isInbox ||
+                  (screen == 'C4' && _inboxParkedForNova) ||
+                  (isSearch && _searchUnderlayScreen == 'C1'),
               child: IgnorePointer(
                 ignoring: !isInbox,
                 child: AnimatedSlide(
@@ -4981,7 +5237,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                       ? const Offset(1, 0)
                       : Offset.zero,
                   child: Opacity(
-                    opacity: isInbox || (screen == 'C4' && _inboxParkedForNova)
+                    opacity:
+                        isInbox ||
+                            (screen == 'C4' && _inboxParkedForNova) ||
+                            (isSearch && _searchUnderlayScreen == 'C1')
                         ? 1
                         : 0,
                     child: _buildConversationListPage(
@@ -4997,11 +5256,17 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         if (_contactsMounted && !dualNow)
           Positioned.fill(
             child: TickerMode(
-              enabled: isContacts,
+              enabled:
+                  isContacts ||
+                  (isSearch && _searchUnderlayScreen == 'C3'),
               child: IgnorePointer(
                 ignoring: !isContacts,
                 child: Opacity(
-                  opacity: isContacts ? 1 : 0,
+                  opacity:
+                      isContacts ||
+                          (isSearch && _searchUnderlayScreen == 'C3')
+                      ? 1
+                      : 0,
                   child: _buildContactsBrowsePage(useKeepAliveKey: true),
                 ),
               ),
@@ -5014,10 +5279,24 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       ],
     );
     // 双栏已自带侧栏，避免再套一层主导航。
-    if (dualNow) {
-      return body;
-    }
-    return _wrapWithMainNavigation(body, screen: screen);
+    // 搜索盖在主导航 / 底栏之上，滑入时底下列表和 Tab 仍在。
+    final framed = (dualNow || searchOverDual)
+        ? body
+        : _wrapWithMainNavigation(
+            body,
+            screen: isSearch ? _searchUnderlayScreen : screen,
+          );
+    if (!_searchMounted) return framed;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Positioned.fill(child: framed),
+        SearchSlideLayer(
+          open: isSearch,
+          child: _buildGlobalSearchPage(),
+        ),
+      ],
+    );
   }
 
   bool _isChatRoute(String? screen) {
@@ -6518,6 +6797,12 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       _buildSectionLabel('我的事项'),
                       const SizedBox(height: 8),
                       _buildMenuList(<Widget>[
+                        _buildMenuItem(
+                          icon: Icons.search_rounded,
+                          title: '全局搜索',
+                          desc: '人、群、聊天记录与办公事项',
+                          onTap: () => widget.navigation.go('Z4'),
+                        ),
                         if (widget.onOpenWorkbench != null)
                           _buildMenuItem(
                             icon: Icons.apps_rounded,

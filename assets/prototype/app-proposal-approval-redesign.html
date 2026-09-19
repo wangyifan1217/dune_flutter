@@ -1,0 +1,1578 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>沙丘 APP · 审批详情高阶 UI 重构方案</title>
+  <style>
+    /* ========================================================
+       1. 全局设计令牌与皮肤变量 (沙丘原生色系升级)
+       ======================================================== */
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "Geist Mono", Menlo, Monaco, Consolas, monospace;
+
+      /* 沙丘紫金原生升级调 (Dunes Purple Signature) */
+      --page-bg: #EAE6F0;
+      --app-bg: #F7F5FA;
+      --card-bg: #FFFFFF;
+      --card-subtle: #F3EEF9;
+      --card-hover: #FBF9FD;
+      --border: #DFD7EA;
+      --border-subtle: #ECE6F3;
+      --border-focus: #7B5CD8;
+
+      --primary: #6E49C8;
+      --primary-deep: #4F3294;
+      --primary-soft: #F1EAF9;
+      --primary-glow: rgba(110, 73, 200, 0.18);
+      --gold: #B57914;
+      --gold-soft: #FDF6E9;
+
+      --text: #201D26;
+      --text-sub: #5C5666;
+      --text-muted: #958E9E;
+      --text-light: #C4BED0;
+
+      --green: #2B8A57;
+      --green-soft: #E8F5EE;
+      --green-border: #A6DDBE;
+      --amber: #B56B12;
+      --amber-soft: #FEF6EB;
+      --amber-border: #F7D5A4;
+      --coral: #C73838;
+      --coral-soft: #FDF0F0;
+      --coral-border: #F5B6B6;
+      --blue: #236DB8;
+      --blue-soft: #EDF5FC;
+      --blue-border: #B2D7F7;
+
+      --shadow-card: 0 2px 10px rgba(65, 40, 115, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+      --shadow-float: 0 10px 30px -4px rgba(65, 40, 115, 0.15), 0 2px 6px rgba(0, 0, 0, 0.04);
+      --shadow-nav: 0 4px 16px rgba(65, 40, 115, 0.06);
+
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --radius-xl: 18px;
+      --radius-pill: 9999px;
+    }
+
+    /* 珍珠白金模式 (Minimalist Pearl) */
+    [data-theme="pearl-white"] {
+      --page-bg: #E4E5EB;
+      --app-bg: #F5F6FA;
+      --card-bg: #FFFFFF;
+      --card-subtle: #EEF1F6;
+      --card-hover: #FAFBFC;
+      --border: #D8DDE6;
+      --border-subtle: #E8ECF2;
+      --border-focus: #1F2A38;
+
+      --primary: #1E293B;
+      --primary-deep: #0F172A;
+      --primary-soft: #E2E8F0;
+      --primary-glow: rgba(30, 41, 59, 0.14);
+
+      --gold: #A16207;
+      --gold-soft: #FEF9C3;
+
+      --text: #0F172A;
+      --text-sub: #475569;
+      --text-muted: #94A3B8;
+
+      --shadow-card: 0 1px 3px rgba(0,0,0,0.05), 0 6px 16px -2px rgba(0,0,0,0.03);
+    }
+
+    /* 曜石深色模式 (Midnight Obsidian) */
+    [data-theme="midnight-dark"] {
+      --page-bg: #090A0E;
+      --app-bg: #12141B;
+      --card-bg: #1A1D27;
+      --card-subtle: #232735;
+      --card-hover: #262B3A;
+      --border: #2D3344;
+      --border-subtle: #222634;
+      --border-focus: #9D7BFA;
+
+      --primary: #9D7BFA;
+      --primary-deep: #B79BFB;
+      --primary-soft: rgba(157, 123, 250, 0.15);
+      --primary-glow: rgba(157, 123, 250, 0.28);
+
+      --gold: #E5AC44;
+      --gold-soft: rgba(229, 172, 68, 0.15);
+
+      --text: #F3F4F8;
+      --text-sub: #ADB3C4;
+      --text-muted: #6E7588;
+
+      --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.35);
+      --shadow-float: 0 12px 36px rgba(0, 0, 0, 0.6);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      font-family: var(--font-sans);
+      background-color: var(--page-bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+    }
+
+    .num, .amount {
+      font-family: var(--font-mono);
+      font-feature-settings: "tnum" 1, "zero" 1;
+    }
+
+    /* ========================================================
+       2. 演示控制主台 (顶部切换栏)
+       ======================================================== */
+    .app-preview-header {
+      height: 52px;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      z-index: 100;
+      position: relative;
+    }
+    [data-theme="midnight-dark"] .app-preview-header {
+      background: rgba(18, 20, 27, 0.94);
+      border-bottom-color: #262B3A;
+    }
+
+    .app-brand-area {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .app-logo {
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      background: linear-gradient(135deg, #7B5CD8, #4F3294);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 800;
+      box-shadow: 0 3px 8px rgba(110, 73, 200, 0.3);
+    }
+    .app-brand-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .app-brand-tag {
+      font-size: 11px;
+      padding: 2px 7px;
+      background: var(--primary-soft);
+      color: var(--primary);
+      border-radius: var(--radius-pill);
+      font-weight: 600;
+    }
+
+    .app-ctrl-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .ctrl-pill-selector {
+      display: inline-flex;
+      background: var(--card-subtle);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+      padding: 2px;
+    }
+    .ctrl-btn {
+      border: none;
+      background: transparent;
+      padding: 4px 12px;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-sub);
+      cursor: pointer;
+      transition: all 0.16s ease;
+      white-space: nowrap;
+    }
+    .ctrl-btn:hover { color: var(--text); }
+    .ctrl-btn.active {
+      background: var(--card-bg);
+      color: var(--primary);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+      font-weight: 700;
+    }
+
+    /* ========================================================
+       3. 仿真沙箱容器 (居中手机 / 平板自适应视口)
+       ======================================================== */
+    .sandbox-container {
+      height: calc(100% - 52px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      overflow: auto;
+    }
+
+    /* 手机外壳 (iPhone 16 Pro 仿真框架) */
+    .app-phone-case {
+      width: 393px;
+      height: 852px;
+      max-height: calc(100vh - 84px);
+      background: var(--app-bg);
+      border-radius: 50px;
+      box-shadow: 
+        0 0 0 12px #1E1D22,
+        0 0 0 14px rgba(255, 255, 255, 0.18),
+        0 30px 80px -10px rgba(0, 0, 0, 0.45);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: width 0.3s ease;
+    }
+
+    /* 平板 / 宽屏展开模式 */
+    .app-phone-case.tablet-mode {
+      width: 820px;
+      border-radius: 32px;
+      box-shadow: 
+        0 0 0 10px #1E1D22,
+        0 24px 60px rgba(0, 0, 0, 0.35);
+    }
+    .app-phone-case.tablet-mode .dynamic-island-bar {
+      display: none;
+    }
+
+    /* 顶部动态岛与系统状态栏 */
+    .phone-status-bar {
+      height: 48px;
+      padding: 10px 24px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      flex-shrink: 0;
+      z-index: 50;
+    }
+    .dynamic-island {
+      width: 108px;
+      height: 28px;
+      background: #000;
+      border-radius: 20px;
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 60;
+    }
+
+    /* ========================================================
+       4. APP 导航栏 (原生 _topbar 升级版)
+       ======================================================== */
+    .app-topbar {
+      padding: 6px 14px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: var(--app-bg);
+      border-bottom: 1px solid var(--border-subtle);
+      flex-shrink: 0;
+      z-index: 40;
+    }
+    .app-back-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: var(--radius-pill);
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text);
+      cursor: pointer;
+      box-shadow: var(--shadow-card);
+      flex-shrink: 0;
+    }
+    .app-bar-center {
+      flex: 1;
+      min-width: 0;
+    }
+    .app-bar-title {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .app-bar-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 1px;
+    }
+
+    .app-bar-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .app-action-pill {
+      height: 30px;
+      padding: 0 10px;
+      border-radius: var(--radius-pill);
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-sub);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      box-shadow: var(--shadow-card);
+    }
+    .app-action-pill.primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    /* ========================================================
+       5. APP 吸顶板块定位条 (原生 _sectionNav 极奢改造)
+       ======================================================== */
+    .app-section-nav {
+      height: 42px;
+      background: rgba(247, 245, 250, 0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 8px;
+      overflow-x: auto;
+      flex-shrink: 0;
+      z-index: 35;
+      scrollbar-width: none;
+    }
+    [data-theme="midnight-dark"] .app-section-nav {
+      background: rgba(18, 20, 27, 0.88);
+    }
+    .app-section-nav::-webkit-scrollbar { display: none; }
+
+    .nav-anchor-chip {
+      height: 28px;
+      padding: 0 11px;
+      border-radius: var(--radius-pill);
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-sub);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      white-space: nowrap;
+      position: relative;
+      transition: all 0.16s ease;
+    }
+    .nav-anchor-chip.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+      box-shadow: 0 2px 8px var(--primary-glow);
+    }
+    .nav-badge-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--green);
+      color: #fff;
+      font-size: 9px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+    .nav-badge-dot.todo {
+      background: var(--amber);
+    }
+
+    /* ========================================================
+       6. APP 滚动内容流 (Scrollable Viewport)
+       ======================================================== */
+    .app-scroll-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 14px 100px; /* 留出底部悬浮按钮高度 */
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* 任务提醒横幅 (原生 _taskBanner 高级态) */
+    .app-task-banner {
+      background: linear-gradient(135deg, var(--amber-soft), #fff);
+      border: 1px solid var(--amber-border);
+      border-radius: var(--radius-lg);
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      box-shadow: var(--shadow-card);
+    }
+    .app-task-banner.president {
+      background: linear-gradient(135deg, var(--primary-soft), #fff);
+      border-color: var(--primary-glow);
+    }
+    .task-banner-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .task-banner-text {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--amber);
+    }
+    .app-task-banner.president .task-banner-text {
+      color: var(--primary);
+    }
+    .task-banner-cue {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* ========================================================
+       7. 核心卡片 1：高管 Executive Overview (重构 _overview)
+       ======================================================== */
+    .app-exec-hero {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 18px 16px 16px;
+      box-shadow: var(--shadow-card);
+      position: relative;
+      overflow: hidden;
+    }
+    /* 顶部沙丘渐变微光细线 */
+    .app-exec-hero::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3.5px;
+      background: linear-gradient(90deg, var(--primary), #9B7AD4 60%, var(--gold));
+    }
+
+    .hero-meta-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .hero-stage-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: var(--radius-pill);
+      font-size: 11.5px;
+      font-weight: 700;
+    }
+    .hero-stage-badge.pending {
+      background: var(--amber-soft);
+      color: var(--amber);
+      border: 1px solid var(--amber-border);
+    }
+    .hero-stage-badge.done {
+      background: var(--green-soft);
+      color: var(--green);
+      border: 1px solid var(--green-border);
+    }
+    .hero-stage-badge.reviewing {
+      background: var(--primary-soft);
+      color: var(--primary);
+      border: 1px solid var(--border);
+    }
+    .hero-stage-badge.rejected {
+      background: var(--coral-soft);
+      color: var(--coral);
+      border: 1px solid var(--coral-border);
+    }
+
+    /* 呼吸脉冲小灯 */
+    .pulse-indicator {
+      width: 6.5px;
+      height: 6.5px;
+      border-radius: 50%;
+      background: currentColor;
+      display: inline-block;
+      position: relative;
+    }
+    .pulse-indicator::after {
+      content: "";
+      position: absolute;
+      inset: -2px;
+      border-radius: 50%;
+      border: 1.5px solid currentColor;
+      animation: pulse 1.8s infinite ease-out;
+      opacity: 0.7;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 0.8; }
+      100% { transform: scale(2.4); opacity: 0; }
+    }
+
+    .hero-code-tag {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      background: var(--card-subtle);
+      padding: 2px 7px;
+      border-radius: var(--radius-sm);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+
+    .hero-main-title {
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1.35;
+      margin-bottom: 12px;
+    }
+
+    /* 核心指标磁贴网格 (Executive Metrics Grid - 解决高管找不到数据的痛点) */
+    .hero-metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      background: var(--card-subtle);
+      padding: 10px;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-subtle);
+    }
+    .metric-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .metric-label {
+      font-size: 10.5px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .metric-number {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--text);
+      display: flex;
+      align-items: baseline;
+      gap: 2px;
+    }
+    .metric-number small {
+      font-size: 10.5px;
+      font-weight: 500;
+      color: var(--text-sub);
+    }
+
+    /* ========================================================
+       8. 核心卡片 2：流程跟踪横向时间轴 (Progress Timeline)
+       ======================================================== */
+    .app-timeline-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 14px;
+      box-shadow: var(--shadow-card);
+    }
+    .timeline-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .timeline-title {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .timeline-stepper {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: relative;
+    }
+    .timeline-node-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      z-index: 2;
+    }
+    .node-bubble {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--card-subtle);
+      border: 2px solid var(--border);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+    .node-bubble.done {
+      background: var(--green);
+      border-color: var(--green);
+      color: #fff;
+    }
+    .node-bubble.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+      box-shadow: 0 0 0 4px var(--primary-glow);
+    }
+    .node-text {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--text-sub);
+    }
+    .node-sub {
+      font-size: 9.5px;
+      color: var(--text-muted);
+    }
+    .timeline-conn-line {
+      flex: 1;
+      height: 2px;
+      background: var(--border-subtle);
+      margin: 0 4px;
+      transform: translateY(-10px);
+    }
+    .timeline-conn-line.done {
+      background: var(--green);
+    }
+
+    /* ========================================================
+       9. 核心卡片 3：申报产品与资管对接卡片 (结合 API 1/2/3)
+       ======================================================== */
+    .app-section-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 14px;
+      box-shadow: var(--shadow-card);
+    }
+    .section-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .section-card-title {
+      font-size: 13.5px;
+      font-weight: 750;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .section-badge {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: var(--radius-pill);
+      background: var(--card-subtle);
+      color: var(--text-muted);
+    }
+
+    /* 单款申报产品卡片 */
+    .sku-item-card {
+      background: var(--card-subtle);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .sku-item-card:last-child { margin-bottom: 0; }
+    .sku-item-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .sku-title-block {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .sku-no-pill {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      color: var(--text-sub);
+    }
+    .sku-prod-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    /* 资管平台对接状态芯片 (对接规范特色亮点) */
+    .platform-sync-chip {
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    .platform-sync-chip.created {
+      background: var(--green-soft);
+      color: var(--green);
+      border: 1px solid var(--green-border);
+    }
+    .platform-sync-chip.creating {
+      background: var(--blue-soft);
+      color: var(--blue);
+      border: 1px solid var(--blue-border);
+    }
+    .platform-sync-chip.failed {
+      background: var(--coral-soft);
+      color: var(--coral);
+      border: 1px solid var(--coral-border);
+    }
+
+    .sku-price-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      background: var(--card-bg);
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-subtle);
+    }
+    .sku-price-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .sku-price-k {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .sku-price-v {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .sku-error-notice {
+      margin-top: 8px;
+      padding: 6px 10px;
+      background: var(--coral-soft);
+      border: 1px dashed var(--coral-border);
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      color: var(--coral);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* ========================================================
+       10. 核心卡片 4：商务条款与合同附件
+       ======================================================== */
+    .kv-row-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .kv-compact-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed var(--border-subtle);
+      font-size: 12px;
+    }
+    .kv-compact-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .kv-compact-k { color: var(--text-muted); }
+    .kv-compact-v { font-weight: 600; color: var(--text); text-align: right; }
+
+    /* 合同附件列表条 */
+    .attach-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-radius: var(--radius-md);
+      background: var(--card-subtle);
+      border: 1px solid var(--border-subtle);
+      margin-top: 8px;
+    }
+    .attach-strip-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ========================================================
+       11. 核心卡片 5：审批意见批注与留痕 (_commentsSection)
+       ======================================================== */
+    .comment-bubble-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 10px 12px;
+      background: var(--card-subtle);
+      border-left: 3px solid var(--primary);
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    .comment-bubble-head {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* ========================================================
+       12. APP 底部悬浮决策工具条 (Bottom Decision Dock)
+       ======================================================== */
+    .app-bottom-dock {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 12px 16px 28px;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-top: 1px solid var(--border-subtle);
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 80;
+    }
+    [data-theme="midnight-dark"] .app-bottom-dock {
+      background: rgba(26, 29, 39, 0.95);
+      border-top-color: #262B3A;
+    }
+
+    /* 快捷审批批注短语微标签 */
+    .quick-chips-scroll {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding-bottom: 2px;
+    }
+    .quick-chips-scroll::-webkit-scrollbar { display: none; }
+    .quick-reply-pill {
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: var(--radius-pill);
+      background: var(--card-subtle);
+      border: 1px solid var(--border);
+      color: var(--text-sub);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.16s ease;
+    }
+    .quick-reply-pill:hover {
+      background: var(--primary-soft);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .dock-action-row {
+      display: flex;
+      gap: 10px;
+    }
+    .dock-btn {
+      height: 44px;
+      border-radius: var(--radius-pill);
+      font-size: 14px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: all 0.16s ease;
+      border: none;
+    }
+    .dock-btn.reject {
+      flex: 1;
+      background: var(--coral-soft);
+      border: 1.5px solid var(--coral-border);
+      color: var(--coral);
+    }
+    .dock-btn.approve {
+      flex: 2;
+      background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+      color: #fff;
+      box-shadow: 0 4px 14px var(--primary-glow);
+    }
+
+    /* 底部 Home Indicator */
+    .home-indicator {
+      width: 134px;
+      height: 4.5px;
+      background: #000;
+      border-radius: 3px;
+      margin: 8px auto 0;
+      opacity: 0.3;
+    }
+
+    /* 模拟反馈 Toast */
+    .app-toast {
+      position: absolute;
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: rgba(20, 20, 24, 0.9);
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 600;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 1000;
+    }
+    .app-toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body data-theme="dunes-purple">
+
+  <!-- ========================================================
+       顶部全局切换台 (操控不同 App 场景与设备形态)
+       ======================================================== -->
+  <header class="app-preview-header">
+    <div class="app-brand-area">
+      <div class="app-logo">D</div>
+      <div>
+        <span class="app-brand-title">沙丘移动端 · 审批详情重构</span>
+        <span class="app-brand-tag">APP 原生体验对齐</span>
+      </div>
+    </div>
+
+    <div class="app-ctrl-group">
+      <!-- 流转阶段模拟切换 -->
+      <span style="font-size: 11.5px; color: var(--text-muted);">审批阶段:</span>
+      <div class="ctrl-pill-selector" id="seg-stage">
+        <button class="ctrl-btn" data-stage="filling">01 填写中</button>
+        <button class="ctrl-btn" data-stage="reviewing">02 并行复核</button>
+        <button class="ctrl-btn active" data-stage="pending_president">03 待总裁终审</button>
+        <button class="ctrl-btn" data-stage="done">04 办结生效</button>
+        <button class="ctrl-btn" data-stage="rejected">05 驳回修改</button>
+      </div>
+
+      <!-- 设备外壳切换 -->
+      <span style="font-size: 11.5px; color: var(--text-muted); margin-left: 8px;">设备形态:</span>
+      <div class="ctrl-pill-selector" id="seg-device">
+        <button class="ctrl-btn active" data-device="phone">📱 手机端 (393px)</button>
+        <button class="ctrl-btn" data-device="tablet">💻 平板/宽屏 (820px)</button>
+      </div>
+
+      <!-- 主题风格 -->
+      <span style="font-size: 11.5px; color: var(--text-muted); margin-left: 8px;">质感调性:</span>
+      <div class="ctrl-pill-selector" id="seg-theme">
+        <button class="ctrl-btn active" data-theme="dunes-purple">沙丘紫金 (原生升级)</button>
+        <button class="ctrl-btn" data-theme="pearl-white">珍珠白金 (高管极简)</button>
+        <button class="ctrl-btn" data-theme="midnight-dark">曜石深色</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ========================================================
+       仿真 APP 运行视口 (iPhone / Tablet 框架)
+       ======================================================== -->
+  <main class="sandbox-container">
+
+    <div class="app-phone-case" id="phone-case">
+
+      <!-- 动态岛与手机状态栏 -->
+      <div class="dynamic-island-bar">
+        <div class="dynamic-island"></div>
+      </div>
+      <div class="phone-status-bar">
+        <span>09:41</span>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10a6 6 0 0 0-12 0v8h12v-8z"/></svg>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="18" height="10" rx="2" ry="2"/><line x1="22" y1="11" x2="22" y2="13"/></svg>
+        </div>
+      </div>
+
+      <!-- APP 顶栏 (_topbar 原生升级) -->
+      <div class="app-topbar">
+        <div class="app-back-btn" onclick="showAppToast('返回待办审批列表')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        </div>
+        <div class="app-bar-center">
+          <div class="app-bar-title" id="bar-title">华东成品油战略合作提案</div>
+          <div class="app-bar-sub">
+            <span id="bar-sub-kind">销售提案</span>
+            <span>·</span>
+            <span class="num">SP-20260918-0042</span>
+          </div>
+        </div>
+        <div class="app-bar-actions">
+          <button class="app-action-pill" onclick="showAppToast('已生成分享卡片，可直接粘贴微信/IM')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            转发
+          </button>
+        </div>
+      </div>
+
+      <!-- APP 吸顶板块定位胶囊条 (_sectionNav 极奢升级) -->
+      <div class="app-section-nav" id="section-nav">
+        <div class="nav-anchor-chip active" onclick="scrollToSection('sec-overview')">
+          <span>概览</span>
+        </div>
+        <div class="nav-anchor-chip" onclick="scrollToSection('sec-market')">
+          <span>市场部</span>
+          <span class="nav-badge-dot">✓</span>
+        </div>
+        <div class="nav-anchor-chip" onclick="scrollToSection('sec-tech')">
+          <span>科技部</span>
+          <span class="nav-badge-dot" id="tech-badge">✓</span>
+        </div>
+        <div class="nav-anchor-chip" onclick="scrollToSection('sec-finance')">
+          <span>财务部</span>
+          <span class="nav-badge-dot" id="finance-badge">✓</span>
+        </div>
+        <div class="nav-anchor-chip" onclick="scrollToSection('sec-flow')">
+          <span>流程全景</span>
+        </div>
+      </div>
+
+      <!-- APP 纵向滚动内容流 -->
+      <div class="app-scroll-content" id="scroll-body">
+
+        <!-- 动态任务提示条 (_taskBanner) -->
+        <div class="app-task-banner president" id="task-banner">
+          <div class="task-banner-left">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <div>
+              <div class="task-banner-text" id="task-banner-title">待您最终审批 (总裁办)</div>
+              <div class="task-banner-cue" id="task-banner-cue">已完成全部部门复核，请核定后办结</div>
+            </div>
+          </div>
+          <button class="app-action-pill" style="height:26px; padding:0 8px; font-size:11px;" onclick="scrollToSection('sec-bottom-action')">去审批</button>
+        </div>
+
+        <!-- 1. Executive Overview 高管概览卡 (重构 _overview) -->
+        <div class="app-exec-hero" id="sec-overview">
+          <div class="hero-meta-row">
+            <span class="hero-stage-badge pending" id="stage-badge">
+              <span class="pulse-indicator"></span>
+              <span id="stage-badge-text">待最终确认 (终审中)</span>
+            </span>
+            <span class="hero-code-tag" onclick="copyText('SP-20260918-0042')">
+              <span>SP-20260918-0042</span>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </span>
+          </div>
+
+          <h2 class="hero-main-title">2026年度华东区域成品油联营代销战略合作提案</h2>
+
+          <!-- 高管核心财务 KPI 磁贴 (首屏直接掌握命脉) -->
+          <div class="hero-metrics-grid">
+            <div class="metric-item">
+              <span class="metric-label">预计年合作规模</span>
+              <span class="metric-number amount">¥ 1,280 <small>万</small></span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-label">测算综合毛利率</span>
+              <span class="metric-number num" style="color: var(--green);">14.2% <small>(超额达标)</small></span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-label">履约结算周期</span>
+              <span class="metric-number num">30 <small>天 (周结)</small></span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-label">申报就绪标品</span>
+              <span class="metric-number num">3 <small>款 (资管已建档 2 款)</small></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. 审批流转横向时间轴 (Progress Timeline 升级) -->
+        <div class="app-timeline-card">
+          <div class="timeline-head">
+            <div class="timeline-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              审批推进节奏
+            </div>
+            <span style="font-size: 11px; color: var(--text-muted);">共 5 个节点</span>
+          </div>
+
+          <div class="timeline-stepper">
+            <div class="timeline-node-wrap">
+              <div class="node-bubble done">✓</div>
+              <span class="node-text">市场初拟</span>
+              <span class="node-sub">李明</span>
+            </div>
+            <div class="timeline-conn-line done"></div>
+
+            <div class="timeline-node-wrap">
+              <div class="node-bubble done">✓</div>
+              <span class="node-text">科技联调</span>
+              <span class="node-sub">赵科技</span>
+            </div>
+            <div class="timeline-conn-line done"></div>
+
+            <div class="timeline-node-wrap">
+              <div class="node-bubble done" id="node-review">✓</div>
+              <span class="node-text">双部复核</span>
+              <span class="node-sub">财务/法务</span>
+            </div>
+            <div class="timeline-conn-line done" id="line-president"></div>
+
+            <div class="timeline-node-wrap">
+              <div class="node-bubble active" id="node-president">●</div>
+              <span class="node-text">最终核决</span>
+              <span class="node-sub">王总裁</span>
+            </div>
+            <div class="timeline-conn-line" id="line-done"></div>
+
+            <div class="timeline-node-wrap">
+              <div class="node-bubble" id="node-done">5</div>
+              <span class="node-text">办结生效</span>
+              <span class="node-sub">自动下发</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. 市场部板块：申报产品与资管对接芯片 (结合三接口) -->
+        <div class="app-section-card" id="sec-market">
+          <div class="section-card-header">
+            <div class="section-card-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+              一、申报主产品与资管平台对接
+            </div>
+            <span class="section-badge">共 3 款产品</span>
+          </div>
+
+          <!-- SKU 1：已创建 -->
+          <div class="sku-item-card">
+            <div class="sku-item-head">
+              <div class="sku-title-block">
+                <span class="sku-no-pill">SKU-01</span>
+                <span class="sku-prod-name">92# 车用汽油（国VI B·吨包）</span>
+              </div>
+              <span class="platform-sync-chip created">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                已建档 · ZG-PROD-92-001
+              </span>
+            </div>
+            <div class="sku-price-grid">
+              <div class="sku-price-cell">
+                <span class="sku-price-k">供货价</span>
+                <span class="sku-price-v amount">¥7,850/吨</span>
+              </div>
+              <div class="sku-price-cell">
+                <span class="sku-price-k">指导售价</span>
+                <span class="sku-price-v amount">¥8,920/吨</span>
+              </div>
+              <div class="sku-price-cell">
+                <span class="sku-price-k">渠道分成</span>
+                <span class="sku-price-v num" style="color:var(--green)">8.5% 返佣</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- SKU 2：同步中 -->
+          <div class="sku-item-card">
+            <div class="sku-item-head">
+              <div class="sku-title-block">
+                <span class="sku-no-pill">SKU-02</span>
+                <span class="sku-prod-name">95# 高清清洁汽油（吨包）</span>
+              </div>
+              <span class="platform-sync-chip creating">
+                <span class="pulse-indicator" style="width:5px;height:5px"></span>
+                资管草稿同步中...
+              </span>
+            </div>
+            <div class="sku-price-grid">
+              <div class="sku-price-cell">
+                <span class="sku-price-k">供货价</span>
+                <span class="sku-price-v amount">¥8,300/吨</span>
+              </div>
+              <div class="sku-price-cell">
+                <span class="sku-price-k">指导售价</span>
+                <span class="sku-price-v amount">¥9,450/吨</span>
+              </div>
+              <div class="sku-price-cell">
+                <span class="sku-price-k">渠道分成</span>
+                <span class="sku-price-v num" style="color:var(--green)">9.2% 返佣</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- SKU 3：建档异常 (非阻断规范演示) -->
+          <div class="sku-item-card">
+            <div class="sku-item-head">
+              <div class="sku-title-block">
+                <span class="sku-no-pill">SKU-03</span>
+                <span class="sku-prod-name">0# 车用柴油（工程直供）</span>
+              </div>
+              <span class="platform-sync-chip failed">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                资管建档异常
+              </span>
+            </div>
+            <div class="sku-price-grid">
+              <div class="sku-price-cell">
+                <span class="sku-price-k">供货价</span>
+                <span class="sku-price-v amount">¥7,120/吨</span>
+              </div>
+              <div class="sku-price-cell">
+                <span class="sku-price-k">指导售价</span>
+                <span class="sku-price-v amount">¥8,050/吨</span>
+              </div>
+              <div class="sku-price-cell">
+                <span class="sku-price-k">渠道分成</span>
+                <span class="sku-price-v num">7.0% 返佣</span>
+              </div>
+            </div>
+            <div class="sku-error-notice">
+              <span>平台提示：危化品经营许可证校验超时 (ERR_40082)。不阻断当前审批。</span>
+              <button class="app-action-pill" style="height:22px; padding:0 6px; font-size:10px;" onclick="showAppToast('已加入异步自动重推队列')">重试推送</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. 科技部板块 (_techSection) -->
+        <div class="app-section-card" id="sec-tech">
+          <div class="section-card-header">
+            <div class="section-card-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              二、科技部平台对接与系统参数
+            </div>
+            <span class="section-badge" style="color:var(--green)">赵科技 · 已核准</span>
+          </div>
+          <div class="kv-row-list">
+            <div class="kv-compact-row">
+              <span class="kv-compact-k">直连系统平台</span>
+              <span class="kv-compact-v">中油好客全国分销中台 (API 直连)</span>
+            </div>
+            <div class="kv-compact-row">
+              <span class="kv-compact-k">数据联调形式</span>
+              <span class="kv-compact-v">Restful JSON / Centrifuge 实时广播</span>
+            </div>
+            <div class="kv-compact-row">
+              <span class="kv-compact-k">财务对账字段同步</span>
+              <span class="kv-compact-v">已勾选：吨包SN码、批次号、税控发票号</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. 财务部板块 (_financeSection) -->
+        <div class="app-section-card" id="sec-finance">
+          <div class="section-card-header">
+            <div class="section-card-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+              三、财务部结算细则与履约保证金
+            </div>
+            <span class="section-badge" style="color:var(--green)">钱财务 · 已复核</span>
+          </div>
+          <div class="kv-row-list">
+            <div class="kv-compact-row">
+              <span class="kv-compact-k">签约合作主体</span>
+              <span class="kv-compact-v">中石化华东分公司联合销售事业部</span>
+            </div>
+            <div class="kv-compact-row">
+              <span class="kv-compact-k">履约保证金</span>
+              <span class="kv-compact-v amount">¥ 1,000,000.00 (已锁定)</span>
+            </div>
+            <div class="kv-compact-row">
+              <span class="kv-compact-k">发票开具时效</span>
+              <span class="kv-compact-v">次月 5 日前出具 13% 增值税专票</span>
+            </div>
+          </div>
+
+          <!-- 附件卡片 -->
+          <div class="attach-strip">
+            <div class="attach-strip-name">
+              <span style="color:#E03131; font-weight:800; font-size:10px; background:#FDE8E8; padding:2px 4px; border-radius:3px;">PDF</span>
+              2026华东联营框架协议_法务审核版.pdf
+            </div>
+            <button class="app-action-pill" style="height:24px; padding:0 8px; font-size:11px;" onclick="showAppToast('正在调起安全阅读器...')">查看</button>
+          </div>
+        </div>
+
+        <!-- 6. 审批批注与时间链记录 (_commentsSection) -->
+        <div class="app-section-card" id="sec-flow">
+          <div class="section-card-header">
+            <div class="section-card-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              四、审批流转批注痕迹
+            </div>
+          </div>
+
+          <div class="comment-bubble-item">
+            <div class="comment-bubble-head">
+              <strong>赵科技 · 科技负责人</strong>
+              <span>昨日 16:45</span>
+            </div>
+            <div style="color:var(--text-sub)">接口一与接口二联调完毕，商品草稿已进入对接池，确认无误推复核。</div>
+          </div>
+
+          <div class="comment-bubble-item">
+            <div class="comment-bubble-head">
+              <strong>钱财务 · 财务复核</strong>
+              <span>今日 09:15</span>
+            </div>
+            <div style="color:var(--text-sub)">保证金 100 万已电汇核验，综合毛利 14.2% 符合三季度考核，同意通过。</div>
+          </div>
+        </div>
+
+        <div id="sec-bottom-action"></div>
+      </div>
+
+      <!-- APP 底部高奢悬浮决策条 (Bottom Decision Dock) -->
+      <div class="app-bottom-dock" id="bottom-dock">
+        <!-- 快捷短语胶囊 -->
+        <div class="quick-chips-scroll">
+          <span class="quick-reply-pill" onclick="quickFill('符合本季度战略，核验通过。')">✨ 符合战略，同意</span>
+          <span class="quick-reply-pill" onclick="quickFill('财务与科技已就绪，准予推进。')">👍 部门已就绪，通过</span>
+          <span class="quick-reply-pill" onclick="quickFill('需补充四季度保证金追加协议后再审。')">⚠️ 需补充协议</span>
+        </div>
+
+        <!-- 决策操作按钮 -->
+        <div class="dock-action-row">
+          <button class="dock-btn reject" onclick="handleReject()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            退回驳回
+          </button>
+          <button class="dock-btn approve" onclick="handleApprove()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            同意并通过
+          </button>
+        </div>
+
+        <div class="home-indicator"></div>
+      </div>
+
+      <!-- App 内置 Toast -->
+      <div class="app-toast" id="app-toast">已完成</div>
+
+    </div>
+
+  </main>
+
+  <!-- ========================================================
+       交互逻辑与阶段模拟驱动
+       ======================================================== -->
+  <script>
+    // 1. 阶段状态驱动
+    const segStage = document.getElementById('seg-stage');
+    const stageBadge = document.getElementById('stage-badge');
+    const stageBadgeText = document.getElementById('stage-badge-text');
+    const taskBanner = document.getElementById('task-banner');
+    const taskBannerTitle = document.getElementById('task-banner-title');
+    const taskBannerCue = document.getElementById('task-banner-cue');
+    const bottomDock = document.getElementById('bottom-dock');
+
+    const nodeReview = document.getElementById('node-review');
+    const nodePresident = document.getElementById('node-president');
+    const nodeDone = document.getElementById('node-done');
+    const linePresident = document.getElementById('line-president');
+    const lineDone = document.getElementById('line-done');
+
+    segStage.addEventListener('click', (e) => {
+      const btn = e.target.closest('.ctrl-btn');
+      if (!btn) return;
+      segStage.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      applyStage(btn.dataset.stage);
+    });
+
+    function applyStage(stage) {
+      if (stage === 'filling') {
+        stageBadge.className = 'hero-stage-badge pending';
+        stageBadge.innerHTML = '<span class="pulse-indicator"></span><span>填写中 (市场草拟)</span>';
+        taskBanner.className = 'app-task-banner';
+        taskBannerTitle.innerText = '待您填写市场与产品信息';
+        taskBannerCue.innerText = '填完后点击上方「通知科技」进入下一阶段';
+        bottomDock.style.display = 'none';
+
+        nodeReview.className = 'node-bubble'; nodeReview.innerText = '3';
+        nodePresident.className = 'node-bubble'; nodePresident.innerText = '4';
+        nodeDone.className = 'node-bubble'; nodeDone.innerText = '5';
+        linePresident.className = 'timeline-conn-line';
+        lineDone.className = 'timeline-conn-line';
+      } else if (stage === 'reviewing') {
+        stageBadge.className = 'hero-stage-badge reviewing';
+        stageBadge.innerHTML = '<span class="pulse-indicator"></span><span>并行复核中</span>';
+        taskBanner.className = 'app-task-banner';
+        taskBannerTitle.innerText = '待科技与财务部门逐条复核';
+        taskBannerCue.innerText = '科技已确认，财务复核进行中';
+        bottomDock.style.display = 'none';
+
+        nodeReview.className = 'node-bubble active'; nodeReview.innerText = '●';
+        nodePresident.className = 'node-bubble'; nodePresident.innerText = '4';
+        nodeDone.className = 'node-bubble'; nodeDone.innerText = '5';
+        linePresident.className = 'timeline-conn-line';
+        lineDone.className = 'timeline-conn-line';
+      } else if (stage === 'pending_president') {
+        stageBadge.className = 'hero-stage-badge pending';
+        stageBadge.innerHTML = '<span class="pulse-indicator"></span><span>待最终确认 (终审中)</span>';
+        taskBanner.className = 'app-task-banner president';
+        taskBannerTitle.innerText = '待您最终审批 (总裁办)';
+        taskBannerCue.innerText = '已完成全部部门复核，请核定后办结';
+        bottomDock.style.display = 'flex';
+
+        nodeReview.className = 'node-bubble done'; nodeReview.innerText = '✓';
+        nodePresident.className = 'node-bubble active'; nodePresident.innerText = '●';
+        nodeDone.className = 'node-bubble'; nodeDone.innerText = '5';
+        linePresident.className = 'timeline-conn-line done';
+        lineDone.className = 'timeline-conn-line';
+      } else if (stage === 'done') {
+        stageBadge.className = 'hero-stage-badge done';
+        stageBadge.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg><span>已完成 (提案已办结生效)</span>';
+        taskBanner.style.display = 'none';
+        bottomDock.style.display = 'none';
+
+        nodeReview.className = 'node-bubble done'; nodeReview.innerText = '✓';
+        nodePresident.className = 'node-bubble done'; nodePresident.innerText = '✓';
+        nodeDone.className = 'node-bubble done'; nodeDone.innerText = '✓';
+        linePresident.className = 'timeline-conn-line done';
+        lineDone.className = 'timeline-conn-line done';
+      } else if (stage === 'rejected') {
+        stageBadge.className = 'hero-stage-badge rejected';
+        stageBadge.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg><span>审批已驳回退回</span>';
+        taskBanner.className = 'app-task-banner';
+        taskBannerTitle.innerText = '提案已退回：需发起人修改重提';
+        taskBannerCue.innerText = '退回批注：“履约保证金条款需追加违约质押书”';
+        bottomDock.style.display = 'none';
+
+        nodePresident.className = 'node-bubble';
+        nodePresident.style.borderColor = 'var(--coral)';
+        nodePresident.style.color = 'var(--coral)';
+        nodePresident.innerText = '✕';
+      }
+    }
+
+    // 2. 设备形态切换
+    const segDevice = document.getElementById('seg-device');
+    const phoneCase = document.getElementById('phone-case');
+    segDevice.addEventListener('click', (e) => {
+      const btn = e.target.closest('.ctrl-btn');
+      if (!btn) return;
+      segDevice.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      phoneCase.classList.toggle('tablet-mode', btn.dataset.device === 'tablet');
+      showAppToast(btn.dataset.device === 'tablet' ? '已展开平板/宽屏双栏视界' : '已切换至 393px 手机单手视界');
+    });
+
+    // 3. 质感皮肤切换
+    const segTheme = document.getElementById('seg-theme');
+    segTheme.addEventListener('click', (e) => {
+      const btn = e.target.closest('.ctrl-btn');
+      if (!btn) return;
+      segTheme.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.body.setAttribute('data-theme', btn.dataset.theme);
+      showAppToast(`已切换至「${btn.innerText.trim()}」视觉调性`);
+    });
+
+    // 4. 快捷锚点滚动
+    function scrollToSection(id) {
+      const target = document.getElementById(id);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    // 5. 审批动作
+    function handleApprove() {
+      showAppToast('✓ 审批成功：提案终审已通过！');
+      applyStage('done');
+      segStage.querySelectorAll('.ctrl-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.stage === 'done');
+      });
+    }
+
+    function handleReject() {
+      showAppToast('✕ 已驳回提案并通知发起人修改');
+      applyStage('rejected');
+      segStage.querySelectorAll('.ctrl-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.stage === 'rejected');
+      });
+    }
+
+    function quickFill(text) {
+      showAppToast(`已载入快捷短语: "${text}"`);
+    }
+
+    function copyText(text) {
+      navigator.clipboard?.writeText(text);
+      showAppToast(`已复制单号：${text}`);
+    }
+
+    let toastTimer = null;
+    function showAppToast(msg) {
+      const t = document.getElementById('app-toast');
+      t.innerText = msg;
+      t.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+    }
+  </script>
+</body>
+</html>

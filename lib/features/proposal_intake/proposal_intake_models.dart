@@ -48,8 +48,11 @@ const kProposalChildProductLabel = '子产品';
 String proposalIntakeProductKindLabel({required bool child}) =>
     child ? kProposalChildProductLabel : kProposalMainProductLabel;
 
-/// 产品在业务平台上的配置进度。先只展示，后续再接操作。
+/// 产品在业务平台上的配置进度。
 const kProposalSkuPlatformStatusPending = 'pending';
+const kProposalSkuPlatformStatusCreating = 'creating';
+const kProposalSkuPlatformStatusCreated = 'created';
+const kProposalSkuPlatformStatusFailed = 'failed';
 
 String normalizeProposalSkuPlatformStatus(String raw) {
   final value = raw.trim();
@@ -65,8 +68,28 @@ String proposalSkuPlatformStatusLabel(String raw) {
   final code = normalizeProposalSkuPlatformStatus(raw);
   return switch (code) {
     kProposalSkuPlatformStatusPending => '待配置',
+    kProposalSkuPlatformStatusCreating => '创建中',
+    kProposalSkuPlatformStatusCreated => '已创建',
+    kProposalSkuPlatformStatusFailed => '创建失败',
     _ => code,
   };
+}
+
+String proposalSkuPlatformStatusChipLabel(ProposalSkuDetailRow row) {
+  final status = normalizeProposalSkuPlatformStatus(row.platformStatus);
+  final label = proposalSkuPlatformStatusLabel(status);
+  switch (status) {
+    case kProposalSkuPlatformStatusCreated:
+      final code = row.partnerProductCode.trim();
+      if (code.isNotEmpty) return '业务平台状态 $label · $code';
+      return '业务平台状态 $label';
+    case kProposalSkuPlatformStatusFailed:
+      final msg = row.platformMessage.trim();
+      if (msg.isNotEmpty) return '业务平台状态 $label · $msg';
+      return '业务平台状态 $label';
+    default:
+      return '业务平台状态 $label';
+  }
 }
 
 class ProposalIntakeAccess {
@@ -5252,6 +5275,8 @@ class ProposalSkuDetailRow {
     this.parentSkuId = '',
     this.rollback = '',
     this.platformStatus = '',
+    this.partnerProductCode = '',
+    this.platformMessage = '',
     this.settlements = const [],
   });
 
@@ -5283,6 +5308,12 @@ class ProposalSkuDetailRow {
 
   /// 业务平台配置状态，缺省为待配置。
   final String platformStatus;
+
+  /// 资管回写的业务平台产品编码。
+  final String partnerProductCode;
+
+  /// 接口一失败或接口二回写的说明。
+  final String platformMessage;
   final List<ProposalSkuSettleRow> settlements;
 
   String get syncSourceCode => (syncSourceRef?.code ?? '').trim();
@@ -5351,6 +5382,8 @@ class ProposalSkuDetailRow {
     String? parentSkuId,
     String? rollback,
     String? platformStatus,
+    String? partnerProductCode,
+    String? platformMessage,
     List<ProposalSkuSettleRow>? settlements,
   }) => ProposalSkuDetailRow(
     id: id,
@@ -5387,6 +5420,8 @@ class ProposalSkuDetailRow {
     parentSkuId: parentSkuId ?? this.parentSkuId,
     rollback: rollback ?? this.rollback,
     platformStatus: platformStatus ?? this.platformStatus,
+    partnerProductCode: partnerProductCode ?? this.partnerProductCode,
+    platformMessage: platformMessage ?? this.platformMessage,
     settlements: settlements ?? this.settlements,
   );
 
@@ -5464,6 +5499,8 @@ class ProposalSkuDetailRow {
     'parentSkuId': parentSkuId,
     'rollback': rollback.trim(),
     'platformStatus': normalizeProposalSkuPlatformStatus(platformStatus),
+    'partnerProductCode': partnerProductCode.trim(),
+    'platformMessage': platformMessage.trim(),
     'settlements': [
       for (final item in settlements)
         item
@@ -5534,6 +5571,9 @@ class ProposalSkuDetailRow {
       platformStatus: normalizeProposalSkuPlatformStatus(
         '${raw['platformStatus'] ?? ''}',
       ),
+      partnerProductCode: '${raw['partnerProductCode'] ?? ''}'.trim(),
+      platformMessage: '${raw['platformMessage'] ?? raw['message'] ?? ''}'
+          .trim(),
       settlements: [
         for (final item
             in raw['settlements'] is List

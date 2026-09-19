@@ -48,5 +48,14 @@ void main() {
         contains('\n- 风力：'),
       );
     });
+
+    test('splits compact bold field labels into Markdown list rows', () {
+      expect(
+        normalizeNovaMarkdownLayout(
+          '明天适合出门-**天气：**多云-**气温：**23℃~29℃-**降水：**约6%',
+        ),
+        '明天适合出门\n- **天气：**多云\n- **气温：**23℃~29℃\n- **降水：**约6%',
+      );
+    });
   });
 }

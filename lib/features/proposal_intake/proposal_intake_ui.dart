@@ -149,6 +149,15 @@ class ProposalStatusChip extends StatelessWidget {
 
 enum ProposalChipKind { normal, purple, draft, warn, ok }
 
+ProposalChipKind proposalSkuPlatformStatusChipKind(String raw) {
+  return switch (normalizeProposalSkuPlatformStatus(raw)) {
+    kProposalSkuPlatformStatusFailed => ProposalChipKind.warn,
+    kProposalSkuPlatformStatusCreated => ProposalChipKind.ok,
+    kProposalSkuPlatformStatusCreating => ProposalChipKind.purple,
+    _ => ProposalChipKind.draft,
+  };
+}
+
 class ProposalCard extends StatelessWidget {
   const ProposalCard({
     super.key,

@@ -233,6 +233,104 @@ class NativeKbService {
     );
   }
 
+  /// 只在指定本地文档 ID 范围内检索，不会搜整库。
+  Future<List<NativeKbChunk>> retrieveScoped({
+    required String query,
+    required List<int> documentIds,
+    int topK = 12,
+  }) async {
+    final ids = documentIds.where((id) => id > 0).toSet().toList();
+    if (query.trim().isEmpty || ids.isEmpty) return const [];
+    final resp = await _client.post(
+      _dunesUri('/kb/retrieve'),
+      headers: {..._dunesHeaders, 'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'query': query.trim(),
+        'documentIds': ids,
+        'topK': topK,
+      }),
+    );
+    final body = _decode(resp.body);
+    if (resp.statusCode < 200 ||
+        resp.statusCode >= 300 ||
+        body['success'] == false) {
+      throw Exception(
+        (body['message'] ?? body['error']?['message'] ?? '知识库限定检索失败')
+            .toString(),
+      );
+    }
+    return parseNovaKbRetrieveBody(body);
+  }
+
+  /// 把 RAGFlow UUID 解析成本地 kb_document 数字 ID，检索接口只认这个。
+  Future<List<int>> resolveLocalDocumentIds({
+    List<int> documentIds = const <int>[],
+    List<String> ragflowDocIds = const <String>[],
+    String fallbackId = '',
+  }) async {
+    final out = <int>[];
+    final seen = <int>{};
+    void addLocal(int id) {
+      if (id > 0 && seen.add(id)) out.add(id);
+    }
+
+    for (final id in documentIds) {
+      addLocal(id);
+    }
+    final pending = <String>[
+      ...ragflowDocIds,
+      if (fallbackId.trim().isNotEmpty) fallbackId.trim(),
+    ];
+    for (final raw in pending) {
+      final id = raw.trim();
+      if (id.isEmpty) continue;
+      final numeric = int.tryParse(id) ?? 0;
+      if (numeric > 0) {
+        addLocal(numeric);
+        continue;
+      }
+      try {
+        final detail = await fetchDunesDocumentByRagflowId(id);
+        addLocal(int.tryParse(detail.dunesDocumentId) ?? 0);
+      } catch (_) {}
+    }
+    return out;
+  }
+
+  Future<List<NativeKbChunk>> fetchDocumentInlineChunks({
+    required List<int> documentIds,
+    int maxCharsEach = 8000,
+    int maxDocs = 8,
+  }) async {
+    final chunks = <NativeKbChunk>[];
+    for (final id in documentIds.take(maxDocs)) {
+      if (id <= 0) continue;
+      try {
+        final doc = await fetchDunesDocument('$id');
+        final md = await _fetchMarkdownFromDocumentRecord(
+          doc: doc,
+          docId: '$id',
+        );
+        final text = (md ?? '').trim();
+        if (text.isEmpty) continue;
+        chunks.add(
+          NativeKbChunk(
+            docId: id,
+            title: doc.title.trim().isNotEmpty
+                ? doc.title.trim()
+                : (doc.fileName.trim().isNotEmpty
+                      ? doc.fileName.trim()
+                      : '知识库文档'),
+            chunk: text.length <= maxCharsEach
+                ? text
+                : text.substring(0, maxCharsEach),
+          ),
+        );
+      } catch (_) {}
+    }
+    return chunks;
+  }
+
   NativeKbSummary _parseSummary(Map<String, dynamic> st) {
     final rawDocs = st['documents'] is List
         ? st['documents'] as List
@@ -633,8 +731,8 @@ class NativeKbService {
   }
 
   int _prdDocSortScore(NativeKbDocument doc) {
+    if (isKbMeetingMinutesDocument(doc)) return 2;
     final name = '${doc.fileName} ${doc.title}'.toLowerCase();
-    if (name.contains('会议纪要') || name.contains('meeting-minutes')) return 2;
     if (name.contains('会议') || name.contains('纪要') || name.contains('prd')) {
       return 1;
     }

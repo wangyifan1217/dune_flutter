@@ -68,6 +68,51 @@ void main() {
     expect(cameraOpened, isFalse);
   });
 
+  testWidgets('APP swipe up on shortcut strip opens more tools', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    var moreOpened = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NovaC4InputBar(
+            controller: TextEditingController(),
+            focusNode: FocusNode(),
+            voiceMode: false,
+            sending: false,
+            enabled: true,
+            hintText: '问小饕...',
+            modelLabel: 'GPT',
+            quickActionsOpen: false,
+            onToggleVoice: () {},
+            onSend: () {},
+            onPickModel: () {},
+            onInputFocused: () {},
+            onToggleQuickActions: () => moreOpened = true,
+            onOpenKb: () {},
+            onOpenMeeting: () {},
+            onVoiceCall: () {},
+            onCamera: () {},
+            onAlbum: () {},
+            onHistory: () {},
+            onNewChat: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.fling(find.text('更多'), const Offset(0, -80), 800);
+    await tester.pumpAndSettle();
+    expect(moreOpened, isTrue);
+  });
+
   testWidgets('expanded more grid shows extra tools', (tester) async {
     tester.view.physicalSize = const Size(1080, 1920);
     tester.view.devicePixelRatio = 2.0;

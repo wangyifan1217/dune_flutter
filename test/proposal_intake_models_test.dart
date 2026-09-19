@@ -411,6 +411,30 @@ void main() {
       }).toJson()['platformStatus'],
       kProposalSkuPlatformStatusPending,
     );
+    final created = ProposalSkuDetailRow.fromJson({
+      'id': 'sku-3',
+      'platformStatus': 'created',
+      'partnerProductCode': 'MOCK-1-sku-3',
+    });
+    expect(proposalSkuPlatformStatusLabel(created.platformStatus), '已创建');
+    expect(
+      proposalSkuPlatformStatusChipLabel(created),
+      '业务平台状态 已创建 · MOCK-1-sku-3',
+    );
+    final failed = ProposalSkuDetailRow.fromJson({
+      'id': 'sku-4',
+      'platformStatus': 'failed',
+      'platformMessage': '渠道不存在',
+    });
+    expect(proposalSkuPlatformStatusLabel(failed.platformStatus), '创建失败');
+    expect(
+      proposalSkuPlatformStatusChipLabel(failed),
+      '业务平台状态 创建失败 · 渠道不存在',
+    );
+    expect(
+      proposalSkuPlatformStatusLabel('creating'),
+      '创建中',
+    );
   });
 
   test('sku keeps institution snapshot', () {

@@ -30,7 +30,8 @@ void main() {
     expect(find.text('我知道了'), findsNothing);
     expect(find.text('帮我在知识库里找相关资料'), findsOneWidget);
     expect(find.text('总结一下知识库里最近的文档'), findsOneWidget);
-    expect(find.text('根据知识库里的会议纪要列出要点'), findsOneWidget);
+    expect(find.text('根据会议纪要列出要点'), findsOneWidget);
+    expect(find.textContaining('知识库里的会议纪要'), findsNothing);
     expect(find.text('内容由 AI 生成'), findsOneWidget);
 
     expect(find.textContaining('花呗'), findsNothing);

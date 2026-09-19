@@ -429,9 +429,72 @@ NativeNovaMessage preferNovaPrdUserBubble(
   );
 }
 
+bool _isEmptyStreamingAssistant(NativeNovaMessage m) {
+  return m.role == 'assistant' &&
+      m.streaming &&
+      m.text.trim().isEmpty;
+}
+
+/// 同一轮只保留一条空的流式占位，避免发送中轮询再插一条导致双气泡闪烁。
+List<NativeNovaMessage> collapseNovaStreamingPlaceholders(
+  List<NativeNovaMessage> rows,
+) {
+  var lastEmptyStream = -1;
+  for (var i = 0; i < rows.length; i++) {
+    if (_isEmptyStreamingAssistant(rows[i])) lastEmptyStream = i;
+  }
+  if (lastEmptyStream < 0) return rows;
+  final out = <NativeNovaMessage>[];
+  for (var i = 0; i < rows.length; i++) {
+    if (_isEmptyStreamingAssistant(rows[i]) && i != lastEmptyStream) continue;
+    out.add(rows[i]);
+  }
+  return out;
+}
+
+String novaReplyFingerprint(String text) =>
+    text.replaceAll(RegExp(r'\s+'), '').trim();
+
+/// 服务端 IM、审计 turn 与本地流式缓存可能同时回显同一条回复。
+/// 仅折叠相邻的 assistant 回复：中间一旦有用户消息，就保留为不同轮次。
+List<NativeNovaMessage> collapseNovaConsecutiveAssistantReplies(
+  List<NativeNovaMessage> rows,
+) {
+  if (rows.length < 2) return rows;
+  final out = <NativeNovaMessage>[];
+  for (final row in rows) {
+    if (row.role == 'assistant' &&
+        row.text.trim().isNotEmpty &&
+        out.isNotEmpty &&
+        out.last.role == 'assistant') {
+      final previous = out.last;
+      final currentText = novaReplyFingerprint(row.text);
+      final previousText = novaReplyFingerprint(previous.text);
+      final sameReply =
+          currentText == previousText ||
+          (currentText.length >= 80 &&
+              previousText.length >= 80 &&
+              (currentText.startsWith(previousText) ||
+                  previousText.startsWith(currentText)));
+      if (sameReply) {
+        out[out.length - 1] =
+            novaHistoryRichness(row) >= novaHistoryRichness(previous)
+            ? row
+            : previous;
+        continue;
+      }
+    }
+    out.add(row);
+  }
+  return out;
+}
+
 bool isDuplicateNovaHistoryMessage(NativeNovaMessage a, NativeNovaMessage b) {
   if (a.id > 0 && b.id > 0 && a.id == b.id) return true;
   if (a.role != b.role) return false;
+  if (_isEmptyStreamingAssistant(a) && _isEmptyStreamingAssistant(b)) {
+    return true;
+  }
   final ta = a.createdAt;
   final tb = b.createdAt;
   if (ta != null && tb != null && ta.difference(tb).inMinutes.abs() > 5) {
@@ -548,7 +611,7 @@ List<NativeNovaMessage> dedupeNovaHistoryMessages(
       out.add(m);
     }
   }
-  return out;
+  return collapseNovaConsecutiveAssistantReplies(out);
 }
 
 /// draft 合并时：服务端已落库的用户消息 id 可能与本地 afterMessageId 不一致。
@@ -3674,6 +3737,15 @@ class NativeNovaService {
     return displayText;
   }
 
+  String _withNovaReplyFormat(String prompt) {
+    final text = prompt.trim();
+    if (text.isEmpty) return text;
+    return '$text\n\n'
+        '回答格式要求：请直接给出内容，不要解释你是否使用 Markdown。'
+        '有多个要点时使用 Markdown 二级/三级标题和 `- ` 列表；'
+        '重点用 `**加粗**`，保持段落和列表换行，不要把所有内容挤成一段。';
+  }
+
   Future<String> sendAndReplyStream({
     required int conversationId,
     required dynamic userContent,
@@ -3693,10 +3765,10 @@ class NativeNovaService {
     var activeConvId = conversationId;
     final contentLabel =
         displayText ?? (userContent is String ? userContent : '[附件消息]');
-    final userPrompt = _extractUserPromptText(
+    final userPrompt = _withNovaReplyFormat(_extractUserPromptText(
       userContent,
       displayText: contentLabel.toString(),
-    );
+    ));
     final skipEchoCheck = userContent is List;
     userStoppedStream = false;
 

@@ -117,6 +117,7 @@ abstract final class NovaWebStorage {
     'dunes_nova_msgs_',
     'dunes_nova_chat_session_',
     'dunes_nova_summary_',
+    'dunes_nova_kb_scope_',
     'dunes_kb_msgs_',
     'dunes_nova_generating_',
     'dunes_nova_stream_draft_',

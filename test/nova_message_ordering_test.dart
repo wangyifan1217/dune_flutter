@@ -202,5 +202,77 @@ void main() {
       expect(sorted[0].role, 'user');
       expect(sorted[1].role, 'assistant');
     });
+
+    test('duplicate empty streaming assistants collapse to one placeholder', () {
+      final now = DateTime.now();
+      final first = NativeNovaMessage(
+        id: 1789809939626,
+        role: 'assistant',
+        text: '',
+        thinkStatus: '正在生成…',
+        streaming: true,
+        createdAt: now,
+      );
+      final second = NativeNovaMessage(
+        id: 92228,
+        role: 'assistant',
+        text: '',
+        thinkStatus: '正在思考',
+        streaming: true,
+        createdAt: now.add(const Duration(milliseconds: 80)),
+      );
+      expect(isDuplicateNovaHistoryMessage(first, second), isTrue);
+      final collapsed = collapseNovaStreamingPlaceholders([
+        NativeNovaMessage(
+          id: 1789809939625,
+          role: 'user',
+          text: '总结一下',
+          createdAt: now,
+        ),
+        first,
+        second,
+      ]);
+      expect(collapsed.where((m) => m.role == 'assistant').length, 1);
+      expect(collapsed.last.id, second.id);
+    });
+
+    test('consecutive duplicate assistant replies collapse without swallowing new turns', () {
+      final now = DateTime.now();
+      final firstReply = NativeNovaMessage(
+        id: 12,
+        role: 'assistant',
+        text: '## 结论\n- 本周完成验收',
+        createdAt: now,
+      );
+      final echoedReply = NativeNovaMessage(
+        id: 13,
+        role: 'assistant',
+        text: '## 结论\n- 本周完成验收',
+        createdAt: now.add(const Duration(seconds: 2)),
+        thinkStatus: '已完成思考',
+      );
+      final user = NativeNovaMessage(
+        id: 14,
+        role: 'user',
+        text: '再详细一点',
+        createdAt: now.add(const Duration(seconds: 3)),
+      );
+      final nextReply = NativeNovaMessage(
+        id: 15,
+        role: 'assistant',
+        text: '补充了验收范围。',
+        createdAt: now.add(const Duration(seconds: 4)),
+      );
+      final collapsed = collapseNovaConsecutiveAssistantReplies([
+        firstReply,
+        echoedReply,
+        user,
+        nextReply,
+      ]);
+      expect(collapsed, hasLength(3));
+      expect(collapsed[0].id, echoedReply.id);
+      expect(collapsed[1].role, 'user');
+      expect(collapsed[2].id, nextReply.id);
+    });
   });
 }

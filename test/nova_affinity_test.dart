@@ -35,7 +35,7 @@ void main() {
       NovaHistoryTurn(
         conversationId: 3,
         messageId: 4,
-        title: '根据知识库里的会议纪要列出要点',
+        title: '根据会议纪要列出要点',
         preview: '会议待办',
       ),
     ]);

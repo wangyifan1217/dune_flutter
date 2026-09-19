@@ -14,6 +14,7 @@ class NativeMeetingSummary {
     this.organizerDisplayName,
     this.organizerUsername,
     this.folderId,
+    this.kbDocumentId,
   });
 
   final int meetingId;
@@ -28,6 +29,7 @@ class NativeMeetingSummary {
   final String? organizerDisplayName;
   final String? organizerUsername;
   final int? folderId;
+  final int? kbDocumentId;
 
   String get displayTime => NativeMeetingTime.formatDisplayBest(
         createdAt: createdAt,
@@ -70,6 +72,9 @@ class NativeMeetingSummary {
           (json['organizerUsername'] ?? json['organizer_username'])
               ?.toString(),
       folderId: _readOptionalInt(json['folderId'] ?? json['folder_id']),
+      kbDocumentId: _readOptionalInt(
+        json['kbDocumentId'] ?? json['kb_document_id'],
+      ),
     );
   }
 }

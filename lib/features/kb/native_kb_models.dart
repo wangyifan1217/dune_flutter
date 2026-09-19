@@ -319,6 +319,99 @@ bool nativeKbDocumentIndexed(NativeKbDocument doc) {
   return doc.statusLabel == '已索引';
 }
 
+/// 是否由「会议纪要 → 上传知识库」写入，而不是用户自己传到知识库的普通文件。
+bool isKbMeetingMinutesDocument(NativeKbDocument doc) {
+  return isKbMeetingMinutesUploadName(doc.fileName) ||
+      isKbMeetingMinutesUploadName(doc.title) ||
+      isKbMeetingMinutesUploadName(doc.fileObjectKey);
+}
+
+bool isKbMeetingMinutesName(String raw) => isKbMeetingMinutesUploadName(raw);
+
+/// 会议详情页上传知识库时的命名：`会议纪要-{标题}.md` 或 `meeting-minutes-{id}.md`。
+bool isKbMeetingMinutesUploadName(String raw) {
+  final name = raw.trim().toLowerCase().replaceAll('\\', '/');
+  if (name.isEmpty) return false;
+  final base = name.split('/').last;
+  if (base.startsWith('会议纪要-')) return true;
+  if (base == 'meeting-minutes.md' || base.startsWith('meeting-minutes-')) {
+    return true;
+  }
+  return name.contains('/meeting-minutes-') || name.endsWith('/meeting-minutes.md');
+}
+
+/// 小饕知识库选择器：只去掉会议纪要上传进来的文档，以及会议已绑定的 kb 文档。
+bool novaKbDocumentAllowedInPicker(
+  NativeKbDocument doc, {
+  Set<int> meetingKbIds = const <int>{},
+}) {
+  if (isKbMeetingMinutesDocument(doc)) return false;
+  final local = int.tryParse(doc.dunesDocumentId) ?? 0;
+  if (local > 0 && meetingKbIds.contains(local)) return false;
+  return true;
+}
+
+class NativeKbChunk {
+  const NativeKbChunk({
+    required this.docId,
+    required this.title,
+    required this.chunk,
+  });
+
+  final int docId;
+  final String title;
+  final String chunk;
+
+  factory NativeKbChunk.fromJson(Map<String, dynamic> json) {
+    return NativeKbChunk(
+      docId: _chunkDocId(json),
+      title: (json['title'] ??
+              json['documentTitle'] ??
+              json['fileName'] ??
+              json['name'] ??
+              '')
+          .toString()
+          .trim(),
+      chunk: (json['chunk'] ??
+              json['excerpt'] ??
+              json['text'] ??
+              json['content'] ??
+              json['chunkText'] ??
+              '')
+          .toString()
+          .trim(),
+    );
+  }
+}
+
+int _chunkDocId(Map<String, dynamic> json) {
+  final raw = json['docId'] ?? json['documentId'] ?? json['id'];
+  if (raw is num) return raw.toInt();
+  return int.tryParse('$raw') ?? 0;
+}
+
+List<NativeKbChunk> parseNovaKbRetrieveBody(Map<String, dynamic> body) {
+  final data = body['data'];
+  var rows = const <dynamic>[];
+  if (data is List) {
+    rows = data;
+  } else if (data is Map) {
+    final map = Map<String, dynamic>.from(data);
+    final nested =
+        map['content'] ?? map['items'] ?? map['chunks'] ?? map['records'];
+    if (nested is List) rows = nested;
+  } else if (body['content'] is List) {
+    rows = body['content'] as List;
+  } else if (body['chunks'] is List) {
+    rows = body['chunks'] as List;
+  }
+  return rows
+      .whereType<Map>()
+      .map((row) => NativeKbChunk.fromJson(Map<String, dynamic>.from(row)))
+      .where((chunk) => chunk.chunk.isNotEmpty)
+      .toList(growable: false);
+}
+
 class NativeKbCitation {
   const NativeKbCitation({
     required this.sourceTitle,

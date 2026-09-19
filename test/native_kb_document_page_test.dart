@@ -62,4 +62,62 @@ void main() {
     expect(kbNovaFolderIdForDelete('3'), isNull);
     expect(kbNovaFolderIdForDelete('dataset-uuid'), 'dataset-uuid');
   });
+
+  test('only meeting-uploaded kb files are excluded from nova kb picker', () {
+    final uploaded = NativeKbDocument.fromJson({
+      'id': 1,
+      'title': '会议纪要-需求评审',
+      'fileName': '会议纪要-需求评审.md',
+      'ingestionStatus': 'INDEXED',
+    });
+    final backend = NativeKbDocument.fromJson({
+      'id': 2,
+      'title': '周会',
+      'fileName': 'meeting-minutes-88.md',
+      'ingestionStatus': 'INDEXED',
+    });
+    final ordinary = NativeKbDocument.fromJson({
+      'id': 3,
+      'title': '报价规范',
+      'fileName': '报价规范.pdf',
+      'ingestionStatus': 'INDEXED',
+    });
+    final userMinutesDoc = NativeKbDocument.fromJson({
+      'id': 5,
+      'title': '卫健委混改项目会议纪要及行动规划0902.docx',
+      'fileName': '卫健委混改项目会议纪要及行动规划0902.docx',
+      'ingestionStatus': 'INDEXED',
+    });
+    expect(isKbMeetingMinutesDocument(uploaded), isTrue);
+    expect(isKbMeetingMinutesDocument(backend), isTrue);
+    expect(isKbMeetingMinutesDocument(ordinary), isFalse);
+    expect(isKbMeetingMinutesDocument(userMinutesDoc), isFalse);
+    expect(novaKbDocumentAllowedInPicker(userMinutesDoc), isTrue);
+    expect(isKbMeetingMinutesUploadName('会议纪要-需求评审.md'), isTrue);
+    expect(isKbMeetingMinutesUploadName('会议纪要'), isFalse);
+    expect(isKbMeetingMinutesUploadName('制度文档'), isFalse);
+
+    final keyed = NativeKbDocument.fromJson({
+      'id': 4,
+      'title': '周会摘要',
+      'fileName': 'weekly.md',
+      'fileObjectKey': '7/meeting-minutes-12.md',
+      'ingestionStatus': 'INDEXED',
+    });
+    expect(isKbMeetingMinutesDocument(keyed), isTrue);
+    expect(
+      novaKbDocumentAllowedInPicker(
+        ordinary,
+        meetingKbIds: {3},
+      ),
+      isFalse,
+    );
+    expect(
+      novaKbDocumentAllowedInPicker(
+        ordinary,
+        meetingKbIds: {99},
+      ),
+      isTrue,
+    );
+  });
 }

@@ -34,6 +34,7 @@ class NativeContactsPage extends StatefulWidget {
     this.minPickCount = 2,
     this.onPickCompleted,
     this.allowSelfInPickMode = false,
+    this.onOpenGlobalSearch,
   });
 
   final AuthSession session;
@@ -64,6 +65,9 @@ class NativeContactsPage extends StatefulWidget {
 
   /// 多选时是否允许勾选当前登录用户（如行政通知发给自己）。
   final bool allowSelfInPickMode;
+
+  /// 顶栏搜索进入全局搜索；未传时仍展开本页联系人筛选。
+  final VoidCallback? onOpenGlobalSearch;
 
   @override
   State<NativeContactsPage> createState() => _NativeContactsPageState();
@@ -633,6 +637,10 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
                       : _enterGroupPickMode,
                   onConfirmCreate: _confirmGroupPick,
                   onToggleSearch: () {
+                    if (!_groupPickMode && widget.onOpenGlobalSearch != null) {
+                      widget.onOpenGlobalSearch!();
+                      return;
+                    }
                     setState(() {
                       _searchOpen = !_searchOpen;
                       if (!_searchOpen) {

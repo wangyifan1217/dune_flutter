@@ -22,7 +22,6 @@ class NativeDesktopSettingsPage extends StatefulWidget {
     this.onScanWorkstation,
     this.onOpenWechatBot,
     this.onClearCache,
-    this.onStartProposal,
     this.onLogout,
   });
 
@@ -33,7 +32,6 @@ class NativeDesktopSettingsPage extends StatefulWidget {
   final VoidCallback? onScanWorkstation;
   final VoidCallback? onOpenWechatBot;
   final VoidCallback? onClearCache;
-  final VoidCallback? onStartProposal;
   final VoidCallback? onLogout;
 
   @override
@@ -207,8 +205,7 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
                 widget.onOpenReleaseHistory != null ||
                 widget.onScanWorkstation != null ||
                 widget.onOpenWechatBot != null ||
-                widget.onClearCache != null ||
-                widget.onStartProposal != null) ...[
+                widget.onClearCache != null) ...[
               const GroupInfoSectionLabel('应用与工具'),
               if (widget.onCheckForUpdates != null)
                 _buildActionRow(
@@ -241,12 +238,6 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
                   icon: Icons.cleaning_services_outlined,
                   title: '清除本地缓存',
                   onTap: widget.onClearCache!,
-                ),
-              if (widget.onStartProposal != null)
-                _buildActionRow(
-                  icon: Icons.add_circle_outline_rounded,
-                  title: '发起提案',
-                  onTap: widget.onStartProposal!,
                 ),
             ],
             if (widget.onLogout != null) ...[

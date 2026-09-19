@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>沙丘 · 企微式全局搜索原型</title>
+  <style>
+    :root {
+      --page: #EAE6F0;
+      --app: #F7F5FA;
+      --card: #fff;
+      --subtle: #F3EEF9;
+      --border: #DFD7EA;
+      --text: #201D26;
+      --text2: #5C5666;
+      --muted: #958E9E;
+      --purple: #6E49C8;
+      --purple-soft: #F1EAF9;
+      --green: #2B8A57;
+      --amber: #B56B12;
+      --coral: #C73838;
+      --blue: #236DB8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #cfc6dc; color: var(--text); }
+    .desk { height: 100%; display: flex; flex-direction: column; }
+    .ctrl { height: 48px; background: #fff; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-size: 13px; }
+    .seg { display: flex; gap: 4px; background: var(--subtle); padding: 3px; border-radius: 999px; }
+    .seg button { border: 0; background: transparent; padding: 5px 12px; border-radius: 999px; font-size: 12px; color: var(--text2); cursor: pointer; }
+    .seg button.on { background: #fff; color: var(--purple); font-weight: 700; }
+    .stage { flex: 1; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .phone { width: 393px; height: 820px; max-height: calc(100vh - 80px); background: var(--app); border-radius: 36px; box-shadow: 0 0 0 10px #1e1d22, 0 24px 60px rgba(0,0,0,.35); overflow: hidden; display: flex; flex-direction: column; position: relative; }
+    .status { height: 44px; padding: 12px 22px 0; display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; }
+    .bar { padding: 8px 12px 10px; display: flex; align-items: center; gap: 8px; }
+    .search { flex: 1; height: 36px; background: #fff; border: 1px solid var(--border); border-radius: 10px; display: flex; align-items: center; gap: 6px; padding: 0 10px; }
+    .search input { border: 0; outline: 0; flex: 1; font-size: 14px; background: transparent; color: var(--text); }
+    .cancel { color: var(--purple); font-size: 14px; font-weight: 600; cursor: pointer; }
+    .tabs { display: flex; gap: 4px; padding: 0 10px 8px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--border); }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab { flex: none; padding: 6px 10px; font-size: 13px; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; }
+    .tab.on { color: var(--purple); font-weight: 700; border-bottom-color: var(--purple); }
+    .scroll { flex: 1; overflow: auto; padding: 10px 12px 24px; }
+    .chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; scrollbar-width: none; }
+    .chip { flex: none; height: 32px; padding: 0 12px; border-radius: 999px; background: #fff; border: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text2); cursor: pointer; }
+    .smart { margin: 4px 0 14px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, var(--purple-soft), #fff); border: 1px solid #d8c8f0; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--purple); cursor: pointer; }
+    .sec { font-size: 12px; color: var(--muted); margin: 12px 0 8px; display: flex; justify-content: space-between; }
+    .row { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; display: flex; gap: 10px; align-items: center; margin-bottom: 8px; cursor: pointer; }
+    .av { width: 38px; height: 38px; border-radius: 10px; background: var(--purple-soft); color: var(--purple); display: grid; place-items: center; font-weight: 800; font-size: 13px; flex: none; }
+    .av.g { background: #E8F5EE; color: var(--green); }
+    .av.m { background: #EDF5FC; color: var(--blue); }
+    .av.a { background: #FEF6EB; color: var(--amber); }
+    .av.t { background: #F3EEF9; color: var(--purple); }
+    .ttl { font-size: 14px; font-weight: 650; }
+    .ttl em { color: var(--purple); font-style: normal; }
+    .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .more { text-align: center; font-size: 12px; color: var(--purple); padding: 6px 0 12px; cursor: pointer; font-weight: 600; }
+    .hint { font-size: 11px; color: var(--muted); margin: 0 0 10px; }
+    .toast { position: absolute; top: 58px; left: 50%; transform: translateX(-50%); background: #201D26; color: #fff; padding: 7px 14px; border-radius: 999px; font-size: 12px; opacity: 0; transition: .2s; pointer-events: none; }
+    .toast.on { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="desk">
+    <div class="ctrl">
+      <b>沙丘全局搜索 · 静态原型</b>
+      <div class="seg" id="scenes">
+        <button class="on" data-s="idle">空态</button>
+        <button data-s="all">输入「预警」</button>
+        <button data-s="chat">聊天记录深挖</button>
+        <button data-s="approval">审批命中</button>
+      </div>
+    </div>
+    <div class="stage">
+      <div class="phone">
+        <div class="status"><span>09:41</span><span>5G</span></div>
+        <div class="bar">
+          <div class="search">
+            <span>⌕</span>
+            <input id="q" placeholder="搜索" value="" />
+          </div>
+          <span class="cancel">取消</span>
+        </div>
+        <div class="tabs" id="tabs" hidden></div>
+        <div class="scroll" id="body"></div>
+        <div class="toast" id="toast">已打开</div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const tabs = ['全部','联系人','群聊','聊天记录','审批','任务','文档','会议','应用'];
+    const scenes = {
+      idle: () => {
+        document.getElementById('q').value = '';
+        document.getElementById('tabs').hidden = true;
+        document.getElementById('body').innerHTML = `
+          <div class="chips">
+            ${['聊天记录','审批','任务','文档','会议','微盘','应用'].map(x=>`<span class="chip">${x}</span>`).join('')}
+          </div>
+          <div class="smart">✦ 智能搜索 · 用自然语言找人或事</div>
+          <div class="sec"><span>搜索历史</span><span>清空</span></div>
+          ${['预警','灯塔','华东提案','王奕凡'].map(x=>`<div class="row"><div class="av">史</div><div><div class="ttl">${x}</div><div class="sub">最近搜索</div></div></div>`).join('')}
+          <div class="sec">最近联系</div>
+          <div class="row"><div class="av">王</div><div><div class="ttl">王奕凡</div><div class="sub">市场拓展二部 · 点按发起私聊</div></div></div>
+        `;
+      },
+      all: () => {
+        document.getElementById('q').value = '预警';
+        const t = document.getElementById('tabs');
+        t.hidden = false;
+        t.innerHTML = tabs.map((x,i)=>`<span class="tab ${i===0?'on':''}">${x}</span>`).join('');
+        document.getElementById('body').innerHTML = `
+          <div class="hint">本地会话已出 · 聊天记录与审批正在补齐（分波到达）</div>
+          <div class="sec"><span>联系人</span><span>2</span></div>
+          <div class="row"><div class="av">灯</div><div><div class="ttl">灯塔<em>预警</em>机器人</div><div class="sub">数字员工 · 可会话</div></div></div>
+          <div class="row"><div class="av">何</div><div><div class="ttl">何Union2022</div><div class="sub">运营 · 最近聊过预警配置</div></div></div>
+          <div class="sec"><span>群聊</span><span>1</span></div>
+          <div class="row"><div class="av g">群</div><div><div class="ttl">灯塔收入&支出配置<em>预警</em>(6)</div><div class="sub">包含成员：预警</div></div></div>
+          <div class="sec"><span>聊天记录</span><span>查看全部 2 条</span></div>
+          <div class="row"><div class="av m">记</div><div><div class="ttl">灯塔告警(7)</div><div class="sub">王奕凡：9998 条相关聊天记录</div></div></div>
+          <div class="more">查看全部聊天记录</div>
+          <div class="sec"><span>应用</span></div>
+          <div class="row"><div class="av a">预</div><div><div class="ttl">特惠<em>预警</em></div><div class="sub">工作台应用</div></div></div>
+          <div class="row"><div class="av t">合</div><div><div class="ttl">合同<em>预警</em></div><div class="sub">灯塔 · 到期提醒</div></div></div>
+        `;
+      },
+      chat: () => {
+        document.getElementById('q').value = '预警';
+        const t = document.getElementById('tabs');
+        t.hidden = false;
+        t.innerHTML = tabs.map((x,i)=>`<span class="tab ${x==='聊天记录'?'on':''}">${x}</span>`).join('');
+        document.getElementById('body').innerHTML = `
+          <div class="chips">${['全部','图片与视频','文件','链接','转发'].map((x,i)=>`<span class="chip ${i===0?'':''}">${x}</span>`).join('')}</div>
+          <div class="row"><div class="av m">记</div><div><div class="ttl">灯塔告警(7)</div><div class="sub">王奕凡：把<em>预警</em>阈值改成 80% · 昨天 17:02</div></div></div>
+          <div class="row"><div class="av m">记</div><div><div class="ttl">灯塔收入&支出配置预警(6)</div><div class="sub">系统：已生成<em>预警</em>日报 · 今天 07:49</div></div></div>
+        `;
+      },
+      approval: () => {
+        document.getElementById('q').value = '预警';
+        const t = document.getElementById('tabs');
+        t.hidden = false;
+        t.innerHTML = tabs.map((x)=>`<span class="tab ${x==='审批'?'on':''}">${x}</span>`).join('');
+        document.getElementById('body').innerHTML = `
+          <div class="chips">${['待我处理','我发起','抄送','已办'].map(x=>`<span class="chip">${x}</span>`).join('')}</div>
+          <div class="row"><div class="av a">审</div><div><div class="ttl">供应商库存<em>预警</em>规则调整</div><div class="sub">待我处理 · 李明 · SP-20260918-0042</div></div></div>
+          <div class="row"><div class="av t">提</div><div><div class="ttl">华东成品油<em>预警</em>联营提案</div><div class="sub">协作提案 · 待最终确认</div></div></div>
+        `;
+      }
+    };
+    function show(s){ (scenes[s]||scenes.idle)(); }
+    document.getElementById('scenes').onclick = (e) => {
+      const b = e.target.closest('button'); if(!b) return;
+      document.querySelectorAll('#scenes button').forEach(x=>x.classList.toggle('on', x===b));
+      show(b.dataset.s);
+    };
+    document.getElementById('body').onclick = () => {
+      const t = document.getElementById('toast');
+      t.classList.add('on');
+      setTimeout(()=>t.classList.remove('on'), 1400);
+    };
+    show('idle');
+  </script>
+</body>
+</html>

@@ -45,9 +45,9 @@ class _NovaAiPartnerWelcomeViewState extends State<NovaAiPartnerWelcomeView>
       iconBg: Color(0xFFF2ECFC),
     ),
     _WelcomePromptItem(
-      title: '根据知识库里的会议纪要列出要点',
-      subtitle: '已索引的纪要可以直接问我',
-      prompt: '根据知识库里的会议纪要，帮我列出要点和待办',
+      title: '根据会议纪要列出要点',
+      subtitle: '从会议入口选纪要，也可以直接问我',
+      prompt: '根据最近的会议纪要，帮我列出要点和待办',
       icon: Icons.groups_2_rounded,
       iconColor: Color(0xFF00B087),
       iconBg: Color(0xFFE6F8F3),

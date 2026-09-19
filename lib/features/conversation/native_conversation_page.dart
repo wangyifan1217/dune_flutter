@@ -67,6 +67,7 @@ class NativeConversationPage extends StatefulWidget {
     this.onOpenAdministrativeNotice,
     this.onOpenReconciliationAssistant,
     this.onStartPrivateChat,
+    this.onOpenGlobalSearch,
     this.selectedConversationId,
     this.conversationReadSignal,
     this.notificationsReadSignal,
@@ -101,6 +102,9 @@ class NativeConversationPage extends StatefulWidget {
 
   /// 搜索命中尚无会话的联系人时，按 peerId 打开私聊（首条消息前不建会话）。
   final ValueChanged<int>? onStartPrivateChat;
+
+  /// 点按搜索栏进入企微式全局搜索（Z4）。未传时仍走列表内筛选。
+  final VoidCallback? onOpenGlobalSearch;
 
   /// 双栏布局中当前选中的会话，用于列表高亮。
   final int? selectedConversationId;
@@ -1988,8 +1992,13 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                     : NovaBackgroundCoordinator.instance.hasUnreadReply,
               ),
               ChatInboxSearchBar(
-                controller: _searchController,
-                onChanged: _onSearchChanged,
+                controller: widget.onOpenGlobalSearch == null
+                    ? _searchController
+                    : null,
+                onChanged: widget.onOpenGlobalSearch == null
+                    ? _onSearchChanged
+                    : null,
+                onTap: widget.onOpenGlobalSearch,
               ),
               Expanded(child: _buildBody()),
             ],

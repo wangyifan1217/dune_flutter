@@ -523,6 +523,14 @@ String normalizeNovaMarkdownLayout(String text) {
     RegExp(r'([^\s\n])([-－—])(?=[\u4e00-\u9fff]{1,8}[：:])'),
     (m) => '${m.group(1)}\n- ',
   );
+  // 模型有时把关键字段加粗后压成“**天气：**多云-**气温：**23℃”。
+  // 放宽标签前后的 Markdown 标记，保持字段仍按列表分行展示。
+  s = s.replaceAllMapped(
+    RegExp(
+      r'([^\s\n])\s*[-－—]\s*(?=(?:\*\*)?[\u4e00-\u9fffA-Za-z0-9（）()]{1,12}(?:\*\*)?[：:])',
+    ),
+    (m) => '${m.group(1)}\n- ',
+  );
   s = s.replaceAllMapped(
     RegExp(r'([^\n])([•●])\s*'),
     (m) => '${m.group(1)}\n${m.group(2)} ',

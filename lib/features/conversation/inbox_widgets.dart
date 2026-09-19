@@ -786,15 +786,20 @@ class _DropdownItem extends StatelessWidget {
 class ChatInboxSearchBar extends StatelessWidget {
   const ChatInboxSearchBar({
     super.key,
-    required this.controller,
-    required this.onChanged,
+    this.controller,
+    this.onChanged,
+    this.onTap,
+    this.hintText,
   });
 
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
+  final TextEditingController? controller;
+  final ValueChanged<String>? onChanged;
+  final VoidCallback? onTap;
+  final String? hintText;
 
   @override
   Widget build(BuildContext context) {
+    final hint = hintText ?? (onTap != null ? '搜索' : '搜索会话或联系人');
     // 与顶栏动画隔离，避免 Web 合成层把搜索栏一起带动。
     return RepaintBoundary(
       child: Container(
@@ -807,7 +812,9 @@ class ChatInboxSearchBar extends StatelessWidget {
             color: Colors.white,
             borderRadius: BorderRadius.circular(6),
           ),
-          child: Row(
+          child: onTap != null
+              ? _InboxSearchTapTarget(hint: hint, onTap: onTap!)
+              : Row(
             children: [
               const Icon(Icons.search, size: 17, color: Color(0xFFB2B2B2)),
               const SizedBox(width: 6),
@@ -823,7 +830,7 @@ class ChatInboxSearchBar extends StatelessWidget {
                   decoration: InputDecoration(
                     isDense: true,
                     border: InputBorder.none,
-                    hintText: '搜索会话或联系人',
+                    hintText: hint,
                     hintStyle: DunesTypography.sans(
                       fontSize: 13,
                       color: const Color(0xFFB2B2B2),
@@ -832,10 +839,11 @@ class ChatInboxSearchBar extends StatelessWidget {
                   ),
                 ),
               ),
+              if (controller != null)
               ListenableBuilder(
-                listenable: controller,
+                listenable: controller!,
                 builder: (context, _) {
-                  if (controller.text.isEmpty) {
+                  if (controller!.text.isEmpty) {
                     return const SizedBox.shrink();
                   }
                   return IconButton(
@@ -848,8 +856,8 @@ class ChatInboxSearchBar extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                     iconSize: 16,
                     onPressed: () {
-                      controller.clear();
-                      onChanged('');
+                      controller!.clear();
+                      onChanged?.call('');
                     },
                     icon: const Icon(Icons.close, color: Color(0xFFB2B2B2)),
                   );
@@ -857,6 +865,39 @@ class ChatInboxSearchBar extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InboxSearchTapTarget extends StatelessWidget {
+  const _InboxSearchTapTarget({required this.hint, required this.onTap});
+
+  final String hint;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Row(
+          children: [
+            const Icon(Icons.search, size: 17, color: Color(0xFFB2B2B2)),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                hint,
+                style: DunesTypography.sans(
+                  fontSize: 13,
+                  color: const Color(0xFFB2B2B2),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1727,8 +1768,9 @@ class _NovaEyesButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: '小饕',
+    return Semantics(
+      button: true,
+      label: '小饕',
       child: Material(
         color: Colors.transparent,
         child: InkWell(

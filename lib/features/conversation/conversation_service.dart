@@ -10,7 +10,9 @@ import '../auth/auth_session.dart';
 import '../nova/nova_history_utils.dart';
 import '../../core/widgets/cached_network_image.dart';
 import '../chat/chat_media_cache.dart';
+import '../search/global_search_models.dart';
 import '../xflow/approval_chat_share.dart';
+import 'conversation_inbox_cache.dart';
 import 'conversation_mention_utils.dart';
 import 'conversation_models.dart';
 import 'im_user_status.dart';
@@ -138,20 +140,26 @@ class ConversationService {
     'Content-Type': 'application/json',
   };
 
-  Future<List<NativeConversation>> fetchConversations() async {
+  Future<List<NativeConversation>> fetchConversations({String query = ''}) async {
     try {
-      return await _fetchConversationsOnce();
+      return await _fetchConversationsOnce(query: query);
     } catch (e) {
       final msg = e.toString();
       if (msg.contains('HTTP 401') || msg.contains('HTTP 403')) rethrow;
       // 重启后网卡/VPN 刚起来时，首次响应可能是截断 JSON 或网关 HTML。
       debugPrint('[ConversationService] fetchConversations retry after: $e');
-      return _fetchConversationsOnce();
+      return _fetchConversationsOnce(query: query);
     }
   }
 
-  Future<List<NativeConversation>> _fetchConversationsOnce() async {
-    final resp = await _client.get(_uri('/conversations'), headers: _headers);
+  Future<List<NativeConversation>> _fetchConversationsOnce({
+    String query = '',
+  }) async {
+    final q = query.trim();
+    final path = q.isEmpty
+        ? '/conversations'
+        : '/conversations?q=${Uri.encodeQueryComponent(q)}';
+    final resp = await _client.get(_uri(path), headers: _headers);
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw Exception('会话列表加载失败: HTTP ${resp.statusCode}');
     }
@@ -1576,6 +1584,280 @@ class ConversationService {
         .toList(growable: false);
     final hasMore = _readBoolField(data, 'hasMore') || items.length >= size;
     return NativeSearchMessagePage(items: items, hasMore: hasMore);
+  }
+
+  /// 跨会话消息搜索。接口命中与会话扇出合并；链接/文件名在 payload 里也会匹配。
+  Future<List<GlobalMessageHit>> searchMessagesGlobal({
+    required String query,
+    String kind = '',
+    int limit = 20,
+  }) async {
+    final q = query.trim();
+    if (q.isEmpty) return const <GlobalMessageHit>[];
+    final api = <GlobalMessageHit>[];
+    try {
+      final params = <String, String>{
+        'q': q,
+        'page': '1',
+        'size': '$limit',
+        if (kind.trim().isNotEmpty) 'kind': kind.trim(),
+      };
+      final resp = await _client.get(
+        _uri('/chat/messages/search?${Uri(queryParameters: params).query}'),
+        headers: _headers,
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final body = _decode(resp.body);
+        if (body['success'] != false) {
+          api.addAll(
+            _rowsFromData(body['data'])
+                .whereType<Map>()
+                .map((row) => _mapGlobalMessage(Map<String, dynamic>.from(row)))
+                .where((hit) => hit.messageId > 0 && hit.conversationId > 0),
+          );
+        }
+      }
+    } catch (_) {}
+    final fanout = await _searchMessagesFanout(query: q, kind: kind, limit: limit);
+    return _dedupeMessageHits([...api, ...fanout]);
+  }
+
+  Future<List<GlobalMessageHit>> _searchMessagesFanout({
+    required String query,
+    required String kind,
+    required int limit,
+  }) async {
+    final cached =
+        ConversationInboxCache.instance.peek(_session.userId)?.conversations ??
+        const <NativeConversation>[];
+    final usable = cached
+        .where((c) => c.id > 0 && (c.isPrivate || c.isGroup || c.isWorkgroupApproval))
+        .toList();
+    final q = query.toLowerCase();
+    final matched = <NativeConversation>[];
+    final rest = <NativeConversation>[];
+    for (final c in usable) {
+      if (_conversationLooksRelated(c, q)) {
+        matched.add(c);
+      } else {
+        rest.add(c);
+      }
+    }
+    try {
+      final remote = await fetchConversations(query: query);
+      final seen = {...matched, ...rest}.map((c) => c.id).toSet();
+      for (final c in remote) {
+        if (c.id <= 0 || !seen.add(c.id)) continue;
+        if (c.isPrivate || c.isGroup || c.isWorkgroupApproval) {
+          matched.add(c);
+        }
+      }
+    } catch (_) {}
+    final cap = limit >= 40 ? 24 : 18;
+    final targets = [...matched, ...rest].take(cap).toList(growable: false);
+    if (targets.isEmpty) return const <GlobalMessageHit>[];
+    final webQuery = _looksLikeWebQuery(query);
+    final pages = await Future.wait(
+      targets.map((c) {
+        return _searchOneConversation(
+          conversation: c,
+          query: query,
+          kind: kind,
+          scanRecent: webQuery || _conversationLooksRelated(c, q),
+        );
+      }),
+    );
+    final out = <GlobalMessageHit>[];
+    for (final rows in pages) {
+      out.addAll(rows);
+    }
+    return out;
+  }
+
+  Future<List<GlobalMessageHit>> _searchOneConversation({
+    required NativeConversation conversation,
+    required String query,
+    required String kind,
+    required bool scanRecent,
+  }) async {
+    final hits = <int, GlobalMessageHit>{};
+    void addAll(Iterable<NativeChatMessage> rows) {
+      for (final m in rows) {
+        if (m.id <= 0) continue;
+        if (!_messageMatchesKind(m.kind, kind)) continue;
+        hits[m.id] = GlobalMessageHit(
+          conversationId: conversation.id,
+          conversationTitle: conversation.displayTitle,
+          messageId: m.id,
+          senderName: m.senderName,
+          bodyText: _messageDisplayText(m),
+          kind: m.kind,
+          createdAt: m.createdAt,
+          payload: m.payload,
+        );
+      }
+    }
+
+    try {
+      final page = await searchMessagePage(
+        conversationId: conversation.id,
+        query: query,
+        size: 30,
+      );
+      addAll(page.items);
+    } catch (_) {}
+
+    final needScan = scanRecent || hits.isEmpty;
+    if (needScan) {
+      try {
+        final recent = await fetchMessages(conversation.id, size: 80);
+        addAll(
+          recent.where((m) => _messageMatchesQuery(m, query)),
+        );
+      } catch (_) {}
+    }
+    return hits.values.toList(growable: false);
+  }
+
+  List<GlobalMessageHit> _dedupeMessageHits(List<GlobalMessageHit> rows) {
+    final seen = <String>{};
+    final out = <GlobalMessageHit>[];
+    for (final hit in rows) {
+      final key = '${hit.conversationId}:${hit.messageId}';
+      if (!seen.add(key)) continue;
+      out.add(hit);
+    }
+    return out;
+  }
+
+  bool _conversationLooksRelated(NativeConversation c, String q) {
+    if (q.isEmpty) return false;
+    return c.preview.toLowerCase().contains(q) ||
+        c.displayTitle.toLowerCase().contains(q) ||
+        c.title.toLowerCase().contains(q);
+  }
+
+  bool _looksLikeWebQuery(String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return false;
+    return q.contains('http') ||
+        q.contains('www.') ||
+        q.contains('://') ||
+        q.contains('.com') ||
+        q.contains('.cn') ||
+        q.contains('.net') ||
+        q.contains('.org') ||
+        q.contains('.io');
+  }
+
+  bool _messageMatchesQuery(NativeChatMessage m, String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return false;
+    return _messageHaystack(m).contains(q);
+  }
+
+  String _messageDisplayText(NativeChatMessage m) {
+    final body = m.bodyText.trim();
+    if (body.isNotEmpty) return body;
+    final url = _payloadString(m.payload, const ['url', 'href', 'link', 'src']);
+    if (url.isNotEmpty) return url;
+    final title = _payloadString(m.payload, const ['title', 'name', 'fileName', 'file_name']);
+    if (title.isNotEmpty) return title;
+    return '[${m.kind}]';
+  }
+
+  String _messageHaystack(NativeChatMessage m) {
+    final buf = StringBuffer()
+      ..write(m.bodyText)
+      ..write(' ')
+      ..write(m.senderName)
+      ..write(' ')
+      ..write(m.kind)
+      ..write(' ');
+    _writePayloadHaystack(buf, m.payload, 0);
+    return buf.toString().toLowerCase();
+  }
+
+  void _writePayloadHaystack(StringBuffer buf, Map<String, dynamic>? payload, int depth) {
+    if (payload == null || depth > 3) return;
+    for (final value in payload.values) {
+      if (value is String && value.trim().isNotEmpty) {
+        buf.write(value);
+        buf.write(' ');
+      } else if (value is Map) {
+        _writePayloadHaystack(buf, Map<String, dynamic>.from(value), depth + 1);
+      } else if (value is List) {
+        for (final item in value.take(12)) {
+          if (item is Map) {
+            _writePayloadHaystack(buf, Map<String, dynamic>.from(item), depth + 1);
+          } else if (item is String) {
+            buf.write(item);
+            buf.write(' ');
+          }
+        }
+      }
+    }
+  }
+
+  String _payloadString(Map<String, dynamic>? payload, List<String> keys) {
+    if (payload == null) return '';
+    for (final key in keys) {
+      final v = payload[key];
+      if (v == null) continue;
+      final text = v.toString().trim();
+      if (text.isNotEmpty) return text;
+    }
+    for (final nested in const ['card', 'link', 'share', 'file', 'web']) {
+      final raw = payload[nested];
+      if (raw is Map) {
+        final found = _payloadString(Map<String, dynamic>.from(raw), keys);
+        if (found.isNotEmpty) return found;
+      }
+    }
+    return '';
+  }
+
+  GlobalMessageHit _mapGlobalMessage(Map<String, dynamic> raw) {
+    final sender = raw['sender'];
+    final senderMap = sender is Map
+        ? Map<String, dynamic>.from(sender)
+        : const <String, dynamic>{};
+    return GlobalMessageHit(
+      conversationId: (raw['conversationId'] as num?)?.toInt() ?? 0,
+      conversationTitle: (raw['conversationTitle'] ?? raw['title'] ?? '会话')
+          .toString(),
+      messageId: (raw['id'] as num?)?.toInt() ?? 0,
+      senderName: (senderMap['displayName'] ?? raw['senderName'] ?? '')
+          .toString(),
+      bodyText: (raw['bodyText'] ?? raw['text'] ?? '').toString(),
+      kind: (raw['kind'] ?? 'TEXT').toString(),
+      createdAt: DateTime.tryParse((raw['createdAt'] ?? '').toString()),
+      payload: raw['payload'] is Map
+          ? Map<String, dynamic>.from(raw['payload'] as Map)
+          : null,
+      matchCount: _readMatchCount(raw),
+    );
+  }
+
+  int _readMatchCount(Map<String, dynamic> raw) {
+    for (final key in const ['matchCount', 'hitCount', 'relatedCount', 'messageCount']) {
+      final v = raw[key];
+      if (v is num && v.toInt() > 1) return v.toInt();
+    }
+    return 1;
+  }
+
+  bool _messageMatchesKind(String messageKind, String filter) {
+    final f = filter.trim().toUpperCase();
+    if (f.isEmpty || f == 'ALL') return true;
+    final k = messageKind.trim().toUpperCase();
+    if (f == 'IMAGE' || f == 'MEDIA') {
+      return k == 'IMAGE' || k == 'VIDEO' || k == 'MEDIA';
+    }
+    if (f == 'FILE') return k == 'FILE';
+    if (f == 'LINK') return k == 'LINK' || k == 'URL';
+    if (f == 'FORWARD') return k == 'FORWARD' || k == 'MERGE_FORWARD';
+    return k == f;
   }
 
   /// im-go 消息类接口：`data` 为 `{ items: [...] }`；会话列表等仍为数组。

@@ -9,6 +9,7 @@ import '../auth/auth_session.dart';
 import '../chat/group_composite_avatar.dart';
 import '../chat/user_avatar_widget.dart';
 import '../contacts/contact_models.dart';
+import '../contacts/contact_service.dart';
 import '../conversation/conversation_inbox_cache.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
@@ -74,6 +75,8 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
   MessageThreadGroup? _thread;
   List<GlobalMessageHit> _threadHits = const [];
   bool _threadLoading = false;
+  Map<int, ({String? preset, String? objectKey})> _senderAvatarByUserId =
+      const <int, ({String? preset, String? objectKey})>{};
 
   static const _pageBg = Color(0xFFF6F3FA);
   static const _panelColor = Colors.white;
@@ -305,6 +308,7 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
       _threadLoading = true;
       _tab = GlobalSearchCategory.messages;
     });
+    unawaited(_loadThreadAvatarContext(thread));
     try {
       final more = await _facade.loadThreadMessages(
         conversationId: thread.conversationId,
@@ -320,6 +324,42 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _threadLoading = false);
+    }
+  }
+
+  Future<void> _loadThreadAvatarContext(MessageThreadGroup thread) async {
+    try {
+      final conversation = await _avatarService.fetchConversation(
+        thread.conversationId,
+      );
+      if (conversation == null) return;
+      final avatars = <int, ({String? preset, String? objectKey})>{};
+      if (conversation.isPrivate) {
+        final peerId = conversation.peerUserId ?? 0;
+        if (peerId > 0) {
+          final contact = await ContactService(
+            session: widget.session,
+          ).fetchContact(peerId);
+          if (contact != null) {
+            avatars[peerId] = (
+              preset: contact.avatarPreset ?? conversation.peerAvatarPreset,
+              objectKey:
+                  contact.avatarObjectKey ?? conversation.peerAvatarObjectKey,
+            );
+          }
+        }
+      } else {
+        final members = await _avatarService.fetchConversationMembers(
+          thread.conversationId,
+        );
+        avatars.addAll(_avatarService.avatarMapFromMembers(members));
+      }
+      if (!mounted || _thread?.conversationId != thread.conversationId) return;
+      setState(() {
+        _senderAvatarByUserId = {..._senderAvatarByUserId, ...avatars};
+      });
+    } catch (_) {
+      // Avatar lookup is best-effort; initials remain as a fallback.
     }
   }
 
@@ -1127,6 +1167,12 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
         objectKey: message.senderAvatarObjectKey,
         url: message.senderAvatarUrl,
       );
+    }
+    final loaded = _senderAvatarByUserId[message.senderUserId];
+    if (loaded != null &&
+        (loaded.preset?.trim().isNotEmpty == true ||
+            loaded.objectKey?.trim().isNotEmpty == true)) {
+      return (preset: loaded.preset, objectKey: loaded.objectKey, url: null);
     }
     final conversation = _conversationById(message.conversationId);
     if (conversation == null) {

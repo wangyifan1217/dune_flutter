@@ -6797,12 +6797,6 @@ class _NativeB2PageState extends State<_NativeB2Page> {
                       _buildSectionLabel('我的事项'),
                       const SizedBox(height: 8),
                       _buildMenuList(<Widget>[
-                        _buildMenuItem(
-                          icon: Icons.search_rounded,
-                          title: '全局搜索',
-                          desc: '人、群、聊天记录与办公事项',
-                          onTap: () => widget.navigation.go('Z4'),
-                        ),
                         if (widget.onOpenWorkbench != null)
                           _buildMenuItem(
                             icon: Icons.apps_rounded,

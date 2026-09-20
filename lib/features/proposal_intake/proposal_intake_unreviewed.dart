@@ -70,6 +70,26 @@ const _kContractReviewFields = {
   'InvoiceFlow',
 };
 
+/// 合同附件/关联件。不能用 startsWith('purchase'|'sales')，否则会锁死
+/// 采购产品、销售政策等市场手填项。采购提案默认 salesContractCompleted=true。
+const _kContractArtifactSuffixes = {
+  'FileName',
+  'ObjectKey',
+  'FileUrl',
+  'FileSize',
+  'Files',
+  'ContractId',
+  'ContractIds',
+  'Contracts',
+};
+
+bool _isContractFormKey(String key, String prefix) {
+  if (!key.startsWith(prefix) || key.length <= prefix.length) return false;
+  final suffix = key.substring(prefix.length);
+  return _kContractReviewFields.contains(suffix) ||
+      _kContractArtifactSuffixes.contains(suffix);
+}
+
 bool _reviewFlag(Map<String, dynamic> review, String key) =>
     review[key] == true;
 
@@ -126,6 +146,14 @@ bool proposalIntakeFormKeyLocked(
   if (key == 'productFinance') {
     return _reviewFlag(review, 'financeCompleted');
   }
+  // 采购提案默认财务、销售合同已复核。备注跟市场走，不能整板块锁死。
+  if (key == 'financeRemark' &&
+      _reviewFlag(review, 'financeCompleted') &&
+      _reviewFlag(review, 'salesContractCompleted')) {
+    return _reviewFlag(review, 'marketCompleted') ||
+        _itemReviewed(review, 'financeItems', key) ||
+        _itemReviewed(review, 'financeItems', 'main:$key');
+  }
   if (_kFinanceReviewKeys.contains(key)) {
     return _reviewFlag(review, 'financeCompleted') ||
         _itemReviewed(review, 'financeItems', key) ||
@@ -152,7 +180,7 @@ bool proposalIntakeFormKeyLocked(
             _itemReviewed(review, 'contractItems', '$prefix.$field');
       }
     }
-    if (key.startsWith(prefix)) {
+    if (_isContractFormKey(key, prefix)) {
       return _reviewFlag(review, '${prefix}ContractCompleted');
     }
   }
@@ -160,10 +188,37 @@ bool proposalIntakeFormKeyLocked(
 }
 
 Map<String, dynamic> proposalIntakeCloneForm(Map<String, dynamic> form) {
-  final raw = jsonDecode(jsonEncode(form));
-  if (raw is Map<String, dynamic>) return Map<String, dynamic>.from(raw);
-  if (raw is Map) return Map<String, dynamic>.from(raw);
+  return proposalIntakeJsonSafeForm(form);
+}
+
+/// 去掉 NaN / 无穷大和无法 JSON 编码的值，避免点保存时编码失败。
+Map<String, dynamic> proposalIntakeJsonSafeForm(Map<String, dynamic> form) {
+  try {
+    final raw = jsonDecode(jsonEncode(form));
+    if (raw is Map<String, dynamic>) return Map<String, dynamic>.from(raw);
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+  } catch (_) {}
+  final sanitized = _jsonSafeValue(form);
+  if (sanitized is Map<String, dynamic>) return sanitized;
+  if (sanitized is Map) return Map<String, dynamic>.from(sanitized);
   return <String, dynamic>{};
+}
+
+Object? _jsonSafeValue(Object? value) {
+  if (value is double && !value.isFinite) return 0;
+  if (value is Map) {
+    return {
+      for (final entry in value.entries)
+        '${entry.key}': _jsonSafeValue(entry.value),
+    };
+  }
+  if (value is List) {
+    return [for (final item in value) _jsonSafeValue(item)];
+  }
+  if (value == null || value is num || value is String || value is bool) {
+    return value;
+  }
+  return '$value';
 }
 
 String _skuCatalogSettlePrefix(String key) =>
@@ -215,9 +270,7 @@ List<Map<String, dynamic>> _mergeSkuSettlements({
 }) {
   final existingRows = _objectRowList(existing);
   final incomingRows = _objectRowList(incoming);
-  final incomingById = {
-    for (final row in incomingRows) _objectRowId(row): row,
-  };
+  final incomingById = {for (final row in incomingRows) _objectRowId(row): row};
   final used = <String>{};
   final out = <Map<String, dynamic>>[];
   for (final row in existingRows) {
@@ -249,9 +302,7 @@ List<Map<String, dynamic>> _mergeSharedSettlements({
 }) {
   final existingRows = _objectRowList(existing);
   final incomingRows = _objectRowList(incoming);
-  final incomingById = {
-    for (final row in incomingRows) _objectRowId(row): row,
-  };
+  final incomingById = {for (final row in incomingRows) _objectRowId(row): row};
   final used = <String>{};
   final out = <Map<String, dynamic>>[];
   for (final row in existingRows) {
@@ -315,9 +366,7 @@ Object? proposalIntakeMergeSkuCatalog({
     ];
   }
 
-  final existingById = {
-    for (final row in existingRows) _objectRowId(row): row,
-  };
+  final existingById = {for (final row in existingRows) _objectRowId(row): row};
   return [
     for (final row in incomingRows)
       if (existingById[_objectRowId(row)] != null)

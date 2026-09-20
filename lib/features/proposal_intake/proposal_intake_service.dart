@@ -228,10 +228,13 @@ class ProposalIntakeService {
         rethrow;
       }
       final latest = await fetchDetail(row.id);
-      final merged = proposalIntakeKeepUnreviewedForm(
-        baseline: latest.form,
-        current: row.form,
-        review: latest.review,
+      final merged = proposalIntakePreserveUserFinanceEdits(
+        original: row.form,
+        persist: proposalIntakeKeepUnreviewedForm(
+          baseline: latest.form,
+          current: row.form,
+          review: latest.review,
+        ),
       );
       return save(
         latest.copyWith(

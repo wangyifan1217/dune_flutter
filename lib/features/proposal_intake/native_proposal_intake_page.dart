@@ -530,14 +530,35 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           viewAll: widget.session.proposalIntakeViewAll,
         )) {
       try {
-        final saved = editing.id <= 0
-            ? await _service.create(
-                title: editing.title,
-                kind: editing.kind,
-                form: proposalIntakeConfirmContractEdits(editing.form),
-                review: editing.review,
-              )
-            : await _service.saveResolvingConflict(editing);
+        final persistForm = proposalIntakeBuildPersistForm(
+          editing.form,
+          businessCatalog: _options?.businessCostItemOptions ?? const [],
+          costCatalog: _options?.costItemOptions ?? const [],
+        );
+        final fallbackForm = proposalIntakeJsonSafeForm(
+          proposalIntakeConfirmContractEdits(editing.form),
+        );
+        Future<ProposalIntakeRow> persist(Map<String, dynamic> form) {
+          final row = editing.copyWith(form: form);
+          return row.id <= 0
+              ? _service.create(
+                  title: row.title,
+                  kind: row.kind,
+                  form: row.form,
+                  review: row.review,
+                )
+              : _service.saveResolvingConflict(row);
+        }
+
+        ProposalIntakeRow saved;
+        try {
+          saved = await persist(persistForm);
+        } catch (error) {
+          if (proposalIntakeFormsEqual(persistForm, fallbackForm)) {
+            rethrow;
+          }
+          saved = await persist(fallbackForm);
+        }
         _editing = saved;
         if (mounted && proposalIntakeShowDraftSavedToast(saved)) {
           _toast('已保存草稿');
@@ -2030,6 +2051,19 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       return;
     }
     var form = Map<String, dynamic>.from(_form)..[key] = value;
+    if (proposalIntakeIsProductFinanceField(key)) {
+      form = proposalIntakeWriteProductFinance(
+        form,
+        owner: kProposalProductFinanceMain,
+        finance: {
+          ...proposalIntakeProductFinance(
+            form,
+            owner: kProposalProductFinanceMain,
+          ),
+          key: value,
+        },
+      );
+    }
     var estimated = false;
     if (proposalIsFinanceEstimateInputKey(key)) {
       final before = Map<String, dynamic>.from(form);
@@ -2093,11 +2127,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ..remove('syncSourceRef');
     }
     _markFormDirty();
-    _row = _row.copyWith(
-      status: _statusAfterEdit,
-      form: form,
-      review: review,
-    );
+    _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
     if (value != null && value.isNotEmpty) {
       _prefetchSettle(value.code, 'CHANNEL');
     }
@@ -2135,6 +2165,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
     _bumpCostAmountStamps(before, next);
     return _keepUnreviewed(next);
+  }
+
+  Map<String, dynamic> _persistableForm(Map<String, dynamic> form) {
+    return proposalIntakeBuildPersistForm(
+      form,
+      keepUnreviewed: _keepUnreviewed,
+      businessCatalog: widget.options.businessCostItemOptions,
+      costCatalog: widget.options.costItemOptions,
+    );
   }
 
   Map<String, dynamic> _keepUnreviewed(Map<String, dynamic> form) {
@@ -3647,7 +3686,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   Widget _anchor(String key, Widget child) {
     // LayoutBuilder / 栅格会在一次 build 里把同一字段挂两次。
     // putIfAbsent 复用同一把 GlobalKey 时，Column 会直接红屏。
-    final n = _anchorUseCount.update(key, (value) => value + 1, ifAbsent: () => 0);
+    final n = _anchorUseCount.update(
+      key,
+      (value) => value + 1,
+      ifAbsent: () => 0,
+    );
     final slot = n == 0 ? key : '$key#$n';
     final gk = _fieldAnchorKeys.putIfAbsent(slot, GlobalKey.new);
     return KeyedSubtree(
@@ -4063,29 +4106,58 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     }
   }
 
+  Future<ProposalIntakeRow> _persistDraft(ProposalIntakeRow row) {
+    if (row.id <= 0) {
+      return widget.service.create(
+        title: row.title,
+        kind: row.kind,
+        form: row.form,
+        review: row.review,
+      );
+    }
+    return widget.service.saveResolvingConflict(row);
+  }
+
   Future<void> _saveDraft() async {
     if (!proposalIntakeHasMeaningfulContent(_row)) {
       widget.onError('请先填写提案信息后再保存草稿');
       return;
     }
+    FocusManager.instance.primaryFocus?.unfocus();
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
     try {
-      final confirmed = _row.copyWith(
-        form: _keepUnreviewed(
-          proposalIntakeConfirmContractEdits(_withEstimatedFinanceCosts(_form)),
+      final prepared = _row.copyWith(form: _persistableForm(_form));
+      final fallback = _row.copyWith(
+        form: proposalIntakeJsonSafeForm(
+          proposalIntakePreserveUserFinanceEdits(
+            original: _form,
+            persist: proposalIntakeConfirmContractEdits(_form),
+          ),
         ),
       );
-      final saved = confirmed.id <= 0
-          ? await widget.service.create(
-              title: confirmed.title,
-              kind: confirmed.kind,
-              form: confirmed.form,
-              review: confirmed.review,
-            )
-          : await widget.service.saveResolvingConflict(confirmed);
+      var sent = prepared.form;
+      ProposalIntakeRow saved;
+      try {
+        saved = await _persistDraft(prepared);
+      } catch (error) {
+        if (proposalIntakeFormsEqual(prepared.form, fallback.form)) {
+          rethrow;
+        }
+        sent = fallback.form;
+        saved = await _persistDraft(fallback);
+      }
+      saved = saved.copyWith(
+        form: proposalIntakePreserveUserFinanceEdits(
+          original: sent,
+          persist: saved.form,
+        ),
+      );
       if (!mounted) return;
       setState(() {
         _row = saved;
         _serverForm = proposalIntakeCloneForm(saved.form);
+        _fieldEpoch++;
         _markFormDirty(false);
       });
       widget.onSaved(saved);
@@ -6173,10 +6245,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               fieldKey: 'child-syncSourceRef',
               valueOverride: proposalIntakeFormSyncSourceRef(snap),
               reviewSection: reviewOf('syncSourceRef'),
-              onSelected: (value) => _setChildTech(
-                'syncSourceRef',
-                catalogRefToJson(value),
-              ),
+              onSelected: (value) =>
+                  _setChildTech('syncSourceRef', catalogRefToJson(value)),
             ),
           ]),
           _anchor(
@@ -9820,8 +9890,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       resetReview: 'technologyCompleted',
       reviewSection: reviewSection ?? 'technologyItem:syncSourceRef',
     );
-    final current =
-        valueOverride ?? proposalIntakeFormSyncSourceRef(_form);
+    final current = valueOverride ?? proposalIntakeFormSyncSourceRef(_form);
     final selected =
         _selectedCatalog(current, _syncSourceCatalog) ??
         ((current != null && current.isNotEmpty) ? current : null);
@@ -12958,8 +13027,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   Widget _gridRow(List<Widget> cells, int columns, {required bool lastRow}) {
     final spanAll =
-        cells.length == 1 &&
-        (columns <= 1 || _isFullWidthWidget(cells.first));
+        cells.length == 1 && (columns <= 1 || _isFullWidthWidget(cells.first));
     if (spanAll) {
       return _gridCell(
         child: cells.first,

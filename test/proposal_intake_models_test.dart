@@ -1,5 +1,6 @@
 import 'package:dunes_app/features/proposal_intake/proposal_cost_estimate.dart';
 import 'package:dunes_app/features/proposal_intake/proposal_intake_models.dart';
+import 'package:dunes_app/features/proposal_intake/proposal_intake_unreviewed.dart';
 import 'package:dunes_app/features/proposal_intake/settlement_catalog.dart';
 import 'package:dunes_app/features/xflow/approval_chat_share.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -324,14 +325,11 @@ void main() {
 
   test('form sync source drives product settlement when sku has none', () {
     const source = CatalogRef(code: 'DIGITALG', name: '能源');
-    final form = proposalIntakeApplyFormSyncSource(
-      {
-        'skuDetails': [
-          {'id': 'sku-1', 'productName': '现金券'},
-        ],
-      },
-      source,
-    );
+    final form = proposalIntakeApplyFormSyncSource({
+      'skuDetails': [
+        {'id': 'sku-1', 'productName': '现金券'},
+      ],
+    }, source);
     expect(proposalIntakeFormSyncSourceCode(form), 'DIGITALG');
     expect(proposalIntakeSkuDetails(form).single.syncSourceCode, 'DIGITALG');
     expect(
@@ -427,14 +425,8 @@ void main() {
       'platformMessage': '渠道不存在',
     });
     expect(proposalSkuPlatformStatusLabel(failed.platformStatus), '创建失败');
-    expect(
-      proposalSkuPlatformStatusChipLabel(failed),
-      '业务平台状态 创建失败 · 渠道不存在',
-    );
-    expect(
-      proposalSkuPlatformStatusLabel('creating'),
-      '创建中',
-    );
+    expect(proposalSkuPlatformStatusChipLabel(failed), '业务平台状态 创建失败 · 渠道不存在');
+    expect(proposalSkuPlatformStatusLabel('creating'), '创建中');
   });
 
   test('sku keeps institution snapshot', () {
@@ -2046,9 +2038,10 @@ void main() {
       '财务部负责人二 李财务 · 请填写财务技术接口',
     ]);
     expect(
-      proposalIntakeNotifyRecipients(action: 'notify_tech', row: row)
-          .map((item) => item.task)
-          .toList(),
+      proposalIntakeNotifyRecipients(
+        action: 'notify_tech',
+        row: row,
+      ).map((item) => item.task).toList(),
       ['请填写财务技术接口'],
     );
   });
@@ -3043,16 +3036,23 @@ void main() {
       'paid': false,
     });
     expect(
-      proposalIntakeFormWithDefaultFinanceInterfaces(const {}, options)['financeInterfaces'],
-      {'drain': true, 'face': true, 'writeoff': true, 'sale': true, 'subsidy': false, 'paid': false},
-    );
-    expect(
       proposalIntakeFormWithDefaultFinanceInterfaces(
-        {
-          'financeInterfaces': {'paid': true},
-        },
+        const {},
         options,
       )['financeInterfaces'],
+      {
+        'drain': true,
+        'face': true,
+        'writeoff': true,
+        'sale': true,
+        'subsidy': false,
+        'paid': false,
+      },
+    );
+    expect(
+      proposalIntakeFormWithDefaultFinanceInterfaces({
+        'financeInterfaces': {'paid': true},
+      }, options)['financeInterfaces'],
       {'paid': true},
     );
   });
@@ -4492,6 +4492,144 @@ void main() {
       {'revenue': 40, 'projectCost': 4, 'financeRemark': '子产品'},
     );
   });
+
+  test('user-owned settle fields survive estimate and empty server echo', () {
+    final original = {
+      'supplySettleMode': '预付款',
+      'supplySettleCycle': '补贴D+1',
+      'supplyPayer': '无',
+      'supplyPayAccount': '无',
+      'channelSettleMode': '分期',
+      'channelSettleCycle': '核销后D+1',
+      'channelPayee': '无',
+      'channelReceiveAccount': '无',
+      'productFinance': {
+        'main': {'supplyPayer': '', 'channelPayee': ''},
+      },
+    };
+    final wiped = proposalIntakePreserveUserFinanceEdits(
+      original: original,
+      persist: {
+        'supplyPayer': '',
+        'channelPayee': '',
+        'profit': 12,
+        'productFinance': {
+          'main': {'supplyPayer': '', 'profit': 12},
+        },
+      },
+    );
+    expect(wiped['supplySettleMode'], '预付款');
+    expect(wiped['supplyPayer'], '无');
+    expect(wiped['channelSettleMode'], '分期');
+    expect(wiped['channelPayee'], '无');
+    expect((wiped['productFinance'] as Map)['main']['supplyPayer'], '无');
+    expect(wiped['profit'], 12);
+  });
+
+  test(
+    'persist form keeps edited settle fields and sanitizes non-finite numbers',
+    () {
+      final form = proposalIntakeBuildPersistForm({
+        'supplyPayer': '无',
+        'supplyPayAccount': '无',
+        'channelPayee': '无',
+        'profit': double.nan,
+        'productFinance': {
+          'main': {'supplyPayer': '', 'profit': double.infinity},
+        },
+      });
+      expect(form['supplyPayer'], '无');
+      expect(form['supplyPayAccount'], '无');
+      expect(form['channelPayee'], '无');
+      expect(form['profit'], isA<num>());
+      expect((form['profit'] as num).isFinite, isTrue);
+    },
+  );
+
+  test('purchase persist keeps market and finance remark after unreviewed merge', () {
+    const review = {
+      'marketCompleted': false,
+      'financeCompleted': true,
+      'purchaseContractCompleted': true,
+      'salesContractCompleted': true,
+    };
+    final form = proposalIntakeBuildPersistForm(
+      {
+        'salesPolicy': '新销售政策',
+        'supplierPolicy': '新供给政策',
+        'executionPlan': '新执行计划',
+        'riskPoints': '新风险点',
+        'purchaseProducts': <String>['现金券'],
+        'supplyProducts': [
+          {'id': 'sp-1', 'productName': '供给A'},
+        ],
+        'financeRemark': '采购财务备注',
+        'purchaseName': '应保持合同名',
+      },
+      keepUnreviewed: (current) => proposalIntakeKeepUnreviewedForm(
+        baseline: {
+          'salesPolicy': '',
+          'supplierPolicy': '',
+          'executionPlan': '',
+          'riskPoints': '',
+          'purchaseProducts': <String>[],
+          'supplyProducts': <Map<String, dynamic>>[],
+          'financeRemark': '',
+          'purchaseName': '旧合同',
+        },
+        current: current,
+        review: review,
+      ),
+    );
+    expect(form['salesPolicy'], '新销售政策');
+    expect(form['supplierPolicy'], '新供给政策');
+    expect(form['executionPlan'], '新执行计划');
+    expect(form['riskPoints'], '新风险点');
+    expect(form['purchaseProducts'], <String>['现金券']);
+    expect((form['supplyProducts'] as List).single['productName'], '供给A');
+    expect(form['financeRemark'], '采购财务备注');
+    expect(form['purchaseName'], '旧合同');
+  });
+
+  test(
+    'estimating keeps user-edited main settle fields over stale productFinance',
+    () {
+      final form = proposalApplyEstimatedFinanceCosts({
+        'supplySettleMode': '预付款',
+        'supplySettleCycle': '补贴D+1',
+        'supplyPayer': '无',
+        'supplyPayAccount': '无',
+        'channelSettleMode': '分期',
+        'channelSettleCycle': '核销后D+1',
+        'channelPayee': '无',
+        'channelReceiveAccount': '无',
+        'productFinance': {
+          'main': {
+            'supplySettleMode': '',
+            'supplySettleCycle': '',
+            'supplyPayer': '',
+            'supplyPayAccount': '',
+            'channelSettleMode': '',
+            'channelPayee': '',
+          },
+        },
+      });
+      expect(form['supplySettleMode'], '预付款');
+      expect(form['supplySettleCycle'], '补贴D+1');
+      expect(form['supplyPayer'], '无');
+      expect(form['supplyPayAccount'], '无');
+      expect(form['channelSettleMode'], '分期');
+      expect(form['channelSettleCycle'], '核销后D+1');
+      expect(form['channelPayee'], '无');
+      expect(form['channelReceiveAccount'], '无');
+      final main = proposalIntakeProductFinance(
+        form,
+        owner: kProposalProductFinanceMain,
+      );
+      expect(main['supplyPayer'], '无');
+      expect(main['channelSettleMode'], '分期');
+    },
+  );
 
   test('product finance scope calculates only its own products', () {
     final form = {

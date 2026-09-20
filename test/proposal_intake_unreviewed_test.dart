@@ -2,6 +2,17 @@ import 'package:dunes_app/features/proposal_intake/proposal_intake_unreviewed.da
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('json-safe form drops NaN so draft encode can succeed', () {
+    final form = proposalIntakeJsonSafeForm({
+      'supplyPayer': '无',
+      'profit': double.nan,
+      'nested': {'margin': double.infinity},
+    });
+    expect(form['supplyPayer'], '无');
+    expect(form['profit'], 0);
+    expect((form['nested'] as Map)['margin'], 0);
+  });
+
   test('unreviewed turnover times can change while reviewed profit stays', () {
     const review = {
       'marketCompleted': true,
@@ -93,57 +104,60 @@ void main() {
     );
   });
 
-  test('rejected child product settlement can change while reviewed rows stay', () {
-    const review = {
-      'marketCompleted': true,
-      'financeCompleted': false,
-      'financeItems': {
-        'skuSettle:child-1:st-a': true,
-        'skuSettle:child-1:st-b': false,
-      },
-    };
-    const baseline = {
-      'childProducts': [
-        {
-          'id': 'child-1',
-          'productName': '加油100',
-          'settlements': [
-            {'id': 'st-a', 'settleRatio': '90'},
-            {'id': 'st-b', 'settleRatio': '97.5'},
-          ],
+  test(
+    'rejected child product settlement can change while reviewed rows stay',
+    () {
+      const review = {
+        'marketCompleted': true,
+        'financeCompleted': false,
+        'financeItems': {
+          'skuSettle:child-1:st-a': true,
+          'skuSettle:child-1:st-b': false,
         },
-      ],
-      'childTechnology': {'technologyPlatform': '已复核平台'},
-    };
-    final got = proposalIntakeKeepUnreviewedForm(
-      baseline: baseline,
-      current: {
+      };
+      const baseline = {
         'childProducts': [
           {
             'id': 'child-1',
-            'productName': '被改掉的子产品',
+            'productName': '加油100',
             'settlements': [
-              {'id': 'st-a', 'settleRatio': '1'},
-              {'id': 'st-b', 'settleRatio': '88'},
+              {'id': 'st-a', 'settleRatio': '90'},
+              {'id': 'st-b', 'settleRatio': '97.5'},
             ],
           },
         ],
-        'childTechnology': {'technologyPlatform': '不该改'},
-      },
-      review: review,
-    );
-    final rows = got['childProducts'] as List;
-    final child = rows.single as Map;
-    expect(child['productName'], '加油100');
-    final settlements = child['settlements'] as List;
-    expect(settlements[0]['settleRatio'], '90');
-    expect(settlements[1]['settleRatio'], '88');
-    expect(got['childTechnology']['technologyPlatform'], '不该改');
-    expect(
-      proposalIntakeFormKeyLocked('childProducts', baseline, review),
-      isFalse,
-    );
-  });
+        'childTechnology': {'technologyPlatform': '已复核平台'},
+      };
+      final got = proposalIntakeKeepUnreviewedForm(
+        baseline: baseline,
+        current: {
+          'childProducts': [
+            {
+              'id': 'child-1',
+              'productName': '被改掉的子产品',
+              'settlements': [
+                {'id': 'st-a', 'settleRatio': '1'},
+                {'id': 'st-b', 'settleRatio': '88'},
+              ],
+            },
+          ],
+          'childTechnology': {'technologyPlatform': '不该改'},
+        },
+        review: review,
+      );
+      final rows = got['childProducts'] as List;
+      final child = rows.single as Map;
+      expect(child['productName'], '加油100');
+      final settlements = child['settlements'] as List;
+      expect(settlements[0]['settleRatio'], '90');
+      expect(settlements[1]['settleRatio'], '88');
+      expect(got['childTechnology']['technologyPlatform'], '不该改');
+      expect(
+        proposalIntakeFormKeyLocked('childProducts', baseline, review),
+        isFalse,
+      );
+    },
+  );
 
   test('rejected shared settlement can change while reviewed rows stay', () {
     const review = {
@@ -183,6 +197,58 @@ void main() {
     );
   });
 
+  test('purchase market fields stay editable after contract review', () {
+    const review = {
+      'marketCompleted': false,
+      'financeCompleted': true,
+      'purchaseContractCompleted': true,
+      'salesContractCompleted': true,
+    };
+    expect(
+      proposalIntakeFormKeyLocked('salesPolicy', const {}, review),
+      isFalse,
+    );
+    expect(
+      proposalIntakeFormKeyLocked('purchaseProducts', const {}, review),
+      isFalse,
+    );
+    expect(
+      proposalIntakeFormKeyLocked('supplierPolicy', const {}, review),
+      isFalse,
+    );
+    expect(
+      proposalIntakeFormKeyLocked('executionPlan', const {}, review),
+      isFalse,
+    );
+    expect(
+      proposalIntakeFormKeyLocked('purchaseName', const {}, review),
+      isTrue,
+    );
+    expect(
+      proposalIntakeFormKeyLocked('purchaseFileName', const {}, review),
+      isTrue,
+    );
+    final got = proposalIntakeKeepUnreviewedForm(
+      baseline: {
+        'salesPolicy': '旧销售政策',
+        'purchaseProducts': <String>['旧产品'],
+        'financeRemark': '旧备注',
+        'purchaseName': '旧合同',
+      },
+      current: {
+        'salesPolicy': '新销售政策',
+        'purchaseProducts': <String>['新产品'],
+        'financeRemark': '新备注',
+        'purchaseName': '新合同',
+      },
+      review: review,
+    );
+    expect(got['salesPolicy'], '新销售政策');
+    expect(got['purchaseProducts'], <String>['新产品']);
+    expect(got['financeRemark'], '新备注');
+    expect(got['purchaseName'], '旧合同');
+  });
+
   test('productFinance stays editable after market review', () {
     const review = {'marketCompleted': true};
     expect(
@@ -208,10 +274,7 @@ void main() {
       },
       review: review,
     );
-    expect(
-      (got['productFinance'] as Map)['main']['turnoverTimes'],
-      4,
-    );
+    expect((got['productFinance'] as Map)['main']['turnoverTimes'], 4);
   });
 
   test('unreviewed nested supply fields can change after market review', () {
@@ -224,20 +287,14 @@ void main() {
         'proposalName': '已复核名称',
         'supplySettleCycle': '现金 D+2',
         'productFinance': {
-          'main': {
-            'supplySettleCycle': '现金 D+2',
-            'profit': 8,
-          },
+          'main': {'supplySettleCycle': '现金 D+2', 'profit': 8},
         },
       },
       current: {
         'proposalName': '不该改',
         'supplySettleCycle': '折扣应付已扣',
         'productFinance': {
-          'main': {
-            'supplySettleCycle': '折扣应付已扣',
-            'profit': 99,
-          },
+          'main': {'supplySettleCycle': '折扣应付已扣', 'profit': 99},
         },
       },
       review: review,

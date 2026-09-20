@@ -3752,6 +3752,17 @@ bool _proposalJsonEqual(Object? left, Object? right) {
       jsonEncode(right ?? <String, dynamic>{});
 }
 
+bool proposalIntakeFormsEqual(
+  Map<String, dynamic> left,
+  Map<String, dynamic> right,
+) {
+  try {
+    return _proposalJsonEqual(left, right);
+  } catch (_) {
+    return false;
+  }
+}
+
 /// 复核相关负责人：没选就不能通知科技 / 提交复核。
 /// 销售和采购填写环节都要指定运营。
 List<String> missingProposalReviewAssignees(
@@ -4344,6 +4355,111 @@ String proposalIntakeProductFinanceOwner(Object? raw) =>
     '$raw'.trim() == kProposalProductFinanceChildren
     ? kProposalProductFinanceChildren
     : kProposalProductFinanceMain;
+
+bool proposalIntakeIsProductFinanceField(String key) =>
+    _kProposalProductFinanceFields.contains(key);
+
+/// 用户手填的财务字段。估算和接口回包都不能用空值盖掉。
+const kProposalUserOwnedFinanceKeys = <String>{
+  'turnoverTimes',
+  'supplySettleMode',
+  'supplySettleCycle',
+  'supplyPayer',
+  'supplyPayAccount',
+  'channelSettleMode',
+  'channelSettleCycle',
+  'channelPayee',
+  'channelReceiveAccount',
+  'generalBusinessAccount',
+  'prepaidAccount',
+  'financeRemark',
+  'costItems',
+  'costItemCodes',
+  'businessCostItems',
+  'businessCostItemCodes',
+  'operatingCostItems',
+  'operatingCostItemCodes',
+  'taxCostItems',
+  'taxCostItemCodes',
+  'rollback',
+  'financeModules',
+};
+
+/// 采购提案市场手填项。复核锁和估算都不能用旧值/空值盖掉。
+const kProposalUserOwnedMarketKeys = <String>{
+  'purchaseProducts',
+  'supplyProducts',
+  'isExistingSupplyProduct',
+  'supplierPolicy',
+  'salesPolicy',
+  'executionPlan',
+  'riskPoints',
+};
+
+Map<String, dynamic> proposalIntakePreserveUserFinanceEdits({
+  required Map<String, dynamic> original,
+  required Map<String, dynamic> persist,
+}) {
+  final out = Map<String, dynamic>.from(persist);
+  void apply(
+    Map<String, dynamic> target,
+    Map<String, dynamic> source, {
+    Iterable<String> keys = kProposalUserOwnedFinanceKeys,
+  }) {
+    for (final key in keys) {
+      if (source.containsKey(key)) target[key] = source[key];
+    }
+  }
+
+  apply(out, original);
+  final originalGroups = original['productFinance'] is Map
+      ? Map<String, dynamic>.from(original['productFinance'] as Map)
+      : <String, dynamic>{};
+  final outGroups = out['productFinance'] is Map
+      ? Map<String, dynamic>.from(out['productFinance'] as Map)
+      : <String, dynamic>{};
+  for (final owner in const [
+    kProposalProductFinanceMain,
+    kProposalProductFinanceChildren,
+  ]) {
+    final nested = originalGroups[owner] is Map
+        ? Map<String, dynamic>.from(originalGroups[owner] as Map)
+        : <String, dynamic>{};
+    final source = owner == kProposalProductFinanceMain
+        ? <String, dynamic>{
+            ...nested,
+            for (final key in kProposalUserOwnedFinanceKeys)
+              if (original.containsKey(key)) key: original[key],
+          }
+        : nested;
+    if (source.isEmpty && outGroups[owner] == null) continue;
+    final dest = outGroups[owner] is Map
+        ? Map<String, dynamic>.from(outGroups[owner] as Map)
+        : <String, dynamic>{};
+    apply(dest, source);
+    outGroups[owner] = dest;
+  }
+  if (outGroups.isNotEmpty) {
+    out['productFinance'] = outGroups;
+    final main = outGroups[kProposalProductFinanceMain];
+    if (main is Map) {
+      apply(out, Map<String, dynamic>.from(main));
+    }
+  }
+  apply(out, original);
+  apply(out, original, keys: kProposalUserOwnedMarketKeys);
+  return out;
+}
+
+/// 从一份已展开的财务 scope / 顶层表单里抽出产品财务字段。
+Map<String, dynamic> proposalIntakePickProductFinanceFields(
+  Map<String, dynamic> form,
+) {
+  return {
+    for (final key in _kProposalProductFinanceFields)
+      if (form.containsKey(key)) key: form[key],
+  };
+}
 
 /// Returns one product group's finance data.
 ///
@@ -5915,9 +6031,7 @@ List<String> proposalIntakeOutputFormOptions(
   List<String> configured, {
   bool purchase = false,
 }) {
-  final out = purchase
-      ? [...kPurchaseCapabilityInputForms]
-      : [...configured];
+  final out = purchase ? [...kPurchaseCapabilityInputForms] : [...configured];
   if (!out.contains(kProposalOutputFormBusinessPlatform)) {
     out.add(kProposalOutputFormBusinessPlatform);
   }

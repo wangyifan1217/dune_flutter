@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'proposal_intake_models.dart';
+import 'proposal_intake_unreviewed.dart';
 import 'settlement_catalog.dart';
 
 const kProposalCouponProcurementCostKey = 'couponProcurementCost';
@@ -50,10 +51,7 @@ const _kEstimatedFinanceOutputKeys = {
 /// 任务评级只看主产品年化规模，子产品规模不计入。
 double? proposalIntakeMainProductScale(Map<String, dynamic> form) {
   return proposalProductScaleRollup(
-    proposalIntakeProductFinanceScope(
-      form,
-      owner: kProposalProductFinanceMain,
-    ),
+    proposalIntakeProductFinanceScope(form, owner: kProposalProductFinanceMain),
   )?.salesScale;
 }
 
@@ -640,7 +638,10 @@ List<String> proposalExclusiveVatTaxNames(
     for (final name in names)
       if (name.trim().isNotEmpty) name.trim(),
   ];
-  final vat = [for (final name in list) if (proposalIsVatTaxItem(name)) name];
+  final vat = [
+    for (final name in list)
+      if (proposalIsVatTaxItem(name)) name,
+  ];
   if (vat.isEmpty) return list;
   final keep = prefer != null && proposalIsVatTaxItem(prefer)
       ? prefer
@@ -1130,12 +1131,42 @@ Map<String, dynamic> proposalApplyEstimatedFinanceCosts(
       owner: owner,
       finance: {
         ...proposalIntakeProductFinance(next, owner: owner),
+        ...proposalIntakePickProductFinanceFields(estimated),
         for (final key in _kEstimatedFinanceOutputKeys)
           if (estimated.containsKey(key)) key: estimated[key],
       },
     );
   }
   return next;
+}
+
+/// 点保存和返回自动保存共用：估算失败时回退当前表单，保证能提交。
+Map<String, dynamic> proposalIntakeBuildPersistForm(
+  Map<String, dynamic> form, {
+  Map<String, dynamic> Function(Map<String, dynamic> form)? keepUnreviewed,
+  List<ProposalCostItemOption> businessCatalog = const [],
+  List<ProposalCostItemOption> costCatalog = const [],
+}) {
+  var next = form;
+  try {
+    next = proposalApplyEstimatedFinanceCosts(
+      form,
+      businessCatalog: businessCatalog,
+      costCatalog: costCatalog,
+    );
+  } catch (_) {
+    next = form;
+  }
+  try {
+    next = proposalIntakeConfirmContractEdits(next);
+  } catch (_) {}
+  if (keepUnreviewed != null) {
+    try {
+      next = keepUnreviewed(next);
+    } catch (_) {}
+  }
+  next = proposalIntakePreserveUserFinanceEdits(original: form, persist: next);
+  return proposalIntakeJsonSafeForm(next);
 }
 
 String? _manualKeyForAmounts(String amountsKey) => switch (amountsKey) {

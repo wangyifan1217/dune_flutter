@@ -42,6 +42,8 @@ class TaskItem {
     this.openItemCount = 0,
     this.itemsReadyToClose = false,
     this.displayStatus = '',
+    this.hasPendingChange = false,
+    this.pendingChangeKind = '',
   });
 
   final int id;
@@ -88,6 +90,8 @@ class TaskItem {
   final int openItemCount;
   final bool itemsReadyToClose;
   final String displayStatus;
+  final bool hasPendingChange;
+  final String pendingChangeKind;
 
   bool get isMain => parentId == null;
   bool get isPending =>
@@ -150,6 +154,8 @@ class TaskItem {
       openItemCount: (json['openItemCount'] as num?)?.toInt() ?? 0,
       itemsReadyToClose: json['itemsReadyToClose'] == true,
       displayStatus: '${json['displayStatus'] ?? ''}',
+      hasPendingChange: json['hasPendingChange'] == true,
+      pendingChangeKind: '${json['pendingChangeKind'] ?? ''}',
     );
   }
 }
@@ -205,6 +211,8 @@ class TaskDetail {
     this.logs = const [],
     this.evalLogs = const [],
     this.attachments = const [],
+    this.pendingChangeRequest,
+    this.changeHistory = const [],
   });
 
   final TaskItem task;
@@ -212,6 +220,133 @@ class TaskDetail {
   final List<TaskProgressLog> logs;
   final List<TaskEvalLog> evalLogs;
   final List<TaskAttachment> attachments;
+  final TaskChangeRequest? pendingChangeRequest;
+  final List<TaskChangeRequest> changeHistory;
+}
+
+class TaskChangeField {
+  const TaskChangeField({
+    required this.field,
+    this.from = '',
+    this.to = '',
+  });
+
+  final String field;
+  final String from;
+  final String to;
+
+  factory TaskChangeField.fromJson(Map<String, dynamic> json) {
+    return TaskChangeField(
+      field: '${json['field'] ?? ''}',
+      from: '${json['from'] ?? ''}',
+      to: '${json['to'] ?? ''}',
+    );
+  }
+}
+
+class TaskChangeRequest {
+  const TaskChangeRequest({
+    required this.id,
+    required this.taskId,
+    this.kind = 'change',
+    this.status = 'pending',
+    this.requesterUserId = 0,
+    this.approverUserId = 0,
+    this.proposedTitle,
+    this.proposedDescription,
+    this.proposedDueAt,
+    this.proposedOwnerUserId,
+    this.previousTitle,
+    this.previousDescription,
+    this.previousDueAt,
+    this.previousOwnerUserId,
+    this.overdueAtSubmit = false,
+    this.requesterComment = '',
+    this.decisionComment = '',
+    this.decidedBy,
+    this.decidedAt,
+    this.createdAt,
+    this.requesterName = '',
+    this.approverName = '',
+    this.proposedOwnerName = '',
+    this.previousOwnerName = '',
+    this.decidedByName = '',
+    this.changes = const [],
+  });
+
+  final int id;
+  final int taskId;
+  final String kind;
+  final String status;
+  final int requesterUserId;
+  final int approverUserId;
+  final String? proposedTitle;
+  final String? proposedDescription;
+  final DateTime? proposedDueAt;
+  final int? proposedOwnerUserId;
+  final String? previousTitle;
+  final String? previousDescription;
+  final DateTime? previousDueAt;
+  final int? previousOwnerUserId;
+  final bool overdueAtSubmit;
+  final String requesterComment;
+  final String decisionComment;
+  final int? decidedBy;
+  final DateTime? decidedAt;
+  final DateTime? createdAt;
+  final String requesterName;
+  final String approverName;
+  final String proposedOwnerName;
+  final String previousOwnerName;
+  final String decidedByName;
+  final List<TaskChangeField> changes;
+
+  bool get isPending => status == 'pending';
+  bool get isAssignment => kind == 'assignment';
+
+  factory TaskChangeRequest.fromJson(Map<String, dynamic> json) {
+    DateTime? parseTime(dynamic v) {
+      if (v == null) return null;
+      return DateTime.tryParse(v.toString());
+    }
+
+    String? parseString(dynamic v) {
+      if (v == null) return null;
+      return v.toString();
+    }
+
+    return TaskChangeRequest(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      taskId: (json['taskId'] as num?)?.toInt() ?? 0,
+      kind: '${json['kind'] ?? 'change'}',
+      status: '${json['status'] ?? 'pending'}',
+      requesterUserId: (json['requesterUserId'] as num?)?.toInt() ?? 0,
+      approverUserId: (json['approverUserId'] as num?)?.toInt() ?? 0,
+      proposedTitle: parseString(json['proposedTitle']),
+      proposedDescription: parseString(json['proposedDescription']),
+      proposedDueAt: parseTime(json['proposedDueAt']),
+      proposedOwnerUserId: (json['proposedOwnerUserId'] as num?)?.toInt(),
+      previousTitle: parseString(json['previousTitle']),
+      previousDescription: parseString(json['previousDescription']),
+      previousDueAt: parseTime(json['previousDueAt']),
+      previousOwnerUserId: (json['previousOwnerUserId'] as num?)?.toInt(),
+      overdueAtSubmit: json['overdueAtSubmit'] == true,
+      requesterComment: '${json['requesterComment'] ?? ''}',
+      decisionComment: '${json['decisionComment'] ?? ''}',
+      decidedBy: (json['decidedBy'] as num?)?.toInt(),
+      decidedAt: parseTime(json['decidedAt']),
+      createdAt: parseTime(json['createdAt']),
+      requesterName: '${json['requesterName'] ?? ''}',
+      approverName: '${json['approverName'] ?? ''}',
+      proposedOwnerName: '${json['proposedOwnerName'] ?? ''}',
+      previousOwnerName: '${json['previousOwnerName'] ?? ''}',
+      decidedByName: '${json['decidedByName'] ?? ''}',
+      changes: (json['changes'] as List? ?? const [])
+          .whereType<Map>()
+          .map((e) => TaskChangeField.fromJson(Map<String, dynamic>.from(e)))
+          .toList(growable: false),
+    );
+  }
 }
 
 class TaskProgressLog {
@@ -515,6 +650,37 @@ String taskStatusLabel(String status) {
       return '草稿';
     default:
       return '进行中';
+  }
+}
+
+String taskPendingChangeLabel(String kind) {
+  if (kind == 'assignment') return '指派待审批';
+  return '修改待审批';
+}
+
+String taskChangeFieldLabel(String field) {
+  switch (field) {
+    case 'title':
+      return '标题';
+    case 'description':
+      return '内容';
+    case 'dueAt':
+      return '截止日';
+    case 'owner':
+      return '负责人';
+    default:
+      return field;
+  }
+}
+
+String taskChangeStatusLabel(String status) {
+  switch (status) {
+    case 'approved':
+      return '已通过';
+    case 'rejected':
+      return '已驳回';
+    default:
+      return '待审批';
   }
 }
 

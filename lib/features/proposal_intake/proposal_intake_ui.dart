@@ -1259,7 +1259,7 @@ Future<void> showProposalIntakeProcessHelp(
                 const Text(
                   '「催办」只把当前待办再发一次到审批助手，不改变提案阶段。\n'
                   '「转发」自己选会话，把提案名片发出去，不经过审批助手，也不推进流程。\n'
-                  '点「通知科技 / 提交复核 / 通知最终人」仍走审批助手，那是第一次派发流程待办。',
+                  '点「通知财务填写 / 提交复核 / 通知最终人」仍走审批助手，那是第一次派发流程待办。',
                   style: TextStyle(
                     color: ProposalPalette.text,
                     fontSize: 13,
@@ -1825,7 +1825,7 @@ class _ProposalProgressDot extends StatelessWidget {
   }
 }
 
-/// 结算比例不允许输入 `%`；粘贴 `1%` 时自动换成 `0.01`。
+/// 结算比例只填小数（如 `0.08`），不允许输入 `%` / `％`。
 class ProposalSettleRatioFormatter extends TextInputFormatter {
   const ProposalSettleRatioFormatter();
 
@@ -1834,23 +1834,21 @@ class ProposalSettleRatioFormatter extends TextInputFormatter {
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    var text = newValue.text.replaceAll('％', '%');
-    if (text.contains('%')) {
-      text = proposalIntakeNormalizeSettleRatio(text);
-    } else {
-      final buffer = StringBuffer();
-      var hasDot = false;
-      for (final rune in text.runes) {
-        final ch = String.fromCharCode(rune);
-        if (ch == '.' && !hasDot) {
-          hasDot = true;
-          buffer.write(ch);
-        } else if (ch.compareTo('0') >= 0 && ch.compareTo('9') <= 0) {
-          buffer.write(ch);
-        }
-      }
-      text = buffer.toString();
+    if (newValue.text.contains('%') || newValue.text.contains('％')) {
+      return oldValue;
     }
+    final buffer = StringBuffer();
+    var hasDot = false;
+    for (final rune in newValue.text.runes) {
+      final ch = String.fromCharCode(rune);
+      if (ch == '.' && !hasDot) {
+        hasDot = true;
+        buffer.write(ch);
+      } else if (ch.compareTo('0') >= 0 && ch.compareTo('9') <= 0) {
+        buffer.write(ch);
+      }
+    }
+    final text = buffer.toString();
     if (text == newValue.text) return newValue;
     return TextEditingValue(
       text: text,

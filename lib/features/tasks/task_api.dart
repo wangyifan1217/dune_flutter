@@ -150,12 +150,23 @@ class TaskApi {
         .whereType<Map>()
         .map((e) => TaskEvalLog.fromJson(Map<String, dynamic>.from(e)))
         .toList(growable: false);
+    TaskChangeRequest? pending;
+    final pendingRaw = map['pendingChangeRequest'];
+    if (pendingRaw is Map) {
+      pending = TaskChangeRequest.fromJson(Map<String, dynamic>.from(pendingRaw));
+    }
+    final history = (map['changeHistory'] as List? ?? const [])
+        .whereType<Map>()
+        .map((e) => TaskChangeRequest.fromJson(Map<String, dynamic>.from(e)))
+        .toList(growable: false);
     return TaskDetail(
       task: task,
       subtasks: subs,
       logs: logs,
       evalLogs: evalLogs,
       attachments: attachments,
+      pendingChangeRequest: pending,
+      changeHistory: history,
     );
   }
 
@@ -221,6 +232,49 @@ class TaskApi {
       body: jsonEncode(body),
     );
     final data = _unwrap(resp);
+    return TaskItem.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<TaskItem> assignTask(
+    int id, {
+    required int ownerUserId,
+    String comment = '',
+  }) async {
+    final resp = await http.post(
+      _uri('$id/assign'),
+      headers: _headers,
+      body: jsonEncode({
+        'ownerUserId': ownerUserId,
+        'comment': comment,
+      }),
+    );
+    final data = _unwrap(resp);
+    return TaskItem.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<TaskItem> approveChange(int id, {String comment = ''}) async {
+    final resp = await http.post(
+      _uri('$id/approve-change'),
+      headers: _headers,
+      body: jsonEncode({'comment': comment}),
+    );
+    final data = _unwrap(resp);
+    if (data is Map && data['task'] is Map) {
+      return TaskItem.fromJson(Map<String, dynamic>.from(data['task'] as Map));
+    }
+    return TaskItem.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<TaskItem> rejectChange(int id, {String comment = ''}) async {
+    final resp = await http.post(
+      _uri('$id/reject-change'),
+      headers: _headers,
+      body: jsonEncode({'comment': comment}),
+    );
+    final data = _unwrap(resp);
+    if (data is Map && data['task'] is Map) {
+      return TaskItem.fromJson(Map<String, dynamic>.from(data['task'] as Map));
+    }
     return TaskItem.fromJson(Map<String, dynamic>.from(data as Map));
   }
 

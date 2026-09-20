@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>饕 · 使用热力（图示预览）</title>
+  <style>
+    :root {
+      --bg: #e8e4f2;
+      --phone: #1c1726;
+      --surface: #f5f6f8;
+      --card: #fff;
+      --purple: #7b5cd8;
+      --deep: #4a2fa0;
+      --pale: #f4eefc;
+      --text: #261d38;
+      --text2: #5a5c56;
+      --text3: #94938a;
+      --line: #ede8f5;
+      --sans: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      padding: 28px 16px 48px;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; }
+    .kicker { font-size: 11px; letter-spacing: .08em; color: #5a3d9e; font-weight: 700; }
+    h1 { font-size: 22px; margin: 6px 0 8px; }
+    .sub { font-size: 13px; color: var(--text2); line-height: 1.55; margin-bottom: 20px; }
+    .stage { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+    .phone {
+      width: 390px;
+      height: 800px;
+      background: var(--phone);
+      border-radius: 36px;
+      padding: 12px;
+      box-shadow: 0 18px 50px rgba(48, 24, 90, .18);
+    }
+    .screen {
+      height: 100%;
+      background: var(--surface);
+      border-radius: 28px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .status {
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 18px 0;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .body { flex: 1; overflow: auto; padding: 0 16px 22px; }
+    .nav { display: flex; align-items: center; gap: 8px; padding: 8px 4px 10px; }
+    .back { color: var(--text2); font-size: 13px; cursor: pointer; }
+    .title { font-size: 18px; font-weight: 700; color: var(--purple); }
+    .meta { margin-left: auto; font-size: 12px; color: var(--text2); font-weight: 600; }
+    .search {
+      display: flex; align-items: center; gap: 8px;
+      background: #fff; border: 1px solid #e8eaed; border-radius: 10px;
+      padding: 8px 10px; margin-bottom: 8px;
+    }
+    .search input {
+      border: 0; outline: none; flex: 1; font-size: 13px; background: transparent;
+      font-family: inherit; color: var(--text);
+    }
+    .search .ico { color: var(--text3); font-size: 14px; }
+    .chips { display: flex; gap: 8px; padding-bottom: 10px; overflow-x: auto; }
+    .chip {
+      border: 1px solid #e8eaed; background: #fff; color: var(--text2);
+      border-radius: 8px; padding: 6px 10px; font-size: 12px; white-space: nowrap;
+      cursor: pointer;
+    }
+    .chip.on { background: #f0eef7; border-color: var(--purple); color: var(--purple); font-weight: 700; }
+    .dept-lab { font-size: 12px; font-weight: 600; color: var(--text2); margin: 2px 0 8px; }
+    .dept-lab em { color: var(--purple); font-style: normal; font-size: 11px; margin-left: 8px; }
+    .metrics { display: flex; gap: 8px; margin-bottom: 12px; }
+    .metric {
+      flex: 1; background: #fff; border: 1px solid var(--line);
+      border-radius: 12px; padding: 10px 8px; text-align: center;
+    }
+    .metric b { display: block; font-size: 16px; }
+    .metric span { font-size: 11px; color: var(--text3); }
+    h2 { font-size: 15px; margin: 14px 0 4px; }
+    .hint { font-size: 12px; color: var(--text3); margin-bottom: 10px; }
+    .card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+    }
+    .heat {
+      display: grid;
+      gap: 3px 3px;
+      align-items: center;
+    }
+    .heat .lab {
+      font-size: 11px; font-weight: 700; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .heat .hd {
+      font-size: 10px; color: var(--text3); font-weight: 600; text-align: center;
+    }
+    .cell {
+      width: 100%; aspect-ratio: 1; border-radius: 5px; min-height: 14px;
+      cursor: pointer; border: 1px solid transparent;
+    }
+    .cell:hover, .cell.on { border-color: var(--deep); }
+    .custom-panel {
+      background: #fff; border: 1px solid var(--line); border-radius: 12px;
+      padding: 10px; margin-bottom: 10px;
+    }
+    .legend {
+      display: flex; align-items: center; gap: 4px;
+      justify-content: flex-end; margin-top: 8px;
+      font-size: 10px; color: var(--text3);
+    }
+    .legend i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+    .bars { display: flex; flex-direction: column; gap: 8px; }
+    .bar-row { display: grid; grid-template-columns: 42px 1fr 52px; gap: 8px; align-items: center; }
+    .bar-row span { font-size: 11px; font-weight: 700; }
+    .bar-row em { font-size: 11px; color: var(--purple); font-style: normal; text-align: right; }
+    .track { height: 10px; background: #f1ebf9; border-radius: 99px; overflow: hidden; }
+    .track b { display: block; height: 100%; background: linear-gradient(90deg, #c4b0f0, #4a2fa0); border-radius: 99px; }
+    .people { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+    .person {
+      background: #fff; border-radius: 12px; padding: 10px 12px;
+      display: flex; gap: 10px; align-items: center; cursor: pointer;
+    }
+    .av {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: #f1ebf9; color: var(--purple);
+      display: grid; place-items: center; font-weight: 700;
+    }
+    .person .info { flex: 1; }
+    .name { font-size: 14px; font-weight: 700; }
+    .dept { font-size: 12px; color: var(--text3); }
+    .stay { font-size: 13px; font-weight: 700; color: var(--purple); }
+    .days { display: flex; align-items: end; height: 128px; gap: 6px; }
+    .day { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: end; align-items: center; }
+    .col { width: 100%; border-radius: 6px 6px 2px 2px; }
+    .day span { font-size: 10px; color: var(--text3); margin-top: 6px; }
+    .page-row { margin-bottom: 10px; }
+    .page-row .top { display: flex; justify-content: space-between; font-size: 13px; }
+    .page-row i { display: block; height: 8px; background: #f1ebf9; border-radius: 99px; margin-top: 4px; overflow: hidden; }
+    .page-row i b { display: block; height: 100%; background: var(--purple); }
+    .empty { text-align: center; color: var(--text3); font-size: 13px; padding: 28px 0; }
+    .side { flex: 1; min-width: 260px; font-size: 13px; color: var(--text2); line-height: 1.65; }
+    .hub-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 10px 4px; background: #fff; border: 1px solid var(--line);
+      border-radius: 16px; padding: 16px 8px;
+    }
+    .hub-item { text-align: center; cursor: pointer; }
+    .hub-ico {
+      width: 42px; height: 42px; margin: 0 auto 8px; border-radius: 13px;
+      display: grid; place-items: center; color: #fff; font-size: 13px; font-weight: 700;
+    }
+    .hub-item b { display: block; font-size: 12px; }
+    .hub-item span { font-size: 10px; color: var(--text3); }
+    .tip {
+      font-size: 11px; color: var(--purple); background: #f3eefa;
+      border-radius: 8px; padding: 8px 10px; margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="kicker">STATIC CHART PREVIEW</div>
+    <h1>使用热力 · 图示</h1>
+    <p class="sub">点本周 / 近7天 / 近30天 / 自定义，看列数和日期号怎么变。纵轴始终是模块，颜色按当前区间最久的那格重算。示意「今天」是周三，方便看出本周只有 3 列。</p>
+    <div class="stage">
+      <div class="phone"><div class="screen" id="app"></div></div>
+      <div class="side">
+        <p><b>权限：</b>组织用户勾选「使用热力查看全部」后看全员；未勾选只看自己及下级。</p>
+        <p><b>筛选：</b>顶部搜姓名/账号，部门 chips 再收窄。图表和列表一起变。</p>
+        <p><b>格子图：</b>行永远是模块。换日期只改列（日期号）和深浅，不会把纵轴换成别的。</p>
+        <p><b>近30天：</b>汇总按 30 天，格子最多画最近 14 列，避免挤成一条。</p>
+        <p>从督导入口点「使用热力」开始看。</p>
+      </div>
+    </div>
+  </div>
+  <script>
+    const TODAY = new Date(2026, 8, 16);
+    const MODULES = ["通讯", "审批", "NOVA", "灯塔", "任务", "会议"];
+    const BASE = { 通讯: 72, 审批: 58, NOVA: 50, 灯塔: 30, 任务: 34, 会议: 22 };
+    const depts = ["全部", "产品部", "技术部", "财务部", "人事部"];
+    const people = [
+      { name: "王敏", account: "wangmin", dept: "产品部", stay: "4小时21分", top: "通讯" },
+      { name: "李强", account: "liqiang", dept: "技术部", stay: "3小时08分", top: "审批" },
+      { name: "陈苑", account: "chenyuan", dept: "财务部", stay: "2小时44分", top: "NOVA" },
+      { name: "赵琳", account: "zhaolin", dept: "人事部", stay: "1小时16分", top: "灯塔" },
+    ];
+    const pages = [
+      { name: "消息", stay: "1小时48分", w: 90 },
+      { name: "审批工作台", stay: "52分", w: 48 },
+      { name: "NOVA", stay: "41分", w: 38 },
+      { name: "提案详情", stay: "28分", w: 26 },
+      { name: "灯塔", stay: "18分", w: 16 },
+    ];
+    const customPresets = [
+      { key: "a", label: "09-08~09-12", from: new Date(2026, 8, 8), to: new Date(2026, 8, 12) },
+      { key: "b", label: "09-01~09-07", from: new Date(2026, 8, 1), to: new Date(2026, 8, 7) },
+      { key: "c", label: "09-14~09-16", from: new Date(2026, 8, 14), to: new Date(2026, 8, 16) },
+    ];
+
+    let state = {
+      view: "heat",
+      q: "",
+      dept: "全部",
+      module: "",
+      user: 0,
+      range: "d7",
+      customKey: "a",
+    };
+
+    function addDays(d, n) {
+      const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+      return x;
+    }
+    function sameDay(a, b) {
+      return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    }
+    function pad(n) { return String(n).padStart(2, "0"); }
+    function dayLabel(d) { return pad(d.getDate()); }
+    function eachDay(from, to) {
+      const out = [];
+      for (let d = new Date(from); d <= to; d = addDays(d, 1)) out.push(new Date(d));
+      return out;
+    }
+    function mondayOf(d) {
+      const day = d.getDay() || 7;
+      return addDays(d, 1 - day);
+    }
+
+    function selectedDates() {
+      if (state.range === "week") return eachDay(mondayOf(TODAY), TODAY);
+      if (state.range === "d7") return eachDay(addDays(TODAY, -6), TODAY);
+      if (state.range === "d30") return eachDay(addDays(TODAY, -13), TODAY);
+      const p = customPresets.find((x) => x.key === state.customKey) || customPresets[0];
+      return eachDay(p.from, p.to);
+    }
+
+    function cellValue(module, date) {
+      const weekend = date.getDay() === 0 || date.getDay() === 6;
+      let base = BASE[module];
+      if (weekend) {
+        if (module === "审批" || module === "任务") base *= 0.12;
+        else if (module === "会议") base *= 0.08;
+        else if (module === "通讯") base *= 0.38;
+        else base *= 0.22;
+      }
+      if (module === "通讯" && date.getDay() === 3) base = 100;
+      if (module === "会议" && date.getDate() === 11) base = 86;
+      if (module === "灯塔" && date.getDate() <= 7) base *= 0.2;
+      if (module === "任务" && date.getDate() >= 14) base *= 1.25;
+      const seed = (module.charCodeAt(0) * 13 + date.getDate() * 17 + date.getMonth()) % 37;
+      return Math.max(0, Math.round(base * (0.62 + seed / 90)));
+    }
+
+    function heatColor(v, max) {
+      if (v <= 0 || max <= 0) return "#f4eefc";
+      const t = Math.min(1, v / max);
+      const a = [244, 238, 252], b = [74, 47, 160];
+      const c = a.map((x, i) => Math.round(x + (b[i] - x) * (0.12 + t * 0.88)));
+      return `rgb(${c.join(",")})`;
+    }
+
+    function filteredPeople() {
+      const q = state.q.trim().toLowerCase();
+      return people.filter((p) => {
+        if (state.dept !== "全部" && p.dept !== state.dept) return false;
+        if (!q) return true;
+        return p.name.includes(state.q.trim()) || p.account.includes(q);
+      });
+    }
+
+    function chartFor(list, dates) {
+      const scale = list.length === 0 ? 0 : list.length === 4 && state.dept === "全部" && !state.q ? 1 : 0.35 + list.length * 0.16;
+      const rows = MODULES.map((name) => ({
+        name,
+        vals: dates.map((d) => Math.round(cellValue(name, d) * scale)),
+      })).filter((r) => r.vals.some((v) => v > 4));
+      const max = Math.max(1, ...rows.flatMap((r) => r.vals));
+      const sums = rows.map((r) => ({
+        name: r.name,
+        sum: r.vals.reduce((a, b) => a + b, 0),
+      })).sort((a, b) => b.sum - a.sum);
+      const maxSum = Math.max(1, ...sums.map((s) => s.sum));
+      const bars = sums.map((s) => ({
+        name: s.name,
+        w: Math.round(s.sum / maxSum * 100),
+        label: (s.sum / 38).toFixed(1) + "h",
+      }));
+      const users = state.dept === "全部" && !state.q
+        ? (state.range === "d30" ? 61 : state.range === "week" ? 36 : 48)
+        : list.length;
+      const sessions = state.dept === "全部" && !state.q
+        ? (state.range === "d30" ? 890 : state.range === "week" ? 140 : 312)
+        : list.length * (state.range === "d30" ? 18 : 9);
+      const avg = state.range === "week" ? "31分" : state.range === "d30" ? "22分" : list.length === 1 ? "38分" : "26分";
+      return { rows, bars, max, users, sessions, avg };
+    }
+
+    function rangeChipLabel(key) {
+      if (key === "custom") {
+        const p = customPresets.find((x) => x.key === state.customKey) || customPresets[0];
+        return p.label;
+      }
+      return { week: "本周", d7: "近7天", d30: "近30天" }[key];
+    }
+
+    function setRange(key) {
+      state.range = key;
+      state.pickCustom = key === "custom";
+      render();
+    }
+
+    function setQ(v) {
+      state.q = v;
+      render();
+      const input = document.getElementById("q");
+      if (input) {
+        input.focus();
+        input.setSelectionRange(v.length, v.length);
+      }
+    }
+
+    function render() {
+      const root = document.getElementById("app");
+      if (state.view === "hub") {
+        root.innerHTML = `
+          <div class="status"><span>12:58</span><span>5G</span></div>
+          <div class="body">
+            <div class="nav"><div class="title">饕</div></div>
+            <div class="hub-grid">
+              ${[
+                ["工作情况","全部部门","#8b6be8"],
+                ["使用热力","全部人员","#6b5ce8","heat"],
+                ["AI效能","个人与部门","#6272ea"],
+                ["会议纪要","本人及下级","#9e43c2"],
+                ["IM会话","本人及下级","#4884e8"],
+                ["知识库","本人及下级","#d67e33"],
+                ["Cursor","账号与用量","#4a3e66"],
+              ].map(([t,s,c,go]) => `
+                <div class="hub-item" ${go ? `onclick="state.view='heat';render()"` : ""}>
+                  <div class="hub-ico" style="background:${c}">${t.slice(0,1)}</div>
+                  <b>${t}</b><span>${s}</span>
+                </div>`).join("")}
+            </div>
+          </div>`;
+        return;
+      }
+      if (state.view === "heat") {
+        const dates = selectedDates();
+        const list = filteredPeople();
+        const chart = chartFor(list, dates);
+        const qEsc = state.q.replace(/"/g, "&quot;");
+        const cols = dates.length;
+        const rangeHint = state.range === "week"
+          ? `本周 ${dayLabel(dates[0])}–${dayLabel(dates[dates.length - 1])}，共 ${cols} 列`
+          : state.range === "d7"
+            ? `近7天，${cols} 列`
+            : state.range === "d30"
+              ? `近30天汇总，格子只画最近 ${cols} 天`
+              : `自定义 ${rangeChipLabel("custom")}，${cols} 列`;
+        root.innerHTML = `
+          <div class="status"><span>12:58</span><span>5G</span></div>
+          <div class="body">
+            <div class="nav">
+              <div class="back" onclick="state.view='hub';render()">‹ 饕</div>
+              <div class="title">沙丘使用热力</div>
+              <div class="meta">活跃 ${chart.users} 人</div>
+            </div>
+            <div class="search">
+              <span class="ico">⌕</span>
+              <input id="q" value="${qEsc}" placeholder="按姓名或账号筛选"
+                oninput="setQ(this.value)" />
+            </div>
+            <div class="chips">
+              ${["week","d7","d30","custom"].map((k) =>
+                `<div class="chip${state.range === k ? " on" : ""}" onclick="setRange('${k}')">${rangeChipLabel(k)}</div>`
+              ).join("")}
+            </div>
+            ${state.range === "custom" ? `
+              <div class="custom-panel">
+                <div class="hint" style="margin:0 0 8px">选一段日期，格子列数跟着变</div>
+                <div class="chips" style="padding:0">
+                  ${customPresets.map((p) =>
+                    `<div class="chip${state.customKey === p.key ? " on" : ""}" onclick="state.customKey='${p.key}';render()">${p.label}</div>`
+                  ).join("")}
+                </div>
+              </div>` : ""}
+            <div class="dept-lab">部门筛选<em>全部门</em></div>
+            <div class="chips">
+              ${depts.map((d) =>
+                `<div class="chip${state.dept === d ? " on" : ""}" onclick="state.dept='${d}';render()">${d}</div>`).join("")}
+            </div>
+            <div class="metrics">
+              <div class="metric"><b>${chart.users}人</b><span>活跃</span></div>
+              <div class="metric"><b>${chart.avg}</b><span>平均停留</span></div>
+              <div class="metric"><b>${chart.sessions}</b><span>会话</span></div>
+            </div>
+            <div class="tip">${rangeHint}。纵轴仍是模块，深浅按这 ${cols} 天里的最大值。</div>
+            <h2>模块 × 日期</h2>
+            <div class="hint">格子越深，当天在该模块停得越久</div>
+            ${list.length === 0 || chart.rows.length === 0 ? `<div class="card empty">暂无使用数据</div>` : `
+            <div class="card">
+              <div class="heat" style="grid-template-columns: 36px repeat(${cols}, minmax(0,1fr))">
+                <div></div>
+                ${dates.map((d) => `<div class="hd">${dayLabel(d)}</div>`).join("")}
+                ${chart.rows.map((r) => `
+                  <div class="lab">${r.name}</div>
+                  ${r.vals.map((v, ci) => `
+                    <div class="cell${state.module === r.name ? " on" : ""}" style="background:${heatColor(v, chart.max)}"
+                      title="${r.name} ${dates[ci].getMonth() + 1}/${dates[ci].getDate()} 停留指数 ${v}"
+                      onclick="state.module=state.module==='${r.name}'?'':'${r.name}';render()"></div>`).join("")}
+                `).join("")}
+              </div>
+              <div class="legend">
+                低 <i style="background:#f4eefc"></i>
+                <i style="background:#d4c4f4"></i>
+                <i style="background:#9b7ee8"></i>
+                <i style="background:#4a2fa0"></i> 高
+              </div>
+            </div>
+            ${state.module ? `<div class="tip">已选模块：${state.module}</div>` : ""}
+            <h2>模块总停留</h2>
+            <div class="card bars">
+              ${chart.bars.map((b) => `
+                <div class="bar-row">
+                  <span>${b.name}</span>
+                  <div class="track"><b style="width:${b.w}%"></b></div>
+                  <em>${b.label}</em>
+                </div>`).join("")}
+            </div>`}
+            <h2>团队停留</h2>
+            <div class="hint">点人看个人折线/柱状</div>
+            <div class="people">
+              ${list.length === 0 ? `<div class="empty">暂无使用数据</div>` : list.map((p) => `
+                <div class="person" onclick="state.view='user';state.user=${people.indexOf(p)};render()">
+                  <div class="av">${p.name[0]}</div>
+                  <div class="info">
+                    <div class="name">${p.name}</div>
+                    <div class="dept">${p.dept} · 常用${p.top}</div>
+                  </div>
+                  <div class="stay">${p.stay}</div>
+                </div>`).join("")}
+            </div>
+          </div>`;
+        return;
+      }
+      const p = people[state.user] || people[0];
+      const dates = selectedDates();
+      const vals = dates.map((d) => cellValue(p.top, d));
+      const max = Math.max(1, ...vals);
+      root.innerHTML = `
+        <div class="status"><span>12:58</span><span>5G</span></div>
+        <div class="body">
+          <div class="nav">
+            <div class="back" onclick="state.view='heat';render()">‹ 使用热力</div>
+            <div class="title">${p.name}</div>
+          </div>
+          <div class="hint">${p.dept} · ${rangeChipLabel(state.range)} ${p.stay}</div>
+          <h2>每日停留</h2>
+          <div class="card">
+            <div class="days">
+              ${vals.map((h, i) => `
+                <div class="day">
+                  <div class="col" style="height:${Math.round(h / max * 100)}%;background:${heatColor(h, max)}"></div>
+                  <span>${dayLabel(dates[i])}</span>
+                </div>`).join("")}
+            </div>
+          </div>
+          <h2>页面停留</h2>
+          <div class="card">
+            ${pages.map((x) => `
+              <div class="page-row">
+                <div class="top"><span>${x.name}</span><b style="color:var(--purple)">${x.stay}</b></div>
+                <i><b style="width:${x.w}%"></b></i>
+              </div>`).join("")}
+          </div>
+        </div>`;
+    }
+    render();
+  </script>
+</body>
+</html>

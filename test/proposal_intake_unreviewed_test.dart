@@ -189,10 +189,23 @@ void main() {
     expect(rows[1]['settleRatio'], '0.88');
   });
 
-  test('salesScale is not treated as sales contract field', () {
+  test('salesScale locks after market review', () {
     const review = {'marketCompleted': true, 'salesContractCompleted': true};
     expect(
       proposalIntakeFormKeyLocked('salesScale', const {}, review),
+      isTrue,
+    );
+    expect(
+      proposalIntakeFormKeyLocked('salesScale', const {}, {
+        'marketCompleted': false,
+        'financeCompleted': true,
+      }),
+      isFalse,
+    );
+    expect(
+      proposalIntakeFormKeyLocked('salesScale', const {}, {
+        'financeItems': {'salesScale': true},
+      }),
       isFalse,
     );
   });

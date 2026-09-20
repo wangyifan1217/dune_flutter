@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/analytics/usage_analytics.dart';
 import '../../core/http/session_http.dart';
 import '../../core/layout/chat_layout.dart';
 import '../../core/navigation/navigation_controller.dart';
@@ -91,6 +92,9 @@ import '../qianji/native_qianji_cursor_account_page.dart';
 import '../qianji/native_qianji_fund_secondment_detail_page.dart';
 import '../qianji/native_qianji_fund_secondment_page.dart';
 import '../qianji/native_qianji_detail_page.dart';
+import '../qianji/app_usage_models.dart';
+import '../qianji/native_qianji_app_usage_detail_page.dart';
+import '../qianji/native_qianji_app_usage_page.dart';
 import '../qianji/native_qianji_hub_page.dart';
 import '../qianji/efficiency/native_qianji_efficiency_boss_preview.dart';
 import '../qianji/efficiency/native_qianji_efficiency_page.dart';
@@ -245,6 +249,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   bool _meetingQuickStart = false;
   DateTime? _workSituationMonth;
   String _workSituationFilter = 'all';
+  int _usageUserId = 0;
+  String _usageUserName = '';
+  String _usageUserDept = '';
+  DateTime? _usageFrom;
+  DateTime? _usageTo;
   int _selectedProposalId = 0;
   XflowTodoHint? _selectedTodoHint;
   String _b10BackScreen = 'P1';
@@ -736,6 +745,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     print('[Badge] lifecycle=$state activelyInChat=$_userActivelyInChat');
+    UsageAnalytics.instance.onLifecycle(
+      foreground: state == AppLifecycleState.resumed,
+    );
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden) {
@@ -3718,6 +3730,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
             });
             widget.navigation.go('QJEAB');
           },
+          onOpenAppUsage: () => widget.navigation.go('QJUH'),
           onOpenFundSecondment: widget.session.effectiveFundSecondmentAccess
               ? () => widget.navigation.go('QJFS')
               : null,
@@ -3927,6 +3940,31 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           viewerName: widget.session.displayName ?? '',
           initialMonth: _workSituationMonth,
           initialFilter: _workSituationFilter,
+        );
+      case 'QJUH':
+        return NativeQianjiAppUsagePage(
+          session: widget.session,
+          onBack: widget.navigation.back,
+          onOpenUser: (AppUsageUserRow user, DateTime? from, DateTime? to) {
+            setState(() {
+              _usageUserId = user.userId;
+              _usageUserName = user.displayName;
+              _usageUserDept = user.departmentName;
+              _usageFrom = from;
+              _usageTo = to;
+            });
+            widget.navigation.go('QJUHD');
+          },
+        );
+      case 'QJUHD':
+        return NativeQianjiAppUsageDetailPage(
+          session: widget.session,
+          userId: _usageUserId,
+          displayName: _usageUserName,
+          departmentName: _usageUserDept,
+          from: _usageFrom,
+          to: _usageTo,
+          onBack: widget.navigation.back,
         );
       case 'QJTR':
         return NativeQianjiTravelPage(
@@ -5407,6 +5445,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJKB',
       'QJEA',
       'QJEAB',
+      'QJUH',
+      'QJUHD',
       'QJFS',
       'QJFSD',
       'QJTR',
@@ -5500,6 +5540,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'QJKB' ||
         screen == 'QJEA' ||
         screen == 'QJEAB' ||
+        screen == 'QJUH' ||
+        screen == 'QJUHD' ||
         screen == 'QJFS' ||
         screen == 'QJFSD' ||
         screen == 'QJTR' ||
@@ -5573,6 +5615,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final last = _lastQianjiScreen;
     if (!_isNovaTabScreen(last)) return 'QJ';
     if (last == 'QJRC' && _selectedRobotConsultId.isEmpty) return 'QJR';
+    if (last == 'QJUHD' && _usageUserId <= 0) return 'QJUH';
     if (last == 'QJCD' && _cursorBindingId <= 0) return 'QJC';
     if (last == 'QJFSD' && _fundSecondmentId <= 0) return 'QJFS';
     if (last == 'QJI' && _selectedQianjiEntity == null) return 'QJD';
@@ -5600,6 +5643,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJKB',
       'QJEA',
       'QJEAB',
+      'QJUH',
+      'QJUHD',
       'QJFS',
       'QJFSD',
       'QJTR',
@@ -5650,6 +5695,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJKB' => const ['QJ', 'QJKB'],
       'QJEA' => const ['QJ', 'QJEA'],
       'QJEAB' => const ['QJ', 'QJEAB'],
+      'QJUH' => const ['QJ', 'QJUH'],
+      'QJUHD' => const ['QJ', 'QJUH', 'QJUHD'],
       'QJTR' => const ['QJ', 'QJTR'],
       'QJCF' => const ['QJ', 'QJCF'],
       'QJMB' => const ['QJ', 'QJMB'],

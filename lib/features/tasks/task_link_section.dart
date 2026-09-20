@@ -254,12 +254,17 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
     if (text.isEmpty || text == widget.task.description.trim()) return;
     setState(() => _busy = true);
     try {
-      await TaskApi(
+      final updated = await TaskApi(
         widget.session,
       ).patchTask(widget.task.id, {'description': text});
       if (!mounted) return;
-      showDunesCenterToast(context, '已保存，AI 开始匹配相关会议');
-      _markRunningLocally();
+      showDunesCenterToast(
+        context,
+        updated.hasPendingChange ? '已提交修改，待直属上级审批' : '已保存，AI 开始匹配相关会议',
+      );
+      if (!updated.hasPendingChange) {
+        _markRunningLocally();
+      }
       widget.onTaskChanged?.call();
     } catch (e) {
       if (mounted) showDunesCenterToast(context, '$e');

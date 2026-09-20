@@ -21,7 +21,6 @@ const _kFinanceAliasKeys = {
 };
 
 const _kFinanceReviewKeys = {
-  'salesScale',
   'revenue',
   'couponProcurementCost',
   'profit',
@@ -126,7 +125,9 @@ bool proposalIntakeFormKeyLocked(
   if (_kBusinessCostFormKeys.contains(key)) {
     return _reviewFlag(review, 'financeCompleted');
   }
-  if (key == 'hunId') return _reviewFlag(review, 'marketCompleted');
+  if (key == 'hunId' || key == 'salesScale') {
+    return _reviewFlag(review, 'marketCompleted');
+  }
   if (key == 'rollback') {
     return _reviewFlag(review, 'technologyCompleted') ||
         _itemReviewed(review, 'technologyItems', 'skuProducts');
@@ -250,6 +251,9 @@ bool _skuSettleRowReviewed(
   String skuId,
   String settleId,
 ) {
+  if (_itemReviewed(review, 'financeItems', 'skuSettlements')) {
+    return true;
+  }
   final key = '$settlePrefix:$skuId:$settleId';
   if (_itemReviewed(review, 'financeItems', key)) return true;
   if (!_reviewFlag(review, 'financeCompleted')) return false;

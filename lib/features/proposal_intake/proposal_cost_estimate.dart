@@ -20,8 +20,8 @@ const kProposalVatOperatorName = '增值税及附加（运营商+公共出行）
 const kProposalStampTaxName = '印花税';
 
 const kProposalRevenueFormulaTitle = '收入';
-const kProposalRevenueFormula = '各产品：年化规模 × 结算比例 加总';
-const kProposalSalesScaleFormula = '各产品年化规模加总';
+const kProposalRevenueFormula = '市场部规模 × 主产品收入（结算比例，或结算单价÷面值）加总';
+const kProposalSalesScaleFormula = '市场部基础信息填写的年化规模';
 const kProposalProcurementFormula = '各供给规则：关联产品年化规模 × 该条比例，加总';
 const kProposalProfitFormula = '收入 − 采购 − 项目';
 const kProposalMarginFormula = '利润 ÷ 规模';
@@ -55,7 +55,7 @@ double? proposalIntakeMainProductScale(Map<String, dynamic> form) {
   )?.salesScale;
 }
 
-const kProposalProjectCostFormula = '各产品年化规模 × 结算比例，加总';
+const kProposalProjectCostFormula = '各产品年化规模 ×（结算比例或结算单价÷面值）加总';
 
 const kProposalVatSurcharge = 1.12;
 
@@ -222,29 +222,57 @@ double proposalParseSettleRatio(Object? raw) {
   return proposalParseTaxRate(text);
 }
 
+/// 一条结算对规模的乘数：填了比例用比例，填了单价用 单价÷面值。
+double proposalIntakeSettleShare(
+  ProposalFinanceSettleTerms terms, {
+  required double face,
+}) {
+  final ratioText = terms.displayRatio.trim();
+  if (ratioText.isNotEmpty) return proposalParseSettleRatio(ratioText);
+  final price = proposalIntakeParseFaceNumber(terms.displayUnitPrice);
+  if (price > 0 && face > 0) return price / face;
+  return 0;
+}
+
 ProposalProductScaleRollup? proposalProductScaleRollup(
   Map<String, dynamic> form,
 ) {
-  var any = false;
-  var scale = 0.0;
+  final hydrated = proposalIntakeHydrateMarketSalesScale(form);
+  final scale = proposalFinanceAmount(hydrated, kProposalSalesScaleKey);
+  if (scale <= 0) return null;
   var revenue = 0.0;
-  for (final terms in proposalIntakeProductSalesSettleTerms(form)) {
-    if (terms.scale.trim().isEmpty) continue;
-    any = true;
-    final amount = proposalAnnualizedScale(terms);
-    scale += amount;
-    revenue += amount * proposalParseSettleRatio(terms.displayRatio);
+  var anyShare = false;
+  for (final sku in proposalIntakeSkuDetails(hydrated)) {
+    final face = proposalIntakeSkuSettleFace(sku);
+    for (final settle in proposalIntakeSkuSettlements(sku)) {
+      if (settle.isCost) continue;
+      final share = proposalIntakeSettleShare(settle.terms, face: face);
+      if (share <= 0) continue;
+      anyShare = true;
+      revenue += scale * share;
+    }
   }
-  if (!any) return null;
   return ProposalProductScaleRollup(
     salesScale: proposalRoundWan(scale),
-    revenue: proposalRoundWan(revenue),
+    revenue: proposalRoundWan(anyShare ? revenue : 0),
   );
 }
 
+Map<String, dynamic> proposalIntakeHydrateMarketSalesScale(
+  Map<String, dynamic> form,
+) {
+  if (proposalIntakeFormHasText(form, kProposalSalesScaleKey)) return form;
+  final legacy = proposalIntakeLegacyProductScaleTotal(form);
+  if (legacy <= 0) return form;
+  return Map<String, dynamic>.from(form)
+    ..[kProposalSalesScaleKey] = proposalRoundWan(legacy);
+}
+
 double proposalEffectiveSalesScale(Map<String, dynamic> form) {
-  return proposalProductScaleRollup(form)?.salesScale ??
-      proposalFinanceAmount(form, kProposalSalesScaleKey);
+  final hydrated = proposalIntakeHydrateMarketSalesScale(form);
+  final stored = proposalFinanceAmount(hydrated, kProposalSalesScaleKey);
+  if (stored > 0) return stored;
+  return proposalProductScaleRollup(hydrated)?.salesScale ?? 0;
 }
 
 double proposalEffectiveRevenue(Map<String, dynamic> form) {
@@ -278,11 +306,14 @@ double proposalEstimatedMarginAmount(
 Map<String, dynamic> proposalApplyProductScaleRollup(
   Map<String, dynamic> form,
 ) {
-  final rollup = proposalProductScaleRollup(form);
-  if (rollup == null) return form;
-  final next = Map<String, dynamic>.from(form)
-    ..[kProposalSalesScaleKey] = rollup.salesScale
+  final hydrated = proposalIntakeHydrateMarketSalesScale(form);
+  final rollup = proposalProductScaleRollup(hydrated);
+  if (rollup == null) return hydrated;
+  final next = Map<String, dynamic>.from(hydrated)
     ..['revenue'] = rollup.revenue;
+  if (!proposalIntakeFormHasText(form, kProposalSalesScaleKey)) {
+    next[kProposalSalesScaleKey] = rollup.salesScale;
+  }
   return next;
 }
 
@@ -712,9 +743,26 @@ double? proposalEstimatedProcurementCost(Map<String, dynamic> form) {
         proposalParseSettleRatio(terms.displayRatio);
     covered.addAll(terms.skuIds);
   }
-  for (final sku in proposalIntakeAllSellableSkus(form)) {
+  for (final sku in proposalIntakeSkuDetails(form)) {
     if (covered.contains(sku.id)) continue;
-    sum += proposalIntakeSkuScaleTotal(sku) * fallbackRatio;
+    final local = proposalIntakeSkuScaleTotal(sku);
+    sum += (local > 0 ? local : proposalEffectiveSalesScale(form)) *
+        fallbackRatio;
+    break;
+  }
+  if (sum <= 0) {
+    // 产品填写结算的成本条款：市场部规模 × 成本比例。
+    for (final sku in proposalIntakeSkuDetails(form)) {
+      for (final settle in proposalIntakeSkuSettlements(sku)) {
+        if (!settle.isCost) continue;
+        final share = proposalIntakeSettleShare(
+          settle.terms,
+          face: proposalIntakeSkuSettleFace(sku),
+        );
+        if (share <= 0) continue;
+        sum += proposalEffectiveSalesScale(form) * share;
+      }
+    }
   }
   if (sum <= 0) return null;
   return proposalRoundWan(sum);
@@ -730,11 +778,48 @@ double proposalAssociatedSalesScale(
   if (skuIds.isEmpty) return proposalEffectiveSalesScale(form);
   final want = skuIds.toSet();
   var sum = 0.0;
+  var anyLegacy = false;
   for (final sku in proposalIntakeAllSellableSkus(form)) {
     if (!want.contains(sku.id)) continue;
-    sum += proposalIntakeSkuScaleTotal(sku);
+    final local = proposalIntakeSkuScaleTotal(sku);
+    if (local > 0) {
+      anyLegacy = true;
+      sum += local;
+    }
   }
-  return sum;
+  if (anyLegacy) return sum;
+  return proposalEffectiveSalesScale(form);
+}
+
+/// 单价测算用面值：先看本条产品，没有则用关联子产品/主产品，再退到任意有面值的券。
+double proposalIntakeCostSettleFace(
+  Map<String, dynamic> form,
+  List<String> skuIds,
+) {
+  final skus = proposalIntakeAllSellableSkus(form);
+  double firstFace(bool Function(ProposalSkuDetailRow sku) test) {
+    for (final sku in skus) {
+      if (!test(sku)) continue;
+      final value = proposalIntakeSkuSettleFace(sku);
+      if (value > 0) return value;
+    }
+    return 0;
+  }
+
+  final want = skuIds.toSet();
+  if (want.isNotEmpty) {
+    final direct = firstFace((sku) => want.contains(sku.id));
+    if (direct > 0) return direct;
+    final child = firstFace((sku) => want.contains(sku.parentSkuId));
+    if (child > 0) return child;
+    final parents = {
+      for (final sku in skus)
+        if (want.contains(sku.id) && sku.parentSkuId.isNotEmpty) sku.parentSkuId,
+    };
+    final parent = firstFace((sku) => parents.contains(sku.id));
+    if (parent > 0) return parent;
+  }
+  return firstFace((_) => true);
 }
 
 class ProposalPayableCostHit {
@@ -763,27 +848,42 @@ String proposalSettleBillTypeL3(ProposalFinanceSettleTerms terms) {
   return path;
 }
 
-String? proposalPayableBillCostName(ProposalFinanceSettleTerms terms) {
+String? proposalPayableBillCostName(
+  ProposalFinanceSettleTerms terms, {
+  List<String> costNames = const [],
+}) {
   final path = proposalSettleBillPath(terms);
   if (path.contains('应收')) return null;
-  if (path.contains('/') && !path.contains('应付')) return null;
   final display = proposalProjectCostDisplayName(
     proposalSettleBillTypeL3(terms),
   );
-  if (display.isEmpty || !kProposalProjectCostItems.contains(display)) {
+  final allowed = costNames.isNotEmpty ? costNames : kProposalProjectCostItems;
+  if (display.isEmpty || !allowed.contains(display)) {
     return null;
   }
   return display;
 }
 
+double _projectCostSettleShare(
+  Map<String, dynamic> form,
+  ProposalFinanceSettleTerms terms,
+  List<String> skuIds,
+) {
+  return proposalIntakeSettleShare(
+    terms,
+    face: proposalIntakeCostSettleFace(form, skuIds),
+  );
+}
+
 double _projectCostSettleRatio(ProposalFinanceSettleTerms terms) {
-  if (terms.displayRatio.trim().isEmpty) return 0;
-  return proposalParseSettleRatio(terms.displayRatio);
+  return proposalIntakeSettleShare(terms, face: 0);
 }
 
 String _projectCostRatioLabel(ProposalFinanceSettleTerms terms) {
   final text = terms.displayRatio.trim();
   if (text.isNotEmpty) return text;
+  final price = terms.displayUnitPrice.trim();
+  if (price.isNotEmpty) return '单价 $price';
   return proposalFormatWan(_projectCostSettleRatio(terms));
 }
 
@@ -792,11 +892,11 @@ double proposalPayableCostLineAmount(
   ProposalFinanceSettleTerms terms,
   List<String> skuIds,
 ) {
-  final ratio = _projectCostSettleRatio(terms);
-  if (ratio <= 0) return 0;
+  final share = _projectCostSettleShare(form, terms, skuIds);
+  if (share <= 0) return 0;
   final scale = proposalAssociatedSalesScale(form, skuIds);
   if (scale <= 0) return 0;
-  return scale * ratio;
+  return scale * share;
 }
 
 List<String> _expandPayableHitSkuIds(
@@ -820,13 +920,14 @@ List<String> _expandPayableHitSkuIds(
 }
 
 List<ProposalPayableCostHit> proposalPayableProjectCostHits(
-  Map<String, dynamic> form,
-) {
+  Map<String, dynamic> form, {
+  List<String> costNames = const [],
+}) {
   final hits = <ProposalPayableCostHit>[];
   final covered = <String>{};
 
   void addHit(ProposalFinanceSettleTerms terms, List<String> skuIds) {
-    final costName = proposalPayableBillCostName(terms);
+    final costName = proposalPayableBillCostName(terms, costNames: costNames);
     if (costName == null) return;
     final ids = [
       for (final id in skuIds)
@@ -861,6 +962,17 @@ List<ProposalPayableCostHit> proposalPayableProjectCostHits(
   }
   for (final sku in proposalIntakeAllSellableSkus(form)) {
     for (final settle in proposalIntakeSkuSettlements(sku)) {
+      if (settle.isCost) {
+        addHit(
+          settle.terms.copyWith(
+            billType: settle.terms.billType.trim().isEmpty
+                ? '应付'
+                : settle.terms.billType,
+          ),
+          [sku.id],
+        );
+        continue;
+      }
       addHit(settle.terms, [sku.id]);
     }
   }
@@ -871,7 +983,8 @@ List<ProposalPayableCostHit> proposalPayableProjectCostHits(
   };
   final salesGroups = [
     for (final group in proposalIntakeSharedSettlements(form))
-      if (proposalPayableBillCostName(group.terms) == null)
+      if (proposalPayableBillCostName(group.terms, costNames: costNames) ==
+          null)
         [
           for (final id in group.skuIds)
             if (id.trim().isNotEmpty) id.trim(),
@@ -907,7 +1020,7 @@ String proposalProjectCostFormulaSubstitution(
   final grouped = <String, List<double>>{};
   for (final hit in proposalPayableProjectCostHits(form)) {
     if (!aliases.contains(hit.costName)) continue;
-    final ratio = _projectCostSettleRatio(hit.terms);
+    final ratio = _projectCostSettleShare(form, hit.terms, hit.skuIds);
     if (ratio <= 0) continue;
     final label = _projectCostRatioLabel(hit.terms);
     if (hit.skuIds.isEmpty) {
@@ -935,24 +1048,30 @@ String proposalProjectCostFormulaSubstitution(
   return '${parts.join(' + ')} = ${proposalFormatWan(estimated)} 万元';
 }
 
-List<String> proposalMatchedProjectCostNames(Map<String, dynamic> form) {
+List<String> proposalMatchedProjectCostNames(
+  Map<String, dynamic> form, {
+  List<String> costNames = const [],
+}) {
   final seen = <String>{};
   final names = <String>[];
-  for (final hit in proposalPayableProjectCostHits(form)) {
+  final order = costNames.isNotEmpty ? costNames : kProposalProjectCostItems;
+  for (final hit in proposalPayableProjectCostHits(form, costNames: order)) {
     if (seen.add(hit.costName)) names.add(hit.costName);
   }
   return [
-    for (final name in kProposalProjectCostItems)
+    for (final name in order)
       if (seen.contains(name)) name,
-    ...names.where((name) => !kProposalProjectCostItems.contains(name)),
+    ...names.where((name) => !order.contains(name)),
   ];
 }
 
 Map<String, dynamic> proposalEnsureProjectCostItems(
   Map<String, dynamic> form, {
   List<ProposalCostItemOption> catalog = const [],
+  List<String> costNames = const [],
 }) {
-  final matched = proposalMatchedProjectCostNames(form);
+  final order = costNames.isNotEmpty ? costNames : kProposalProjectCostItems;
+  final matched = proposalMatchedProjectCostNames(form, costNames: order);
   if (matched.isEmpty) return form;
   final current = [
     for (final name in proposalCostSelectedNames(form, 'costItems'))
@@ -960,11 +1079,10 @@ Map<String, dynamic> proposalEnsureProjectCostItems(
   ];
   final want = {...matched, ...current};
   final next = [
-    for (final name in kProposalProjectCostItems)
+    for (final name in order)
       if (want.contains(name)) name,
     for (final name in current)
-      if (!kProposalProjectCostItems.contains(name) && want.contains(name))
-        name,
+      if (!order.contains(name) && want.contains(name)) name,
   ];
   if (next.join('\u0001') == current.join('\u0001')) {
     return form;
@@ -984,13 +1102,17 @@ double? proposalEstimateProjectCostAmount(
   Map<String, dynamic> form,
   String name, {
   List<ProposalCostItemOption> catalog = const [],
+  List<String> costNames = const [],
 }) {
   final aliases = proposalProjectCostNamesOf(
     proposalProjectCostDisplayName(name),
   );
   var sum = 0.0;
   var any = false;
-  for (final hit in proposalPayableProjectCostHits(form)) {
+  for (final hit in proposalPayableProjectCostHits(
+    form,
+    costNames: costNames,
+  )) {
     if (!aliases.contains(hit.costName)) continue;
     final amount = proposalPayableCostLineAmount(form, hit.terms, hit.skuIds);
     if (amount <= 0) continue;
@@ -1014,8 +1136,13 @@ Map<String, dynamic> proposalApplyEstimatedProcurement(
 Map<String, dynamic> proposalApplyEstimatedProjectCosts(
   Map<String, dynamic> form, {
   List<ProposalCostItemOption> catalog = const [],
+  List<String> costNames = const [],
 }) {
-  var next = proposalEnsureProjectCostItems(form, catalog: catalog);
+  var next = proposalEnsureProjectCostItems(
+    form,
+    catalog: catalog,
+    costNames: costNames,
+  );
   final names = proposalCostSelectedNames(next, 'costItems');
   if (names.isEmpty) return next;
   final amounts = proposalCostAmountMap(next['costItemAmounts']);
@@ -1028,6 +1155,7 @@ Map<String, dynamic> proposalApplyEstimatedProjectCosts(
       next,
       name,
       catalog: catalog,
+      costNames: costNames,
     );
     if (estimated == null) continue;
     if (amounts[id] == estimated) continue;
@@ -1074,10 +1202,15 @@ Map<String, dynamic> _applyEstimatedFinanceCostsOnForm(
   Map<String, dynamic> form, {
   List<ProposalCostItemOption> businessCatalog = const [],
   List<ProposalCostItemOption> costCatalog = const [],
+  List<String> costNames = const [],
 }) {
   var next = proposalApplyTurnoverCash(proposalApplyProductScaleRollup(form));
   next = proposalApplyEstimatedProcurement(next);
-  next = proposalApplyEstimatedProjectCosts(next, catalog: costCatalog);
+  next = proposalApplyEstimatedProjectCosts(
+    next,
+    catalog: costCatalog,
+    costNames: costNames,
+  );
   next = proposalWriteDerivedProfit(next);
   next = proposalEnsureAutoTaxItems(next);
   next = _writeEstimatedBucket(
@@ -1114,30 +1247,27 @@ Map<String, dynamic> proposalApplyEstimatedFinanceCosts(
   Map<String, dynamic> form, {
   List<ProposalCostItemOption> businessCatalog = const [],
   List<ProposalCostItemOption> costCatalog = const [],
+  List<String> costNames = const [],
 }) {
-  final owners = [
-    kProposalProductFinanceMain,
-    if (proposalIntakeHasChildProducts(form)) kProposalProductFinanceChildren,
-  ];
-  var next = form;
-  for (final owner in owners) {
-    final estimated = _applyEstimatedFinanceCostsOnForm(
-      proposalIntakeProductFinanceScope(next, owner: owner),
-      businessCatalog: businessCatalog,
-      costCatalog: costCatalog,
-    );
-    next = proposalIntakeWriteProductFinance(
-      next,
-      owner: owner,
-      finance: {
-        ...proposalIntakeProductFinance(next, owner: owner),
-        ...proposalIntakePickProductFinanceFields(estimated),
-        for (final key in _kEstimatedFinanceOutputKeys)
-          if (estimated.containsKey(key)) key: estimated[key],
-      },
-    );
-  }
-  return next;
+  final estimated = _applyEstimatedFinanceCostsOnForm(
+    proposalIntakeProductFinanceScope(
+      form,
+      owner: kProposalProductFinanceMain,
+    ),
+    businessCatalog: businessCatalog,
+    costCatalog: costCatalog,
+    costNames: costNames,
+  );
+  return proposalIntakeWriteProductFinance(
+    form,
+    owner: kProposalProductFinanceMain,
+    finance: {
+      ...proposalIntakeProductFinance(form, owner: kProposalProductFinanceMain),
+      ...proposalIntakePickProductFinanceFields(estimated),
+      for (final key in _kEstimatedFinanceOutputKeys)
+        if (estimated.containsKey(key)) key: estimated[key],
+    },
+  );
 }
 
 /// 点保存和返回自动保存共用：估算失败时回退当前表单，保证能提交。
@@ -1146,6 +1276,7 @@ Map<String, dynamic> proposalIntakeBuildPersistForm(
   Map<String, dynamic> Function(Map<String, dynamic> form)? keepUnreviewed,
   List<ProposalCostItemOption> businessCatalog = const [],
   List<ProposalCostItemOption> costCatalog = const [],
+  List<String> costNames = const [],
 }) {
   var next = form;
   try {
@@ -1153,6 +1284,7 @@ Map<String, dynamic> proposalIntakeBuildPersistForm(
       form,
       businessCatalog: businessCatalog,
       costCatalog: costCatalog,
+      costNames: costNames,
     );
   } catch (_) {
     next = form;

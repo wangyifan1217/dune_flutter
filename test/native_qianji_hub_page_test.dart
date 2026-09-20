@@ -39,6 +39,7 @@ void main() {
 
     // 2. Supervise Grid (Alipay 4-col grid style)
     expect(find.text('工作情况'), findsOneWidget);
+    expect(find.text('使用热力'), findsOneWidget);
     expect(find.text('本人及下级'), findsWidgets);
     expect(find.text('会议纪要'), findsWidgets);
     expect(find.text('IM会话'), findsOneWidget);
@@ -79,6 +80,7 @@ void main() {
       displayName: '张三',
       jobTitle: '投资总监',
       workSituationViewAll: true,
+      appUsageViewAll: true,
       qianjiAccess: true,
       digitalEmployeeAccessKnown: false,
     );
@@ -98,7 +100,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('全部部门'), findsOneWidget);
+    expect(find.text('全部人员'), findsOneWidget);
     expect(find.text('工作情况'), findsOneWidget);
+    expect(find.text('使用热力'), findsOneWidget);
   });
 }
 

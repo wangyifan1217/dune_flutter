@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/analytics/usage_analytics.dart';
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
@@ -37,6 +40,24 @@ class _DunesShellState extends State<DunesShell> {
   void initState() {
     super.initState();
     _navigation = DunesNavigationController(initialScreen: widget.initialScreen);
+    _bindUsage();
+  }
+
+  @override
+  void didUpdateWidget(covariant DunesShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.session.userId != widget.session.userId ||
+        oldWidget.session.token != widget.session.token) {
+      _bindUsage();
+    }
+  }
+
+  void _bindUsage() {
+    unawaited(
+      UsageAnalytics.instance.bind(widget.session).then((_) {
+        UsageAnalytics.instance.trackScreen(_navigation.currentScreen);
+      }),
+    );
   }
 
   bool get _enableEdgeBack => defaultTargetPlatform == TargetPlatform.iOS;

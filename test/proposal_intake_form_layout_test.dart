@@ -205,7 +205,7 @@ void main() {
 
     expect(find.text('保存'), findsOneWidget);
     expect(find.text('转发'), findsOneWidget);
-    expect(find.byTooltip('通知科技负责人'), findsOneWidget);
+    expect(find.byTooltip('通知财务填写'), findsOneWidget);
     expect(find.byTooltip('删除'), findsOneWidget);
     expect(find.byTooltip('协作提案流程'), findsOneWidget);
     final save = tester.getRect(find.widgetWithText(OutlinedButton, '保存'));
@@ -215,7 +215,7 @@ void main() {
     expect((save.height - status.height).abs(), lessThan(3));
     expect(save.width, greaterThanOrEqualTo(status.width));
     expect((save.center.dy - status.center.dy).abs(), lessThan(8));
-    expect(find.text('通知科技'), findsNothing);
+    expect(find.text('通知财务填写'), findsNothing);
     expect(find.text('删除'), findsNothing);
     expect(find.text('D'), findsNothing);
     expect(tester.takeException(), isNull);
@@ -405,7 +405,7 @@ void main() {
       expect(find.text('未保存'), findsOneWidget);
       expect(find.text('保存'), findsOneWidget);
       expect(find.text('转发'), findsOneWidget);
-      expect(find.byTooltip('通知科技负责人'), findsNothing);
+      expect(find.byTooltip('通知财务填写'), findsNothing);
       expect(find.byTooltip('删除'), findsNothing);
       expect(tester.takeException(), isNull);
     },
@@ -903,7 +903,7 @@ void main() {
     expect(find.text('王奕凡 发起'), findsNothing);
     expect(find.text('已通过'), findsNothing);
     expect(find.text('李思'), findsWidgets);
-    expect(find.text('待复核'), findsWidgets);
+    expect(find.textContaining('点击复核'), findsWidgets);
     expect(find.text('进行中'), findsNothing);
 
     await tester.tap(find.text('查看全部步骤'));
@@ -992,21 +992,14 @@ void main() {
           'createdBy': 11,
           'form': {
             'createdByName': '王奕凡',
-            'financeModules': [
-              {
-                'id': 'fm-1',
-                'title': '财务模块',
-                'naturalMonth': '是',
-                'revenue': {'ourParty': clause, 'counterparty': '供货方'},
-              },
-            ],
+            'financeRemark': clause,
           },
           'review': {'stage': 'pending_president'},
         }),
       ),
     );
     await tester.pump();
-    await _scrollUntil(tester, '我方主体');
+    await _scrollUntil(tester, '完整可见');
     expect(find.textContaining('完整可见'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
@@ -1742,7 +1735,7 @@ void main() {
       findsNothing,
     );
     expect(find.text('由提交人填写。当前账号不可编辑本板块。'), findsOneWidget);
-    expect(find.byTooltip('通知科技负责人'), findsNothing);
+    expect(find.byTooltip('通知财务填写'), findsNothing);
   });
 
   testWidgets(
@@ -1862,7 +1855,7 @@ void main() {
     expect(find.text('销售合同.pdf'), findsOneWidget);
     expect(find.text('查看合同'), findsOneWidget);
     expect(find.text('下载合同'), findsNothing);
-    expect(find.text('未签合同 · 仅内部 PDF 预览'), findsOneWidget);
+    expect(find.text('未签合同 · 点击文件用系统应用打开'), findsOneWidget);
     expect(
       tester
           .widget<TextButton>(
@@ -1946,7 +1939,9 @@ void main() {
     expect(find.text('上线产品文件'), findsNothing);
   });
 
-  testWidgets('finance owner 2 can add modules during review', (tester) async {
+  testWidgets('finance owner 2 no longer sees launch finance modules', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1440, 2400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -1970,10 +1965,9 @@ void main() {
       ),
     );
     await tester.pump();
-    await _scrollUntil(tester, '新增财务模块');
-    expect(find.text('新增财务模块'), findsOneWidget);
+    expect(find.text('新增财务模块'), findsNothing);
+    expect(find.text('尚未添加财务模块'), findsNothing);
     expect(find.text('新增上线'), findsNothing);
-    expect(find.text('尚未添加财务模块'), findsOneWidget);
     expect(find.textContaining('由财务在对应行点新增或关联'), findsNothing);
   });
 
@@ -2043,19 +2037,19 @@ void main() {
     expect(find.textContaining('加油100元'), findsWidgets);
     expect(find.text('$kProposalChildProductLabel科技'), findsNothing);
     expect(find.text('$kProposalChildProductLabel财务技术接口'), findsNothing);
-    expect(find.text('$kProposalChildProductLabel结算'), findsOneWidget);
+    expect(find.text('$kProposalChildProductLabel结算'), findsNothing);
     expect(find.text('$kProposalMainProductLabel结算'), findsOneWidget);
     expect(find.text('$kProposalMainProductLabel合计'), findsOneWidget);
-    expect(find.text('$kProposalChildProductLabel合计'), findsOneWidget);
-    expect(find.text('项目成本'), findsNWidgets(2));
-    expect(find.text('经营成本'), findsNWidgets(2));
-    expect(find.text('税务成本'), findsNWidgets(2));
+    expect(find.text('$kProposalChildProductLabel合计'), findsNothing);
+    expect(find.text('项目成本'), findsOneWidget);
+    expect(find.text('经营成本'), findsOneWidget);
+    expect(find.text('税务成本'), findsOneWidget);
     expect(find.text('是否回滚'), findsNothing);
     expect(find.text('$kProposalChildProductLabel合并财务模块'), findsNothing);
-    expect(find.text('$kProposalMainProductLabel财务模块'), findsOneWidget);
+    expect(find.text('$kProposalMainProductLabel财务模块'), findsNothing);
   });
 
-  testWidgets('existing child finance module remains visible', (tester) async {
+  testWidgets('existing child finance module stays hidden', (tester) async {
     tester.view.physicalSize = const Size(1440, 2800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -2088,9 +2082,9 @@ void main() {
       ),
     );
     await tester.pump();
-    await _scrollUntil(tester, '$kProposalChildProductLabel合并财务模块');
-    expect(find.text('$kProposalChildProductLabel合并财务模块'), findsOneWidget);
-    expect(find.text('历史子产品财务'), findsOneWidget);
+    expect(find.text('$kProposalChildProductLabel合计'), findsNothing);
+    expect(find.text('$kProposalChildProductLabel合并财务模块'), findsNothing);
+    expect(find.text('历史子产品财务'), findsNothing);
   });
 
   testWidgets('existing built product picker stays closed', (tester) async {
@@ -2286,6 +2280,102 @@ void main() {
     },
   );
 
+  testWidgets('adding a child product asks for coupon kind instead of name', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 3600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'filling',
+          'createdBy': 11,
+          'form': {
+            'skuDetails': [
+              {'id': 'sku-1', 'productName': '30包'},
+            ],
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '新增$kProposalChildProductLabel');
+    await _tapVisible(tester, find.text('新增$kProposalChildProductLabel'));
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(AlertDialog), matching: find.text('产品名称')),
+      findsNothing,
+    );
+    expect(find.text('券类型'), findsOneWidget);
+    expect(find.text('请选择现金券或满减券'), findsOneWidget);
+  });
+
+  testWidgets('market basic info includes annual scale', (tester) async {
+    tester.view.physicalSize = const Size(1440, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_harness(1440));
+    await tester.pump();
+    expect(find.text('规模（万元）'), findsOneWidget);
+    expect(find.text('子产品合计'), findsNothing);
+  });
+
+  testWidgets('tech owner can review products during awaiting_tech', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final session = AuthSession.fromJson(const {
+      'userId': 12,
+      'displayName': '李思',
+    });
+    final row = ProposalIntakeRow.fromJson({
+      'id': 1,
+      'code': 'TA-2026-0001',
+      'title': '测试提案',
+      'status': 'filling',
+      'version': 3,
+      'createdBy': 2,
+      'form': {
+        'technologyOwner': '李思',
+        'technologyOwnerUserId': 12,
+        'skuDetails': [
+          {'id': 'sku-1', 'productName': '30包'},
+        ],
+      },
+      'review': {'stage': 'awaiting_tech'},
+    });
+
+    await tester.pumpWidget(_harness(1440, session: session, row: row));
+    await tester.pump();
+    await _scrollUntil(tester, '产品相关');
+    expect(find.text('科技部负责人复核'), findsNothing);
+    final header = find.ancestor(
+      of: find.text('产品相关'),
+      matching: find.byType(Row),
+    ).first;
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.descendant(
+              of: header,
+              matching: find.widgetWithText(OutlinedButton, '点此复核'),
+            ),
+          )
+          .onPressed,
+      isNotNull,
+    );
+  });
+
   testWidgets(
     'sales purchase contract can pick an approved purchase proposal',
     (tester) async {
@@ -2389,7 +2479,7 @@ void main() {
     expect(find.text('已签销售合同.pdf'), findsOneWidget);
     expect(find.text('查看合同'), findsOneWidget);
     expect(find.text('下载合同'), findsNothing);
-    expect(find.text('已签合同 · 仅内部 PDF 预览'), findsOneWidget);
+    expect(find.text('已签合同 · 点击文件打开'), findsOneWidget);
     expect(find.text('点击选择未签合同 PDF / Word'), findsNothing);
   });
 
@@ -2571,52 +2661,145 @@ void main() {
     );
     expect(find.text('结算一'), findsNothing);
     await _tapVisible(tester, find.text('填写结算').last);
-    expect(find.text('结算一'), findsOneWidget);
-    expect(find.text('规模口径'), findsWidgets);
+    final dialog = find.byType(AlertDialog);
+    expect(find.descendant(of: dialog, matching: find.text('收入')), findsWidgets);
+    expect(find.descendant(of: dialog, matching: find.text('成本')), findsWidgets);
+    expect(find.descendant(of: dialog, matching: find.text('规模口径')), findsNothing);
+    expect(find.descendant(of: dialog, matching: find.text('账单类型')), findsNothing);
+    expect(find.descendant(of: dialog, matching: find.text('结算方式')), findsNothing);
+    expect(find.descendant(of: dialog, matching: find.text('生效时间')), findsNothing);
+    expect(find.descendant(of: dialog, matching: find.text('失效时间')), findsNothing);
+    expect(find.descendant(of: dialog, matching: find.text('新增收入')), findsOneWidget);
+    expect(find.descendant(of: dialog, matching: find.text('新增成本')), findsOneWidget);
+    expect(find.descendant(of: dialog, matching: find.text('收入一')), findsNothing);
+    expect(find.descendant(of: dialog, matching: find.text('成本一')), findsNothing);
     expect(
-      find.descendant(of: _fieldOf('规模口径').first, matching: find.text('年')),
+      find.descendant(of: dialog, matching: find.text('尚未填写收入')),
       findsOneWidget,
     );
     expect(
-      find.descendant(
-        of: _fieldOf('规模口径').first,
-        matching: find.byType(ProposalSelectField<String>),
-      ),
+      find.descendant(of: dialog, matching: find.text('尚未填写成本')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: dialog, matching: find.text('点此复核')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: dialog, matching: find.text('财务部负责人二复核')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: dialog, matching: find.text('规模（万元）')),
       findsNothing,
     );
     expect(find.text('是否已经建产品'), findsNothing);
     expect(find.text('渠道设置'), findsNothing);
     expect(find.text('标签三-一级'), findsNothing);
     expect(find.text('标签三-二级'), findsNothing);
-    expect(find.text('账单类型'), findsOneWidget);
-    expect(find.text('结算方式'), findsOneWidget);
-    expect(find.text('结算比例'), findsOneWidget);
-    expect(find.text('结算单价'), findsOneWidget);
-    expect(find.text('规模（万元）'), findsOneWidget);
-    expect(find.text('计算公式'), findsOneWidget);
-    expect(find.text('发票类型'), findsOneWidget);
-    expect(find.text('税率'), findsWidgets);
-    expect(
-      _childInField<ProposalSelectField<String>>(
-        tester,
-        '发票类型',
-      ).options.map((item) => item.value),
-      containsAll(kProposalInvoiceTypes),
+  });
+
+  testWidgets('finance reviews product settlements on the outer block', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        session: AuthSession.fromJson(const {
+          'userId': 12,
+          'displayName': '李思',
+        }),
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'reviewing',
+          'createdBy': 11,
+          'form': {
+            'financeOwner2': '李思',
+            'financeOwner2UserId': 12,
+            'skuDetails': [
+              {'id': 'sku-1', 'productName': '中石油100元', 'faceValue': '100'},
+            ],
+          },
+          'review': {'stage': 'reviewing'},
+        }),
+      ),
     );
+    await tester.pump();
+    await _scrollUntil(tester, '开始逐条复核');
+    await tester.ensureVisible(find.text('开始逐条复核'));
+    await tester.pump();
+    await tester.tap(find.text('开始逐条复核'));
+    await tester.pump();
+    await _scrollUntil(tester, '产品结算');
+    expect(find.text('点此复核'), findsWidgets);
+    await _tapVisible(tester, find.text('填写结算').last);
+    final settleDialog = find.byType(AlertDialog);
     expect(
-      _childInField<ProposalSelectField<String>>(
-        tester,
-        '税率',
-      ).options.map((item) => item.value),
-      containsAll(kProposalTaxRates),
+      find.descendant(of: settleDialog, matching: find.text('点此复核')),
+      findsNothing,
     );
-    expect(find.text('生效时间'), findsOneWidget);
-    expect(find.text('失效时间'), findsOneWidget);
-    expect(find.text('新增明细'), findsWidgets);
+  });
+
+  testWidgets('product settle last income or cost row can be deleted', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'filling',
+          'createdBy': 11,
+          'form': {
+            'skuDetails': [
+              {
+                'id': 'sku-1',
+                'productName': '满减券',
+                'faceValue': '满100减2',
+                'settlements': [
+                  {
+                    'id': 'st-cost-1',
+                    'kind': 'cost',
+                    'billType': '推广费',
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '产品结算');
+    await _tapVisible(tester, find.text('填写结算').last);
+    final dialog = find.byType(AlertDialog);
+    expect(find.descendant(of: dialog, matching: find.text('成本一')), findsOneWidget);
     expect(
-      tester.getTopLeft(find.text('生效时间')).dy,
-      closeTo(tester.getTopLeft(find.text('失效时间')).dy, 2),
+      find.descendant(of: dialog, matching: find.text('尚未填写收入')),
+      findsOneWidget,
     );
+    await _tapVisible(
+      tester,
+      find.descendant(of: dialog, matching: find.text('删除')),
+    );
+    expect(find.descendant(of: dialog, matching: find.text('成本一')), findsNothing);
+    expect(
+      find.descendant(of: dialog, matching: find.text('尚未填写成本')),
+      findsOneWidget,
+    );
+    expect(find.descendant(of: dialog, matching: find.text('新增成本')), findsOneWidget);
   });
 
   testWidgets('shared settle leaves that sku scale-only', (tester) async {
@@ -2672,9 +2855,87 @@ void main() {
     expect(find.text('复制结算'), findsWidgets);
     await _tapVisible(tester, find.text('填写结算').first);
     expect(find.text('结算比例'), findsWidgets);
+    expect(find.text('填小数，如 0.08，不能填%'), findsWidgets);
   });
 
-  testWidgets('finance module asks for project period when not natural month', (
+  testWidgets(
+    'product settlement uses admin unit-price formulas and xor-locks ratio',
+    (tester) async {
+      tester.view.physicalSize = const Size(1440, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        _harness(
+          1440,
+          row: ProposalIntakeRow.fromJson({
+            'id': 1,
+            'code': 'TA-2026-0001',
+            'title': '测试提案',
+            'status': 'filling',
+            'createdBy': 11,
+            'form': {
+              'skuDetails': [
+                {
+                  'id': 'sku-1',
+                  'productName': '中石油100元',
+                  'faceValue': '100',
+                  'settlements': [
+                    {'id': 'st-1', 'settleUnitPrice': '12'},
+                  ],
+                },
+              ],
+            },
+          }),
+        ),
+      );
+      await tester.pump();
+      await _scrollUntil(tester, '产品结算');
+      await _tapVisible(tester, find.text('填写结算').first);
+      final formula = _childInField<ProposalSelectField<CatalogRef>>(
+        tester,
+        '计算公式',
+      );
+      expect(
+        formula.options.map((item) => item.label),
+        containsAll(['按核销统计结算单价', '按销售统计结算单价']),
+      );
+      final ratio = tester.widget<TextFormField>(
+        find.descendant(
+          of: _fieldOf('结算比例').first,
+          matching: find.byType(TextFormField),
+        ),
+      );
+      expect(ratio.enabled, isTrue);
+      expect(find.text('填写后将清空结算单价'), findsOneWidget);
+    },
+  );
+
+  test('product settle ratio formatter rejects percent sign', () {
+    const formatter = ProposalSettleRatioFormatter();
+    TextEditingValue apply(String oldText, String newText) {
+      return formatter.formatEditUpdate(
+        TextEditingValue(
+          text: oldText,
+          selection: TextSelection.collapsed(offset: oldText.length),
+        ),
+        TextEditingValue(
+          text: newText,
+          selection: TextSelection.collapsed(offset: newText.length),
+        ),
+      );
+    }
+
+    expect(apply('0.08', '0.08%').text, '0.08');
+    expect(apply('0.08', '0.08％').text, '0.08');
+    expect(apply('', '1%').text, '');
+    expect(apply('', '8％').text, '');
+    expect(apply('', '0.08').text, '0.08');
+    expect(apply('0', '0.08').text, '0.08');
+    expect(apply('', '8a').text, '8');
+  });
+
+  testWidgets('legacy finance modules are not shown during review', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1440, 2400);
@@ -2715,21 +2976,9 @@ void main() {
       ),
     );
     await tester.pump();
-    await _scrollUntil(tester, '是否自然月');
-    expect(find.text('是否自然月'), findsOneWidget);
-    expect(find.text('项目周期'), findsNothing);
-
-    _childInField<ProposalSelectField<String>>(tester, '是否自然月').onSelected!(
-      '否',
-    );
-    await tester.pump();
-    expect(find.text('项目周期'), findsOneWidget);
-
-    _childInField<ProposalSelectField<String>>(tester, '是否自然月').onSelected!(
-      '是',
-    );
-    await tester.pump();
-    expect(find.text('项目周期'), findsNothing);
+    expect(find.text('财务模块1'), findsNothing);
+    expect(find.text('是否自然月'), findsNothing);
+    expect(find.text('新增财务模块'), findsNothing);
   });
 
   testWidgets(
@@ -3653,7 +3902,7 @@ void main() {
         findsNothing,
       );
       expect(find.text('再加一条'), findsNothing);
-      expect(find.textContaining('按应付账单第三级匹配成本类型'), findsOneWidget);
+      expect(find.textContaining('从产品成本结算的「成本类型」匹配'), findsOneWidget);
       expect(
         find.descendant(of: _fieldOf('项目成本'), matching: find.text('?')),
         findsOneWidget,
@@ -3865,15 +4114,15 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.descendant(of: _fieldOf('收入（万元）'), matching: find.text('272.60')),
+        find.descendant(of: _fieldOf('收入（万元）'), matching: find.text('547.80')),
         findsOneWidget,
       );
       expect(
-        find.descendant(of: _fieldOf('利润（万元）'), matching: find.text('187.60')),
+        find.descendant(of: _fieldOf('利润（万元）'), matching: find.text('462.80')),
         findsOneWidget,
       );
       expect(
-        find.descendant(of: _fieldOf('毛利率（%）'), matching: find.text('62.53')),
+        find.descendant(of: _fieldOf('毛利率（%）'), matching: find.text('154.27')),
         findsOneWidget,
       );
     },
@@ -4131,7 +4380,14 @@ void main() {
             'createdBy': 11,
             'form': {
               'skuDetails': [
-                {'id': 'sku-1', 'productName': '满200减15', 'faceValue': '15'},
+                {
+                  'id': 'sku-1',
+                  'productName': '满200减15',
+                  'faceValue': '15',
+                  'settlements': [
+                    {'id': 'st-1'},
+                  ],
+                },
               ],
             },
             'review': {'stage': 'reviewing'},
@@ -4141,33 +4397,40 @@ void main() {
       await tester.pump();
       await _scrollUntil(tester, '产品结算');
       await _tapVisible(tester, find.text('填写结算').last);
-      expect(find.text('结算一'), findsOneWidget);
+      final dialog = find.byType(AlertDialog);
+      expect(
+        find.descendant(of: dialog, matching: find.text('收入')),
+        findsWidgets,
+      );
+      expect(
+        find.descendant(of: dialog, matching: find.text('收入一')),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
 
-      final dialog = find.byType(AlertDialog);
       final title = tester.getRect(
         find.descendant(of: dialog, matching: find.textContaining('主产品结算')),
       );
       final settle = tester.getRect(
-        find.descendant(of: dialog, matching: find.text('结算一')),
+        find.descendant(of: dialog, matching: find.text('收入一')),
       );
       expect(title.bottom, lessThanOrEqualTo(settle.top));
 
-      final bill = tester.getRect(_fieldOf('账单类型').first);
-      final mode = tester.getRect(_fieldOf('结算方式').first);
       final ratio = tester.getRect(_fieldOf('结算比例').first);
       final price = tester.getRect(_fieldOf('结算单价').first);
-      final scale = tester.getRect(_fieldOf('规模（万元）').first);
-      expect(bill.bottom, lessThanOrEqualTo(price.top + 1));
-      expect(bill.height, lessThan(88));
-      expect(mode.height, lessThan(88));
+      final formula = tester.getRect(_fieldOf('计算公式').first);
+      final invoice = tester.getRect(_fieldOf('发票类型').first);
+      final tax = tester.getRect(_fieldOf('税率').first);
+      expect(find.descendant(of: dialog, matching: find.text('账单类型')), findsNothing);
+      expect(find.descendant(of: dialog, matching: find.text('结算方式')), findsNothing);
+      expect(find.descendant(of: dialog, matching: find.text('规模（万元）')), findsNothing);
       expect(ratio.height, lessThan(88));
       expect(price.height, lessThan(88));
-      expect(scale.height, lessThan(88));
-      expect(bill.width, closeTo(price.width, 1));
-      expect(mode.top, greaterThanOrEqualTo(bill.bottom - 1));
-      expect(ratio.top, greaterThanOrEqualTo(mode.bottom - 1));
-      expect(scale.top, greaterThanOrEqualTo(price.bottom - 1));
+      expect(formula.height, lessThan(88));
+      expect(invoice.height, lessThan(88));
+      expect(tax.height, lessThan(88));
+      expect(price.top, greaterThanOrEqualTo(ratio.bottom - 1));
+      expect(formula.top, greaterThanOrEqualTo(price.bottom - 1));
 
       Rect? chip;
       var best = double.infinity;
@@ -4181,7 +4444,7 @@ void main() {
         }
       }
       expect(chip, isNotNull);
-      expect(chip!.overlaps(bill), isFalse);
+      expect(chip!.overlaps(ratio), isFalse);
       expect(chip.overlaps(price), isFalse);
       expect(tester.takeException(), isNull);
     },
@@ -4453,7 +4716,7 @@ void main() {
     await tester.pump();
     await _scrollUntil(tester, '$kProposalChildProductLabel财务复核');
 
-    expect(find.textContaining('已加密上锁'), findsNWidgets(2));
+    expect(find.textContaining('已加密上锁'), findsOneWidget);
     expect(find.text('子产品保密成本'), findsNothing);
   });
 

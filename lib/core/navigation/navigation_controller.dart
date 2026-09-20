@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../analytics/usage_analytics.dart';
 import 'generated/screen_registry.dart';
 
 /// 与 HTML 原型 history_ / setScreen / go / back 同步的导航状态。
@@ -41,8 +42,7 @@ class DunesNavigationController extends ChangeNotifier {
     if (_history.isEmpty || _history.last != screenId) {
       _history.add(screenId);
     }
-    _currentScreen = screenId;
-    notifyListeners();
+    _setScreen(screenId);
   }
 
   void go(String screenId) {
@@ -50,15 +50,13 @@ class DunesNavigationController extends ChangeNotifier {
     if (_history.isEmpty || _history.last != screenId) {
       _history.add(screenId);
     }
-    _currentScreen = screenId;
-    notifyListeners();
+    _setScreen(screenId);
   }
 
   void back() {
     if (_history.length > 1) {
       _history.removeLast();
-      _currentScreen = _history.last;
-      notifyListeners();
+      _setScreen(_history.last);
     }
   }
 
@@ -69,8 +67,7 @@ class DunesNavigationController extends ChangeNotifier {
     final idx = _history.lastIndexOf(screenId);
     if (idx >= 0) {
       _history.removeRange(idx + 1, _history.length);
-      _currentScreen = screenId;
-      notifyListeners();
+      _setScreen(screenId);
       return;
     }
     go(screenId);
@@ -87,7 +84,12 @@ class DunesNavigationController extends ChangeNotifier {
     } else {
       _history[_history.length - 1] = screenId;
     }
+    _setScreen(screenId);
+  }
+
+  void _setScreen(String screenId) {
     _currentScreen = screenId;
+    UsageAnalytics.instance.trackScreen(screenId);
     notifyListeners();
   }
 

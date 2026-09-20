@@ -42,6 +42,7 @@ class AuthSession {
     this.travelImportAccess = false,
     this.travelViewAll = false,
     this.workSituationViewAll = false,
+    this.appUsageViewAll = false,
     this.kpiPerformanceAccess = false,
     this.kpiFollowupAccess = false,
     this.payrollReportAccess = false,
@@ -112,6 +113,9 @@ class AuthSession {
 
   /// 工作情况查看全部部门；未开通仅自己及下属。
   final bool workSituationViewAll;
+
+  /// 使用热力查看全部人员；未开通仅自己及下属。
+  final bool appUsageViewAll;
 
   /// 工作台行政「月度绩效考评」。
   final bool kpiPerformanceAccess;
@@ -250,6 +254,9 @@ class AuthSession {
       if (!next.workSituationViewAll) {
         next = next.copyWith(workSituationViewAll: true);
       }
+      if (!next.appUsageViewAll) {
+        next = next.copyWith(appUsageViewAll: true);
+      }
     }
     return next;
   }
@@ -308,6 +315,7 @@ class AuthSession {
     bool? travelImportAccess,
     bool? travelViewAll,
     bool? workSituationViewAll,
+    bool? appUsageViewAll,
     bool? kpiPerformanceAccess,
     bool? kpiFollowupAccess,
     bool? payrollReportAccess,
@@ -356,6 +364,7 @@ class AuthSession {
       travelImportAccess: travelImportAccess ?? this.travelImportAccess,
       travelViewAll: travelViewAll ?? this.travelViewAll,
       workSituationViewAll: workSituationViewAll ?? this.workSituationViewAll,
+      appUsageViewAll: appUsageViewAll ?? this.appUsageViewAll,
       kpiPerformanceAccess: kpiPerformanceAccess ?? this.kpiPerformanceAccess,
       kpiFollowupAccess: kpiFollowupAccess ?? this.kpiFollowupAccess,
       payrollReportAccess: payrollReportAccess ?? this.payrollReportAccess,
@@ -439,6 +448,7 @@ class AuthSession {
       travelImportAccess: data['travelImportAccess'] == true,
       travelViewAll: data['travelViewAll'] == true,
       workSituationViewAll: data['workSituationViewAll'] == true,
+      appUsageViewAll: data['appUsageViewAll'] == true,
       kpiPerformanceAccess: data['kpiPerformanceAccess'] == true,
       kpiFollowupAccess: data['kpiFollowupAccess'] == true,
       payrollReportAccess: data['payrollReportAccess'] == true,
@@ -497,6 +507,7 @@ class AuthSession {
       travelImportAccess: claims['travelImportAccess'] == true,
       travelViewAll: claims['travelViewAll'] == true,
       workSituationViewAll: claims['workSituationViewAll'] == true,
+      appUsageViewAll: claims['appUsageViewAll'] == true,
       kpiPerformanceAccess: claims['kpiPerformanceAccess'] == true,
       kpiFollowupAccess: claims['kpiFollowupAccess'] == true,
       payrollReportAccess: claims['payrollReportAccess'] == true,
@@ -561,6 +572,7 @@ class AuthSession {
       'travelImportAccess': travelImportAccess,
       'travelViewAll': travelViewAll,
       'workSituationViewAll': workSituationViewAll,
+      'appUsageViewAll': appUsageViewAll,
       'kpiPerformanceAccess': kpiPerformanceAccess,
       'kpiFollowupAccess': kpiFollowupAccess,
       'payrollReportAccess': payrollReportAccess,
@@ -614,6 +626,7 @@ class AuthSession {
       travelImportAccess: json['travelImportAccess'] == true,
       travelViewAll: json['travelViewAll'] == true,
       workSituationViewAll: json['workSituationViewAll'] == true,
+      appUsageViewAll: json['appUsageViewAll'] == true,
       kpiPerformanceAccess: json['kpiPerformanceAccess'] == true,
       kpiFollowupAccess: json['kpiFollowupAccess'] == true,
       payrollReportAccess: json['payrollReportAccess'] == true,

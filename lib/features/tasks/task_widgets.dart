@@ -717,6 +717,11 @@ class TaskNameCard extends StatelessWidget {
                     text: task.overdue ? '已逾期' : taskStatusLabel(task.status),
                     color: _statusColor,
                   ),
+                  if (task.hasPendingChange)
+                    TaskMetaChip(
+                      text: taskPendingChangeLabel(task.pendingChangeKind),
+                      color: const Color(0xFFB45309),
+                    ),
                   if (task.aiState == 'analyzing')
                     const TaskAiStateChip(text: 'AI 分析中')
                   else if (task.aiState == 'binding')
@@ -865,6 +870,14 @@ class TaskWorkbenchCard extends StatelessWidget {
                     text: task.overdue ? '已逾期' : taskStatusLabel(task.status),
                     color: statusColor,
                   ),
+                  if (task.hasPendingChange)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: TaskMetaChip(
+                        text: taskPendingChangeLabel(task.pendingChangeKind),
+                        color: const Color(0xFFB45309),
+                      ),
+                    ),
                 ],
               ),
               if (groupMode) ...[

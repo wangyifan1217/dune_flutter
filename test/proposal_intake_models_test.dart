@@ -1094,7 +1094,7 @@ void main() {
           {
             'id': 'sku-1',
             'settlements': [
-              {'id': 'st-1', 'taxRate': '6%'},
+              {'id': 'st-1', 'taxRate': '6%', 'settleRatio': '0.5'},
             ],
           },
         ],
@@ -1109,8 +1109,8 @@ void main() {
       expect(form['businessCostItemAmounts']['渠道侧U'], 6.48);
       expect(form['salesScale'], 200);
       expect(form['revenue'], 100);
-      expect(form['profit'], isNull);
-      expect(form['margin'], isNull);
+      expect(form['profit'], 15);
+      expect(form['margin'], 7.5);
       expect(form['taxCostItemAmounts']['增值税及附加（能源）'], 1.01);
       expect(form['taxCostItemAmounts']['印花税'], 0.12);
       expect(form['taxCostItemAmounts']['所得税'], 1.62);
@@ -1135,7 +1135,7 @@ void main() {
         proposalCostFormulaText(ProposalCostEstimateKind.operating),
         '(收入 − 采购 − 项目) × 2%',
       );
-      expect(kProposalProjectCostFormula, contains('年化规模 × 结算比例'));
+      expect(kProposalProjectCostFormula, contains('结算单价÷面值'));
 
       form = proposalApplyEstimatedFinanceCosts(
         proposalMarkCostAmountManual(
@@ -1145,7 +1145,7 @@ void main() {
         ),
       );
       expect(form['operatingCostItemAmounts']['差旅成本'], 0.3);
-      expect(form['operatingCostItemAmounts']['招待费'], 2.3);
+      expect(form['operatingCostItemAmounts']['招待费'], 0.3);
 
       final help = proposalCostFormulaHelpOf(
         name: '差旅成本',
@@ -1178,10 +1178,6 @@ void main() {
       var form = proposalApplyEstimatedFinanceCosts({
         'couponProcurementCost': 80,
         'projectCost': 5,
-        'salesScale': 999,
-        'revenue': 888,
-        'profit': 1,
-        'margin': 1,
         'skuDetails': [
           {
             'id': 'sku-1',
@@ -1204,9 +1200,9 @@ void main() {
         'taxCostItems': ['增值税及附加（能源）', '印花税'],
       });
       expect(form['salesScale'], 300);
-      expect(form['revenue'], 272.6);
-      expect(form['profit'], 187.6);
-      expect(form['margin'], 62.53);
+      expect(form['revenue'], 547.8);
+      expect(form['profit'], 462.8);
+      expect(form['margin'], 154.27);
       expect(form['taxCostItemAmounts']['印花税'], 0.18);
       expect(form['taxCostItemAmounts']['增值税及附加（能源）'], 12.61);
 
@@ -1244,9 +1240,9 @@ void main() {
         ],
       });
       expect(form['salesScale'], 100);
-      expect(form['revenue'], 100);
-      expect(form['profit'], 100);
-      expect(form['margin'], 100);
+      expect(form['revenue'], 0);
+      expect(form['profit'], 0);
+      expect(form['margin'], 0);
 
       expect(
         proposalTurnoverCashAmount({
@@ -1441,7 +1437,7 @@ void main() {
       ],
     });
     expect(form['salesScale'], 300);
-    expect(form['revenue'], 277.8);
+    expect(form['revenue'], 0);
     expect(
       proposalIntakeSkuSettleReviewKeys({
         'skuDetails': [
@@ -1600,6 +1596,7 @@ void main() {
             },
             {
               'id': 'st-2',
+              'kind': 'cost',
               'billType': '应付账单 / 服务费 / 平台服务费',
               'settleRatio': '0.004',
               'settleUnitPrice': '100',
@@ -1844,7 +1841,7 @@ void main() {
     if (kProposalSharedSettleEnabled) {
       expect(issues, isEmpty);
     } else {
-      expect(issues, contains('渠道产品「现金券100」结算一未填完结算方式对应金额、计算公式、税率'));
+      expect(issues, contains('渠道产品「现金券100」收入一未填完结算比例或单价、计算公式、税率'));
     }
   });
 
@@ -1959,7 +1956,7 @@ void main() {
       row: row,
     );
     expect(items.map((item) => item.line).toList(), [
-      '财务部负责人二 李财务 · 请填写财务技术接口',
+      '财务部负责人二 李财务 · 请填写财务技术接口和项目成本',
     ]);
     expect(proposalIntakeNotifiedToast(items), '已通知：李财务（财务部负责人二）');
     final write = ProposalIntakeWriteResult.fromJson({
@@ -2034,15 +2031,15 @@ void main() {
     });
     final items = proposalIntakeRemindRecipients(row: row);
     expect(items.map((item) => item.line).toList(), [
-      '科技部负责人 张科技 · 请确认并提交复核',
-      '财务部负责人二 李财务 · 请填写财务技术接口',
+      '提交人 朱子姝 · 请财务填完后提交复核',
+      '财务部负责人二 李财务 · 请填写财务技术接口和项目成本',
     ]);
     expect(
       proposalIntakeNotifyRecipients(
         action: 'notify_tech',
         row: row,
       ).map((item) => item.task).toList(),
-      ['请填写财务技术接口'],
+      ['请填写财务技术接口和项目成本'],
     );
   });
 
@@ -2392,6 +2389,238 @@ void main() {
       expect(configured.resolvedSettleCycles, ['T+7']);
     },
   );
+
+  test(
+    'business platforms and unit-price formulas use admin config with fallback',
+    () {
+      final defaults = ProposalIntakeOptions.fromJson(const {});
+      expect(
+        defaults.resolvedBusinessPlatforms.map((item) => item.name),
+        kProposalDefaultBusinessPlatforms,
+      );
+      expect(
+        defaults.resolvedUnitPriceFormulas.map((item) => item.name),
+        kProposalDefaultUnitPriceFormulas,
+      );
+      final configured = ProposalIntakeOptions.fromJson(const {
+        'technology': {
+          'businessPlatforms': ['能源|POINTS_REBATE', '出行|TRAVEL_MEMBER'],
+        },
+        'finance': {
+          'unitPriceFormulas': ['按核销统计结算单价', '按下发统计结算单价'],
+        },
+      });
+      expect(configured.resolvedBusinessPlatforms.first.name, '能源');
+      expect(configured.resolvedBusinessPlatforms.first.code, 'POINTS_REBATE');
+      expect(configured.resolvedUnitPriceFormulas.last.name, '按下发统计结算单价');
+    },
+  );
+
+  test('project cost items use admin config with hardcoded fallback', () {
+    expect(
+      ProposalIntakeOptions.fromJson(const {}).resolvedProjectCostItems,
+      kProposalProjectCostItems,
+    );
+    final configured = ProposalIntakeOptions.fromJson(const {
+      'finance': {
+        'costItems': ['推广费', '平台服务费', '专项活动费'],
+      },
+    });
+    expect(configured.resolvedProjectCostItems, [
+      '推广费',
+      '平台交易服务费',
+      '专项活动费',
+    ]);
+    final form = {
+      'salesScale': 100,
+      'skuDetails': [
+        {
+          'id': 'sku-1',
+          'faceValue': '100',
+          'settlements': [
+            {
+              'id': 'st-1',
+              'kind': 'cost',
+              'billType': '专项活动费',
+              'settleRatio': '0.02',
+            },
+          ],
+        },
+      ],
+    };
+    expect(
+      proposalMatchedProjectCostNames(
+        form,
+        costNames: configured.resolvedProjectCostItems,
+      ),
+      contains('专项活动费'),
+    );
+    expect(
+      proposalEstimateProjectCostAmount(
+        form,
+        '专项活动费',
+        costNames: configured.resolvedProjectCostItems,
+      ),
+      2,
+    );
+  });
+
+  test('settle ratio and unit price are exclusive', () {
+    final priced = proposalIntakeApplySettleXor(
+      ProposalFinanceSettleTerms.fromJson(const {
+        'settleRatio': '0.12',
+        'settleUnitPrice': '',
+      }),
+      settleUnitPrice: '12',
+    );
+    expect(priced.displayUnitPrice, '12');
+    expect(priced.displayRatio, isEmpty);
+
+    final ratio = proposalIntakeApplySettleXor(priced, settleRatio: '0.08');
+    expect(ratio.displayRatio, '0.08');
+    expect(ratio.displayUnitPrice, isEmpty);
+
+    final cleared = proposalIntakeApplySettleXor(
+      ProposalFinanceSettleTerms.fromJson(const {
+        'settleUnitPrice': '',
+        'settlePrice': '12',
+      }),
+      settleUnitPrice: '',
+    );
+    expect(cleared.displayUnitPrice, isEmpty);
+    expect(cleared.displayRatio, isEmpty);
+  });
+
+  test('bind 能源 to 资管 能源积分 by name prefix', () {
+    final bound = proposalIntakeBindSyncSource(
+      const CatalogRef(code: '能源', name: '能源'),
+      const [
+        CatalogRef(code: 'POINTS_REBATE', name: '能源积分'),
+        CatalogRef(code: 'TRAVEL_MEMBER', name: '出行积分'),
+      ],
+    );
+    expect(bound.code, 'POINTS_REBATE');
+    expect(bound.name, '能源积分');
+  });
+
+  test('unit price revenue uses scale times unit price over face', () {
+    final form = {
+      'salesScale': 100,
+      'skuDetails': [
+        {
+          'id': 'sku-1',
+          'faceValue': '100',
+          'settlements': [
+            {'id': 'st-1', 'settleUnitPrice': '98', 'taxRate': '6%'},
+          ],
+        },
+      ],
+    };
+    expect(proposalProductScaleRollup(form)?.revenue, 98);
+  });
+
+  test('满减券 face splits and unit-price revenue uses 满额', () {
+    expect(proposalIntakeJoinDiscountFace('200', '15'), '满200减15');
+    expect(proposalIntakeSplitDiscountFace('满200减15'), ('200', '15'));
+    final sku = ProposalSkuDetailRow.fromJson({
+      'id': 'c1',
+      'couponKind': '满减券',
+      'faceValue': '满200减15',
+    });
+    expect(proposalIntakeSkuSettleFace(sku), 200);
+    final form = {
+      'salesScale': 100,
+      'skuDetails': [
+        {
+          'id': 'sku-1',
+          'couponKind': '满减券',
+          'faceValue': '满200减15',
+          'settlements': [
+            {'id': 'st-1', 'settleUnitPrice': '12', 'taxRate': '6%'},
+          ],
+        },
+      ],
+    };
+    expect(proposalProductScaleRollup(form)?.revenue, 6);
+  });
+
+  test('project cost matches 成本类型 without payable bill path', () {
+    final form = {
+      'salesScale': 100,
+      'skuDetails': [
+        {
+          'id': 'sku-1',
+          'faceValue': '100',
+          'settlements': [
+            {
+              'id': 'st-1',
+              'kind': 'cost',
+              'billType': '推广费',
+              'settleRatio': '0.01',
+            },
+          ],
+        },
+      ],
+    };
+    expect(proposalMatchedProjectCostNames(form), contains('推广费'));
+    expect(proposalEstimateProjectCostAmount(form, '推广费'), 1);
+  });
+
+  test('project cost on child coupon uses market scale and unit price', () {
+    final form = {
+      'salesScale': 100,
+      'skuDetails': [
+        {'id': 'main-1', 'productName': '券包'},
+      ],
+      'childProducts': [
+        {
+          'id': 'child-1',
+          'parentSkuId': 'main-1',
+          'couponKind': '现金券',
+          'faceValue': '100',
+          'settlements': [
+            {
+              'id': 'st-1',
+              'kind': 'cost',
+              'billType': '推广费',
+              'settleUnitPrice': '8',
+            },
+          ],
+        },
+      ],
+    };
+    expect(proposalMatchedProjectCostNames(form), contains('推广费'));
+    expect(proposalEstimateProjectCostAmount(form, '推广费'), 8);
+  });
+
+  test('project cost unit price on main product uses child face', () {
+    final form = {
+      'salesScale': 100,
+      'skuDetails': [
+        {
+          'id': 'main-1',
+          'productName': '券包',
+          'settlements': [
+            {
+              'id': 'st-1',
+              'kind': 'cost',
+              'billType': '推广费',
+              'settleUnitPrice': '8',
+            },
+          ],
+        },
+      ],
+      'childProducts': [
+        {
+          'id': 'child-1',
+          'parentSkuId': 'main-1',
+          'couponKind': '现金券',
+          'faceValue': '100',
+        },
+      ],
+    };
+    expect(proposalEstimateProjectCostAmount(form, '推广费'), 8);
+  });
 
   test('selecting a signed contract copies the register source file', () {
     final patch = proposalIntakePatchFromContract(
@@ -3060,7 +3289,7 @@ void main() {
   test('tech revision action labels', () {
     expect(proposalIntakeActionLabel('start_tech_revision'), '待发起科技变更');
     expect(proposalIntakeActionLabel('fill_tech'), '待填写科技');
-    expect(proposalIntakeActionLabel('notify_market2'), '待确认提交复核');
+    expect(proposalIntakeActionLabel('notify_market2'), '待填写人确认并提交复核');
     expect(proposalIntakeActionLabel('fill_finance_interface'), '待填写财务技术接口');
     expect(proposalIntakeActionLabel('review_finance_interface'), '待复核财务技术接口');
   });
@@ -3156,13 +3385,11 @@ void main() {
     expect(next.toJson()['billType'], '电子券销售款');
   });
 
-  test('each product gets one settlement and can add more', () {
+  test('product settlements stay empty until added', () {
     const sku = ProposalSkuDetailRow(id: 'sku-1', productName: '中石油100元');
-    final first = proposalIntakeSkuSettlements(sku);
-    expect(first, hasLength(1));
-    expect(first.single.id, 'sku-1-st-1');
-    expect(proposalIntakeSettleLabel(0), '结算一');
-    expect(proposalIntakeSettleLabel(1), '结算二');
+    expect(proposalIntakeSkuSettlements(sku), isEmpty);
+    expect(proposalIntakeSettleLabel(0, kind: '收入'), '收入一');
+    expect(proposalIntakeSettleLabel(0, kind: '成本'), '成本一');
 
     final saved = sku.copyWith(
       settlements: [
@@ -3175,7 +3402,7 @@ void main() {
       proposalIntakeSkuSettleReviewKeys({
         'skuDetails': [saved.toJson()],
       }),
-      ['skuSettle:sku-1:st-a', 'skuSettle:sku-1:st-b'],
+      [kProposalSkuSettlementsReviewKey],
     );
   });
 
@@ -3222,7 +3449,21 @@ void main() {
           {'id': 'sku-1', 'productName': '中石油100元'},
         ],
       }),
-      contains('渠道产品「中石油100元」结算一未填完结算方式对应金额、计算公式、税率'),
+      isEmpty,
+    );
+    expect(
+      proposalIntakeSkuSettleIssues({
+        'skuDetails': [
+          {
+            'id': 'sku-1',
+            'productName': '中石油100元',
+            'settlements': [
+              {'id': 'st-1'},
+            ],
+          },
+        ],
+      }),
+      contains('渠道产品「中石油100元」收入一未填完结算比例或单价、计算公式、税率'),
     );
     expect(
       proposalIntakeSkuSettleIssues({
@@ -3283,12 +3524,11 @@ void main() {
       ],
     };
     expect(proposalIntakeSkuSettleReviewKeys(form), [
-      'skuSettle:sku-1:st-a',
-      'skuSettle:sku-1:st-b',
+      kProposalSkuSettlementsReviewKey,
     ]);
     expect(
       proposalIntakeSkuSettleIssues(form),
-      contains('渠道产品「中石油100元」结算二未填完结算方式对应金额、计算公式、税率'),
+      contains('渠道产品「中石油100元」收入二未填完结算比例或单价、计算公式、税率'),
     );
     if (kProposalExistingBuiltEnabled) {
       expect(
@@ -3351,6 +3591,14 @@ void main() {
       }),
       isEmpty,
     );
+    expect(
+      proposalIntakeLaunchModuleReviewKeys({
+        'financeModules': [
+          {'id': 'fm-1', 'title': '模块甲'},
+        ],
+      }),
+      isEmpty,
+    );
   });
 
   test('finance module period is required and parsed from json', () {
@@ -3388,7 +3636,7 @@ void main() {
       proposalIntakeLaunchFinanceIssues({
         'financeModules': [missingPeriod.toJson()],
       }),
-      contains('财务模块「模块乙」非自然月请选择项目周期'),
+      isEmpty,
     );
     expect(
       proposalIntakeLaunchFinanceIssues({
@@ -3396,7 +3644,7 @@ void main() {
           {'id': 'fm-1', 'title': '模块甲'},
         ],
       }),
-      contains('财务模块「模块甲」请选择是否自然月'),
+      isEmpty,
     );
   });
 
@@ -3734,7 +3982,7 @@ void main() {
   test('sales fill fields are required except optional products', () {
     final empty = proposalIntakeSalesMarketIssues({});
     expect(empty, contains('请选择业务板块'));
-    expect(empty, contains('请填写产品提案名称'));
+    expect(empty, contains('请填写规模（万元）'));
     expect(empty, isNot(contains('请填写子标题')));
     expect(empty, contains('请选择产品（标签一）'));
     expect(empty, isNot(contains('请选择子分类')));
@@ -3749,7 +3997,7 @@ void main() {
     );
     expect(
       proposalIntakeSalesFinanceFillIssues({}),
-      contains('请在产品结算中填写规模（万元）'),
+      isNot(contains('请在市场部基础信息填写规模（万元）')),
     );
     expect(
       proposalIntakeSalesFinanceFillIssues({}),
@@ -3861,7 +4109,7 @@ void main() {
       ProposalIntakeProgressState.current,
     );
     expect(_progressById(steps, 'initiate').statusText, '填写中');
-    expect(_progressById(steps, 'initiate').action, '填写市场、科技与产品');
+    expect(_progressById(steps, 'initiate').action, '填写市场、科技与产品 · 点右上角「通知财务填写」');
     expect(
       _progressById(steps, 'initiate').time,
       formatProposalIntakeProgressTime('2026-09-04T02:48:00Z'),
@@ -3872,13 +4120,40 @@ void main() {
     );
     expect(_progressById(steps, 'review_finance_module').role, '财务部负责人一');
     expect(steps.any((item) => item.id == 'review_finance_interface'), isFalse);
-    expect(_progressById(steps, 'review_tech').action, '复核科技与产品（含财务技术接口）');
+    expect(
+      _progressById(steps, 'review_tech').action,
+      '到各科技字段旁点「点此复核」，再到科技部底部确认本板块',
+    );
+    expect(_progressById(steps, 'start_review').role, '填写人');
+    expect(_progressById(steps, 'start_review').name, '朱子姝');
+    expect(_progressById(steps, 'fill_finance_interface').name, '胡珏');
+    expect(_progressById(steps, 'fill_tech').statusText, '未开始');
+    expect(_progressById(steps, 'review_market').name, '未指定');
+    expect(_progressById(steps, 'review_market').statusText, '未开始');
+    expect(_progressById(steps, 'review_market').title, '市场部负责人一 未指定');
     expect(
       steps
           .where((item) => item.state == ProposalIntakeProgressState.current)
           .length,
       1,
     );
+  });
+
+  test('progress timeline shows 未指定 when owners are empty', () {
+    final row = ProposalIntakeRow.fromJson({
+      'id': 31,
+      'kind': 'sales',
+      'status': 'filling',
+      'createdBy': 0,
+      'form': const <String, dynamic>{},
+      'review': {'stage': 'filling'},
+    });
+    final steps = proposalIntakeProgressSteps(row: row);
+    expect(_progressById(steps, 'initiate').name, '未指定');
+    expect(_progressById(steps, 'start_review').role, '填写人');
+    expect(_progressById(steps, 'start_review').name, '未指定');
+    expect(_progressById(steps, 'fill_finance_interface').name, '未指定');
+    expect(_progressById(steps, 'review_tech').name, '未指定');
   });
 
   test('nav section check follows completed reviews', () {
@@ -4004,7 +4279,7 @@ void main() {
       _progressById(steps, 'review_market').state,
       ProposalIntakeProgressState.current,
     );
-    expect(_progressById(steps, 'review_market').statusText, '待复核');
+    expect(_progressById(steps, 'review_market').statusText, '请 石淼 点击复核');
     expect(_progressById(steps, 'review_market').time, '');
     expect(
       _progressById(steps, 'review_tech').state,
@@ -4018,13 +4293,16 @@ void main() {
       _progressById(steps, 'review_finance_module').state,
       ProposalIntakeProgressState.current,
     );
-    expect(_progressById(steps, 'review_finance_module').statusText, '待复核');
+    expect(_progressById(steps, 'review_finance_module').statusText, '请 邓艳丽 点击复核');
     expect(
       _progressById(steps, 'notify_president').state,
       ProposalIntakeProgressState.pending,
     );
     expect(proposalIntakePendingReviewLabels(row), ['待石淼复核', '待邓艳丽复核']);
-    expect(proposalIntakeProgressHeadline(steps), '市场部负责人一 · 石淼、财务部负责人一 · 邓艳丽');
+    expect(
+      proposalIntakeProgressHeadline(steps),
+      '当前应由 市场部负责人一 石淼 · 到市场部底部点「整个板块复核通过」、当前应由 财务部负责人一 邓艳丽 · 到财务部底部点「整个板块复核通过」',
+    );
   });
 
   test('finance module review waits until finance owner 2 is done', () {
@@ -4053,13 +4331,13 @@ void main() {
       _progressById(steps, 'review_contract').state,
       ProposalIntakeProgressState.current,
     );
-    expect(_progressById(steps, 'review_contract').statusText, '进行中');
+    expect(_progressById(steps, 'review_contract').statusText, '请 刘雨滴 点击复核');
     expect(_progressById(steps, 'review_contract').time, '当前');
     expect(
       _progressById(steps, 'review_finance_module').state,
       ProposalIntakeProgressState.pending,
     );
-    expect(_progressById(steps, 'review_finance_module').statusText, '待处理');
+    expect(_progressById(steps, 'review_finance_module').statusText, '未开始');
     expect(proposalIntakePendingReviewLabels(row), ['待刘雨滴复核']);
   });
 
@@ -4200,7 +4478,10 @@ void main() {
       'review': {'stage': 'awaiting_tech'},
     });
     final steps = proposalIntakeProgressSteps(row: row);
-    expect(proposalIntakeProgressHeadline(steps), '填写人 · 朱子姝、财务部负责人二 · 胡珏');
+    expect(
+      proposalIntakeProgressHeadline(steps),
+      '当前应由 填写人 朱子姝 · 补全科技与产品、当前应由 财务部负责人二 胡珏 · 填写财务技术接口和项目成本、当前应由 填写人 朱子姝 · 财务填完后，点右上角「确认并提交复核」',
+    );
   });
 
   test('configured presidents are recognized without hiding progress', () {
@@ -4345,8 +4626,7 @@ void main() {
       expect(proposalIntakeSkuDetails(form).single.id, 'sku-1');
       expect(proposalIntakeChildProducts(form).single.id, 'child-1');
       expect(proposalIntakeSkuSettleReviewKeys(form), [
-        'skuSettle:sku-1:st-1',
-        'skuSettle:child-1:st-c',
+        kProposalSkuSettlementsReviewKey,
       ]);
       expect(
         proposalIntakeTechnologyReviewItemKeys(form),
@@ -4382,8 +4662,8 @@ void main() {
       expect((outbound['packs'] as List).single['skuQuantities'], {
         'child-1': 1,
       });
-      expect(proposalProductScaleRollup(form)?.salesScale, 150);
-      expect(proposalProductScaleRollup(form)?.revenue, 10);
+      expect(proposalProductScaleRollup(form)?.salesScale, 100);
+      expect(proposalProductScaleRollup(form)?.revenue, 8);
     },
   );
 
@@ -4427,6 +4707,38 @@ void main() {
     });
     expect(child.parentSkuId, 'main-1');
     expect(child.toJson()['parentSkuId'], 'main-1');
+  });
+
+  test('child products require coupon kind instead of a typed name', () {
+    final form = {
+      'skuDetails': [
+        {'id': 'main-1', 'productName': '权益主产品'},
+      ],
+      'childProducts': [
+        {
+          'id': 'child-1',
+          'parentSkuId': 'main-1',
+          'faceValue': '100',
+        },
+      ],
+    };
+    final issues = proposalIntakeSkuSettleIssues(
+      form,
+      includeSettlements: false,
+    );
+    expect(issues, contains('${kProposalChildProductLabel}第1条请选择现金券或满减券'));
+    expect(issues.join(), isNot(contains('请填写产品名称')));
+    final saved = ProposalSkuDetailRow.fromJson({
+      'id': 'child-1',
+      'couponKind': '现金券',
+      'productName': '现金券',
+      'parentSkuId': 'main-1',
+      'faceValue': '100',
+    });
+    expect(saved.resolvedCouponKind, '现金券');
+    expect(saved.displayName, '现金券');
+    expect(saved.toJson()['couponKind'], '现金券');
+    expect(saved.toJson()['productName'], '现金券');
   });
 
   test('legacy multi sku details are not auto-promoted to child products', () {
@@ -4720,10 +5032,10 @@ void main() {
         estimated,
         owner: kProposalProductFinanceChildren,
       );
-      expect(childFinance['salesScale'], 200);
-      expect(childFinance['revenue'], 200);
-      expect(childFinance['turnoverCash'], 8.33);
-      expect(childFinance['profit'], isNot(-880));
+      expect(childFinance['turnoverTimes'], 2);
+      expect(childFinance.containsKey('salesScale'), isFalse);
+      expect(childFinance['revenue'], isNull);
+      expect(childFinance['turnoverCash'], isNull);
     },
   );
 
@@ -4826,8 +5138,70 @@ void main() {
       )['turnoverCash'],
       isNull,
     );
-    expect(proposalProductScaleRollup(form)?.salesScale, 8400);
+    expect(proposalProductScaleRollup(form)?.salesScale, 400);
   });
+
+  test('market salesScale is kept as the only rollup source', () {
+    final form = proposalApplyEstimatedFinanceCosts({
+      'salesScale': 888,
+      'skuDetails': [
+        {
+          'id': 'sku-1',
+          'settlements': [
+            {'id': 'st-1', 'scale': '100', 'settleRatio': '0.5'},
+          ],
+        },
+      ],
+    });
+    expect(form['salesScale'], 888);
+    expect(form['revenue'], 444);
+  });
+
+  test(
+    'finance line review ignores salesScale and uses whole product settle',
+    () {
+      Map<String, bool> items({bool settle = true}) => {
+        ..._allFinanceItemsReviewed(),
+        if (settle) kProposalSkuSettlementsReviewKey: true,
+      };
+      ProposalIntakeRow rowOf(Map<String, bool> financeItems) {
+        return ProposalIntakeRow.fromJson({
+          'kind': 'sales',
+          'form': {
+            'skuDetails': [
+              {
+                'id': 'sku-1',
+                'settlements': [
+                  {'id': 'st-1'},
+                ],
+              },
+            ],
+            'childProducts': [
+              {
+                'id': 'child-1',
+                'settlements': [
+                  {'id': 'st-c'},
+                ],
+              },
+            ],
+          },
+          'review': {'financeItems': financeItems},
+        });
+      }
+
+      expect(proposalIntakeFinanceLineItemsReviewed(rowOf(items())), isTrue);
+      expect(
+        proposalIntakeFinanceLineItemsReviewed(rowOf(items(settle: false))),
+        isFalse,
+      );
+      expect(
+        proposalIntakeFinanceLineItemsReviewed(
+          rowOf({...items(), 'salesScale': false}),
+        ),
+        isTrue,
+      );
+    },
+  );
 }
 
 int _fillMissingCount(ProposalIntakeRow row) {
@@ -4852,7 +5226,6 @@ ProposalIntakeProgressStep _progressById(
 }
 
 Map<String, bool> _allFinanceItemsReviewed() => {
-  'salesScale': true,
   'revenue': true,
   'couponProcurementCost': true,
   'profit': true,

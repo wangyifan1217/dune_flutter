@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/analytics/usage_analytics.dart';
 import '../../core/config/dunes_defaults.dart';
 import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
@@ -75,6 +76,7 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
       // 托盘退出会很快硬杀进程：先尽快清本地会话，网络 teardown 不阻塞退出。
       setWindowsTrayOnBeforeQuit(() async {
         final uid = _session?.userId ?? 0;
+        unawaited(UsageAnalytics.instance.unbind());
         AuthSessionCoordinator.instance.clear();
         if (mounted) setState(() => _session = null);
         try {
@@ -173,6 +175,7 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
 
   void _onSignedOut() {
     final uid = _session?.userId ?? 0;
+    unawaited(UsageAnalytics.instance.unbind());
     AuthSessionCoordinator.instance.clear();
     setState(() => _session = null);
     _clearSession(userId: uid);

@@ -5,17 +5,21 @@ const _themePurple = Color(0xFF7B5CD8);
 Future<({bool confirmed, String comment})> confirmTaskApproval(
   BuildContext context, {
   required bool pass,
+  String? title,
+  String? hint,
 }) async {
   final ctrl = TextEditingController();
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Text(pass ? '通过子目标' : '驳回子目标'),
+      title: Text(
+        title ?? (pass ? '通过子目标' : '驳回子目标'),
+      ),
       content: TextField(
         controller: ctrl,
         decoration: InputDecoration(
-          hintText: '意见（选填）',
+          hintText: hint ?? '意见（选填）',
           filled: true,
           fillColor: const Color(0xFFF5F6F8),
           border: OutlineInputBorder(

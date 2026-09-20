@@ -9,8 +9,10 @@ import 'task_ai_analysis.dart';
 import 'task_api.dart';
 import 'native_task_action_page.dart';
 import 'task_approval_confirm.dart';
+import 'task_assign_dialog.dart';
 import 'task_attachment_tile.dart';
 import 'task_avatar.dart';
+import 'task_change_dialog.dart';
 import 'task_first_use_guide.dart';
 import 'task_link_section.dart';
 import 'task_models.dart';
@@ -153,7 +155,8 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
     return t.ownerUserId == uid ||
         t.creatorUserId == uid ||
         t.approverUserId == uid ||
-        t.coOwnerUserIds.contains(uid);
+        t.coOwnerUserIds.contains(uid) ||
+        _detail?.pendingChangeRequest?.approverUserId == uid;
   }
 
   bool get _viewOnly => !_isStakeholder;
@@ -339,6 +342,16 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
         t.coOwnerUserIds.contains(uid);
   }
 
+  bool get _canChangeFields => _canPostpone;
+
+  bool get _canAssign => _canPostpone;
+
+  bool get _canDecideChange {
+    final req = _detail?.pendingChangeRequest;
+    if (req == null || !req.isPending) return false;
+    return req.approverUserId == widget.session.userId;
+  }
+
   Future<void> _postpone() async {
     final task = _detail?.task;
     if (task == null || _busy) return;
@@ -354,12 +367,109 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
         59,
         59,
       );
-      await _api.patchTask(task.id, {
+      final updated = await _api.patchTask(task.id, {
         'dueAt': due.toUtc().toIso8601String(),
         if (draft.reason.isNotEmpty) 'progressNote': draft.reason,
       });
       await _reload();
-      if (mounted) showDunesCenterToast(context, '已延期');
+      if (mounted) {
+        showDunesCenterToast(
+          context,
+          updated.hasPendingChange ? '已提交延期，待直属上级审批' : '已延期',
+        );
+      }
+    } catch (e) {
+      if (mounted) showDunesCenterToast(context, '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _submitChange() async {
+    final task = _detail?.task;
+    if (task == null || _busy) return;
+    final draft = await showTaskChangeDialog(context, task: task);
+    if (draft == null || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final updated = await _api.patchTask(task.id, {
+        if (draft.title != null) 'title': draft.title,
+        if (draft.description != null) 'description': draft.description,
+        if (draft.dueAt != null)
+          'dueAt': DateTime(
+            draft.dueAt!.year,
+            draft.dueAt!.month,
+            draft.dueAt!.day,
+            23,
+            59,
+            59,
+          ).toUtc().toIso8601String(),
+      });
+      await _reload();
+      if (mounted) {
+        showDunesCenterToast(
+          context,
+          updated.hasPendingChange ? '已提交修改，待直属上级审批' : '已保存',
+        );
+      }
+    } catch (e) {
+      if (mounted) showDunesCenterToast(context, '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _assign() async {
+    final task = _detail?.task;
+    if (task == null || _busy) return;
+    final draft = await showTaskAssignDialog(
+      context,
+      session: widget.session,
+      task: task,
+    );
+    if (draft == null || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final updated = await _api.assignTask(
+        task.id,
+        ownerUserId: draft.ownerUserId,
+        comment: draft.comment,
+      );
+      await _reload();
+      if (mounted) {
+        showDunesCenterToast(
+          context,
+          updated.hasPendingChange ? '已提交指派，待直属上级审批' : '已指派',
+        );
+      }
+    } catch (e) {
+      if (mounted) showDunesCenterToast(context, '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _decideChange({required bool pass}) async {
+    final task = _detail?.task;
+    if (task == null) return;
+    final result = await confirmTaskApproval(
+      context,
+      pass: pass,
+      title: pass ? '通过修改' : '驳回修改',
+      hint: pass ? '意见（选填）' : '驳回原因（选填）',
+    );
+    if (!result.confirmed || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      if (pass) {
+        await _api.approveChange(task.id, comment: result.comment);
+      } else {
+        await _api.rejectChange(task.id, comment: result.comment);
+      }
+      await _reload();
+      if (mounted) {
+        showDunesCenterToast(context, pass ? '修改已生效' : '已驳回，保留原内容');
+      }
     } catch (e) {
       if (mounted) showDunesCenterToast(context, '$e');
     } finally {
@@ -532,6 +642,150 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
     return '';
   }
 
+  Widget _pendingChangeBanner(TaskChangeRequest req) {
+    final title = req.isAssignment ? '指派待审批' : '修改待审批';
+    final who = req.approverName.trim().isEmpty ? '直属上级' : req.approverName;
+    final lines = <String>[
+      '当前页面仍显示原内容，待 $who 审批后生效。',
+      if (req.overdueAtSubmit) '本单提交时任务已逾期。',
+      ...req.changes.map(_changeFieldLine),
+      if (req.requesterComment.trim().isNotEmpty)
+        '说明：${req.requesterComment.trim()}',
+    ];
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF6E8),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE8C48A)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFFB45309),
+            ),
+          ),
+          const SizedBox(height: 4),
+          for (final line in lines)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                line,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: DunesColors.text2,
+                  height: 1.4,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _changeFieldLine(TaskChangeField field) {
+    final label = taskChangeFieldLabel(field.field);
+    final from = field.from.trim().isEmpty ? '空' : field.from.trim();
+    final to = field.to.trim().isEmpty ? '空' : field.to.trim();
+    return '$label：$from → $to';
+  }
+
+  Widget _buildChangeHistory(TaskDetail d) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '修改历史',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          for (final req in d.changeHistory)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE3E5EA)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        req.isAssignment ? '指派' : '修改',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      TaskMetaChip(
+                        text: taskChangeStatusLabel(req.status),
+                        color: req.status == 'approved'
+                            ? const Color(0xFF1F9D76)
+                            : req.status == 'rejected'
+                            ? const Color(0xFFE35D6A)
+                            : const Color(0xFFB45309),
+                      ),
+                      if (req.overdueAtSubmit) ...[
+                        const SizedBox(width: 6),
+                        const TaskMetaChip(
+                          text: '逾期修改',
+                          color: Color(0xFFB45309),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${req.requesterName.isEmpty ? '发起人' : req.requesterName} → ${req.approverName.isEmpty ? '直属上级' : req.approverName}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.text3,
+                    ),
+                  ),
+                  for (final field in req.changes)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        _changeFieldLine(field),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: DunesColors.text,
+                        ),
+                      ),
+                    ),
+                  if (req.decisionComment.trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '审批意见：${req.decisionComment.trim()}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: DunesColors.text2,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActionPanel(TaskDetail d) {
     final actions = <Widget>[];
     if (d.task.status == 'pending_assignment' &&
@@ -573,6 +827,23 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
         ),
       );
     } else {
+      if (_canDecideChange) {
+        actions.add(
+          OutlinedButton.icon(
+            onPressed: _busy ? null : () => _decideChange(pass: false),
+            icon: const Icon(Icons.close, size: 17),
+            label: const Text('驳回修改'),
+          ),
+        );
+        actions.add(
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: _themePurple),
+            onPressed: _busy ? null : () => _decideChange(pass: true),
+            icon: const Icon(Icons.check, size: 17),
+            label: const Text('通过修改'),
+          ),
+        );
+      }
       if (_canEditProgress &&
           !(d.task.isMain && d.subtasks.isNotEmpty) &&
           d.task.status != 'completed') {
@@ -602,6 +873,24 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
             onPressed: _busy ? null : _postpone,
             icon: const Icon(Icons.event_repeat, size: 17),
             label: const Text('延期'),
+          ),
+        );
+      }
+      if (_canChangeFields) {
+        actions.add(
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _submitChange,
+            icon: const Icon(Icons.edit_outlined, size: 17),
+            label: const Text('修改'),
+          ),
+        );
+      }
+      if (_canAssign) {
+        actions.add(
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _assign,
+            icon: const Icon(Icons.person_add_alt_1_outlined, size: 17),
+            label: const Text('指派'),
           ),
         );
       }
@@ -798,6 +1087,10 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                     ),
                   ),
                 ],
+                if (d.pendingChangeRequest != null) ...[
+                  const SizedBox(height: 8),
+                  _pendingChangeBanner(d.pendingChangeRequest!),
+                ],
                 const SizedBox(height: 10),
                 Builder(
                   builder: (_) {
@@ -883,6 +1176,15 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                                           ? const Color(0xFF1F9D76)
                                           : _themePurple),
                               ),
+                              if (d.task.hasPendingChange ||
+                                  d.pendingChangeRequest != null)
+                                TaskMetaChip(
+                                  text: taskPendingChangeLabel(
+                                    d.pendingChangeRequest?.kind ??
+                                        d.task.pendingChangeKind,
+                                  ),
+                                  color: const Color(0xFFB45309),
+                                ),
                               TaskMetaChip(
                                 text:
                                     '优先级${taskPriorityLabel(d.task.priority)}',
@@ -984,6 +1286,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                   for (final a in d.attachments)
                     TaskAttachmentTile(session: widget.session, attachment: a),
                 ],
+                if (d.changeHistory.isNotEmpty) _buildChangeHistory(d),
                 if (d.task.isMain && !d.task.isPending) ...[
                   const SizedBox(height: 18),
                   TaskLinkSection(

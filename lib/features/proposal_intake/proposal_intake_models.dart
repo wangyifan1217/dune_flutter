@@ -48,6 +48,90 @@ const kProposalChildProductLabel = '子产品';
 String proposalIntakeProductKindLabel({required bool child}) =>
     child ? kProposalChildProductLabel : kProposalMainProductLabel;
 
+const kProposalCouponKindCash = '现金券';
+const kProposalCouponKindDiscount = '满减券';
+const kProposalCouponKinds = <String>[
+  kProposalCouponKindCash,
+  kProposalCouponKindDiscount,
+];
+
+String proposalIntakeNormalizeCouponKind(String raw) {
+  final value = raw.trim();
+  if (value == kProposalCouponKindCash || value.contains('现金')) {
+    return kProposalCouponKindCash;
+  }
+  if (value == kProposalCouponKindDiscount || value.contains('满减')) {
+    return kProposalCouponKindDiscount;
+  }
+  return '';
+}
+
+final _kDiscountFacePattern = RegExp(
+  r'满\s*([0-9]+(?:\.[0-9]+)?)\s*减\s*([0-9]+(?:\.[0-9]+)?)',
+);
+final _kDashFacePattern = RegExp(
+  r'^([0-9]+(?:\.[0-9]+)?)\s*[-—~]\s*([0-9]+(?:\.[0-9]+)?)$',
+);
+
+(String threshold, String off) proposalIntakeSplitDiscountFace(String raw) {
+  final text = raw.trim();
+  final matched =
+      _kDiscountFacePattern.firstMatch(text) ??
+      _kDashFacePattern.firstMatch(text);
+  if (matched == null) return ('', '');
+  return (matched.group(1) ?? '', matched.group(2) ?? '');
+}
+
+bool proposalIntakeIsDiscountFace(String raw) {
+  final split = proposalIntakeSplitDiscountFace(raw);
+  return split.$1.isNotEmpty || split.$2.isNotEmpty;
+}
+
+String proposalIntakeJoinDiscountFace(String threshold, String off) {
+  final a = threshold.trim();
+  final b = off.trim();
+  if (a.isEmpty && b.isEmpty) return '';
+  return '满${a}减$b';
+}
+
+double proposalIntakeParseFaceNumber(String raw) {
+  final text = raw
+      .trim()
+      .replaceAll('元', '')
+      .replaceAll(',', '')
+      .replaceAll('，', '');
+  if (text.isEmpty) return 0;
+  return double.tryParse(text) ?? 0;
+}
+
+/// 测算用面值：现金券取面值；满减券取满额（与销售规模同口径）。
+double proposalIntakeSkuSettleFace(ProposalSkuDetailRow sku) {
+  final face = sku.faceValue.trim();
+  final discount = sku.resolvedCouponKind == kProposalCouponKindDiscount ||
+      proposalIntakeIsDiscountFace(face);
+  if (discount) {
+    final split = proposalIntakeSplitDiscountFace(face);
+    final threshold = proposalIntakeParseFaceNumber(split.$1);
+    if (threshold > 0) return threshold;
+    final off = proposalIntakeParseFaceNumber(split.$2);
+    if (off > 0) return off;
+  }
+  return proposalIntakeParseFaceNumber(face);
+}
+
+const kProposalSkuSettleKindIncome = 'income';
+const kProposalSkuSettleKindCost = 'cost';
+
+String proposalIntakeNormalizeSkuSettleKind(String raw) {
+  final value = raw.trim().toLowerCase();
+  if (value == kProposalSkuSettleKindCost ||
+      value == '成本' ||
+      value.contains('cost')) {
+    return kProposalSkuSettleKindCost;
+  }
+  return kProposalSkuSettleKindIncome;
+}
+
 /// 产品在业务平台上的配置进度。
 const kProposalSkuPlatformStatusPending = 'pending';
 const kProposalSkuPlatformStatusCreating = 'creating';
@@ -672,6 +756,28 @@ const kProposalProjectCostItems = [
   '推广费',
 ];
 
+/// 管理后台「项目成本明细」优先；未配置时用默认名单。
+List<String> proposalIntakeProjectCostNameCatalog({
+  List<String> names = const [],
+  List<ProposalCostItemOption> catalog = const [],
+}) {
+  final seen = <String>{};
+  final out = <String>[];
+  void add(String raw) {
+    final name = proposalProjectCostDisplayName(raw.trim());
+    if (name.isEmpty || !seen.add(name)) return;
+    out.add(name);
+  }
+
+  for (final name in names) {
+    add(name);
+  }
+  for (final item in catalog) {
+    add(item.name);
+  }
+  return out.isNotEmpty ? out : kProposalProjectCostItems;
+}
+
 /// 协作提案「经营成本」表头。
 const kProposalOperatingCostItems = ['差旅成本', '招待费'];
 
@@ -911,8 +1017,10 @@ class ProposalIntakeOptions {
     this.operatingCostRules = '',
     this.costItemSource = '',
     required this.rollbackOptions,
+    this.businessPlatforms = const [],
     this.settleModes = const [],
     this.settleCycles = const [],
+    this.unitPriceFormulas = const [],
     required this.ratingS,
     required this.ratingA,
     required this.ratingB,
@@ -932,6 +1040,7 @@ class ProposalIntakeOptions {
   final List<String> supplyBrands;
   final List<String> rebateModes;
   final List<ProposalLinkedOption> platforms;
+  final List<CatalogRef> businessPlatforms;
   final List<String> outputForms;
   final List<String> developmentTypes;
   final List<ProposalFinanceInterface> financeInterfaces;
@@ -945,6 +1054,7 @@ class ProposalIntakeOptions {
   final List<String> rollbackOptions;
   final List<String> settleModes;
   final List<String> settleCycles;
+  final List<String> unitPriceFormulas;
   final double ratingS;
   final double ratingA;
   final double ratingB;
@@ -990,6 +1100,7 @@ class ProposalIntakeOptions {
           )
           .where((item) => item.value.isNotEmpty)
           .toList(growable: false),
+      businessPlatforms: _catalogChoices(technology['businessPlatforms']),
       outputForms: _strings(technology['outputForms']),
       developmentTypes: _strings(technology['developmentTypes']),
       financeInterfaces: _list(technology['financeInterfaces'])
@@ -1014,6 +1125,7 @@ class ProposalIntakeOptions {
       rollbackOptions: _strings(finance['rollbackOptions']),
       settleModes: _strings(finance['settleModes']),
       settleCycles: _strings(finance['settleCycles']),
+      unitPriceFormulas: _strings(finance['unitPriceFormulas']),
       // 金额口径为万元。
       ratingS: _number(rules['ratingS'], 5000),
       ratingA: _number(rules['ratingA'], 2000),
@@ -1037,6 +1149,29 @@ class ProposalIntakeOptions {
 
   List<String> get resolvedSettleCycles =>
       settleCycles.isNotEmpty ? settleCycles : kProposalPreSettleCycles;
+
+  List<CatalogRef> get resolvedBusinessPlatforms =>
+      businessPlatforms.isNotEmpty
+      ? businessPlatforms
+      : [
+          for (final name in kProposalDefaultBusinessPlatforms)
+            CatalogRef(code: name, name: name),
+        ];
+
+  List<CatalogRef> get resolvedUnitPriceFormulas {
+    final names = unitPriceFormulas.isNotEmpty
+        ? unitPriceFormulas
+        : kProposalDefaultUnitPriceFormulas;
+    return [
+      for (final name in names) CatalogRef(code: name, name: name),
+    ];
+  }
+
+  List<String> get resolvedProjectCostItems =>
+      proposalIntakeProjectCostNameCatalog(
+        names: costItems,
+        catalog: costItemOptions,
+      );
 
   bool isConfiguredPresident(int userId) =>
       userId > 0 && presidentUserIds.contains(userId);
@@ -1881,10 +2016,16 @@ String proposalIntakeActionLabel(
     return '$base $trimmed';
   }
 
+  String withConfirmSubmit() {
+    final name = row?.initiatorDisplayName(people) ?? '';
+    if (name.isEmpty || name == '未指定') return '待填写人确认并提交复核';
+    return '待$name确认并提交复核';
+  }
+
   return switch (action) {
     'fill' => withName('待填写', row?.initiatorDisplayName(people) ?? ''),
     'fill_tech' => withName('待填写科技', row?.initiatorDisplayName(people) ?? ''),
-    'notify_market2' => '待确认提交复核',
+    'notify_market2' => withConfirmSubmit(),
     'fill_finance_interface' => withOwner('待填写财务技术接口', 'financeOwner2'),
     'start_review' => '待重新提交复核',
     'review_market' => withReviewer('marketOwner1', fallback: '待复核市场部'),
@@ -1913,7 +2054,6 @@ String proposalIntakeActionLabel(
 
 bool proposalIntakeFinanceLineItemsReviewed(ProposalIntakeRow row) {
   final keys = <String>[
-    'salesScale',
     'revenue',
     'couponProcurementCost',
     'profit',
@@ -1935,13 +2075,18 @@ bool proposalIntakeFinanceLineItemsReviewed(ProposalIntakeRow row) {
     'operatingCost',
     'taxCost',
     'proposalSubtitle',
-    ...proposalIntakeLaunchModuleReviewKeys(row.form),
     ...proposalIntakeSkuSettleReviewKeys(row.form),
   ];
   if (keys.isEmpty) return false;
   final raw = row.review['financeItems'];
   final items = raw is Map ? raw : const {};
   for (final key in keys) {
+    if (key == kProposalSkuSettlementsReviewKey) {
+      if (!proposalIntakeSkuSettlementsReviewed(row.review, row.form)) {
+        return false;
+      }
+      continue;
+    }
     if (items[key] != true) return false;
   }
   return true;
@@ -2029,6 +2174,7 @@ const kProposalTechnologyReviewFields = <String>[
 ];
 
 const kProposalSkuProductsReviewKey = 'skuProducts';
+const kProposalSkuSettlementsReviewKey = 'skuSettlements';
 
 const kProposalTechnologyReviewLabels = <String, String>{
   'technologyPlatform': 'τ-标签一',
@@ -2161,7 +2307,7 @@ String proposalIntakeSectionTaskCue(String action) {
     return '请到页面底部确认';
   }
   if (action == 'start_review') return '请修改后重新提交复核';
-  if (action == 'notify_market2') return '请确认科技内容后提交复核';
+  if (action == 'notify_market2') return '请财务填完后提交复核';
   return '';
 }
 
@@ -2178,7 +2324,6 @@ int proposalIntakeTaskRemainingCount(
     final items = raw is Map ? raw : const {};
     var left = 0;
     for (final key in [
-      'salesScale',
       'revenue',
       'couponProcurementCost',
       'profit',
@@ -2200,9 +2345,12 @@ int proposalIntakeTaskRemainingCount(
       'operatingCost',
       'taxCost',
       'proposalSubtitle',
-      ...proposalIntakeLaunchModuleReviewKeys(form),
       ...proposalIntakeSkuSettleReviewKeys(form),
     ]) {
+      if (key == kProposalSkuSettlementsReviewKey) {
+        if (!proposalIntakeSkuSettlementsReviewed(review, form)) left++;
+        continue;
+      }
       if (items[key] != true) left++;
     }
     return left;
@@ -2220,7 +2368,7 @@ String proposalIntakeTaskBannerTitle(
   return switch (action) {
     'fill' => '待你填写市场、科技与产品',
     'fill_tech' => '待你填写科技与产品',
-    'notify_market2' => '待你确认并提交复核',
+    'notify_market2' => '待你提交复核',
     'fill_finance_interface' => '待你填写财务技术接口',
     'revise' => '最终人已驳回，请从头填写',
     'revise_module' => '板块已驳回，请修改后重新提交复核',
@@ -2249,16 +2397,19 @@ String proposalIntakeTaskBannerBody(
     return '看完内容后，到本板块最底部点「整个板块复核通过」。也可直接整板块驳回。';
   }
   return switch (action) {
-    'review_tech' => '到各字段旁点复核，财务技术接口也算科技一条。底部确认前会检查遗漏。也可直接整板块驳回。',
+    'review_tech' =>
+      '到各字段旁和「产品相关」点「点此复核」，财务技术接口也算科技一条。再到科技部最底部确认本板块，确认前会检查遗漏。也可直接整板块驳回。',
     'review_finance' => '到各费用字段旁点复核。也可直接整板块驳回。',
     'review_finance_interface' => '到财务技术接口处点复核。',
     'review_contract' => '到合同处点复核。也可直接整板块驳回。',
     'president_confirm' => '审批进度和其他人看到的一样。看完各板块后，到页面底部点「确认通过」或「驳回」。',
-    'fill' => '先填市场部和产品，科技字段一并填。填完后点右上角「通知科技」。定位条带「填」的就是当前板块。',
+    'fill' => '先填市场部和产品，科技字段一并填。填完后点右上角「通知财务填写」。定位条带「填」的就是当前板块。',
     'fill_tech' => '到科技部填写平台、能力和产品。财务技术接口由财务部负责人二填写。定位条带「填」的就是当前板块。',
-    'notify_market2' => '科技部内容由填写人填写。确认无误后点右上角提交复核。',
-    'fill_finance_interface' => '到科技部勾选财务技术接口。定位条带「填」的就是当前板块。',
-    'revise' => '最终人驳回后流程从头开始。改完后重新通知科技负责人。',
+    'notify_market2' =>
+      '等财务部负责人二填完财务技术接口和项目成本后，点右上角「确认并提交复核」。',
+    'fill_finance_interface' =>
+        '到科技部勾选财务技术接口，再到财务部核对项目成本。定位条带「填」的就是当前板块。',
+    'revise' => '最终人驳回后流程从头开始。改完后重新通知财务填写。',
     'revise_module' => '按驳回意见改对应板块，改完后点右上角重新提交复核。',
     'start_review' => '内容改完后点右上角重新提交复核。',
     'start_tech_revision' => '如需改科技内容，点右上角发起科技变更。',
@@ -2368,10 +2519,16 @@ String proposalIntakeProgressHeadline(List<ProposalIntakeProgressStep> steps) {
   }
   return current
       .map((step) {
-        if (step.role.isNotEmpty && step.name.isNotEmpty) {
-          return '${step.role} · ${step.name}';
+        final who = [
+          if (step.role.isNotEmpty) step.role,
+          if (step.name.isNotEmpty) step.name,
+        ].join(' ');
+        final action = step.action.trim();
+        if (who.isNotEmpty && action.isNotEmpty) {
+          return '当前应由 $who · $action';
         }
-        if (step.name.isNotEmpty) return step.name;
+        if (who.isNotEmpty) return '当前应由 $who';
+        if (action.isNotEmpty) return '当前应$action';
         return step.title;
       })
       .join('、');
@@ -2408,7 +2565,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
   final leftFilling = rank == 0;
   final crossedTech = rank >= 1 || reviewRejected || anyReviewDone;
   final initiator = row.initiatorDisplayName(people);
-  final initiatorName = initiator == '未指定' ? '' : initiator;
+  final initiatorName = initiator.trim().isEmpty ? '未指定' : initiator;
   final createdAt = formatProposalIntakeProgressTime(row.createdAt);
   final handoffAt = formatProposalIntakeProgressTime(
     '${review['lastHandoffAt'] ?? ''}',
@@ -2421,24 +2578,52 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
   );
 
   String ownerName(String prefix) {
-    return proposalIntakeOwnerDisplayName(row.form, prefix, people: people);
+    final name = proposalIntakeOwnerDisplayName(
+      row.form,
+      prefix,
+      people: people,
+    ).trim();
+    return name.isEmpty ? '未指定' : name;
+  }
+
+  String namedOrUnspecified(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || trimmed == '未指定') return '未指定';
+    return trimmed;
+  }
+
+  String currentActionStatus({
+    required String name,
+    required String role,
+    required bool review,
+    required bool submit,
+  }) {
+    final person = namedOrUnspecified(name);
+    if (person == '未指定') return '请先在表单选择$role';
+    if (review) return '请 $person 点击复核';
+    if (submit) return '请点右上角按钮';
+    return '请填写';
   }
 
   String presidentName() {
-    final fromForm = ownerName('president');
+    final fromForm = proposalIntakeOwnerDisplayName(
+      row.form,
+      'president',
+      people: people,
+    ).trim();
     final configured = options?.presidentDisplayNames(people).trim() ?? '';
-    if (fromForm.isNotEmpty) {
+    if (fromForm.isNotEmpty && fromForm != '未指定') {
       if (configured.isNotEmpty && !fromForm.contains(configured)) {
         return '$fromForm、$configured';
       }
       return fromForm;
     }
-    return configured;
+    return configured.isEmpty ? '未指定' : configured;
   }
 
   String statusOf(ProposalIntakeProgressState state, {String done = '已通过'}) {
     return switch (state) {
-      ProposalIntakeProgressState.pending => '待处理',
+      ProposalIntakeProgressState.pending => '未开始',
       ProposalIntakeProgressState.current => '进行中',
       ProposalIntakeProgressState.done => done,
       ProposalIntakeProgressState.rejected => '已驳回',
@@ -2471,14 +2656,27 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
     String? title,
     String? statusText,
   }) {
-    final resolvedName = name.trim();
+    final resolvedName = name.trim().isEmpty ? '未指定' : name.trim();
+    final resolvedStatus =
+        statusText ??
+        (state == ProposalIntakeProgressState.current
+            ? currentActionStatus(
+                name: resolvedName,
+                role: role,
+                review:
+                    id.startsWith('review_') ||
+                    id == 'president' ||
+                    id == 'review_finance_module',
+                submit: id == 'start_review' || id == 'notify_president',
+              )
+            : statusOf(state, done: doneStatus));
     return ProposalIntakeProgressStep(
       id: id,
-      title: title ?? role,
+      title: title ?? '$role $resolvedName',
       role: role,
       name: resolvedName,
       action: action,
-      statusText: statusText ?? statusOf(state, done: doneStatus),
+      statusText: resolvedStatus,
       time: timeOf(state, done: time, current: currentTime),
       state: state,
     );
@@ -2492,7 +2690,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
 
   ProposalIntakeProgressState startReviewState() {
     if (inStartReview) return ProposalIntakeProgressState.current;
-    if (inTechFill) return ProposalIntakeProgressState.pending;
+    if (inTechFill) return ProposalIntakeProgressState.current;
     if (presidentRejected && leftFilling) {
       return ProposalIntakeProgressState.pending;
     }
@@ -2550,8 +2748,8 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       id: 'initiate',
       role: '提交人',
       name: initiatorName,
-      action: leftFilling ? '填写市场、科技与产品' : '发起',
-      title: initiatorName.isEmpty ? '提交人 发起' : '$initiatorName 发起',
+      action: leftFilling ? '填写市场、科技与产品 · 点右上角「通知财务填写」' : '发起',
+      title: initiatorName == '未指定' ? '提交人 发起' : '$initiatorName 发起',
       state: initiateState,
       doneStatus: '已发起',
       statusText: initiateState == ProposalIntakeProgressState.current
@@ -2564,7 +2762,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       id: 'fill_tech',
       role: '填写人',
       name: initiatorName,
-      action: '填写科技与产品',
+      action: '补全科技与产品',
       state: fillState(current: inTechFill),
       time: handoffAt,
       currentTime: handoffAt,
@@ -2573,16 +2771,18 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       id: 'fill_finance_interface',
       role: '财务部负责人二',
       name: ownerName('financeOwner2'),
-      action: '填写财务技术接口',
+      action: '填写财务技术接口和项目成本',
       state: fillState(current: inTechFill),
       time: handoffAt,
       currentTime: handoffAt,
     ),
     person(
       id: 'start_review',
-      role: '提交人',
+      role: inStartReview ? '提交人' : '填写人',
       name: initiatorName,
-      action: '提交复核',
+      action: inStartReview
+          ? '重新提交复核 · 点右上角重新提交复核'
+          : '财务填完后，点右上角「确认并提交复核」',
       state: startReviewState(),
       time: handoffAt,
       currentTime: handoffAt,
@@ -2591,7 +2791,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       id: 'review_market',
       role: '市场部负责人一',
       name: ownerName('marketOwner1'),
-      action: '整板块复核市场',
+      action: '到市场部底部点「整个板块复核通过」',
       state: reviewerState('marketCompleted', techRound: true),
       time: reviewedAt,
     ),
@@ -2599,7 +2799,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       id: 'review_tech',
       role: '科技部负责人',
       name: ownerName('technologyOwner'),
-      action: '复核科技与产品（含财务技术接口）',
+      action: '到各科技字段旁点「点此复核」，再到科技部底部确认本板块',
       state: reviewerState('technologyCompleted', techRound: true),
       time: reviewedAt,
     ),
@@ -2607,7 +2807,9 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       id: 'review_contract',
       role: '财务部负责人二',
       name: ownerName('financeOwner2'),
-      action: purchase ? '复核采购合同' : '复核合同与财务',
+      action: purchase
+          ? '到合同处点「点此复核」'
+          : '到主产品合计及产品「填写结算」的收入/成本旁点「点此复核」',
       state: reviewerState(
         'purchaseContractCompleted',
         rejected: contractRejected,
@@ -2621,7 +2823,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
         id: 'review_finance_module',
         role: '财务部负责人一',
         name: ownerName('financeOwner1'),
-        action: '整板块复核财务',
+        action: '到财务部底部点「整个板块复核通过」',
         state: reviewerState('financeCompleted', active: finance2Done),
         time: reviewedAt,
       ),
@@ -2629,7 +2831,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       id: 'notify_president',
       role: '提交人',
       name: initiatorName,
-      action: '通知最终人',
+      action: '到页面底部通知最终人',
       state: notifyState(),
       time: handoffAt,
       currentTime: handoffAt,
@@ -2638,7 +2840,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       id: 'president',
       role: '最终确认人',
       name: presidentName(),
-      action: '最终确认',
+      action: '到页面底部点「确认通过」或「驳回」',
       state: presidentState(),
       time: decidedAt,
       currentTime: decidedAt,
@@ -2649,7 +2851,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       role: '',
       name: '',
       action: finished ? '提案已完成' : '各环节通过后结束',
-      statusText: finished ? '已完成' : '待处理',
+      statusText: finished ? '已完成' : '未开始',
       time: finished ? decidedAt : '',
       state: finished
           ? ProposalIntakeProgressState.done
@@ -2667,7 +2869,15 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
     for (final step in steps)
       if (step.state == ProposalIntakeProgressState.current &&
           step.id.startsWith('review_'))
-        step.copyWith(statusText: '待复核', time: '')
+        step.copyWith(
+          statusText: currentActionStatus(
+            name: step.name,
+            role: step.role,
+            review: true,
+            submit: false,
+          ),
+          time: '',
+        )
       else
         step,
   ];
@@ -2819,7 +3029,7 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeNotifyRecipients({
     case 'notify_tech':
       return _dedupeNotifyRecipients(
         [
-          owner('financeOwner2', '财务部负责人二', '请填写财务技术接口'),
+          owner('financeOwner2', '财务部负责人二', '请填写财务技术接口和项目成本'),
         ].whereType<ProposalIntakeNotifyRecipient>().toList(),
       );
     case 'notify_market2':
@@ -2919,19 +3129,17 @@ List<ProposalIntakeNotifyRecipient> proposalIntakeRemindRecipients({
     case 'awaiting_tech':
       return _dedupeNotifyRecipients(
         [
-          proposalIntakeNotifyOwner(
-            form: row.form,
+          proposalIntakeSubmitterNotifyRecipient(
+            row,
+            task: '请财务填完后提交复核',
             people: people,
-            prefix: 'technologyOwner',
-            role: '科技部负责人',
-            task: '请确认并提交复核',
           ),
           proposalIntakeNotifyOwner(
             form: row.form,
             people: people,
             prefix: 'financeOwner2',
             role: '财务部负责人二',
-            task: '请填写财务技术接口',
+            task: '请填写财务技术接口和项目成本',
           ),
         ].whereType<ProposalIntakeNotifyRecipient>().toList(),
       );
@@ -3763,7 +3971,7 @@ bool proposalIntakeFormsEqual(
   }
 }
 
-/// 复核相关负责人：没选就不能通知科技 / 提交复核。
+/// 复核相关负责人：没选就不能通知财务填写 / 提交复核。
 /// 销售和采购填写环节都要指定运营。
 List<String> missingProposalReviewAssignees(
   Map<String, dynamic> form, {
@@ -3957,6 +4165,74 @@ bool proposalIntakeSettleIsTier(ProposalFinanceSettleTerms terms) {
   return terms.settleMode.contains('阶梯');
 }
 
+const kProposalDefaultBusinessPlatforms = <String>['能源', '出行'];
+const kProposalDefaultUnitPriceFormulas = <String>[
+  '按核销统计结算单价',
+  '按销售统计结算单价',
+];
+
+/// 结算比例和结算单价只能填一项：填了比例就清掉单价，反之亦然。
+ProposalFinanceSettleTerms proposalIntakeApplySettleXor(
+  ProposalFinanceSettleTerms terms, {
+  String? settleRatio,
+  String? settleUnitPrice,
+}) {
+  var next = terms;
+  if (settleRatio != null) {
+    final ratio = proposalIntakeNormalizeSettleRatio(settleRatio);
+    next = next.copyWith(settleRatio: ratio);
+    if (ratio.isNotEmpty) {
+      next = next.copyWith(settleUnitPrice: '', settlePrice: '');
+    }
+  }
+  if (settleUnitPrice != null) {
+    final price = settleUnitPrice.trim();
+    next = next.copyWith(settleUnitPrice: price);
+    if (price.isNotEmpty) {
+      next = next.copyWith(settleRatio: '', settlePrice: '');
+    } else {
+      next = next.copyWith(settlePrice: '');
+    }
+  }
+  return next;
+}
+
+/// 把后台配置的「能源/出行」绑到资管业务平台，供结算字典和产品搜索用。
+CatalogRef proposalIntakeBindSyncSource(
+  CatalogRef configured,
+  List<CatalogRef> syncSources,
+) {
+  if (configured.isEmpty || syncSources.isEmpty) return configured;
+  final code = configured.code.trim();
+  final name = configured.name.trim();
+  CatalogRef? hit;
+  if (code.isNotEmpty) {
+    for (final item in syncSources) {
+      if (item.code.trim() == code) {
+        hit = item;
+        break;
+      }
+    }
+  }
+  if (hit == null && name.isNotEmpty) {
+    for (final item in syncSources) {
+      if (item.name.trim() == name) {
+        hit = item;
+        break;
+      }
+    }
+  }
+  if (hit == null && name.isNotEmpty) {
+    for (final item in syncSources) {
+      if (item.name.trim().startsWith(name)) {
+        hit = item;
+        break;
+      }
+    }
+  }
+  return hit ?? configured;
+}
+
 /// 结算比例只存小数。旧数据带 `%` 的按百分数除以 100，例如 `1%` → `0.01`。
 String proposalIntakeNormalizeSettleRatio(Object? raw) {
   var text = '$raw'.trim().replaceAll('％', '%');
@@ -4131,11 +4407,9 @@ class ProposalFinanceSettleTerms {
   bool get isSkuComplete {
     if (taxRate.isEmpty || resolvedRule.isEmpty) return false;
     if (proposalIntakeSettleIsTier(this)) return true;
-    if (proposalIntakeSettleUsesRatio(this) &&
-        proposalIntakeSettleUsesUnitPrice(this)) {
-      return displayRatio.isNotEmpty && displayUnitPrice.isNotEmpty;
-    }
-    return resolvedPrice.isNotEmpty;
+    return displayRatio.isNotEmpty ||
+        displayUnitPrice.isNotEmpty ||
+        resolvedPrice.isNotEmpty;
   }
 
   String get fingerprint => [
@@ -4830,22 +5104,38 @@ String proposalIntakeNewLaunchId() =>
 class ProposalSkuSettleRow {
   const ProposalSkuSettleRow({
     required this.id,
+    this.kind = kProposalSkuSettleKindIncome,
     this.terms = const ProposalFinanceSettleTerms(),
   });
 
   final String id;
+  final String kind;
   final ProposalFinanceSettleTerms terms;
 
-  ProposalSkuSettleRow copyWith({ProposalFinanceSettleTerms? terms}) =>
-      ProposalSkuSettleRow(id: id, terms: terms ?? this.terms);
+  bool get isCost =>
+      proposalIntakeNormalizeSkuSettleKind(kind) == kProposalSkuSettleKindCost;
 
-  Map<String, dynamic> toJson() => {'id': id, ...terms.toJson()};
+  ProposalSkuSettleRow copyWith({
+    String? kind,
+    ProposalFinanceSettleTerms? terms,
+  }) => ProposalSkuSettleRow(
+    id: id,
+    kind: kind ?? this.kind,
+    terms: terms ?? this.terms,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'kind': proposalIntakeNormalizeSkuSettleKind(kind),
+    ...terms.toJson(),
+  };
 
   factory ProposalSkuSettleRow.fromJson(Object? raw) {
     if (raw is! Map) return const ProposalSkuSettleRow(id: '');
     final id = '${raw['id'] ?? ''}'.trim();
     return ProposalSkuSettleRow(
       id: id,
+      kind: proposalIntakeNormalizeSkuSettleKind('${raw['kind'] ?? ''}'),
       terms: ProposalFinanceSettleTerms.fromJson(raw),
     );
   }
@@ -5014,14 +5304,20 @@ String proposalIntakeSettleLabel(int index, {String kind = '结算'}) {
 List<ProposalSkuSettleRow> proposalIntakeSettlementsOf({
   required String id,
   required List<ProposalSkuSettleRow> settlements,
+  bool ensureDefault = true,
 }) {
   if (settlements.isNotEmpty) return settlements;
+  if (!ensureDefault) return const [];
   return [ProposalSkuSettleRow(id: '$id-st-1')];
 }
 
 List<ProposalSkuSettleRow> proposalIntakeSkuSettlements(
   ProposalSkuDetailRow row,
-) => proposalIntakeSettlementsOf(id: row.id, settlements: row.settlements);
+) => proposalIntakeSettlementsOf(
+  id: row.id,
+  settlements: row.settlements,
+  ensureDefault: false,
+);
 
 ProposalFinanceSettleTerms proposalIntakeTermsFromChannelSettlementItem(
   ChannelProductSettlementItem item, {
@@ -5210,6 +5506,35 @@ bool? proposalIntakeExistingBuiltOverride(Map<String, dynamic> form) {
   return null;
 }
 
+List<ProposalFinanceSettleTerms> proposalIntakeMainProductIncomeSettleTerms(
+  Map<String, dynamic> form,
+) {
+  return [
+    for (final sku in proposalIntakeSkuDetails(form))
+      for (final settle in proposalIntakeSkuSettlements(sku))
+        if (!settle.isCost) settle.terms,
+  ];
+}
+
+List<ProposalSkuSettleRow> proposalIntakeSkuSettlementsOfKind(
+  ProposalSkuDetailRow sku, {
+  required String kind,
+}) {
+  final want = proposalIntakeNormalizeSkuSettleKind(kind);
+  return [
+    for (final settle in proposalIntakeSkuSettlements(sku))
+      if (proposalIntakeNormalizeSkuSettleKind(settle.kind) == want) settle,
+  ];
+}
+
+double proposalIntakeLegacyProductScaleTotal(Map<String, dynamic> form) {
+  var sum = 0.0;
+  for (final sku in proposalIntakeSkuDetails(form)) {
+    sum += proposalIntakeSkuScaleTotal(sku);
+  }
+  return sum;
+}
+
 List<ProposalFinanceSettleTerms> proposalIntakeProductSalesSettleTerms(
   Map<String, dynamic> form,
 ) {
@@ -5235,9 +5560,8 @@ List<ProposalFinanceSettleTerms> proposalIntakeProductSalesSettleTerms(
 }
 
 bool proposalIntakeHasProductSalesScale(Map<String, dynamic> form) {
-  return proposalIntakeProductSalesSettleTerms(
-    form,
-  ).any((terms) => terms.scale.trim().isNotEmpty);
+  if (proposalIntakeFormHasText(form, 'salesScale')) return true;
+  return proposalIntakeLegacyProductScaleTotal(form) > 0;
 }
 
 const _kDerivedFinanceMetricKeys = {
@@ -5247,7 +5571,7 @@ const _kDerivedFinanceMetricKeys = {
   'margin',
 };
 
-List<String> proposalIntakeSkuSettleReviewKeys(Map<String, dynamic> form) {
+List<String> proposalIntakeLegacySkuSettleReviewKeys(Map<String, dynamic> form) {
   return [
     for (final sku in proposalIntakeAllSellableSkus(form))
       for (final settle in proposalIntakeSkuSettlements(sku))
@@ -5258,8 +5582,36 @@ List<String> proposalIntakeSkuSettleReviewKeys(Map<String, dynamic> form) {
   ];
 }
 
+List<String> proposalIntakeSkuSettleReviewKeys(Map<String, dynamic> form) {
+  if (proposalIntakeAllSellableSkus(form).isEmpty &&
+      (!kProposalSharedSettleEnabled ||
+          proposalIntakeSharedSettlements(form).isEmpty)) {
+    return const [];
+  }
+  return const [kProposalSkuSettlementsReviewKey];
+}
+
+bool proposalIntakeSkuSettlementsReviewed(
+  Map<String, dynamic> review,
+  Map<String, dynamic> form,
+) {
+  final raw = review['financeItems'];
+  final items = raw is Map ? raw : const {};
+  if (items[kProposalSkuSettlementsReviewKey] == true) return true;
+  final legacy = proposalIntakeLegacySkuSettleReviewKeys(form);
+  if (legacy.isEmpty) {
+    return proposalIntakeSkuSettleReviewKeys(form).isEmpty;
+  }
+  for (final key in legacy) {
+    if (items[key] != true) return false;
+  }
+  return true;
+}
+
 bool proposalIntakeSkuStarted(ProposalSkuDetailRow sku) {
   return sku.productName.trim().isNotEmpty ||
+      sku.couponKind.trim().isNotEmpty ||
+      sku.resolvedCouponKind.isNotEmpty ||
       (sku.assetProduct != null && sku.assetProduct!.isNotEmpty);
 }
 
@@ -5286,11 +5638,16 @@ List<String> proposalIntakeSkuSettleIssues(
     for (final child in children) {
       if (child.parentSkuId.isEmpty) {
         issues.add(
-          '$kProposalChildProductLabel「${child.productName.isEmpty ? '未命名' : child.productName}」请选择关联$kProposalMainProductLabel',
+          '$kProposalChildProductLabel「${child.displayName.isEmpty ? '未命名' : child.displayName}」请选择关联$kProposalMainProductLabel',
         );
       } else if (!mainIds.contains(child.parentSkuId)) {
         issues.add(
-          '$kProposalChildProductLabel「${child.productName.isEmpty ? '未命名' : child.productName}」关联的$kProposalMainProductLabel不存在',
+          '$kProposalChildProductLabel「${child.displayName.isEmpty ? '未命名' : child.displayName}」关联的$kProposalMainProductLabel不存在',
+        );
+      }
+      if (child.resolvedCouponKind.isEmpty) {
+        issues.add(
+          '$kProposalChildProductLabel${child.displayName.isEmpty ? '第${children.indexOf(child) + 1}条' : '「${child.displayName}」'}请选择现金券或满减券',
         );
       }
     }
@@ -5301,9 +5658,9 @@ List<String> proposalIntakeSkuSettleIssues(
         includeSettlements: includeSettlements,
         emptyExistingLabel:
             '已勾选$kProposalChildProductLabel已建产品，请至少添加一条$kProposalChildProductLabel并搜索选择已建产品',
-        rowLabel: (i, sku) => sku.productName.isEmpty
+        rowLabel: (i, sku) => sku.displayName.isEmpty
             ? '$kProposalChildProductLabel第${i + 1}条'
-            : '$kProposalChildProductLabel「${sku.productName}」',
+            : '$kProposalChildProductLabel「${sku.displayName}」',
         covered: proposalIntakeActiveSharedSettleSkuIds(form),
       ),
     );
@@ -5360,7 +5717,9 @@ List<String> _proposalIntakeSkuGroupIssues({
     final settlements = proposalIntakeSkuSettlements(sku);
     for (var j = 0; j < settlements.length; j++) {
       if (!settlements[j].terms.isSkuComplete) {
-        issues.add('$name${proposalIntakeSettleLabel(j)}未填完结算方式对应金额、计算公式、税率');
+        issues.add(
+          '$name${proposalIntakeSettleLabel(j, kind: settlements[j].isCost ? '成本' : '收入')}未填完结算比例或单价、计算公式、税率',
+        );
       }
     }
   }
@@ -5371,6 +5730,7 @@ class ProposalSkuDetailRow {
   const ProposalSkuDetailRow({
     required this.id,
     this.productName = '',
+    this.couponKind = '',
     this.faceValue = '',
     this.productCategoryL1 = '',
     this.productCategoryL2 = '',
@@ -5398,6 +5758,7 @@ class ProposalSkuDetailRow {
 
   final String id;
   final String productName;
+  final String couponKind;
   final String faceValue;
   final String productCategoryL1;
   final String productCategoryL2;
@@ -5449,14 +5810,21 @@ class ProposalSkuDetailRow {
       );
   bool get isExistingBuilt => existingBuilt.trim() == '是';
 
+  String get resolvedCouponKind => proposalIntakeNormalizeCouponKind(
+    couponKind.isNotEmpty ? couponKind : productName,
+  );
+
   String get displayName {
     final fromHit = (assetProduct?.label ?? '').trim();
     if (fromHit.isNotEmpty) return fromHit;
+    final kind = resolvedCouponKind;
+    if (kind.isNotEmpty && parentSkuId.isNotEmpty) return kind;
     return productName.trim();
   }
 
   bool get isBlank =>
       productName.isEmpty &&
+      couponKind.isEmpty &&
       faceValue.isEmpty &&
       productCategoryL1.isEmpty &&
       productCategoryL2.isEmpty &&
@@ -5477,7 +5845,9 @@ class ProposalSkuDetailRow {
       parentSkuId.isEmpty;
 
   ProposalSkuDetailRow copyWith({
+    String? id,
     String? productName,
+    String? couponKind,
     String? faceValue,
     String? productCategoryL1,
     String? productCategoryL2,
@@ -5502,8 +5872,9 @@ class ProposalSkuDetailRow {
     String? platformMessage,
     List<ProposalSkuSettleRow>? settlements,
   }) => ProposalSkuDetailRow(
-    id: id,
+    id: id ?? this.id,
     productName: productName ?? this.productName,
+    couponKind: couponKind ?? this.couponKind,
     faceValue: faceValue ?? this.faceValue,
     productCategoryL1: productCategoryL1 ?? this.productCategoryL1,
     productCategoryL2: productCategoryL2 ?? this.productCategoryL2,
@@ -5549,9 +5920,7 @@ class ProposalSkuDetailRow {
       return copyWith(
         assetProduct: null,
         productName: '',
-        settlements:
-            settlements ??
-            [ProposalSkuSettleRow(id: proposalIntakeNewSkuSettleId())],
+        settlements: settlements ?? const [],
       );
     }
     final name = hit.label.isNotEmpty ? hit.label : productName;
@@ -5583,7 +5952,10 @@ class ProposalSkuDetailRow {
     'id': id,
     'productName': productName.trim().isNotEmpty
         ? productName.trim()
-        : (assetProduct?.label ?? ''),
+        : (resolvedCouponKind.isNotEmpty
+              ? resolvedCouponKind
+              : (assetProduct?.label ?? '')),
+    'couponKind': resolvedCouponKind,
     'faceValue': faceValue,
     'productCategoryL1': productCategoryL1,
     'productCategoryL2': productCategoryL2,
@@ -5661,6 +6033,11 @@ class ProposalSkuDetailRow {
     return ProposalSkuDetailRow(
       id: '${raw['id'] ?? ''}'.trim(),
       productName: productName,
+      couponKind: proposalIntakeNormalizeCouponKind(
+        '${raw['couponKind'] ?? ''}'.trim().isNotEmpty
+            ? '${raw['couponKind'] ?? ''}'
+            : productName,
+      ),
       faceValue: '${raw['faceValue'] ?? raw['skuFaceValue'] ?? ''}'.trim(),
       productCategoryL1: '${raw['productCategoryL1'] ?? ''}'.trim(),
       productCategoryL2: '${raw['productCategoryL2'] ?? ''}'.trim(),
@@ -5747,6 +6124,46 @@ List<T> _preferFilledCatalogRows<T>({
       else
         row,
   ];
+}
+
+ProposalSkuDetailRow proposalIntakeCloneSkuProduct(
+  ProposalSkuDetailRow source, {
+  required String id,
+  String? productName,
+  String? parentSkuId,
+}) {
+  return source.copyWith(
+    id: id,
+    productName: productName ?? source.productName,
+    parentSkuId: parentSkuId ?? source.parentSkuId,
+    platformStatus: '',
+    partnerProductCode: '',
+    platformMessage: '',
+    settlements: [
+      for (final item in proposalIntakeSkuSettlements(source))
+        ProposalSkuSettleRow(
+          id: proposalIntakeNewSkuSettleId(),
+          kind: item.kind,
+          terms: item.terms,
+        ),
+    ],
+  );
+}
+
+String proposalIntakeCopiedProductName(
+  String name,
+  List<ProposalSkuDetailRow> existing,
+) {
+  final base = name.trim().isEmpty ? '未命名' : name.trim();
+  final taken = {for (final row in existing) row.productName.trim()};
+  if (!taken.contains(base)) return base;
+  const suffix = '（副本）';
+  if (!taken.contains('$base$suffix')) return '$base$suffix';
+  var i = 2;
+  while (taken.contains('$base（副本$i）')) {
+    i++;
+  }
+  return '$base（副本$i）';
 }
 
 bool proposalIntakeSkuHasManualDetails(ProposalSkuDetailRow sku) {
@@ -5983,33 +6400,15 @@ proposalIntakeLinkFinanceModule({
   return (rows: nextRows, modules: nextModules);
 }
 
+/// 旧「上线行财务模块」已废弃：结算改走产品收入/成本，不再校验、也不再进入复核。
 List<String> proposalIntakeLaunchFinanceIssues(Map<String, dynamic> form) {
-  final issues = <String>[];
-  for (final module in proposalIntakeFinanceModules(form)) {
-    final title = module.title.isEmpty ? module.id : module.title;
-    final prefix = module.isChildrenOwner ? kProposalChildProductLabel : '';
-    if (!module.periodComplete) {
-      issues.add(
-        module.usesProjectPeriod
-            ? '$prefix财务模块「$title」非自然月请选择项目周期'
-            : '$prefix财务模块「$title」请选择是否自然月',
-      );
-    }
-    if (!module.revenueComplete) {
-      issues.add('$prefix财务模块「$title」收入条款未填完');
-    }
-    if (!module.costsComplete) {
-      issues.add('$prefix财务模块「$title」成本项条款未填完');
-    }
-  }
-  return issues;
+  form;
+  return const [];
 }
 
 List<String> proposalIntakeLaunchModuleReviewKeys(Map<String, dynamic> form) {
-  return [
-    for (final item in proposalIntakeFinanceModules(form))
-      'launchModule:${item.id}',
-  ];
+  form;
+  return const [];
 }
 
 const kPurchaseProposalTypes = ['新增', '变更', '延续'];
@@ -6390,6 +6789,9 @@ List<String> proposalIntakeSalesMarketIssues(Map<String, dynamic> form) {
   needRef('sectorRef', 'sector', '业务板块');
   need('proposalName', '产品提案名称');
   need('proposalType', '提案类型');
+  if (!proposalIntakeHasProductSalesScale(form)) {
+    issues.add('请填写规模（万元）');
+  }
   needRef('productRef', 'product', '产品（标签一）');
   needRef('projectRef', 'projectName', '项目名称（标签一二级）');
   needList('supplies', '供给（标签二）');
@@ -6424,9 +6826,6 @@ List<String> proposalIntakeSalesFinanceFillIssues(Map<String, dynamic> form) {
   final derivedProcurement =
       proposalIntakeHasSupplySettleRatio(form) &&
       (derived || proposalIntakeFormHasText(form, 'salesScale'));
-  if (!derived) {
-    issues.add('请在产品结算中填写规模（万元）');
-  }
   for (final field in kProposalSalesFinanceFillFields) {
     if (_kDerivedFinanceMetricKeys.contains(field.$1)) continue;
     if (field.$1 == 'couponProcurementCost' && derivedProcurement) continue;

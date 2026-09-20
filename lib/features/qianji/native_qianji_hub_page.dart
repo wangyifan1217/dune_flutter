@@ -29,6 +29,7 @@ class NativeQianjiHubPage extends StatefulWidget {
     this.onOpenKbSupervise,
     this.onOpenEfficiencyAnalysis,
     this.onOpenEfficiencyBossPreview,
+    this.onOpenAppUsage,
     this.onOpenFundSecondment,
     this.onOpenCashFlow,
     this.onOpenMonthlyBill,
@@ -45,6 +46,7 @@ class NativeQianjiHubPage extends StatefulWidget {
   final VoidCallback? onOpenKbSupervise;
   final VoidCallback? onOpenEfficiencyAnalysis;
   final VoidCallback? onOpenEfficiencyBossPreview;
+  final VoidCallback? onOpenAppUsage;
   final VoidCallback? onOpenFundSecondment;
   final VoidCallback? onOpenCashFlow;
   final VoidCallback? onOpenMonthlyBill;
@@ -283,6 +285,15 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
         icon: Icons.groups_outlined,
         gradientColors: const [Color(0xFF8B6BE8), Color(0xFF6743D3)],
         onTap: widget.onOpenEfficiencyBossPreview,
+      ),
+      _SuperviseItemData(
+        title: '使用热力',
+        subtitle: widget.session?.appUsageViewAll == true
+            ? '全部人员'
+            : '本人及下级',
+        icon: Icons.grid_view_rounded,
+        gradientColors: const [Color(0xFF6B5CE8), Color(0xFF4A3BC7)],
+        onTap: widget.onOpenAppUsage,
       ),
       if (widget.onOpenEfficiencyAnalysis != null)
         _SuperviseItemData(

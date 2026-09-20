@@ -6,10 +6,12 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
+import '../shell/dunes_toast.dart';
 import 'native_task_hrbp_pane.dart';
 import 'task_api.dart';
 import 'task_management_api.dart';
 import 'task_models.dart';
+import 'task_recurring_create_dialog.dart';
 import 'task_widgets.dart';
 
 enum TaskManagementSection {
@@ -365,54 +367,14 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
   }
 
   Future<void> _createRule() async {
-    final titleController = TextEditingController();
-    final frequencyController = TextEditingController(text: '每月');
-    final startController = TextEditingController();
-    final endController = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('新建周期任务'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _dialogField(titleController, '任务名称'),
-              const SizedBox(height: 10),
-              _dialogField(frequencyController, '周期，例如：每月'),
-              const SizedBox(height: 10),
-              _dialogField(startController, '开始日期 YYYY-MM-DD'),
-              const SizedBox(height: 10),
-              _dialogField(endController, '结束日期，可不填'),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('创建'),
-          ),
-        ],
-      ),
-    );
-    final title = titleController.text.trim();
-    if (confirmed != true || title.isEmpty || !mounted) {
-      titleController.dispose();
-      frequencyController.dispose();
-      startController.dispose();
-      endController.dispose();
-      return;
-    }
+    final draft = await showTaskRecurringCreateDialog(context);
+    if (draft == null || !mounted) return;
     try {
       await _managementApi.createRecurringRule({
-        'title': title,
-        'frequency': frequencyController.text.trim(),
-        'startDate': startController.text.trim(),
-        'endDate': endController.text.trim(),
+        'title': draft.title,
+        'frequency': draft.frequency,
+        'startDate': draft.startDate,
+        'endDate': draft.endDate,
       });
       if (mounted) {
         _showMessage('周期任务已创建');
@@ -420,11 +382,6 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
       }
     } catch (e) {
       if (mounted) _showMessage('创建失败：$e', error: true);
-    } finally {
-      titleController.dispose();
-      frequencyController.dispose();
-      startController.dispose();
-      endController.dispose();
     }
   }
 
@@ -492,23 +449,11 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
     }
   }
 
-  Widget _dialogField(TextEditingController controller, String hint) {
-    return TextField(
-      controller: controller,
-      decoration: InputDecoration(
-        labelText: hint,
-        border: const OutlineInputBorder(),
-        isDense: true,
-      ),
-    );
-  }
-
   void _showMessage(String message, {bool error = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: error ? Colors.redAccent : null,
-      ),
+    showDunesCenterToast(
+      context,
+      message,
+      kind: error ? DunesToastKind.error : DunesToastKind.normal,
     );
   }
 
@@ -742,7 +687,7 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
       return _emptyState(
         Icons.task_alt_outlined,
         '暂无待处理任务',
-        '任务审批和指派确认会显示在这里。',
+        '任务审批、修改待审批和指派确认会显示在这里。',
       );
     }
     return ListView.builder(
@@ -762,7 +707,10 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
             subtitle: Text(
               [
                 if (task.ownerName.isNotEmpty) '负责人 ${task.ownerName}',
-                taskStatusLabel(task.status),
+                if (task.hasPendingChange)
+                  taskPendingChangeLabel(task.pendingChangeKind)
+                else
+                  taskStatusLabel(task.status),
               ].join(' · '),
             ),
             trailing: const Icon(Icons.chevron_right),
@@ -776,55 +724,218 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
   }
 
   Widget _buildRecurring() {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton.icon(
-            onPressed: _createRule,
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('新建周期任务'),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  '到达周期后自动生成主目标，可随时停用。',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: DunesColors.text3,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: _createRule,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('新建周期任务'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: kTaskPurple,
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 12),
-        if (_rules.isEmpty)
-          _emptyState(Icons.repeat_rounded, '暂无周期任务', '创建后将在下一周期生成任务。')
-        else
-          for (final rule in _rules) _ruleCard(rule),
+        Expanded(
+          child: _rules.isEmpty
+              ? _emptyState(
+                  Icons.repeat_rounded,
+                  '暂无周期任务',
+                  '创建后将在下一周期生成任务。',
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
+                  itemCount: _rules.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  itemBuilder: (_, i) => _ruleCard(_rules[i]),
+                ),
+        ),
+      ],
+    );
+  }
+
+  String _ruleRangeLabel(TaskRecurringRule rule) {
+    if (rule.startDate.isEmpty && rule.endDate.isEmpty) return '未设置有效期';
+    if (rule.startDate.isNotEmpty && rule.endDate.isEmpty) {
+      return '${rule.startDate} 起 · 长期有效';
+    }
+    if (rule.startDate.isEmpty) return '至 ${rule.endDate}';
+    return '${rule.startDate}  ~  ${rule.endDate}';
+  }
+
+  Widget _ruleMenuItem({
+    required IconData icon,
+    required String label,
+    Color? color,
+  }) {
+    final tone = color ?? DunesColors.text;
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: tone),
+        const SizedBox(width: 10),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: tone,
+          ),
+        ),
       ],
     );
   }
 
   Widget _ruleCard(TaskRecurringRule rule) {
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        title: Text(rule.title.isEmpty ? '未命名周期任务' : rule.title),
-        subtitle: Text(
-          [
-            if (rule.frequency.isNotEmpty) rule.frequency,
-            if (rule.startDate.isNotEmpty) '开始 ${rule.startDate}',
-            if (rule.endDate.isNotEmpty) '结束 ${rule.endDate}',
-            if (rule.ownerName.isNotEmpty) '负责人 ${rule.ownerName}',
-          ].join(' · '),
+    final enabled = rule.enabled;
+    final accent = enabled ? kTaskPurple : const Color(0xFF9AA0A6);
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 14, 8, 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE3E5EA)),
         ),
-        trailing: PopupMenuButton<String>(
-          onSelected: (value) {
-            if (value == 'toggle') unawaited(_toggleRule(rule));
-            if (value == 'execute') unawaited(_executeRule(rule));
-            if (value == 'history') unawaited(_showRuleExecutions(rule));
-          },
-          itemBuilder: (context) => [
-            PopupMenuItem(
-              value: 'toggle',
-              child: Text(rule.enabled ? '停用规则' : '启用规则'),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 4,
+              height: 42,
+              margin: const EdgeInsets.only(top: 2),
+              decoration: BoxDecoration(
+                color: accent,
+                borderRadius: BorderRadius.circular(4),
+              ),
             ),
-            const PopupMenuItem(value: 'execute', child: Text('立即执行')),
-            const PopupMenuItem(value: 'history', child: Text('执行记录')),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    rule.title.isEmpty ? '未命名周期任务' : rule.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      height: 1.3,
+                      color: DunesColors.text,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      TaskMetaChip(
+                        text: taskRecurringFrequencyLabel(rule.frequency),
+                        color: kTaskPurple,
+                      ),
+                      TaskMetaChip(
+                        text: _ruleRangeLabel(rule),
+                        color: DunesColors.text2,
+                      ),
+                      if (rule.ownerName.isNotEmpty)
+                        TaskMetaChip(
+                          text: rule.ownerName,
+                          color: const Color(0xFF3D7A8C),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _statusPill(enabled ? '启用中' : '已停用', enabled),
+                const SizedBox(height: 4),
+                PopupMenuButton<String>(
+                  tooltip: '更多操作',
+                  offset: const Offset(0, 8),
+                  position: PopupMenuPosition.under,
+                  color: Colors.white,
+                  surfaceTintColor: Colors.white,
+                  elevation: 6,
+                  shadowColor: Colors.black.withValues(alpha: 0.08),
+                  constraints: const BoxConstraints(minWidth: 176),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: Color(0xFFE8EAED)),
+                  ),
+                  onSelected: (value) {
+                    if (value == 'toggle') unawaited(_toggleRule(rule));
+                    if (value == 'execute') unawaited(_executeRule(rule));
+                    if (value == 'history') unawaited(_showRuleExecutions(rule));
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'execute',
+                      height: 44,
+                      child: _ruleMenuItem(
+                        icon: Icons.play_arrow_rounded,
+                        label: '立即生成',
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'history',
+                      height: 44,
+                      child: _ruleMenuItem(
+                        icon: Icons.history_rounded,
+                        label: '执行记录',
+                      ),
+                    ),
+                    const PopupMenuDivider(height: 8),
+                    PopupMenuItem(
+                      value: 'toggle',
+                      height: 44,
+                      child: _ruleMenuItem(
+                        icon: enabled
+                            ? Icons.pause_circle_outline
+                            : Icons.play_circle_outline,
+                        label: enabled ? '停用规则' : '启用规则',
+                        color: enabled
+                            ? const Color(0xFFBE123C)
+                            : const Color(0xFF15803D),
+                      ),
+                    ),
+                  ],
+                  icon: const Icon(
+                    Icons.more_horiz_rounded,
+                    color: DunesColors.text3,
+                  ),
+                ),
+              ],
+            ),
           ],
-          child: _statusPill(rule.enabled ? '启用' : '停用', rule.enabled),
         ),
       ),
     );
@@ -869,6 +980,7 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
               SwitchListTile.adaptive(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('启用任务变更审批'),
+                subtitle: const Text('修改标题、内容、截止日或负责人时，由发起人直属上级一级审批；无直属上级则当场生效'),
                 value: _taskApprovalEnabled,
                 onChanged: (value) =>
                     setState(() => _taskApprovalEnabled = value),
@@ -876,6 +988,7 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
               SwitchListTile.adaptive(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('指派需要接收确认'),
+                subtitle: const Text('仅新建子目标指派他人时生效；运行中转派走直属上级审批'),
                 value: _assignmentConfirmationEnabled,
                 onChanged: (value) =>
                     setState(() => _assignmentConfirmationEnabled = value),

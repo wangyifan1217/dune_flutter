@@ -2954,6 +2954,16 @@ void main() {
         ),
         isNull,
       );
+      // 完整周期也不能拿走势末两点代替服务端同期窗口。
+      expect(
+        lighthouseTrendMomPct(
+          periodDeltaPct: null,
+          partialPeriod: false,
+          selectedIndex: null,
+          series: const [100, 110],
+        ),
+        isNull,
+      );
       expect(lighthouseHeroSuppressPointMom, isFalse);
       expect(lighthouseHeroPointVsLabel('monthly'), 'vs 上月');
       expect(lighthouseHeroPointVsLabel('daily'), 'vs 上日');

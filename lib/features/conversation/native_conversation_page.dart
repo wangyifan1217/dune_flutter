@@ -68,6 +68,7 @@ class NativeConversationPage extends StatefulWidget {
     this.onOpenReconciliationAssistant,
     this.onStartPrivateChat,
     this.onOpenGlobalSearch,
+    this.onQuickMeeting,
     this.selectedConversationId,
     this.conversationReadSignal,
     this.notificationsReadSignal,
@@ -90,6 +91,9 @@ class NativeConversationPage extends StatefulWidget {
   final VoidCallback onOpenNewChat;
   final VoidCallback onOpenAiSummary;
   final VoidCallback? onOpenFavorites;
+
+  /// 消息页左上角「快速开会」。
+  final VoidCallback? onQuickMeeting;
   final ValueChanged<NativeConversation>? onOpenRobot;
   final ValueChanged<NativeConversation>? onOpenApprovalAssistant;
   final ValueChanged<NativeConversation>? onOpenTaskAssistant;
@@ -1972,6 +1976,10 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                 onOpenContacts: widget.onOpenContacts,
                 onNewChat: widget.onOpenNewChat,
                 showNovaLeading: isDesktopCommOnly,
+                onQuickMeeting:
+                    isDesktopCommOnly || widget.session.isExternalUser
+                    ? null
+                    : widget.onQuickMeeting,
                 onOpenNova: widget.session.isExternalUser
                     ? null
                     : _openNovaConversation,

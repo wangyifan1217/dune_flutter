@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -20,6 +21,7 @@ class LighthouseService {
   final AuthSession _session;
   final bool _ownsClient;
   final http.Client _client;
+  final Map<Uri, Future<Map<String, dynamic>>> _inFlight = {};
 
   /// 页面级复用一个 Client，让摘要、列表、趋势等请求共享 keep-alive 连接。
   void dispose() {
@@ -439,17 +441,13 @@ class LighthouseService {
     String? caliber,
   }) async {
     final g = (group ?? '').trim();
-    final data = await _getData(
-      '/lighthouse/people',
-      {
-        if (period != null && period.isNotEmpty) 'period': period,
-        if (offset != null && offset != 0) 'offset': '$offset',
-        ..._rangeQuery(startDate, endDate),
-        if (g.isNotEmpty && g != '全部') 'group': g,
-        if (caliber != null && caliber.isNotEmpty) 'caliber': caliber,
-      },
-      '人效数据加载失败',
-    );
+    final data = await _getData('/lighthouse/people', {
+      if (period != null && period.isNotEmpty) 'period': period,
+      if (offset != null && offset != 0) 'offset': '$offset',
+      ..._rangeQuery(startDate, endDate),
+      if (g.isNotEmpty && g != '全部') 'group': g,
+      if (caliber != null && caliber.isNotEmpty) 'caliber': caliber,
+    }, '人效数据加载失败');
     return LhPeopleBundle.fromJson(data);
   }
 
@@ -457,8 +455,29 @@ class LighthouseService {
     String path,
     Map<String, String> query,
     String errorPrefix,
-  ) async {
-    final resp = await _client.get(_uri(path, query), headers: _headers);
+  ) {
+    final uri = _uri(path, query);
+    // 同一个页面可能同时要当前供给列表与资金池毛利，两个请求的 URI
+    // 完全相同时只发一次；完成后立即移除，手动刷新仍取最新数据。
+    final pending = _inFlight[uri];
+    if (pending != null) return pending;
+    final future = _fetchData(uri, errorPrefix);
+    _inFlight[uri] = future;
+    unawaited(
+      future.then<void>(
+        (_) {
+          _inFlight.remove(uri);
+        },
+        onError: (Object _) {
+          _inFlight.remove(uri);
+        },
+      ),
+    );
+    return future;
+  }
+
+  Future<Map<String, dynamic>> _fetchData(Uri uri, String errorPrefix) async {
+    final resp = await _client.get(uri, headers: _headers);
     if (resp.statusCode == 403) {
       throw Exception('暂无权限');
     }

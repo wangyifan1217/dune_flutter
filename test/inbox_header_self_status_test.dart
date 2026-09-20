@@ -35,4 +35,27 @@ void main() {
     expect(find.text('消息'), findsOneWidget);
     expect(find.text('在线'), findsNothing);
   });
+
+  testWidgets('inbox header shows 快速开会 when Nova leading is off', (
+    tester,
+  ) async {
+    var tapped = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChatInboxHeader(
+            onOpenContacts: () {},
+            showNovaLeading: false,
+            onQuickMeeting: () => tapped = true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('快速开会'), findsOneWidget);
+    expect(find.byKey(const Key('inbox-quick-meeting')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('inbox-quick-meeting')));
+    await tester.pump();
+    expect(tapped, isTrue);
+  });
 }

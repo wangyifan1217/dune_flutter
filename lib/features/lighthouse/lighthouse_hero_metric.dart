@@ -301,16 +301,8 @@ double? lighthouseTrendMomPct({
     if (prev.abs() <= 1e-6) return null;
     return (cur - prev) / prev.abs() * 100;
   }
-  if (periodDeltaPct != null) return periodDeltaPct;
-  if (partialPeriod || series.length < 2) return null;
-  final prev = series[series.length - 2];
-  if (prev.abs() <= 1e-6) return null;
-  if (asPercentagePoints) {
-    final pp = series.last - prev;
-    if (pp.abs() <= 1e-9) return null;
-    return pp;
-  }
-  return (series.last - prev) / prev.abs() * 100;
+  // 本期环比只认服务端的同期窗口，不能用走势末两点补数。
+  return periodDeltaPct;
 }
 
 /// 图例环比文案：箭头表达方向，数字用绝对值，避免「↓ -12%」。
@@ -330,6 +322,22 @@ const lighthouseTrendSeriesKeys = <String>[
   'costAlt',
   'stock',
 ];
+
+/// 「亏绿赚红」只作用在利润那一条线上 —— 收入 / 成本 / 规模不是赚亏，
+/// 全画成红绿只会让整屏失去重点。2 就是 lighthouseTrendSeriesKeys 里的 profit。
+const lighthouseTrendProfitIndex = 2;
+
+/// 这段区间要不要按零轴分色：主线得是利润线，且真的跨过 0。
+/// 全期在赚或全期在亏时不分色 —— 整条线一个颜色已经说清楚了，
+/// 零轴贴在边上做参照即可。
+bool lighthouseTrendSignSplit({
+  required int heroIndex,
+  required double min,
+  required double max,
+}) => heroIndex == lighthouseTrendProfitIndex && min < -1e-9 && max > 1e-9;
+
+/// 一个值该用赚色还是亏色。0 算赚（不亏就是没亏）。
+bool lighthouseTrendValueEarns(double v) => v >= 0;
 
 /// 点图例：再点当前项（或点「全部」）恢复全显；点另一项只留该项。
 String? lighthouseTrendSoloAfterTap(String? current, String tapped) {
@@ -1359,6 +1367,7 @@ const double lighthousePeriodLabelFontSize = 13;
 const bool lighthousePeriodUsesHeroSurface = true;
 const double lighthousePeriodStatusDotSize = 0;
 const int lighthousePeriodAnimationMs = 180;
+
 /// 期间条到 Hero 卡、顶栏到期间条的竖向间距。
 const double lighthousePeriodGapAbove = 4;
 const double lighthouseAppBarTitleFontSize = 18;

@@ -27,7 +27,11 @@ class NativeMeetingCreatePage extends StatefulWidget {
     required this.navigation,
     required this.onBack,
     required this.onCreated,
+    this.autoStartLive = false,
   });
+
+  /// 从「快速开会」进来：自动起一个默认标题并立即开始录音。
+  final bool autoStartLive;
 
   final AuthSession session;
   final DunesNavigationController navigation;
@@ -96,6 +100,24 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     _live.elapsed.addListener(_onLiveChanged);
     _live.interruptionHint.addListener(_onLiveInterruptionHint);
     _recordingCtrl.state.addListener(_onLiveChanged);
+    if (widget.autoStartLive &&
+        !isDesktopCommOnly &&
+        !_live.active.value &&
+        _filePath.isEmpty) {
+      _mode = _CreateMode.live;
+      if (_titleCtrl.text.trim().isEmpty) {
+        _titleCtrl.text = _quickMeetingTitle();
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_live.active.value) unawaited(_startLive());
+      });
+    }
+  }
+
+  String _quickMeetingTitle() {
+    final now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '快速会议 ${two(now.month)}-${two(now.day)} ${two(now.hour)}:${two(now.minute)}';
   }
 
   void _onLiveInterruptionHint() {
@@ -272,7 +294,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     final day = now.day.toString().padLeft(2, '0');
     final hour = now.hour.toString().padLeft(2, '0');
     final minute = now.minute.toString().padLeft(2, '0');
-    return '会议录音 $now.year-$month-$day $hour:$minute';
+    return '会议录音 ${now.year}-$month-$day $hour:$minute';
   }
 
   String _resolvedPersistTitle() {

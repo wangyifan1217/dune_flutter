@@ -11,6 +11,7 @@ import '../conversation/conversation_service.dart';
 import '../nova/nova_icon.dart';
 import 'im_user_status.dart';
 import 'inbox_format.dart';
+import '../meeting/meeting_live_controller.dart';
 
 class ChatInboxHeader extends StatelessWidget {
   const ChatInboxHeader({
@@ -25,7 +26,11 @@ class ChatInboxHeader extends StatelessWidget {
     this.novaThinking = false,
     this.novaUnread = false,
     this.showNovaLeading = true,
+    this.onQuickMeeting,
   });
+
+  /// 左上角「快速开会」：点一下直接开始录音；已在会议中则回到会议页。
+  final VoidCallback? onQuickMeeting;
 
   final VoidCallback onOpenContacts;
   final VoidCallback? onNewChat;
@@ -85,6 +90,11 @@ class ChatInboxHeader extends StatelessWidget {
                       ),
                   ],
                 ),
+              )
+            else if (onQuickMeeting != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _QuickMeetingButton(onTap: onQuickMeeting!),
               ),
             Align(
               alignment: Alignment.centerRight,
@@ -100,6 +110,92 @@ class ChatInboxHeader extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 消息页左上角的「快速开会」胶囊。会议进行中时变成「会议中」红点提示。
+class _QuickMeetingButton extends StatelessWidget {
+  const _QuickMeetingButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: MeetingLiveController.instance.active,
+      builder: (context, live, _) {
+        final fg = live ? const Color(0xFFBC5C40) : const Color(0xFF7B5CD8);
+        return Semantics(
+          button: true,
+          label: live ? '回到进行中的会议' : '快速开会',
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              key: const Key('inbox-quick-meeting'),
+              onTap: () {
+                HapticFeedback.selectionClick();
+                onTap();
+              },
+              borderRadius: BorderRadius.circular(999),
+              child: Ink(
+                height: 30,
+                padding: const EdgeInsets.fromLTRB(4, 0, 10, 0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: live
+                        ? const Color(0xFFF1C9BC)
+                        : const Color(0xFFE4DCF4),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: fg.withValues(alpha: 0.12),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: live
+                              ? const [Color(0xFFE07A5F), Color(0xFFBC5C40)]
+                              : const [Color(0xFF9D84EC), Color(0xFF6E52CC)],
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(
+                        live ? Icons.graphic_eq_rounded : Icons.mic_rounded,
+                        size: 13,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      live ? '会议中' : '快速开会',
+                      style: DunesTypography.sans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: fg,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

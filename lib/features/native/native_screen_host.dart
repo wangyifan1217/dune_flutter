@@ -240,6 +240,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   String _kbChatKind = 'KB_ALL';
   String? _kbChatDocId;
   DateTime? _workProfileMonth;
+
+  /// 下一次打开 MM0 时是否直接开始录音（消息页「快速开会」）。
+  bool _meetingQuickStart = false;
   DateTime? _workSituationMonth;
   String _workSituationFilter = 'all';
   int _selectedProposalId = 0;
@@ -2431,6 +2434,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     bool useKeepAliveKey = false,
   }) {
     return NativeConversationPage(
+      onQuickMeeting: _startQuickMeeting,
       key: useKeepAliveKey
           ? _inboxPageKey
           : const ValueKey<String>('native-conversation-inbox'),
@@ -3620,6 +3624,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     );
   }
 
+  /// 消息页「快速开会」：已有会议在录 → 回到会议页；否则进 MM0 并立即开始录音。
+  void _startQuickMeeting() {
+    if (!MeetingLiveController.instance.active.value) {
+      _meetingQuickStart = true;
+    }
+    widget.navigation.go('MM0');
+  }
+
   /// APP 工作台滑入时垫在底下的「我的」，避免 keep-alive 瞬切丢滑动感。
   Widget _buildMyWorkbenchUnderlay() {
     return _NativeB2Page(
@@ -4773,7 +4785,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           },
         );
       case 'MM0':
+        final quickStart = _meetingQuickStart;
+        _meetingQuickStart = false;
         return NativeMeetingCreatePage(
+          autoStartLive: quickStart,
           session: widget.session,
           navigation: widget.navigation,
           onBack: widget.navigation.leaveMeetingCreate,

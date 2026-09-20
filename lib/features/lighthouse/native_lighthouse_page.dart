@@ -23632,7 +23632,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       }
       return null;
     } else {
-      if (_tab != 'netTa' && _heroLocalOnlyFilterActive) return null;
+      if (_tab != 'netTa' && _heroLocalOnlyFilterActive) {
+        final pct = lighthouseAggregateRowsDeltaPct(
+          _currentRows,
+          key: key,
+          usesSalesGrossMargin: lighthouseGrossMarginUsesSales(
+            _grossMarginContextGroup,
+          ),
+        );
+        if (pct == null) return null;
+        return (pct: pct, isUp: pct >= 0);
+      }
       final m = _bundle?.metrics ?? const <String, dynamic>{};
       final deltaAvailable = m['deltaAvailable'] != false;
 
@@ -29623,9 +29633,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
 
     final nameStyle = LhTypography.sans(
-      size: _fs(nameFontSize) - (r['isChild'] == true ? 1 : 0),
-      weight: r['isChild'] == true ? FontWeight.w500 : FontWeight.w600,
-      color: r['isChild'] == true ? LhColors.ink2 : LhColors.ink,
+      size: _fs(nameFontSize),
+      weight: FontWeight.w600,
+      color: LhColors.ink,
       // 净TA 用过 1.0，汉字底部横笔（业 / 本 / 资）会被 LhScrollText 裁掉。
       height: tab == 'netTa' ? 1.3 : 1.15,
       letterSpacing: -0.1,
@@ -29788,9 +29798,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       // 账本行名比 Hero 标题小一档，长名称才折得住。
       final pinnedNameSize = lighthouseLedgerPinnedNameFontSize(nameTab);
       final pinnedNameStyle = LhTypography.sans(
-        size: _fs(pinnedNameSize) - (r['isChild'] == true ? 1 : 0),
-        weight: r['isChild'] == true ? FontWeight.w500 : FontWeight.w600,
-        color: r['isChild'] == true ? LhColors.ink2 : LhColors.ink,
+        size: _fs(pinnedNameSize),
+        weight: FontWeight.w600,
+        color: LhColors.ink,
         height: 1.26,
         letterSpacing: 0,
       );
@@ -29889,16 +29899,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             ),
             SizedBox(width: _fs(5)),
           ] else ...[
-            // 三级子行：名字前一枚业务线色的「↳」，读得出挂在哪个二级下面。
+            // 三级子行：实心「↳」章，白箭头压在业务线色上，不再用淡线标。
             Padding(
               padding: EdgeInsets.only(top: _fs(1)),
-              child: Icon(
-                Icons.subdirectory_arrow_right_rounded,
-                size: _fs(14),
+              child: LhProductL3BranchMark(
                 color: groupColor,
+                size: _fs(18),
               ),
             ),
-            SizedBox(width: _fs(3)),
+            SizedBox(width: _fs(5)),
           ],
           Expanded(
             // 这里必须是会换行的 Text：LhScrollText 走单行可横拖的渲染
@@ -32061,16 +32070,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             color: isEquityFocus
                 ? const Color(0xFFFBF9FF)
                 : (isChildRow
-                      ? const Color(0xFFFDFCFF)
+                      ? lighthouseProductL3ChildFill(groupColor)
                       : (isTopTenLedgerRow && idx.isOdd
                             ? const Color(0xFFFAFCFF)
                             : Colors.white)),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isTopTenLedgerRow && !isAnyExpanded && !isEquityFocus
-                  ? lighthouseRankSkin(idx).accent.withAlpha(80)
-                  : cardBorder,
-              width: isEquityFocus ? 1.2 : (isTopTenLedgerRow ? 1.0 : 0.8),
+              color: isChildRow
+                  ? lighthouseProductL3ChildBorder(groupColor)
+                  : (isTopTenLedgerRow && !isAnyExpanded && !isEquityFocus
+                        ? lighthouseRankSkin(idx).accent.withAlpha(80)
+                        : cardBorder),
+              width: isChildRow
+                  ? 1.1
+                  : (isEquityFocus ? 1.2 : (isTopTenLedgerRow ? 1.0 : 0.8)),
             ),
             boxShadow: [
               BoxShadow(
@@ -32083,7 +32096,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ),
             ],
           ),
-          child: Column(
+          child: LhProductL3ChildShell(
+            active: isChildRow,
+            color: groupColor,
+            child: Column(
             children: [
               _LedgerGridLine(
                 height: rowH,
@@ -32249,6 +32265,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   trendKey: trendKey,
                 ),
             ],
+          ),
           ),
         ),
       ),
@@ -32476,8 +32493,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   /// 父卡片底部的「细分」折叠条。
-  ///   「三级」是数据字段名不是人话，改叫「细分」；图标用 ↳，
-  ///   和展开后子卡片名字前的「↳」同一个符号，一眼看出是往下挂的子项。
+  ///   「三级」是数据字段名不是人话，改叫「细分」；图标用实心「↳」章，
+  ///   和展开后子卡片名字前的章同一套花色。
   Widget _buildProductL3Bar({
     required List<Map<String, dynamic>> children,
     required bool open,
@@ -32510,10 +32527,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           ),
           child: Row(
             children: [
-              Icon(
-                Icons.subdirectory_arrow_right_rounded,
-                size: _fs(14),
+              LhProductL3BranchMark(
                 color: groupColor,
+                size: _fs(16),
               ),
               SizedBox(width: _fs(5)),
               Container(
@@ -32608,7 +32624,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       child: DecoratedBox(
         decoration: BoxDecoration(
           border: Border(
-            left: BorderSide(color: groupColor.withAlpha(90), width: 1.4),
+            left: BorderSide(color: groupColor, width: 2.4),
           ),
         ),
         child: Padding(

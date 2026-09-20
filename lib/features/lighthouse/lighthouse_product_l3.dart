@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 // 灯塔 · 产品三级分类（category_l3_name）
 //
 // 灯塔产品深浅不一：多数产品二级就是叶子，少数（如「会员套餐点播 › 出行金」）
@@ -114,4 +116,136 @@ List<Map<String, dynamic>> lighthouseProductL3LedgerRows(
     out.add(c);
   }
   return out;
+}
+
+/// 细分子卡底：业务线色薄薄铺一层，和一级白卡分开。
+Color lighthouseProductL3ChildFill(Color groupColor) =>
+    Color.alphaBlend(groupColor.withAlpha(22), const Color(0xFFF7F3FC));
+
+/// 细分子卡描边：比一级 hairline 更饱和，扫一眼能认出是挂下来的。
+Color lighthouseProductL3ChildBorder(Color groupColor) =>
+    Color.alphaBlend(groupColor.withAlpha(110), const Color(0xFFD9D0F0));
+
+/// 细分子卡左侧色轨宽度。
+const double lighthouseProductL3ChildRailWidth = 3.5;
+
+/// 名字前的实心「↳」章：白箭头压在业务线色上，不再用淡线标。
+class LhProductL3BranchMark extends StatelessWidget {
+  const LhProductL3BranchMark({
+    super.key,
+    required this.color,
+    this.size = 18,
+  });
+
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = size * 0.28;
+    return SizedBox(
+      width: size,
+      height: size,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(radius),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.lerp(color, Colors.white, 0.2)!,
+              color,
+              Color.lerp(color, const Color(0xFF1F2421), 0.16)!,
+            ],
+            stops: const [0, 0.52, 1],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: color.withAlpha(88),
+              blurRadius: 3,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(radius),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CustomPaint(painter: _LhProductL3HatchPainter()),
+              Center(
+                child: Icon(
+                  Icons.subdirectory_arrow_right_rounded,
+                  size: size * 0.78,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 子卡左侧一条业务色轨，和名字前的章是同一套花色。
+class LhProductL3ChildShell extends StatelessWidget {
+  const LhProductL3ChildShell({
+    super.key,
+    required this.active,
+    required this.color,
+    required this.child,
+  });
+
+  final bool active;
+  final Color color;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!active) return child;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color.lerp(color, Colors.white, 0.18)!,
+                color,
+                Color.lerp(color, const Color(0xFF1F2421), 0.12)!,
+              ],
+            ),
+          ),
+          child: const SizedBox(width: lighthouseProductL3ChildRailWidth),
+        ),
+        Expanded(child: child),
+      ],
+    );
+  }
+}
+
+class _LhProductL3HatchPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFFFFFFF).withAlpha(46)
+      ..strokeWidth = 2.1
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(
+      Offset(-2, size.height * 0.58),
+      Offset(size.width * 0.72, -2),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(-2, size.height * 0.92),
+      Offset(size.width, size.height * 0.08),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -2162,6 +2162,160 @@ double? lighthouseSeriesSignedDeltaPct(List<double> series) {
   return (cur - prev) / prev.abs() * 100;
 }
 
+/// 与后端 absDeltaPct 同口径：上期为 0 则没有环比。
+double? lighthouseSignedDeltaPct(double current, double previous) {
+  if (previous.abs() < 1e-9) return null;
+  final pct = (current - previous) / previous.abs() * 100;
+  if (pct.abs() < 1e-9) return null;
+  return pct;
+}
+
+/// 用本期金额和行上环比反推上期。prev = cur / (1 + pct/100)。
+/// 上期为负时这个式子不成立，调用方应优先用 prevProfit。
+double? lighthouseRecoverPreviousAmount({
+  required double current,
+  double? deltaPct,
+}) {
+  if (deltaPct == null) return null;
+  final denom = 1 + deltaPct / 100;
+  if (denom.abs() < 1e-12) return null;
+  final prev = current / denom;
+  if (prev.isNaN || prev.isInfinite) return null;
+  return prev;
+}
+
+double _lighthouseRowAmount(Map<String, dynamic> row, String key) {
+  switch (key) {
+    case 'cost':
+    case 'businessCost':
+      return (row['cost'] as num?)?.toDouble() ??
+          (row['operatingCost'] as num?)?.toDouble() ??
+          0;
+    case 'totalCost':
+    case 'costTotal':
+      return (row['totalCost'] as num?)?.toDouble() ??
+          (row['costTotal'] as num?)?.toDouble() ??
+          0;
+    case 'verifiedSales':
+      return (row['verifiedSales'] as num?)?.toDouble() ?? 0;
+    default:
+      return (row[key] as num?)?.toDouble() ?? 0;
+  }
+}
+
+String _lighthouseDeltaLookupKey(String key) {
+  return switch (key) {
+    'costTotal' => 'totalCost',
+    'businessCost' => 'cost',
+    _ => key,
+  };
+}
+
+double? _lighthouseRowDeltaPct(Map<String, dynamic> row, String key) {
+  if (row['_deltaAvailable'] == false) return null;
+  final lookup = _lighthouseDeltaLookupKey(key);
+  final deltas = row['deltas'];
+  if (deltas is Map) {
+    final raw = deltas[lookup] ?? (lookup == key ? null : deltas[key]);
+    if (raw is num) return raw.toDouble();
+    if (raw is Map && raw['pct'] is num) return (raw['pct'] as num).toDouble();
+  }
+  if (key == 'profit' && row['deltaPct'] is num) {
+    return (row['deltaPct'] as num).toDouble();
+  }
+  return null;
+}
+
+double? _lighthouseRowPreviousAmount(Map<String, dynamic> row, String key) {
+  if (key == 'profit') {
+    final prev = row['prevProfit'];
+    if (prev is num) return prev.toDouble();
+    return null;
+  }
+  return lighthouseRecoverPreviousAmount(
+    current: _lighthouseRowAmount(row, key),
+    deltaPct: _lighthouseRowDeltaPct(row, key),
+  );
+}
+
+/// 筛选后的账本行重算 Hero 环比：先加总本期/上期金额，再算相对涨幅。
+/// 毛利率 / ROI 返回百分点差，不是相对涨幅。
+double? lighthouseAggregateRowsDeltaPct(
+  Iterable<Map<String, dynamic>> rows, {
+  required String key,
+  bool usesSalesGrossMargin = false,
+}) {
+  final isRate = key == 'rate' || key == 'grossMargin' || key == 'spreadRate';
+  if (isRate) {
+    var profit = 0.0, prevProfit = 0.0;
+    var totalCost = 0.0, prevTotalCost = 0.0;
+    var sales = 0.0, prevSales = 0.0;
+    var verified = 0.0, prevVerified = 0.0;
+    var revenue = 0.0, prevRevenue = 0.0;
+    var hasPrev = false;
+    for (final row in rows) {
+      profit += _lighthouseRowAmount(row, 'profit');
+      totalCost += _lighthouseRowAmount(row, 'totalCost');
+      sales += _lighthouseRowAmount(row, 'sales');
+      verified += _lighthouseRowAmount(row, 'verifiedSales');
+      revenue += _lighthouseRowAmount(row, 'revenue');
+      final pProfit = _lighthouseRowPreviousAmount(row, 'profit');
+      final pCost = _lighthouseRowPreviousAmount(row, 'totalCost');
+      final pSales = _lighthouseRowPreviousAmount(row, 'sales');
+      final pVerified = _lighthouseRowPreviousAmount(row, 'verifiedSales');
+      final pRevenue = _lighthouseRowPreviousAmount(row, 'revenue');
+      if (pProfit != null) {
+        prevProfit += pProfit;
+        hasPrev = true;
+      }
+      if (pCost != null) prevTotalCost += pCost;
+      if (pSales != null) prevSales += pSales;
+      if (pVerified != null) prevVerified += pVerified;
+      if (pRevenue != null) prevRevenue += pRevenue;
+    }
+    if (!hasPrev) return null;
+    double rate(double p, double cost, double s, double v, double rev) {
+      switch (key) {
+        case 'rate':
+          return cost.abs() < 50 ? 0 : p / cost * 100;
+        case 'grossMargin':
+          final base = usesSalesGrossMargin ? s : v;
+          return base.abs() < 50 ? 0 : p / base * 100;
+        case 'spreadRate':
+          final anchor = v > 0 ? v : s;
+          return anchor <= 0 ? 0 : rev / anchor * 100;
+        default:
+          return 0;
+      }
+    }
+
+    final cur = rate(profit, totalCost, sales, verified, revenue);
+    final prev = rate(
+      prevProfit,
+      prevTotalCost,
+      prevSales,
+      prevVerified,
+      prevRevenue,
+    );
+    final pp = cur - prev;
+    if (pp.abs() < 1e-9) return null;
+    return pp;
+  }
+
+  var current = 0.0;
+  var previous = 0.0;
+  var hasPrev = false;
+  for (final row in rows) {
+    current += _lighthouseRowAmount(row, key);
+    final prev = _lighthouseRowPreviousAmount(row, key);
+    if (prev == null) continue;
+    previous += prev;
+    hasPrev = true;
+  }
+  if (!hasPrev) return null;
+  return lighthouseSignedDeltaPct(current, previous);
+}
+
 int lighthouseNetTASecondaryCount(Map<String, dynamic> row) {
   final secondaries = (row['secondaries'] as List? ?? const [])
       .whereType<Map>()

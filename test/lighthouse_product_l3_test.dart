@@ -1,4 +1,5 @@
 import 'package:dunes_app/features/lighthouse/lighthouse_product_l3.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -57,5 +58,57 @@ void main() {
     expect(lighthouseLedgerRowMatchesSearch(parent, '会员'), isTrue);
     expect(lighthouseProductL3ChildMatchesSearch(parent, '套餐'), isFalse);
     expect(lighthouseLedgerRowMatchesSearch(parent, '中石化'), isFalse);
+  });
+
+  test('细分子卡底色和描边都带业务线色，不是纯白', () {
+    const group = Color(0xFF7B5CD8);
+    expect(lighthouseProductL3ChildFill(group), isNot(const Color(0xFFFFFFFF)));
+    expect(lighthouseProductL3ChildBorder(group), isNot(const Color(0xFFE4DCF4)));
+    expect(
+      lighthouseProductL3ChildFill(group).computeLuminance(),
+      lessThan(const Color(0xFFFDFCFF).computeLuminance()),
+    );
+  });
+
+  testWidgets('细分分支标是实心白箭头，不是淡线标', (tester) async {
+    const group = Color(0xFF7B5CD8);
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: LhProductL3BranchMark(color: group, size: 18),
+        ),
+      ),
+    );
+    final icon = tester.widget<Icon>(
+      find.byIcon(Icons.subdirectory_arrow_right_rounded),
+    );
+    expect(icon.color, Colors.white);
+    expect(icon.size, closeTo(18 * 0.78, 0.01));
+  });
+
+  testWidgets('细分子卡壳在激活时画出左侧色轨', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 40,
+            child: LhProductL3ChildShell(
+              active: true,
+              color: Color(0xFF7B5CD8),
+              child: Text('出行金'),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.byType(LhProductL3ChildShell), findsOneWidget);
+    expect(find.text('出行金'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (w) =>
+            w is SizedBox && w.width == lighthouseProductL3ChildRailWidth,
+      ),
+      findsOneWidget,
+    );
   });
 }

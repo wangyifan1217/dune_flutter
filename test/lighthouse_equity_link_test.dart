@@ -1,4 +1,5 @@
 import 'package:dunes_app/features/lighthouse/lighthouse_equity_link.dart';
+import 'package:dunes_app/features/lighthouse/lighthouse_hero_metric.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -157,6 +158,90 @@ void main() {
     expect(groups.equity.map((row) => row['name']), ['福建省', '广东省']);
     expect(groups.normal.map((row) => row['name']), ['浙江省', '河南省']);
     expect(groups.equity.length + groups.normal.length, rows.length);
+  });
+
+  test('筛选后的 Hero 环比按行加总本期和上期，不平均各省百分比', () {
+    final rows = <Map<String, dynamic>>[
+      {
+        'name': '福建省',
+        'profit': 30,
+        'prevProfit': 10,
+        'sales': 120,
+        'deltas': {'sales': 50.0, 'profit': 200.0},
+      },
+      {
+        'name': '广东省',
+        'profit': 70,
+        'prevProfit': 50,
+        'sales': 80,
+        'deltas': {'sales': 60.0, 'profit': 40.0},
+      },
+    ];
+
+    expect(
+      lighthouseAggregateRowsDeltaPct(rows, key: 'profit'),
+      closeTo((100 - 60) / 60 * 100, 0.001),
+    );
+    expect(
+      lighthouseAggregateRowsDeltaPct(rows, key: 'sales'),
+      closeTo((200 - (120 / 1.5 + 80 / 1.6)) / (120 / 1.5 + 80 / 1.6) * 100, 0.001),
+    );
+    expect(lighthouseAggregateRowsDeltaPct(const [], key: 'profit'), isNull);
+  });
+
+  test('毛利润环比必须用 prevProfit，上期亏损时不能用百分比反推', () {
+    expect(lighthouseSignedDeltaPct(100, 60), closeTo(40 / 60 * 100, 0.001));
+    expect(lighthouseSignedDeltaPct(10, 0), isNull);
+    expect(lighthouseRecoverPreviousAmount(current: 120, deltaPct: 50), 80);
+    expect(lighthouseRecoverPreviousAmount(current: 0, deltaPct: -100), isNull);
+
+    final rows = <Map<String, dynamic>>[
+      {
+        'name': '福建省',
+        'profit': 30,
+        'prevProfit': -10,
+        'deltaPct': 400.0,
+        'deltas': {'profit': 400.0},
+      },
+      {
+        'name': '广东省',
+        'profit': 70,
+        'prevProfit': 50,
+        'deltaPct': 40.0,
+        'deltas': {'profit': 40.0},
+      },
+    ];
+    // 反推会把 -10 错成 6；加总必须是 30+70 vs -10+50。
+    expect(
+      lighthouseAggregateRowsDeltaPct(rows, key: 'profit'),
+      closeTo((100 - 40) / 40 * 100, 0.001),
+    );
+  });
+
+  test('筛选后的 ROI / 毛利率环比是百分点差，不是各省百分比平均', () {
+    final rows = <Map<String, dynamic>>[
+      {
+        'name': '福建省',
+        'profit': 20,
+        'prevProfit': 10,
+        'totalCost': 100,
+        'verifiedSales': 200,
+        'deltas': {'totalCost': 0.0, 'verifiedSales': 0.0},
+      },
+      {
+        'name': '广东省',
+        'profit': 40,
+        'prevProfit': 20,
+        'totalCost': 100,
+        'verifiedSales': 200,
+        'deltas': {'totalCost': 0.0, 'verifiedSales': 0.0},
+      },
+    ];
+    expect(lighthouseAggregateRowsDeltaPct(rows, key: 'rate'), closeTo(15, 0.001));
+    expect(
+      lighthouseAggregateRowsDeltaPct(rows, key: 'grossMargin'),
+      closeTo(7.5, 0.001),
+    );
   });
 
   test('类型筛选后的省份趋势按日期对齐汇总，且不改写行趋势', () {

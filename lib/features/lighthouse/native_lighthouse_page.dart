@@ -22,6 +22,7 @@ import 'lighthouse_bi_view.dart';
 import 'lighthouse_data.dart';
 import 'lighthouse_discount_metric.dart';
 import 'lighthouse_equity_link.dart';
+import 'lighthouse_equity_popover.dart';
 import 'lighthouse_forecast.dart';
 import 'lighthouse_hero_metric.dart';
 import 'lighthouse_period_bar.dart';
@@ -10123,6 +10124,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 默认展开分类：Row2；供给/渠道下再跟 HUN 方框。再点当前维可收起。
   bool _tabBarShowsGroups = true;
   String _hunFilter = '全部'; // '全部' | 'U' | 'N' | 'H' | '混合' — 仅 supply/channel
+  String _tradeTypeFilter = '全部'; // 全部 | 普通交易 | 权益交易 — 仅 supply
   String _anomalyFilter = '全部'; // 亏损 / ROI低于目标 / 成本异常 / 利差倒挂
   final Set<String> _expandedTrends = {}; // 列表行折线默认收起；点「走势」加入此集后展开
   /// 账本行点指标格时，只展开那一条走势。key 同 [_expandedTrends]。
@@ -10877,6 +10879,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       _groupFilter = '全部';
       _tabBarShowsGroups = true;
       _hunFilter = '全部';
+      _tradeTypeFilter = '全部';
       if (_sortField == 'netTa') _sortField = 'profit';
       _listLimit = _listPageSize;
       _rowsCacheKey = '';
@@ -10895,6 +10898,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       _tab = 'product';
       _groupFilter = '全部';
       _tabBarShowsGroups = true;
+      _tradeTypeFilter = '全部';
       _sortField = 'profit';
       _listLimit = _listPageSize;
       _rowsCacheKey = '';
@@ -10915,6 +10919,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       _groupFilter = '全部';
       _tabBarShowsGroups = true;
       _hunFilter = '全部';
+      _tradeTypeFilter = '全部';
       _anomalyFilter = '全部';
       _sortField = 'profit';
       _listLimit = _listPageSize;
@@ -12504,6 +12509,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       final match = _hunMatchFor(_hunFilter);
       rows = rows.where((r) => _hunOf(r).primary == match).toList();
     }
+    if (_tab == 'supply' && _tradeTypeFilter != '全部') {
+      final groups = lighthouseFallbackGroupSupplyRows(rows);
+      rows = _tradeTypeFilter == '权益交易' ? groups.equity : groups.normal;
+    }
     return List<Map<String, dynamic>>.from(rows);
   }
 
@@ -12566,7 +12575,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   List<Map<String, dynamic>> get _currentRows {
     if (_bundle == null) return const [];
     final key =
-        '$_period|$_tab|$_groupFilter|$_hunFilter|$_anomalyFilter|$_sortField|$_sortDesc';
+        '$_period|$_tab|$_groupFilter|$_hunFilter|$_tradeTypeFilter|$_anomalyFilter|$_sortField|$_sortDesc';
     final cached = _rowsCache;
     if (cached != null && key == _rowsCacheKey) return cached;
     _listLimit = _listPageSize; // 筛选/排序/周期变化时重置分页
@@ -12692,6 +12701,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   bool get _listFilterActive =>
       _mainFilterActive ||
       ((_tab == 'supply' || _tab == 'channel') && _hunFilter != '全部') ||
+      (_tab == 'supply' && _tradeTypeFilter != '全部') ||
       _anomalyFilter != '全部';
 
   /// 主 Hero 用当前列表行汇总的场景：
@@ -12701,11 +12711,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   bool get _heroFilterActive =>
       _mainFilterActive ||
       ((_tab == 'supply' || _tab == 'channel') && _hunFilter != '全部') ||
+      (_tab == 'supply' && _tradeTypeFilter != '全部') ||
       _anomalyFilter != '全部';
 
   bool get _heroLocalOnlyFilterActive =>
       ((_tab == 'supply' || _tab == 'channel') && _hunFilter != '全部') ||
+      (_tab == 'supply' && _tradeTypeFilter != '全部') ||
       _anomalyFilter != '全部';
+
+  bool get _supplyTradeTypeFilterActive =>
+      _tab == 'supply' && _tradeTypeFilter != '全部';
 
   /// summary 的 filterGroup / filterTab 是否已与当前 L1 对齐（金额 / 环比 / 走势）。
   ///
@@ -12793,6 +12808,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         label: _uiFilterDef(_tab, 'hun')?['label'] as String? ?? 'U/N',
         value: _hunLabelFor(_hunFilter),
         onClear: () => setState(() => _hunFilter = '全部'),
+      ));
+    }
+    if (_tab == 'supply' && _tradeTypeFilter != '全部') {
+      list.add((
+        label: '类型',
+        value: _tradeTypeFilter,
+        onClear: () => setState(() {
+          _tradeTypeFilter = '全部';
+          _rowsCacheKey = '';
+          _rowsCache = null;
+        }),
       ));
     }
     if (_anomalyFilter != '全部') {
@@ -21737,6 +21763,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       if (n == 2) return const ['上期', '本期'];
       return List<String>.generate(n, (i) => '${i + 1}', growable: false);
     }
+    if (_supplyTradeTypeFilterActive) {
+      final labels = _filteredSupplyTrend()?.labels ?? const <String>[];
+      if (labels.length == n) return labels;
+    }
     final raw = _heroSeriesMetrics['heroSeriesLabels'];
     if (raw is List && raw.isNotEmpty) {
       return raw.map((e) => e.toString()).toList(growable: false);
@@ -22272,6 +22302,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }, growable: false);
   }
 
+  LhAggregatedRowTrend? _filteredSupplyTrend() {
+    if (!_supplyTradeTypeFilterActive || _detailKey != null) return null;
+    return lighthouseAggregateRowTrends(
+      _currentRows.map(_rowWithResolvedTrend),
+    );
+  }
+
   List<double> _anchorMetricSeries() {
     final verified = _readMetricSeries('verifiedSalesSeries');
     final sales = _readMetricSeries('salesSeries');
@@ -22317,7 +22354,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       // L2/L3：没有实体走势就空，不要串一级全量序列。
       return const <double>[];
     }
-    if (_heroLocalOnlyFilterActive) {
+    if (_supplyTradeTypeFilterActive) {
+      final filtered = _filteredSupplyTrend();
+      if (filtered != null) {
+        final trend = <String, dynamic>{
+          'labels': filtered.labels,
+          ...filtered.series,
+        };
+        return _seriesFromTrendMap(trend, key, group: _grossMarginContextGroup);
+      }
+      // 旧数据若没有行级 trend，保留原总走势作只读兜底，不能让 Hero 空白。
+    } else if (_heroLocalOnlyFilterActive) {
       return const <double>[];
     }
     if (!_heroSummaryMatchesGroup) {
@@ -23646,6 +23693,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final showGroups =
         _tabBarShowsGroups && lighthouseLedgerTabShowsCategoryChips(_tab);
     final showHun = showGroups && (_tab == 'supply' || _tab == 'channel');
+    final showTradeType = showGroups && _tab == 'supply';
 
     // ── ROW 1 · 维度锚点 (biggest) ─────────────────────────────────────
     final dimCells = dims.map((t) {
@@ -23678,6 +23726,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               _heroPointIndex = null;
               _tabBarShowsGroups = false;
               _hunFilter = '全部';
+              _tradeTypeFilter = '全部';
               if (_sortField == 'netTa') _sortField = 'profit';
               _listLimit = _listPageSize;
               _rowsCacheKey = '';
@@ -23699,6 +23748,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               _heroPointIndex = null;
               _tabBarShowsGroups = false;
               _hunFilter = '全部';
+              _tradeTypeFilter = '全部';
               _anomalyFilter = '全部';
               _sortField = 'netTa';
               _listLimit = _listPageSize;
@@ -23720,6 +23770,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 _tabBarShowsGroups = false;
                 _groupFilter = '全部';
                 _hunFilter = '全部';
+                _tradeTypeFilter = '全部';
               } else {
                 _tabBarShowsGroups = true;
                 _ensureDefaultGroupFilter();
@@ -23749,6 +23800,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             );
             _ensureDefaultGroupFilter();
             if (key != 'supply' && key != 'channel') _hunFilter = '全部';
+            if (key != 'supply') _tradeTypeFilter = '全部';
             _listLimit = _listPageSize;
             _rowsCacheKey = '';
             _rowsCache = null;
@@ -23796,7 +23848,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 )
               : null,
         ),
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+        padding: const EdgeInsets.fromLTRB(12, 2, 12, 2),
         child: Row(
           children: [
             SizedBox(
@@ -23886,6 +23938,27 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         _heroPointIndex = null;
                         _hunFilter = _hunFilter == v ? '全部' : v;
                         _listLimit = _listPageSize;
+                      }),
+                    ),
+                  )
+                  .toList(),
+            ),
+          if (showTradeType)
+            filterRow(
+              kicker: '类型',
+              divider: true,
+              cells: const ['全部', '普通交易', '权益交易']
+                  .map(
+                    (value) => _filterPill(
+                      label: value,
+                      isOn: _tradeTypeFilter == value,
+                      strong: false,
+                      onTap: () => setState(() {
+                        _heroPointIndex = null;
+                        _tradeTypeFilter = value;
+                        _listLimit = _listPageSize;
+                        _rowsCacheKey = '';
+                        _rowsCache = null;
                       }),
                     ),
                   )
@@ -24049,54 +24122,69 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final fg = strong
         ? (isOn ? Colors.white : LhColors.ink2)
         : (isOn ? _LhPlum.deep : LhColors.mute);
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        curve: Curves.easeOut,
-        height: height,
-        padding: EdgeInsets.only(left: asset != null ? 5 : 12, right: 12),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(height / 2),
-          border: strong
-              ? null
-              : Border.all(
-                  color: isOn ? _LhPlum.primary.withAlpha(120) : LhColors.line2,
-                  width: 0.8,
-                ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (asset != null) ...[
-              // 品牌 logo 垫一个白圆：选中后底色变深紫，logo 原色不会被吃掉。
-              Container(
-                width: height - 8,
-                height: height - 8,
-                padding: const EdgeInsets.all(2.5),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-                child: SvgPicture.asset(asset, fit: BoxFit.contain),
+    return Semantics(
+      button: true,
+      selected: isOn,
+      label: display,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            minWidth: lighthouseLedgerTouchTargetSize,
+            minHeight: lighthouseLedgerTouchTargetSize,
+          ),
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOut,
+              height: height,
+              padding: EdgeInsets.only(left: asset != null ? 5 : 12, right: 12),
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(height / 2),
+                border: strong
+                    ? null
+                    : Border.all(
+                        color: isOn
+                            ? _LhPlum.primary.withAlpha(120)
+                            : LhColors.line2,
+                        width: 0.8,
+                      ),
               ),
-              const SizedBox(width: 5),
-            ],
-            Text(
-              display,
-              maxLines: 1,
-              softWrap: false,
-              style: LhTypography.sans(
-                size: strong ? 12 : 11.5,
-                color: fg,
-                weight: isOn ? FontWeight.w600 : FontWeight.w500,
-                letterSpacing: 0.1,
-                height: 1.0,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (asset != null) ...[
+                    // 品牌 logo 垫一个白圆：选中后底色变深紫，logo 原色不会被吃掉。
+                    Container(
+                      width: height - 8,
+                      height: height - 8,
+                      padding: const EdgeInsets.all(2.5),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                      child: SvgPicture.asset(asset, fit: BoxFit.contain),
+                    ),
+                    const SizedBox(width: 5),
+                  ],
+                  Text(
+                    display,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: LhTypography.sans(
+                      size: strong ? 12 : 11.5,
+                      color: fg,
+                      weight: isOn ? FontWeight.w600 : FontWeight.w500,
+                      letterSpacing: 0.1,
+                      height: 1.0,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -29525,25 +29613,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         : null;
     final nameFontSize = lighthouseLedgerNameFontSizeForTab(nameTab);
 
-    // 权益联动：后端配得上才下发。有线 → 名字带下划线、点名字跳过去；
-    // 没有 → 一切照旧（普通交易点了不会跳，这是需求里明说的）。
-    final equityLink = lighthouseEquityLinkOf(r);
+    // 标签二一级省份统一给出权益入口。匹配到项目就列项目；没匹配到也能点开
+    // 并看到明确空状态，避免用户靠有没有线猜哪些省份可操作。
+    final equityLinks = lighthouseEquityLinksOf(r);
+    final showsEquityPopover = lighthouseShowsEquityPopover(
+      tab: tab,
+      isTopLevel: _detailKey == null,
+      hasEquityLinks: equityLinks.isNotEmpty,
+    );
 
-    final nameStyle =
-        LhTypography.sans(
-          size: _fs(nameFontSize) - (r['isChild'] == true ? 1 : 0),
-          weight: r['isChild'] == true ? FontWeight.w500 : FontWeight.w600,
-          color: r['isChild'] == true ? LhColors.ink2 : LhColors.ink,
-          // 净TA 用过 1.0，汉字底部横笔（业 / 本 / 资）会被 LhScrollText 裁掉。
-          height: tab == 'netTa' ? 1.3 : 1.15,
-          letterSpacing: -0.1,
-        ).copyWith(
-          decoration: equityLink == null ? null : TextDecoration.underline,
-          decorationColor: equityLink == null
-              ? null
-              : _LhPlum.primary.withAlpha(150),
-          decorationThickness: equityLink == null ? null : 1.1,
-        );
+    final nameStyle = LhTypography.sans(
+      size: _fs(nameFontSize) - (r['isChild'] == true ? 1 : 0),
+      weight: r['isChild'] == true ? FontWeight.w500 : FontWeight.w600,
+      color: r['isChild'] == true ? LhColors.ink2 : LhColors.ink,
+      // 净TA 用过 1.0，汉字底部横笔（业 / 本 / 资）会被 LhScrollText 裁掉。
+      height: tab == 'netTa' ? 1.3 : 1.15,
+      letterSpacing: -0.1,
+    );
     final canOpenDetail = canDetail && onOpenDetail != null;
 
     // 收起态只保留名称和分类；占比、走势、毛利率进入展开区。
@@ -29554,14 +29640,35 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     //   和「›」那个 24+4 的固定列各切一刀，留给名字的净宽只有 24.5pt ——
     //   两个汉字。所以「›」不再独占一列：名字整块变成进详情的热区，箭头
     //   改成跟在最后一个字后面的内联字符，跟着文字走。名字 24.5 → 52.5pt。
-    // 名字这一块点了去哪：有权益线就去权益那侧，否则还是进这一行的详情。
-    final nameTap = equityLink != null
-        ? () => _openEquityLink(equityLink)
-        : (canOpenDetail ? onOpenDetail : null);
-    // 名字后面跟的符号：'›' 进详情，'\u2197' 表示会跳到别的板块去。
-    final nameTrailing = equityLink != null
+    // 标签二省份先在原位打开气泡，用户再选具体标签一项目。
+    final nameTap = canOpenDetail ? onOpenDetail : null;
+    // 名字后面跟的符号：'›' 进详情，'\u2197' 表示旁边有跨板块关联。
+    final nameTrailing = showsEquityPopover
         ? ' \u2197'
         : (canOpenDetail ? ' \u203A' : '');
+    final nameText = LhScrollRichText(
+      maxLines: tab == 'netTa' ? 1 : 2,
+      overflow: TextOverflow.ellipsis,
+      text: TextSpan(
+        children: [
+          TextSpan(text: name, style: nameStyle),
+          if (nameTrailing.isNotEmpty)
+            TextSpan(
+              text: nameTrailing,
+              style: LhTypography.sans(
+                size: _fs(nameFontSize) + 1,
+                weight: FontWeight.w600,
+                color: _LhPlum.primary,
+                height: tab == 'netTa' ? 1.3 : 1.15,
+              ),
+            ),
+        ],
+      ),
+    );
+    // 联动线画在文字盒子底下：TextDecoration 会被 LhScrollText clip 掉。
+    final markedName = showsEquityPopover
+        ? LhEquityLinkedLabel(child: nameText)
+        : nameText;
     final nameRow = Row(
       crossAxisAlignment: tab == 'netTa'
           ? CrossAxisAlignment.center
@@ -29571,39 +29678,29 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           child: Padding(
             padding: EdgeInsets.only(left: r['isChild'] == true ? _fs(14) : 0),
             child: Semantics(
-              button: nameTap != null,
-              label: equityLink != null
-                  ? '跳到权益收入：${equityLink.label}'
+              button: showsEquityPopover || nameTap != null,
+              label: showsEquityPopover
+                  ? '查看$name关联的${equityLinks.length}项权益'
                   : (canOpenDetail ? '进入$name详情' : null),
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: nameTap,
-                child: LhScrollRichText(
-                  maxLines: tab == 'netTa' ? 1 : 2,
-                  overflow: TextOverflow.ellipsis,
-                  text: TextSpan(
-                    children: [
-                      TextSpan(text: name, style: nameStyle),
-                      if (nameTrailing.isNotEmpty)
-                        TextSpan(
-                          text: nameTrailing,
-                          style: LhTypography.sans(
-                            size: _fs(nameFontSize) + 1,
-                            weight: FontWeight.w600,
-                            color: _LhPlum.primary,
-                            height: tab == 'netTa' ? 1.3 : 1.15,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
+              child: showsEquityPopover
+                  ? LhEquityPopoverAnchor(
+                      title: name,
+                      transactionProfit: (r['profit'] as num?)?.toDouble() ?? 0,
+                      links: equityLinks,
+                      onOpenLink: _openEquityLink,
+                      child: markedName,
+                    )
+                  : GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: nameTap,
+                      child: nameText,
+                    ),
             ),
           ),
         ),
         // 名字被权益线占走了，这一行自己的明细挪到右边这个小「›」上 ——
         // 只有带线的行才多这一格，别的行版面一点不变。
-        if (equityLink != null && canOpenDetail)
+        if (showsEquityPopover && canOpenDetail)
           Semantics(
             button: true,
             label: '进入$name详情',
@@ -29746,47 +29843,83 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           : null;
       final gmUp = lighthouseLedgerDeltaIsUp(gmDelta);
 
-      final nameBlock = Semantics(
-        button: canOpenDetail,
-        label: canOpenDetail ? '进入$name详情' : null,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: canOpenDetail ? onOpenDetail : null,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (r['isChild'] != true) ...[
-                Padding(
-                  padding: EdgeInsets.only(top: _fs(1.5)),
-                  child: rankChip,
-                ),
-                SizedBox(width: _fs(5)),
-              ] else ...[
-                // 三级子行：名字前一枚业务线色的「↳」，读得出挂在哪个二级下面。
-                Padding(
-                  padding: EdgeInsets.only(top: _fs(1)),
-                  child: Icon(
-                    Icons.subdirectory_arrow_right_rounded,
-                    size: _fs(14),
-                    color: groupColor,
+      // 真正画在卡片上的是这段冻结列，不是上面的 nameRow。标签二省份的下划线
+      // 和气泡必须挂在这里，否则列表里永远看不见。
+      Widget pinnedNameText = Text(
+        name,
+        maxLines: 2,
+        softWrap: true,
+        overflow: TextOverflow.ellipsis,
+        style: pinnedNameStyle,
+      );
+      if (showsEquityPopover) {
+        pinnedNameText = LhEquityPopoverAnchor(
+          title: name,
+          transactionProfit: (r['profit'] as num?)?.toDouble() ?? 0,
+          links: equityLinks,
+          onOpenLink: _openEquityLink,
+          child: LhEquityLinkedLabel(
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(text: name, style: pinnedNameStyle),
+                  TextSpan(
+                    text: ' \u2197',
+                    style: pinnedNameStyle.copyWith(
+                      color: _LhPlum.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
-                SizedBox(width: _fs(3)),
-              ],
-              Expanded(
-                // 这里必须是会换行的 Text：LhScrollText 走单行可横拖的渲染
-                // 路径，maxLines 对它无效 —— 正是它把名字画到列外去的。
-                child: Text(
-                  name,
-                  maxLines: 2,
-                  softWrap: true,
-                  overflow: TextOverflow.ellipsis,
-                  style: pinnedNameStyle,
-                ),
+                ],
               ),
-            ],
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-        ),
+        );
+      }
+
+      final nameRowContent = Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (r['isChild'] != true) ...[
+            Padding(
+              padding: EdgeInsets.only(top: _fs(1.5)),
+              child: rankChip,
+            ),
+            SizedBox(width: _fs(5)),
+          ] else ...[
+            // 三级子行：名字前一枚业务线色的「↳」，读得出挂在哪个二级下面。
+            Padding(
+              padding: EdgeInsets.only(top: _fs(1)),
+              child: Icon(
+                Icons.subdirectory_arrow_right_rounded,
+                size: _fs(14),
+                color: groupColor,
+              ),
+            ),
+            SizedBox(width: _fs(3)),
+          ],
+          Expanded(
+            // 这里必须是会换行的 Text：LhScrollText 走单行可横拖的渲染
+            // 路径，maxLines 对它无效 —— 正是它把名字画到列外去的。
+            child: Align(alignment: Alignment.topLeft, child: pinnedNameText),
+          ),
+        ],
+      );
+
+      final nameBlock = Semantics(
+        button: showsEquityPopover || canOpenDetail,
+        label: showsEquityPopover
+            ? '查看$name关联的${equityLinks.length}项权益'
+            : (canOpenDetail ? '进入$name详情' : null),
+        child: showsEquityPopover
+            ? nameRowContent
+            : GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: canOpenDetail ? onOpenDetail : null,
+                child: nameRowContent,
+              ),
       );
 
       final detailButton = canOpenDetail
@@ -29959,10 +30092,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                               )
                             : const SizedBox.shrink(),
                       ),
-                      if (detailButton != null) ...[
-                        detailButton,
-                        SizedBox(width: _fs(5)),
-                      ],
+                      if (detailButton != null) ...[detailButton],
                       rowExpandButton,
                     ],
                   ),
@@ -32163,10 +32293,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
   // ══ 权益联动 ═════════════════════════════════════════════════════
   //
-  //  标签二二级页里，和权益是同一门生意的那几行，名字带下划线；点名字
-  //  落到标签一权益那侧的项目行（湖北交易亏的 16 万 ↔ 那边赚的 282 万）。
-  //  配得上后端才下发 equityLink —— 没有这条线的行既不画下划线也不可点，
-  //  所以这里不做任何「猜一个落点」的兜底。
+  //  标签二里和权益是同一门生意的行，名字带下划线；点名字先在旁边看同省
+  //  全部权益项目，再从气泡进入具体标签一项目（湖北交易亏的 16 万 ↔
+  //  那边赚的 282 万）。配得上后端才下发 equityLinks，没有就不画线。
   //  行右侧的「›」仍旧进这一行自己的交叉明细，两件事不抢同一个热区。
 
   /// 跳到权益那侧。带上来路，返回键能原路回到刚才那张供给二级页。

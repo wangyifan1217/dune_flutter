@@ -1872,7 +1872,9 @@ void main() {
     expect(lighthouseLedgerShowsDiscountBoard, isFalse);
     expect(lighthouseLedgerShowsDiscountUi, isFalse);
     expect(lighthouseLedgerPrimaryTabHeight, 44);
-    expect(lighthouseLedgerFilterRowHeight, 42);
+    expect(lighthouseLedgerFilterRowHeight, 48);
+    expect(lighthouseLedgerTouchTargetSize, 44);
+    expect(lighthouseLedgerCompactTouchTargetSize, 40);
     expect(lighthouseLedgerFilterKickerWidth, 36);
     expect(lighthouseLedgerFilterChipRadius, 8);
     expect(lighthouseLedgerCentersPrimaryDimensions, isFalse);

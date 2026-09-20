@@ -1331,7 +1331,9 @@ const lighthouseLedgerNavigationLevels = <String>[
   'subSegment',
 ];
 const double lighthouseLedgerPrimaryTabHeight = 44;
-const double lighthouseLedgerFilterRowHeight = 42;
+const double lighthouseLedgerFilterRowHeight = 48;
+const double lighthouseLedgerTouchTargetSize = 44;
+const double lighthouseLedgerCompactTouchTargetSize = 40;
 const double lighthouseLedgerFilterKickerWidth = 36;
 const double lighthouseLedgerFilterChipRadius = 8;
 const bool lighthouseLedgerCentersPrimaryDimensions = false;

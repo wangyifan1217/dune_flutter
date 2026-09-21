@@ -626,10 +626,35 @@ class WorkbenchKpiService {
   }
 
   Future<KpiAppeal> closeAppeal(int id) async {
+    return resolveAppeal(id, decision: 'approved', resolution: '已核验并完成处理');
+  }
+
+  Future<KpiAppeal> resolveAppeal(
+    int id, {
+    required String decision,
+    required String resolution,
+  }) async {
     final resp = await dunesHttpPatch(
       session,
       '/kpi/appeals/$id',
-      body: jsonEncode({'status': 'done'}),
+      body: jsonEncode({
+        'status': 'done',
+        'decision': decision.trim(),
+        'resolution': resolution.trim(),
+      }),
+      client: _client,
+    );
+    final data = _unwrap(resp);
+    final map = data is Map
+        ? Map<String, dynamic>.from(data)
+        : <String, dynamic>{};
+    return KpiAppeal.fromJson(map);
+  }
+
+  Future<KpiAppeal> claimAppeal(int id) async {
+    final resp = await dunesHttpPost(
+      session,
+      '/kpi/appeals/$id/claim',
       client: _client,
     );
     final data = _unwrap(resp);

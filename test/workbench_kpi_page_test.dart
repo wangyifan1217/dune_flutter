@@ -114,6 +114,7 @@ class _FakeKpiService extends WorkbenchKpiService {
           energyWeight: 1,
           telecomScore: 0,
           energyScore: 88,
+          canWrite: true,
           categories: [
             WorkProfileKpiCategory(
               category: 'energy',
@@ -243,6 +244,34 @@ class _FakeKpiService extends WorkbenchKpiService {
     return WorkbenchKpiRubricPublishResult(
       month: month,
       notified: userIds.length,
+    );
+  }
+}
+
+class _LockedMarketKpiService extends _FakeKpiService {
+  @override
+  WorkProfileKpiScore _personScore(String month) {
+    final base = super._personScore(month);
+    return WorkProfileKpiScore(
+      month: base.month,
+      prevMonth: base.prevMonth,
+      people: [
+        for (final person in base.people)
+          WorkProfileKpiPerson(
+            userId: person.userId,
+            userName: person.userName,
+            departmentName: person.departmentName,
+            mainScore: person.mainScore,
+            bonus: person.bonus,
+            telecomWeight: person.telecomWeight,
+            energyWeight: person.energyWeight,
+            telecomScore: person.telecomScore,
+            energyScore: person.energyScore,
+            canWrite: false,
+            categories: person.categories,
+          ),
+      ],
+      teams: base.teams,
     );
   }
 }
@@ -420,6 +449,32 @@ void main() {
     expect(service.lastItems!.single.scoreAdj, 5);
     expect(service.lastItems!.single.remark, '下调中石油占比');
     await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('市场部灯塔账锁定后不能调整权重', (tester) async {
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _LockedMarketKpiService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NativeWorkbenchKpiPage(
+            session: _session,
+            service: service,
+            now: DateTime(2026, 9, 3),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('kpi-person-9')));
+    await tester.pumpAndSettle();
+    expect(find.text('中石油'), findsOneWidget);
+    expect(find.byKey(const Key('kpi-edit-1')), findsNothing);
+    expect(find.byKey(const Key('kpi-detail-save')), findsNothing);
   });
 
   testWidgets('shows markdown summary and forwards it to IM', (tester) async {

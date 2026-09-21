@@ -157,9 +157,18 @@ class _FakeFollowupService extends WorkbenchKpiService {
   }
 
   @override
-  Future<KpiAppeal> closeAppeal(int id) async {
+  Future<KpiAppeal> resolveAppeal(
+    int id, {
+    required String decision,
+    required String resolution,
+  }) async {
     closeCount++;
-    return KpiAppeal(id: id, status: 'done');
+    return KpiAppeal(
+      id: id,
+      status: 'done',
+      decision: decision,
+      resolution: resolution,
+    );
   }
 }
 
@@ -230,6 +239,8 @@ void main() {
           userId: 2,
           userName: '李四',
           departmentName: '能源',
+          assignedTo: 7,
+          assignedToName: '人事专员',
           kind: 'data',
           comment: '中石油利润不该计入',
         ),
@@ -249,10 +260,19 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('kpi-lens-followup')));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('申诉处理 1'));
+    await tester.pumpAndSettle();
     expect(find.text('待处理申诉'), findsOneWidget);
     expect(find.text('中石油利润不该计入'), findsOneWidget);
     expect(find.text('绩效数据'), findsOneWidget);
     await tester.tap(find.byKey(const Key('kpi-followup-appeal-done-8')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('kpi-appeal-resolution')),
+      '已核对原始数据并修正',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('kpi-appeal-resolution-submit')));
     await tester.pumpAndSettle();
     expect(service.closeCount, 1);
     expect(find.text('待处理申诉'), findsNothing);

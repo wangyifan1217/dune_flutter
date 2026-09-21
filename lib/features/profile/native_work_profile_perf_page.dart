@@ -214,18 +214,22 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
     final person = _score?.me;
     if (person == null) return;
     final isRubric = person.isRubric;
-    final comment = await showDialog<String>(
+    final tasks = [for (final category in person.categories) ...category.tasks];
+    final draft = await showDialog<_KpiAppealDraft>(
       context: context,
-      builder: (ctx) => _KpiAppealDialog(isRubric: isRubric),
+      builder: (ctx) => _KpiAppealDialog(isRubric: isRubric, tasks: tasks),
     );
-    if (comment == null || !mounted) return;
+    if (draft == null || !mounted) return;
     try {
       final month = formatKpiMonth(_month);
       final saved = widget.submitAppeal != null
-          ? await widget.submitAppeal!(month, comment)
-          : await WorkProfileKpiService(
-              session: widget.session,
-            ).submitAppeal(month: month, comment: comment);
+          ? await widget.submitAppeal!(month, draft.comment)
+          : await WorkProfileKpiService(session: widget.session).submitAppeal(
+              month: month,
+              comment: draft.comment,
+              subjectTaskId: draft.taskId,
+              expectedChange: draft.expectedChange,
+            );
       if (!mounted) return;
       setState(() => _appeals = [saved, ..._appeals]);
       showDunesToast(context, '已提交');
@@ -284,32 +288,30 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
                   else if (empty)
                     const _EmptyCard()
                   else ...[
-                    if (person != null) ...[
-                      _SummaryCard(person: person),
-                      if (person.isRubric && person.isAcked) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          '已确认 ${formatKpiAckedAt(person.ackedAt)}',
-                          key: const Key('work-profile-perf-acked'),
-                          style: DunesTypography.sans(
-                            fontSize: 13,
-                            color: DunesColors.text2,
-                          ),
+                    _SummaryCard(person: person),
+                    if (person.isRubric && person.isAcked) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        '已确认 ${formatKpiAckedAt(person.ackedAt)}',
+                        key: const Key('work-profile-perf-acked'),
+                        style: DunesTypography.sans(
+                          fontSize: 13,
+                          color: DunesColors.text2,
                         ),
-                      ],
-                      if (person.canAck) ...[
-                        const SizedBox(height: 10),
-                        FilledButton(
-                          key: const Key('work-profile-perf-ack'),
-                          onPressed: _loading ? null : () => unawaited(_ack()),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: _perfAccent,
-                          ),
-                          child: const Text('确认本月绩效'),
-                        ),
-                      ],
-                      const SizedBox(height: 14),
+                      ),
                     ],
+                    if (person.canAck) ...[
+                      const SizedBox(height: 10),
+                      FilledButton(
+                        key: const Key('work-profile-perf-ack'),
+                        onPressed: _loading ? null : () => unawaited(_ack()),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _perfAccent,
+                        ),
+                        child: const Text('确认本月绩效'),
+                      ),
+                    ],
+                    const SizedBox(height: 14),
                     if (hasScore)
                       for (final cat in person.categories) ...[
                         _CategoryBlock(category: cat),
@@ -379,10 +381,23 @@ class _Header extends StatelessWidget {
   }
 }
 
+class _KpiAppealDraft {
+  const _KpiAppealDraft({
+    required this.taskId,
+    required this.comment,
+    required this.expectedChange,
+  });
+
+  final int taskId;
+  final String comment;
+  final String expectedChange;
+}
+
 class _KpiAppealDialog extends StatefulWidget {
-  const _KpiAppealDialog({required this.isRubric});
+  const _KpiAppealDialog({required this.isRubric, required this.tasks});
 
   final bool isRubric;
+  final List<WorkProfileKpiTask> tasks;
 
   @override
   State<_KpiAppealDialog> createState() => _KpiAppealDialogState();
@@ -390,16 +405,21 @@ class _KpiAppealDialog extends StatefulWidget {
 
 class _KpiAppealDialogState extends State<_KpiAppealDialog> {
   late final TextEditingController _controller;
+  late final TextEditingController _expectedController;
+  int _taskId = 0;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController();
+    _expectedController = TextEditingController();
+    if (widget.tasks.isNotEmpty) _taskId = widget.tasks.first.taskId;
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _expectedController.dispose();
     super.dispose();
   }
 
@@ -407,12 +427,55 @@ class _KpiAppealDialogState extends State<_KpiAppealDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(kpiAppealTitle(isRubric: widget.isRubric)),
-      content: TextField(
-        key: const Key('work-profile-perf-appeal-comment'),
-        controller: _controller,
-        maxLines: 4,
-        autofocus: true,
-        decoration: const InputDecoration(hintText: '写清要改什么'),
+      content: SizedBox(
+        width: 440,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<int>(
+              key: const Key('work-profile-perf-appeal-subject'),
+              initialValue: _taskId == 0 ? null : _taskId,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: '申诉指标'),
+              items: [
+                for (final task in widget.tasks)
+                  DropdownMenuItem(
+                    value: task.taskId,
+                    child: Text(
+                      [
+                        task.taskName,
+                        if (task.province.trim().isNotEmpty) task.province,
+                      ].join(' · '),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: (value) => setState(() => _taskId = value ?? 0),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('work-profile-perf-appeal-expected'),
+              controller: _expectedController,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: '期望修正为',
+                hintText: '例如：湖南满减券应计入本月营收和利润',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('work-profile-perf-appeal-comment'),
+              controller: _controller,
+              maxLines: 4,
+              autofocus: true,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: '申诉理由',
+                hintText: '写清数据来源和判断依据',
+              ),
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -421,7 +484,16 @@ class _KpiAppealDialogState extends State<_KpiAppealDialog> {
         ),
         FilledButton(
           key: const Key('work-profile-perf-appeal-ok'),
-          onPressed: () => Navigator.pop(context, _controller.text),
+          onPressed: _taskId == 0
+              ? null
+              : () => Navigator.pop(
+                  context,
+                  _KpiAppealDraft(
+                    taskId: _taskId,
+                    comment: _controller.text.trim(),
+                    expectedChange: _expectedController.text.trim(),
+                  ),
+                ),
           child: const Text('提交'),
         ),
       ],

@@ -40,4 +40,34 @@ void main() {
       service.dispose();
     },
   );
+
+  test(
+    'timed out detail request releases the in-flight slot for retry',
+    () async {
+      var calls = 0;
+      final service = LighthouseService(
+        session: session,
+        requestTimeout: const Duration(milliseconds: 20),
+        client: MockClient((request) {
+          calls++;
+          if (calls == 1) return Completer<http.Response>().future;
+          return Future.value(
+            http.Response('{"data":{"detail":{"name":"demo"}}}', 200),
+          );
+        }),
+      );
+      await expectLater(
+        service.fetchDetail(tab: 'product', key: '测试', period: 'day'),
+        throwsA(predicate((e) => e.toString().contains('请求超时'))),
+      );
+      final retried = await service.fetchDetail(
+        tab: 'product',
+        key: '测试',
+        period: 'day',
+      );
+      expect(retried['detail'], {'name': 'demo'});
+      expect(calls, 2);
+      service.dispose();
+    },
+  );
 }

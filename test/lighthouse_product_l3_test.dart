@@ -63,20 +63,33 @@ void main() {
   test('细分子卡底色和描边都带业务线色，不是纯白', () {
     const group = Color(0xFF7B5CD8);
     expect(lighthouseProductL3ChildFill(group), isNot(const Color(0xFFFFFFFF)));
-    expect(lighthouseProductL3ChildBorder(group), isNot(const Color(0xFFE4DCF4)));
+    expect(
+      lighthouseProductL3ChildBorder(group),
+      isNot(const Color(0xFFE4DCF4)),
+    );
     expect(
       lighthouseProductL3ChildFill(group).computeLuminance(),
       lessThan(const Color(0xFFFDFCFF).computeLuminance()),
     );
   });
 
+  test('悬停态在原有业务色上继续加深，底色和描边都有反馈', () {
+    const group = Color(0xFF7B5CD8);
+    final idleFill = lighthouseProductL3ChildFill(group);
+    final hoverFill = lighthouseProductL3ChildHoverFill(group);
+    final idleBorder = lighthouseProductL3ChildBorder(group);
+    final hoverBorder = lighthouseProductL3ChildHoverBorder(group);
+
+    expect(hoverFill, isNot(idleFill));
+    expect(hoverBorder, isNot(idleBorder));
+    expect(hoverFill.computeLuminance(), lessThan(idleFill.computeLuminance()));
+  });
+
   testWidgets('细分分支标是实心白箭头，不是淡线标', (tester) async {
     const group = Color(0xFF7B5CD8);
     await tester.pumpWidget(
       const MaterialApp(
-        home: Scaffold(
-          body: LhProductL3BranchMark(color: group, size: 18),
-        ),
+        home: Scaffold(body: LhProductL3BranchMark(color: group, size: 18)),
       ),
     );
     final icon = tester.widget<Icon>(
@@ -105,10 +118,34 @@ void main() {
     expect(find.text('出行金'), findsOneWidget);
     expect(
       find.byWidgetPredicate(
-        (w) =>
-            w is SizedBox && w.width == lighthouseProductL3ChildRailWidth,
+        (w) => w is SizedBox && w.width == lighthouseProductL3ChildRailWidth,
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('细分子卡壳套在 Column 里不把色轨拉成无限高', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ListView(
+            children: [
+              LhProductL3ChildShell(
+                active: true,
+                color: Color(0xFF7B5CD8),
+                child: Column(
+                  children: [
+                    SizedBox(height: 48, child: Text('出行金')),
+                    SizedBox(height: 24, child: Text('明细')),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.text('出行金'), findsOneWidget);
   });
 }

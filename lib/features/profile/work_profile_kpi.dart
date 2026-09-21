@@ -364,7 +364,8 @@ class WorkProfileKpiPerson {
   bool get isSkipped =>
       scoreStatus == 'skipped' || skipReason.trim().isNotEmpty;
   bool get isAcked => ackedAt.trim().isNotEmpty;
-  bool get isUnpublished => isRubric && !isPending && !isSkipped && needsPublish;
+  bool get isUnpublished =>
+      isRubric && !isPending && !isSkipped && needsPublish;
 
   String get skipLabel => kpiSkipLabel(skipReason, skipNote);
 
@@ -522,9 +523,15 @@ bool kpiLighthouseBucketDim(String value) {
 
 Map<String, String> parseKpiLighthouseDims(WorkProfileKpiTask task) {
   final out = <String, String>{};
-  void put(String key, String? value, {bool keepNationwide = false}) {
+  void put(
+    String key,
+    String? value, {
+    bool keepNationwide = false,
+    bool overwrite = false,
+  }) {
     final v = (value ?? '').trim();
-    if (v.isEmpty || out.containsKey(key)) return;
+    if (v.isEmpty) return;
+    if (!overwrite && out.containsKey(key)) return;
     if (kpiLighthouseWildcardDim(v, keepNationwide: keepNationwide)) return;
     out[key] = v;
   }
@@ -548,7 +555,7 @@ Map<String, String> parseKpiLighthouseDims(WorkProfileKpiTask task) {
     if (key.startsWith('产品分组') || key == '分组') {
       put('group', value);
     } else if (key.startsWith('产品')) {
-      put('product', value);
+      put('product', value, overwrite: true);
     } else if (key.startsWith('省份')) {
       put('province', value, keepNationwide: true);
     } else if (key.startsWith('渠道')) {
@@ -931,12 +938,26 @@ class KpiAppeal {
     this.userId = 0,
     this.userName = '',
     this.departmentName = '',
+    this.sector = '',
     this.kind = 'data',
     this.kindLabel = '',
     this.comment = '',
     this.status = 'open',
     this.createdAt = '',
     this.handledAt = '',
+    this.handledBy = 0,
+    this.handledByName = '',
+    this.decision = '',
+    this.resolution = '',
+    this.subjectKey = '',
+    this.subjectName = '',
+    this.snapshot = '',
+    this.expectedChange = '',
+    this.assignedTo = 0,
+    this.assignedToName = '',
+    this.assignedRole = '',
+    this.dueAt = '',
+    this.resolvedSnapshot = '',
   });
 
   final int id;
@@ -944,12 +965,26 @@ class KpiAppeal {
   final int userId;
   final String userName;
   final String departmentName;
+  final String sector;
   final String kind;
   final String kindLabel;
   final String comment;
   final String status;
   final String createdAt;
   final String handledAt;
+  final int handledBy;
+  final String handledByName;
+  final String decision;
+  final String resolution;
+  final String subjectKey;
+  final String subjectName;
+  final String snapshot;
+  final String expectedChange;
+  final int assignedTo;
+  final String assignedToName;
+  final String assignedRole;
+  final String dueAt;
+  final String resolvedSnapshot;
 
   bool get isRubric => kind == 'rubric';
   bool get isOpen => status != 'done';
@@ -966,12 +1001,26 @@ class KpiAppeal {
       userId: (json['userId'] as num?)?.toInt() ?? 0,
       userName: '${json['userName'] ?? ''}',
       departmentName: '${json['departmentName'] ?? ''}',
+      sector: '${json['sector'] ?? ''}',
       kind: '${json['kind'] ?? 'data'}',
       kindLabel: '${json['kindLabel'] ?? ''}',
       comment: '${json['comment'] ?? ''}',
       status: '${json['status'] ?? 'open'}',
       createdAt: '${json['createdAt'] ?? ''}',
       handledAt: '${json['handledAt'] ?? ''}',
+      handledBy: (json['handledBy'] as num?)?.toInt() ?? 0,
+      handledByName: '${json['handledByName'] ?? ''}',
+      decision: '${json['decision'] ?? ''}',
+      resolution: '${json['resolution'] ?? ''}',
+      subjectKey: '${json['subjectKey'] ?? ''}',
+      subjectName: '${json['subjectName'] ?? ''}',
+      snapshot: '${json['snapshot'] ?? ''}',
+      expectedChange: '${json['expectedChange'] ?? ''}',
+      assignedTo: (json['assignedTo'] as num?)?.toInt() ?? 0,
+      assignedToName: '${json['assignedToName'] ?? ''}',
+      assignedRole: '${json['assignedRole'] ?? ''}',
+      dueAt: '${json['dueAt'] ?? ''}',
+      resolvedSnapshot: '${json['resolvedSnapshot'] ?? ''}',
     );
   }
 }
@@ -1198,11 +1247,19 @@ class WorkProfileKpiService {
   Future<KpiAppeal> submitAppeal({
     required String month,
     required String comment,
+    int subjectTaskId = 0,
+    String expectedChange = '',
   }) async {
     final resp = await dunesHttpPost(
       session,
       '/kpi/appeal',
-      body: jsonEncode({'month': month.trim(), 'comment': comment.trim()}),
+      body: jsonEncode({
+        'month': month.trim(),
+        'comment': comment.trim(),
+        if (subjectTaskId != 0) 'subjectTaskId': subjectTaskId,
+        if (expectedChange.trim().isNotEmpty)
+          'expectedChange': expectedChange.trim(),
+      }),
       client: _client,
     );
     final data = _unwrap(resp);

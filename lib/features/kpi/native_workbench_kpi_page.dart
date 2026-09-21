@@ -813,7 +813,7 @@ class _NativeWorkbenchKpiPageState extends State<NativeWorkbenchKpiPage> {
       personName: _detailName,
       monthLabel: formatKpiMonthLabel(_month),
       score: _detailScore!,
-      canEdit: person == null || !person.isRubric || person.canWrite,
+      canEdit: person != null && person.canWrite,
       busy: _busy,
       onSave: _saveDetail,
       onSaveRubric: _saveRubricDetail,

@@ -7,6 +7,8 @@
 //   配得上才下发 equityLinks，前端只负责把同省候选放进锚定气泡。没有候选就
 //   当普通行；绝不自己猜落点，免得气泡列出错误项目。
 
+import 'lighthouse_hero_metric.dart';
+
 /// 一行上的权益落点。
 class LhEquityLink {
   const LhEquityLink({
@@ -85,6 +87,12 @@ class LhEquityLink {
     return 0;
   }
 }
+
+/// 将气泡候选项目解析到产品详情里的 project_drill，供点击后直达项目页。
+String? lighthouseEquityProjectDrillKey({
+  required Iterable<String> drillKeys,
+  required String project,
+}) => lighthouseResolveDrillKey(drillKeys: drillKeys, name: project);
 
 /// 从一行账本数据里取权益落点。没有就返回 null。
 LhEquityLink? lighthouseEquityLinkOf(Map<String, dynamic> row) =>

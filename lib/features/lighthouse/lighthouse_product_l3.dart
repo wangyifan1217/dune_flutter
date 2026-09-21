@@ -122,20 +122,57 @@ List<Map<String, dynamic>> lighthouseProductL3LedgerRows(
 Color lighthouseProductL3ChildFill(Color groupColor) =>
     Color.alphaBlend(groupColor.withAlpha(22), const Color(0xFFF7F3FC));
 
+/// 鼠标经过细分子卡时再加一层业务色，给出克制但清楚的定位反馈。
+Color lighthouseProductL3ChildHoverFill(Color groupColor) =>
+    Color.alphaBlend(groupColor.withAlpha(38), const Color(0xFFF7F3FC));
+
 /// 细分子卡描边：比一级 hairline 更饱和，扫一眼能认出是挂下来的。
 Color lighthouseProductL3ChildBorder(Color groupColor) =>
     Color.alphaBlend(groupColor.withAlpha(110), const Color(0xFFD9D0F0));
 
+/// 悬停描边比静止态更清楚，但不做高饱和整圈描边。
+Color lighthouseProductL3ChildHoverBorder(Color groupColor) =>
+    Color.alphaBlend(groupColor.withAlpha(150), const Color(0xFFD9D0F0));
+
 /// 细分子卡左侧色轨宽度。
 const double lighthouseProductL3ChildRailWidth = 3.5;
 
+/// 只重建鼠标所在的细分控件，避免经过一张子卡时重建整页账本。
+class LhProductL3HoverRegion extends StatefulWidget {
+  const LhProductL3HoverRegion({
+    super.key,
+    required this.builder,
+    this.cursor = SystemMouseCursors.basic,
+  });
+
+  final Widget Function(bool hovered) builder;
+  final MouseCursor cursor;
+
+  @override
+  State<LhProductL3HoverRegion> createState() => _LhProductL3HoverRegionState();
+}
+
+class _LhProductL3HoverRegionState extends State<LhProductL3HoverRegion> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: widget.cursor,
+      onEnter: (_) {
+        if (!_hovered) setState(() => _hovered = true);
+      },
+      onExit: (_) {
+        if (_hovered) setState(() => _hovered = false);
+      },
+      child: widget.builder(_hovered),
+    );
+  }
+}
+
 /// 名字前的实心「↳」章：白箭头压在业务线色上，不再用淡线标。
 class LhProductL3BranchMark extends StatelessWidget {
-  const LhProductL3BranchMark({
-    super.key,
-    required this.color,
-    this.size = 18,
-  });
+  const LhProductL3BranchMark({super.key, required this.color, this.size = 18});
 
   final Color color;
   final double size;
@@ -204,24 +241,37 @@ class LhProductL3ChildShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!active) return child;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    // 账本卡片里外层是 Column，高度不封顶。Row + stretch 会把色轨约束成
+    // h=Infinity，直接把整页打穿。用 Stack 跟着内容长，色轨贴左侧拉满。
+    return Stack(
       children: [
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color.lerp(color, Colors.white, 0.18)!,
-                color,
-                Color.lerp(color, const Color(0xFF1F2421), 0.12)!,
-              ],
+        Padding(
+          padding: const EdgeInsets.only(
+            left: lighthouseProductL3ChildRailWidth,
+          ),
+          child: child,
+        ),
+        Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          child: SizedBox(
+            width: lighthouseProductL3ChildRailWidth,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color.lerp(color, Colors.white, 0.18)!,
+                    color,
+                    Color.lerp(color, const Color(0xFF1F2421), 0.12)!,
+                  ],
+                ),
+              ),
             ),
           ),
-          child: const SizedBox(width: lighthouseProductL3ChildRailWidth),
         ),
-        Expanded(child: child),
       ],
     );
   }

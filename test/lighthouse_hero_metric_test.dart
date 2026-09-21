@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_data.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_discount_metric.dart';
@@ -285,14 +286,14 @@ void main() {
     );
   });
 
-  test('hero financial board balances four sections across three columns', () {
+  test('hero cash flow sits by the main KPI, outside columns', () {
     expect(
       lighthouseHeroVerticalSections.map((section) => section.title).toList(),
       ['规模', '成本', '经营性净现金流', '利润'],
     );
     expect(lighthouseHeroColumnSectionKeys, [
       ['scale'],
-      ['cost', 'cash'],
+      ['cost'],
       ['profit'],
     ]);
     expect(lighthouseHeroVerticalSections[0].metricKeys, [
@@ -671,10 +672,10 @@ void main() {
     expect(lighthouseFundPoolSectionTitleIconGap, 7);
   });
 
-  test('lighthouseTrendShareScaleRange only pairs 核销/销售', () {
+  test('核销/销售不再共轴，避免大数把主线压平', () {
     expect(
       lighthouseTrendShareScaleRange(scaleLabel: '核销规模', scaleAltLabel: '销售规模'),
-      isTrue,
+      isFalse,
     );
     expect(
       lighthouseTrendShareScaleRange(
@@ -698,6 +699,11 @@ void main() {
     final flat = lighthouseTrendSeriesRange([0.05, 0.05, 0.05]);
     expect(flat.min, lessThan(0.05));
     expect(flat.max, greaterThan(0.05));
+    expect(lighthouseTrendForecastExpandsRange, isFalse);
+    expect(lighthouseCompactHeroShowsExtremeLabels, isFalse);
+    final breathingRoom = lighthouseTrendSeriesRange([0, 100]);
+    expect(breathingRoom.min, closeTo(-14, 1e-9));
+    expect(breathingRoom.max, closeTo(114, 1e-9));
   });
 
   test('cost bill L3 types render as extra cost trend charts', () {
@@ -3046,9 +3052,8 @@ void main() {
       expect(lighthouseTrendSoloAfterTap('revenue', ''), isNull);
     });
 
-    test('solo keeps every series with data on screen (v15)', () {
-      // v15 · solo 不再藏线，只把强调色改判给被点的那条；可见性 == 有没有数据。
-      expect(lighthouseTrendSoloKeepsContext, isTrue);
+    test('图上只保留当前主线，图例仍保留全部可切换指标', () {
+      expect(lighthouseTrendSoloKeepsContext, isFalse);
       expect(
         lighthouseTrendVisibleFlags(
           hasRevenue: true,
@@ -3058,7 +3063,7 @@ void main() {
           hasScaleAlt: true,
           soloKey: 'profit',
         ),
-        [true, true, true, true, true, false, false],
+        [false, false, true, false, false, false, false],
       );
       // 图例可点性看「有没有数据」，不受单线规则影响。
       expect(
@@ -3071,8 +3076,7 @@ void main() {
         ),
         [true, true, true, true, true, false, false],
       );
-      // v21：默认五条全开（产品要求恢复）。
-      expect(lighthouseTrendDrawsSingleLine, isFalse);
+      expect(lighthouseTrendDrawsSingleLine, isTrue);
       expect(
         lighthouseTrendVisibleFlags(
           hasRevenue: true,
@@ -3081,9 +3085,9 @@ void main() {
           hasScale: true,
           hasScaleAlt: true,
         ),
-        [true, true, true, true, true, false, false],
+        [false, false, false, true, false, false, false],
       );
-      // solo 指向一条没数据的线 → 回落到全开。
+      // solo 指向一条没数据的线 → 回落到默认主线。
       expect(
         lighthouseTrendVisibleFlags(
           hasRevenue: true,
@@ -3093,7 +3097,7 @@ void main() {
           hasScaleAlt: false,
           soloKey: 'cost',
         ),
-        [true, false, true, true, false, false, false],
+        [false, false, false, true, false, false, false],
       );
       expect(
         lighthouseTrendVisibleFlags(
@@ -3105,7 +3109,7 @@ void main() {
           hasCostAlt: true,
           soloKey: 'costAlt',
         ),
-        [true, true, true, true, true, true, false],
+        [false, false, false, false, false, true, false],
       );
       expect(
         lighthouseTrendVisibleFlags(
@@ -3117,7 +3121,7 @@ void main() {
           hasStock: true,
           soloKey: 'stock',
         ),
-        [true, true, true, true, true, false, true],
+        [false, false, false, false, false, false, true],
       );
     });
 
@@ -3411,6 +3415,42 @@ void main() {
       for (var i = 0; i < xs.length; i++) {
         expect(rev[xs.length - 1 - i], closeTo(fwd[i], 1e-9));
       }
+    });
+  });
+
+  group('LighthouseHeroFlatValueDeltaRow', () {
+    testWidgets('宽栏里环比紧挨金额，不甩到栏尾，基线对齐', (tester) async {
+      const amountStyle = TextStyle(
+        fontSize: 13,
+        height: 1.0,
+        fontFamily: 'Roboto',
+      );
+      const deltaStyle = TextStyle(
+        fontSize: 9,
+        height: 1.0,
+        fontFamily: 'Roboto',
+      );
+      await tester.pumpWidget(
+        const Directionality(
+          textDirection: TextDirection.ltr,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 280,
+              child: LighthouseHeroFlatValueDeltaRow(
+                value: Text('-41.75万', style: amountStyle),
+                delta: Text('↓42.8%', style: deltaStyle),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final amount = tester.getRect(find.text('-41.75万'));
+      final pct = tester.getRect(find.text('↓42.8%'));
+      expect(pct.left - amount.right, closeTo(8, 1.5));
+      expect(pct.right, lessThan(180));
+      expect((amount.bottom - pct.bottom).abs(), lessThan(3));
     });
   });
 }

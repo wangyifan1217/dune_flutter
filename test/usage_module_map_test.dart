@@ -12,6 +12,10 @@ void main() {
     expect(usageModuleKeyForScreen('B2'), 'me');
     expect(usageModuleKeyForScreen('B1'), 'approval');
     expect(usageModuleKeyForScreen('K1'), 'kb');
+    expect(usageModuleKeyForScreen('KA1'), 'comm');
+    expect(usageModuleKeyForScreen('TA1'), 'task');
+    expect(usageModuleKeyForScreen('RA1'), 'comm');
+    expect(usageModuleKeyForScreen('XA1'), 'comm');
     expect(usageModuleKeyForScreen('MM'), 'meeting');
     expect(usageModuleKeyForScreen('FD1'), 'drive');
     expect(usageModuleKeyForScreen('XR1'), 'h5');
@@ -31,6 +35,8 @@ void main() {
     expect(usageScreenName('QJUH'), '使用热力');
     expect(usageScreenName('QJUHD'), '人员使用详情');
     expect(usageScreenName('AA1'), '审批助手');
+    expect(usageScreenName('KA1'), '绩效助手');
+    expect(usageScreenName('TA1'), '任务助手');
     expect(usageScreenName('C1'), '消息');
     expect(usageScreenName('自定义页面'), '自定义页面');
     expect(usageScreenName('B10'), '提案详情');
@@ -80,6 +86,51 @@ void main() {
     expect(pages.map((e) => e.screenName).toList(), ['私聊', '小饕']);
     expect(pages.first.durationMs, 11000);
     expect(pages.last.durationMs, 5000);
+  });
+
+  test('groupedUsageModules summarizes pages into product modules', () {
+    final pages = groupedUsageModules([
+      const AppUsagePageStay(
+        screenId: 'MM0',
+        screenName: '会议上传',
+        moduleKey: 'meeting',
+        uv: 1,
+        pv: 1,
+        durationMs: 60000,
+      ),
+      const AppUsagePageStay(
+        screenId: 'MM-L',
+        screenName: '会议历史',
+        moduleKey: 'meeting',
+        uv: 1,
+        pv: 1,
+        durationMs: 30000,
+      ),
+      const AppUsagePageStay(
+        screenId: 'KA1',
+        screenName: 'KA1',
+        moduleKey: 'kb',
+        uv: 1,
+        pv: 2,
+        durationMs: 45000,
+      ),
+      const AppUsagePageStay(
+        screenId: 'B2PERF',
+        screenName: '绩效发展',
+        moduleKey: 'me',
+        uv: 1,
+        pv: 1,
+        durationMs: 0,
+      ),
+    ]);
+    expect(pages.map((e) => e.screenName).toList(), ['会议', '通讯']);
+    expect(pages.first.durationMs, 90000);
+    expect(pages.last.durationMs, 45000);
+  });
+
+  test('usageScreenName hides unmapped route codes', () {
+    expect(usageScreenName('ZZ9'), '其他');
+    expect(usagePageLabel(screenId: 'KA1', screenName: 'KA1'), '绩效助手');
   });
 
   test('formatUsageStay', () {

@@ -66,6 +66,10 @@ const kUsageScreenLabels = <String, String>{
   'AA1': '审批助手',
   'AA2': '审批助手详情',
   'AA3': '审批助手操作',
+  'TA1': '任务助手',
+  'KA1': '绩效助手',
+  'XA1': '薪人薪事助手',
+  'RA1': '对账助手',
   'LH': '灯塔',
   'B2': '我的中心',
   'Z4': '全局搜索',
@@ -101,15 +105,17 @@ String usagePageLabel({String screenId = '', String screenName = ''}) {
     if (fromId != null) return fromId;
     final info = dunesScreenById(id);
     final registryName = info?.name.trim() ?? '';
-    if (registryName.isNotEmpty) return _sanitizeUsageLabel(registryName);
+    if (registryName.isNotEmpty) {
+      return _readableUsageLabel(registryName, fallbackId: id);
+    }
   }
   final name = screenName.trim();
   if (name.isNotEmpty) {
     final fromName = _lookupUsageScreen(name);
     if (fromName != null) return fromName;
-    return _sanitizeUsageLabel(name);
+    return _readableUsageLabel(name, fallbackId: id.isNotEmpty ? id : name);
   }
-  return id;
+  return _readableUsageLabel(id, fallbackId: id);
 }
 
 String? _lookupUsageScreen(String raw) {
@@ -138,11 +144,42 @@ String _sanitizeUsageLabel(String raw) {
   name = name.replaceAll(RegExp('NOVA', caseSensitive: false), '小饕');
   name = name.replaceAll(' · ', ' ').replaceAll('·', '');
   name = name.trim();
-  if (name.length <= 8 && _routeCode.hasMatch(name)) {
+  if (_looksLikeRouteCode(name)) {
     final alias = kUsageScreenLabels[name.toUpperCase()];
     if (alias != null) return alias;
   }
   return name.isEmpty ? raw.trim() : name;
+}
+
+String _readableUsageLabel(String raw, {String fallbackId = ''}) {
+  final sanitized = _sanitizeUsageLabel(raw);
+  if (!_looksLikeRouteCode(sanitized)) return sanitized;
+  final id = fallbackId.trim().isNotEmpty ? fallbackId : raw;
+  return usageModuleLabel(usageModuleKeyForScreen(id));
+}
+
+bool _looksLikeRouteCode(String name) {
+  final trimmed = name.trim();
+  return trimmed.length <= 10 && _routeCode.hasMatch(trimmed);
+}
+
+/// 人员明细按功能汇总时，优先用页面 ID 重新归类，避免历史脏 moduleKey。
+String usageResolvedModuleKey({
+  String screenId = '',
+  String screenName = '',
+  String moduleKey = '',
+}) {
+  final fromId = usageModuleKeyForScreen(screenId);
+  if (fromId != 'other') return fromId;
+  final fromName = usageModuleKeyForScreen(screenName);
+  if (fromName != 'other') return fromName;
+  final key = moduleKey.trim().toLowerCase();
+  if (key.isNotEmpty &&
+      key != '_session' &&
+      kUsageModuleLabels.containsKey(key)) {
+    return key;
+  }
+  return 'other';
 }
 
 String usageModuleKeyForScreen(String screenId) {
@@ -155,6 +192,8 @@ String usageModuleKeyForScreen(String screenId) {
   if (id == 'FD1') return 'drive';
   // 薪人薪事 / 携程商旅 / 资管 等内嵌网页，展示名「网页应用」
   if (id == 'XR1' || id == 'CT1' || id == 'AM1') return 'h5';
+  // 绩效助手 KA1 不能按 K 前缀算进知识库
+  if (id == 'KA1' || id == 'XA1' || id == 'RA1') return 'comm';
   if (id.startsWith('K')) return 'kb';
   if (id.startsWith('MM')) return 'meeting';
   if (id.startsWith('TA')) return 'task';

@@ -196,12 +196,14 @@ class _NativeQianjiAppUsageDetailPageState
       0,
       (m, e) => e.durationMs > m ? e.durationMs : m,
     );
-    final pages = groupedUsagePages(detail.pages);
+    final pages = groupedUsageModules(detail.pages);
     final maxPage = pages.fold<int>(
       0,
       (m, e) => e.durationMs > m ? e.durationMs : m,
     );
-    final topModule = usageModuleLabel(detail.topModule, detail.topModuleName);
+    final topModule = pages.isNotEmpty
+        ? pages.first.screenName
+        : usageModuleLabel(detail.topModule, detail.topModuleName);
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
@@ -228,16 +230,21 @@ class _NativeQianjiAppUsageDetailPageState
         ),
         const SizedBox(height: 20),
         const Text(
-          '页面停留',
+          '功能停留',
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,
             color: Color(0xFF261D38),
           ),
         ),
+        const SizedBox(height: 4),
+        const Text(
+          '按通讯、审批、会议等汇总，不展示到具体页面',
+          style: TextStyle(fontSize: 12, color: DunesColors.text3),
+        ),
         const SizedBox(height: 10),
         if (pages.isEmpty)
-          const Text('暂无页面数据', style: TextStyle(color: DunesColors.text3))
+          const Text('暂无使用数据', style: TextStyle(color: DunesColors.text3))
         else
           for (final page in pages)
             Padding(
@@ -339,7 +346,7 @@ class _PageBar extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                usagePageStayLabel(page),
+                page.screenName,
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,

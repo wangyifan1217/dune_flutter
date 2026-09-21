@@ -320,6 +320,43 @@ List<AppUsagePageStay> groupedUsagePages(List<AppUsagePageStay> pages) {
   return merged;
 }
 
+/// 人员明细按通讯 / 审批 / 会议等功能汇总，不展示到具体页面。
+List<AppUsagePageStay> groupedUsageModules(List<AppUsagePageStay> pages) {
+  if (pages.isEmpty) return const [];
+  final grouped = <String, AppUsagePageStay>{};
+  for (final page in pages) {
+    final key = usageResolvedModuleKey(
+      screenId: page.screenId,
+      screenName: page.screenName,
+      moduleKey: page.moduleKey,
+    );
+    if (key == '_session') continue;
+    final existing = grouped[key];
+    if (existing == null) {
+      grouped[key] = AppUsagePageStay(
+        screenId: key,
+        screenName: usageModuleLabel(key),
+        moduleKey: key,
+        uv: page.uv,
+        pv: page.pv,
+        durationMs: page.durationMs,
+      );
+      continue;
+    }
+    grouped[key] = AppUsagePageStay(
+      screenId: key,
+      screenName: existing.screenName,
+      moduleKey: key,
+      uv: existing.uv + page.uv,
+      pv: existing.pv + page.pv,
+      durationMs: existing.durationMs + page.durationMs,
+    );
+  }
+  final merged = grouped.values.where((e) => e.durationMs > 0).toList();
+  merged.sort((a, b) => b.durationMs.compareTo(a.durationMs));
+  return merged;
+}
+
 String formatUsageStay(int durationMs) {
   if (durationMs <= 0) return '0分';
   final minutes = (durationMs / 60000).round();

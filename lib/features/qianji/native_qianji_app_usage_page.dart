@@ -752,34 +752,6 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
               ),
             ),
         ],
-        if (_selectedModule != null && heatmap.pages.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          for (final p in groupedUsagePages(heatmap.pages).take(8))
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      usagePageStayLabel(p),
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF261D38),
-                      ),
-                    ),
-                  ),
-                  Text(
-                    formatUsageStay(p.durationMs),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: _themePurple,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
       ],
     );
   }

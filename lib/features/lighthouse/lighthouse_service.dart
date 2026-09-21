@@ -13,15 +13,19 @@ const _lighthouseApiBaseOverride = String.fromEnvironment(
 );
 
 class LighthouseService {
-  LighthouseService({required AuthSession session, http.Client? client})
-    : _session = session,
-      _ownsClient = client == null,
-      _client = client ?? http.Client();
+  LighthouseService({
+    required AuthSession session,
+    http.Client? client,
+    this.requestTimeout = const Duration(seconds: 30),
+  }) : _session = session,
+       _ownsClient = client == null,
+       _client = client ?? http.Client();
 
   final AuthSession _session;
   final bool _ownsClient;
   final http.Client _client;
   final Map<Uri, Future<Map<String, dynamic>>> _inFlight = {};
+  final Duration requestTimeout;
 
   /// 页面级复用一个 Client，让摘要、列表、趋势等请求共享 keep-alive 连接。
   void dispose() {
@@ -69,16 +73,18 @@ class LighthouseService {
     DateTime? startDate,
     DateTime? endDate,
   }) async {
-    final resp = await _client.get(
-      _uri('/lighthouse/overview', {
-        if (period != null && period.isNotEmpty) 'period': period,
-        if (date != null && date.isNotEmpty) 'date': date,
-        if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
-        if (offset != null && offset != 0) 'offset': '$offset',
-        ..._rangeQuery(startDate, endDate),
-      }),
-      headers: _headers,
-    );
+    final resp = await _client
+        .get(
+          _uri('/lighthouse/overview', {
+            if (period != null && period.isNotEmpty) 'period': period,
+            if (date != null && date.isNotEmpty) 'date': date,
+            if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
+            if (offset != null && offset != 0) 'offset': '$offset',
+            ..._rangeQuery(startDate, endDate),
+          }),
+          headers: _headers,
+        )
+        .timeout(requestTimeout);
     if (resp.statusCode == 403) {
       throw Exception('暂无权限');
     }
@@ -262,20 +268,22 @@ class LighthouseService {
     int topC = 10,
     int topOpp = 8,
   }) async {
-    final resp = await _client.get(
-      _uri('/lighthouse/analysis/cube', {
-        if (period != null && period.isNotEmpty) 'period': period,
-        if (date != null && date.isNotEmpty) 'date': date,
-        if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
-        if (offset != null && offset != 0) 'offset': '$offset',
-        ..._rangeQuery(startDate, endDate),
-        'top_p': '$topP',
-        'top_s': '$topS',
-        'top_c': '$topC',
-        'top_opp': '$topOpp',
-      }),
-      headers: _headers,
-    );
+    final resp = await _client
+        .get(
+          _uri('/lighthouse/analysis/cube', {
+            if (period != null && period.isNotEmpty) 'period': period,
+            if (date != null && date.isNotEmpty) 'date': date,
+            if (fuel != null && fuel.isNotEmpty && fuel != '全部') 'fuel': fuel,
+            if (offset != null && offset != 0) 'offset': '$offset',
+            ..._rangeQuery(startDate, endDate),
+            'top_p': '$topP',
+            'top_s': '$topS',
+            'top_c': '$topC',
+            'top_opp': '$topOpp',
+          }),
+          headers: _headers,
+        )
+        .timeout(requestTimeout);
     if (resp.statusCode == 403) {
       throw Exception('暂无权限');
     }
@@ -477,7 +485,12 @@ class LighthouseService {
   }
 
   Future<Map<String, dynamic>> _fetchData(Uri uri, String errorPrefix) async {
-    final resp = await _client.get(uri, headers: _headers);
+    late final http.Response resp;
+    try {
+      resp = await _client.get(uri, headers: _headers).timeout(requestTimeout);
+    } on TimeoutException {
+      throw Exception('$errorPrefix: 请求超时，请重试');
+    }
     if (resp.statusCode == 403) {
       throw Exception('暂无权限');
     }

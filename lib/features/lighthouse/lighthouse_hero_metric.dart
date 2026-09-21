@@ -3,6 +3,8 @@ library;
 
 import 'dart:math' as math;
 
+import 'package:flutter/widgets.dart';
+
 /// Whether [key] should render as a percentage in the Hero masthead.
 bool lighthouseHeroMetricIsRate(String key) =>
     key == 'rate' ||
@@ -345,11 +347,7 @@ String? lighthouseTrendSoloAfterTap(String? current, String tapped) {
   return current == tapped ? null : tapped;
 }
 
-/// 应用 solo 后的可见性，长度恒为 6。solo 指向没有数据的项时保持原样。
-/// v21 · 默认画全部五条线（产品要求恢复）。
-///
-/// 单线版关掉了 —— 把 [lighthouseTrendDrawsSingleLine] 改回 true 即可切换，
-/// 其余代码不用动。
+/// 应用 solo 后的可见性，长度恒为 7。solo 指向没有数据的项时回到默认主线。
 ///
 /// 五条各自归一化叠在一张图里，纵轴根本不是同一个：交叉点和相对高低都不表示
 /// 任何事，更要命的是**波动被伪造** —— 每条都拉满整个图高，成本环比 +1.4%
@@ -359,19 +357,14 @@ String? lighthouseTrendSoloAfterTap(String? current, String tapped) {
 /// 退成图例里的数字，点图例换线 —— 「一条走势 + 四个数」的信息量比
 /// 「五条不可比的线」高。
 ///
-/// 唯一保留的双线例外是核销 + 销售：它们 [lighthouseTrendShareScaleRange]
-/// 时共用同一根 Y，两线之间的面积就是未核销差额，是真实可读的量。
-const bool lighthouseTrendDrawsSingleLine = false;
-
-/// v15 · solo（点中某个指标）不再把其余序列藏掉，只把它们降成中性上下文线。
+/// 一次只画当前主指标。其余指标仍保留在图例中，点击后切换为主线。
 ///
-///   「点一下别的线全没了」是这张图最常被抱怨的地方：读者同时失去了参照系
-///   和形状对比 —— 单看一条线，既不知道它相对其他几条是高是低，也不知道
-///   这个拐点是它自己的还是全盘的。
-///   规则没变，仍然是 **任何时刻画面上最多一个强调色**：solo 只是把强调色
-///   从「优先级挑出来的主线」改判给被点的那条，其余照旧走中性阶。
-///   想回到「只画一条」把这里改回 false 即可。
-const bool lighthouseTrendSoloKeepsContext = true;
+/// 核销与销售虽然同单位，但量级可能相差数倍；共轴双线会把较小的一条压成近似
+/// 水平线。单线各用自己的真实值域，既保留趋势可读性，也不伪造两条线的高低。
+const bool lighthouseTrendDrawsSingleLine = true;
+
+/// 点图例后只画选中指标；完整数据入口仍留在图例数字中。
+const bool lighthouseTrendSoloKeepsContext = false;
 
 /// 非焦点内容的统一淡化度 —— 走势上下文线、未选中的指标格共用同一个值。
 ///
@@ -489,21 +482,26 @@ bool lighthouseDeltaIsLoud(double pct) =>
 bool lighthouseHeroTrendDrawsContextLine(int seriesIndex) =>
     seriesIndex == 2 || seriesIndex == 4;
 
-/// 核销 / 销售才共用一根 Y（看未核销差额）。项目成本三级量级差百倍，必须各自归一。
+/// 趋势图不再让两条规模线共用 Y 轴。
+///
+/// 即使标签是核销 / 销售，也可能出现 55 万对 278 万；共轴会把较小主线压平。
+/// 图例仍可切换两项，但画布一次只显示一条、各用自己的值域。
 bool lighthouseTrendShareScaleRange({
   required String scaleLabel,
   required String scaleAltLabel,
-}) {
-  bool isSalesFamily(String raw) {
-    final s = raw.trim();
-    if (s.isEmpty) return false;
-    return s.contains('核销') || s.contains('销售') || s == '规模';
-  }
+}) => false;
 
-  return isSalesFamily(scaleLabel) && isSalesFamily(scaleAltLabel);
-}
+/// 月末预测只负责虚线终点和进度胶囊，不参与历史走势的 Y 值域。
+///
+/// 预测常是当前已发生额的数倍；纳入值域会把所有已完成月份压成水平线。
+const bool lighthouseTrendForecastExpandsRange = false;
 
-/// 单条走势自己的值域：上下留 8% 边，全点相等时扩一截以免贴成一条边。
+/// 单条走势自己的值域：留出足够上下边距，避免短序列的峰谷被放大成断崖。
+const double lighthouseTrendRangePaddingFraction = 0.14;
+
+/// 紧凑 Hero 不常驻 MAX/MIN 贴纸；极值小圈与点选读数已经足够。
+const bool lighthouseCompactHeroShowsExtremeLabels = false;
+
 ({double min, double max}) lighthouseTrendSeriesRange(List<double> values) {
   if (values.isEmpty) return (min: 0.0, max: 1.0);
   var mn = values.first;
@@ -518,7 +516,7 @@ bool lighthouseTrendShareScaleRange({
     final floor = pad < 1e-9 ? 1.0 : pad;
     return (min: mn - floor, max: mx + floor);
   }
-  final pad = span * 0.08;
+  final pad = span * lighthouseTrendRangePaddingFraction;
   return (min: mn - pad, max: mx + pad);
 }
 
@@ -650,6 +648,38 @@ const double lighthouseHeroMetricDeltaFontSize = 8;
 const double lighthouseHeroCellLabelFontSize = 10;
 const double lighthouseHeroCellDeltaFontSize = 9;
 
+/// 拍平格：金额和环比同一行、挨在一起左对齐，按字母基线对齐。
+///
+/// 宽栏里不要用 tight [Flexible] 把环比甩到栏尾；环比字号比金额小，
+/// 也不要用 [CrossAxisAlignment.end] 把百分比沉到数字底下。
+class LighthouseHeroFlatValueDeltaRow extends StatelessWidget {
+  const LighthouseHeroFlatValueDeltaRow({
+    super.key,
+    required this.value,
+    required this.delta,
+    this.gap = 8,
+  });
+
+  final Widget value;
+  final Widget delta;
+  final double gap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Flexible(fit: FlexFit.loose, child: value),
+        Padding(
+          padding: EdgeInsets.only(left: gap),
+          child: delta,
+        ),
+      ],
+    );
+  }
+}
+
 /// 期间条关掉常驻氛围动效，只留有反馈意义的滑块 / 涟漪 / 切换流光。
 const bool lighthousePeriodAmbientMotion = false;
 
@@ -723,7 +753,7 @@ const lighthouseHeroVerticalSections = <LighthouseHeroVerticalSection>[
 
 const lighthouseHeroColumnSectionKeys = <List<String>>[
   ['scale'],
-  ['cost', 'cash'],
+  ['cost'],
   ['profit'],
 ];
 

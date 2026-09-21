@@ -19,6 +19,10 @@ const _tabular = <FontFeature>[FontFeature.tabularFigures()];
 
 enum _MemberTab { unpublished, publishedUnacked, acked }
 
+enum _FollowupView { progress, appeals }
+
+enum _AppealFilter { open, done }
+
 /// 考评页里的催办进度：按月看打分 / 发布 / 确认，用来催，不代替领导打分。
 class NativeWorkbenchKpiFollowupPage extends StatefulWidget {
   const NativeWorkbenchKpiFollowupPage({
@@ -56,6 +60,9 @@ class _NativeWorkbenchKpiFollowupPageState
   String _sector = 'all';
   List<KpiAppeal> _appeals = const [];
   int? _closingAppealId;
+  _FollowupView _view = _FollowupView.progress;
+  _AppealFilter _appealFilter = _AppealFilter.open;
+  String? _appealError;
 
   DateTime get _clock => widget.now ?? DateTime.now();
   DateTime get _currentMonth => kpiMonthStart(_clock);
@@ -107,33 +114,32 @@ class _NativeWorkbenchKpiFollowupPageState
     setState(() {
       _loading = true;
       _error = null;
+      _appealError = null;
     });
+    final month = formatKpiMonth(_month);
+    KpiFollowupBoard? board;
+    List<KpiAppeal> appeals = const [];
+    String? boardError;
+    String? appealError;
     try {
-      final month = formatKpiMonth(_month);
-      final board = await _service.fetchFollowup(month: month);
-      var appeals = const <KpiAppeal>[];
-      try {
-        appeals = await _service.listAppeals(month: month);
-      } catch (_) {}
-      if (!mounted) return;
-      setState(() {
-        _board = board;
-        _appeals = appeals;
-        _loading = false;
-        _memberTab = _defaultMemberTab(board);
-        if (!widget.embedded &&
-            _sector != 'all' &&
-            board.sectors.every((s) => s.key != _sector)) {
-          _sector = 'all';
-        }
-      });
+      board = await _service.fetchFollowup(month: month);
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = friendlyErrorText(e, fallback: '加载失败');
-        _loading = false;
-      });
+      boardError = friendlyErrorText(e, fallback: '催办进度加载失败');
     }
+    try {
+      appeals = await _service.listAppeals(month: month);
+    } catch (e) {
+      appealError = friendlyErrorText(e, fallback: '申诉加载失败');
+    }
+    if (!mounted) return;
+    setState(() {
+      _board = board;
+      _appeals = appeals;
+      _error = boardError;
+      _appealError = appealError;
+      _loading = false;
+      if (board != null) _memberTab = _defaultMemberTab(board);
+    });
   }
 
   _MemberTab _defaultMemberTab(KpiFollowupBoard board) {
@@ -240,13 +246,20 @@ class _NativeWorkbenchKpiFollowupPageState
             : const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
           if (!embedded) ...[_standaloneHeader(), const SizedBox(height: 10)],
-          if (_loading && board == null)
+          _viewTabs(),
+          const SizedBox(height: 10),
+          if (_loading && board == null && _appeals.isEmpty)
             const Padding(
               padding: EdgeInsets.only(top: 48),
               child: Center(
-                child: CircularProgressIndicator(strokeWidth: 2, color: _accent),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: _accent,
+                ),
               ),
             )
+          else if (_view == _FollowupView.appeals)
+            ..._appealsBody()
           else if (_error != null && board == null)
             _errorCard()
           else if (board != null)
@@ -254,6 +267,71 @@ class _NativeWorkbenchKpiFollowupPageState
         ],
       ),
     );
+  }
+
+  Widget _viewTabs() {
+    final openCount = _appeals.where((row) => row.isOpen).length;
+    return SegmentedButton<_FollowupView>(
+      key: const Key('kpi-followup-view-tabs'),
+      segments: [
+        const ButtonSegment(value: _FollowupView.progress, label: Text('流程催办')),
+        ButtonSegment(
+          value: _FollowupView.appeals,
+          label: Text(openCount > 0 ? '申诉处理 $openCount' : '申诉处理'),
+        ),
+      ],
+      selected: {_view},
+      onSelectionChanged: (value) => setState(() => _view = value.first),
+      showSelectedIcon: false,
+    );
+  }
+
+  List<Widget> _appealsBody() {
+    if (_appealError != null) {
+      return [
+        _Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Text(
+                  _appealError!,
+                  style: const TextStyle(color: DunesColors.text2),
+                ),
+                TextButton(onPressed: _load, child: const Text('重试')),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+    final filtered = [
+      for (final row in _appeals)
+        if ((_appealFilter == _AppealFilter.open) == row.isOpen &&
+            (_sector == 'all' || row.sector == _sector))
+          row,
+    ];
+    return [
+      SegmentedButton<_AppealFilter>(
+        segments: const [
+          ButtonSegment(value: _AppealFilter.open, label: Text('待处理')),
+          ButtonSegment(value: _AppealFilter.done, label: Text('已办结')),
+        ],
+        selected: {_appealFilter},
+        onSelectionChanged: (value) =>
+            setState(() => _appealFilter = value.first),
+        showSelectedIcon: false,
+      ),
+      const SizedBox(height: 10),
+      if (filtered.isEmpty)
+        _Card(
+          child: _EmptyHint(
+            _appealFilter == _AppealFilter.open ? '当前没有待处理申诉' : '当前没有已办结申诉',
+          ),
+        )
+      else
+        _appealsCard(filtered, showDone: _appealFilter == _AppealFilter.done),
+    ];
   }
 
   Widget _standaloneHeader() {
@@ -375,14 +453,8 @@ class _NativeWorkbenchKpiFollowupPageState
 
   List<Widget> _body(KpiFollowupBoard board) {
     final sectors = _visibleSectors(board);
-    final openAppeals = [
-      for (final row in _appeals)
-        if (row.isOpen) row,
-    ];
     if (sectors.isEmpty) {
-      return [
-        _Card(child: const _EmptyHint('这个月还没有需要催办的部门')),
-      ];
+      return [_Card(child: const _EmptyHint('这个月还没有需要催办的部门'))];
     }
     final leaders = _leadersOf(sectors);
     final groups = <({KpiFollowupSector sector, KpiFollowupGroup group})>[
@@ -391,10 +463,6 @@ class _NativeWorkbenchKpiFollowupPageState
     ];
     return [
       _PipelineCard(counts: _visibleCounts(board)),
-      if (openAppeals.isNotEmpty) ...[
-        const SizedBox(height: 10),
-        _appealsCard(openAppeals),
-      ],
       if (leaders.isNotEmpty) ...[
         const SizedBox(height: 10),
         _leadersCard(leaders),
@@ -408,24 +476,29 @@ class _NativeWorkbenchKpiFollowupPageState
     ];
   }
 
-  Widget _appealsCard(List<KpiAppeal> rows) {
+  Widget _appealsCard(List<KpiAppeal> rows, {bool showDone = false}) {
     return _Card(
       tone: DunesColors.coral,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _CardHeader(
-            title: '待处理申诉',
+            title: showDone ? '已办结申诉' : '待处理申诉',
             count: rows.length,
             countColor: DunesColors.coral,
-            hint: '会同时通知人事和直属上级',
+            hint: showDone ? '处理结果可追溯' : '请核验后填写处理结论',
           ),
           for (var i = 0; i < rows.length; i++) ...[
             const Divider(height: 1, color: _line),
             _AppealRow(
               appeal: rows[i],
               closing: _closingAppealId == rows[i].id,
-              onClose: () => unawaited(_closeAppeal(rows[i])),
+              onClaim: showDone || rows[i].assignedTo > 0
+                  ? null
+                  : () => unawaited(_claimAppeal(rows[i])),
+              onClose: showDone || rows[i].assignedTo == 0
+                  ? null
+                  : () => unawaited(_closeAppeal(rows[i])),
             ),
           ],
         ],
@@ -435,37 +508,57 @@ class _NativeWorkbenchKpiFollowupPageState
 
   Future<void> _closeAppeal(KpiAppeal appeal) async {
     if (appeal.id <= 0 || _closingAppealId != null) return;
+    final result = await showDialog<({String decision, String resolution})>(
+      context: context,
+      builder: (context) => _AppealResolutionDialog(appeal: appeal),
+    );
+    if (result == null || !mounted) return;
     setState(() => _closingAppealId = appeal.id);
     try {
-      await _service.closeAppeal(appeal.id);
+      final saved = await _service.resolveAppeal(
+        appeal.id,
+        decision: result.decision,
+        resolution: result.resolution,
+      );
       if (!mounted) return;
       setState(() {
         _appeals = [
           for (final row in _appeals)
-            if (row.id == appeal.id)
-              KpiAppeal(
-                id: row.id,
-                month: row.month,
-                userId: row.userId,
-                userName: row.userName,
-                departmentName: row.departmentName,
-                kind: row.kind,
-                kindLabel: row.kindLabel,
-                comment: row.comment,
-                status: 'done',
-                createdAt: row.createdAt,
-                handledAt: row.handledAt,
-              )
-            else
-              row,
+            if (row.id == appeal.id) saved else row,
         ];
       });
-      showDunesToast(context, '已标记处理');
+      showDunesToast(context, '申诉已办结并通知员工');
     } catch (e) {
       if (mounted) {
         showDunesToast(
           context,
           friendlyErrorText(e, fallback: '处理失败'),
+          kind: DunesToastKind.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _closingAppealId = null);
+    }
+  }
+
+  Future<void> _claimAppeal(KpiAppeal appeal) async {
+    if (appeal.id <= 0 || _closingAppealId != null) return;
+    setState(() => _closingAppealId = appeal.id);
+    try {
+      final saved = await _service.claimAppeal(appeal.id);
+      if (!mounted) return;
+      setState(() {
+        _appeals = [
+          for (final row in _appeals)
+            if (row.id == appeal.id) saved else row,
+        ];
+      });
+      showDunesToast(context, '已领取，请在时限内完成核验');
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          friendlyErrorText(e, fallback: '领取失败'),
           kind: DunesToastKind.error,
         );
       }
@@ -665,8 +758,7 @@ class _NativeWorkbenchKpiFollowupPageState
     final seen = <String>{};
     final people = [
       for (final p in raw)
-        if (seen.add(p.userId > 0 ? 'id:${p.userId}' : 'name:${p.userName}'))
-          p,
+        if (seen.add(p.userId > 0 ? 'id:${p.userId}' : 'name:${p.userName}')) p,
     ];
     if (people.isEmpty) {
       final text = switch (_memberTab) {
@@ -996,7 +1088,11 @@ class _Stage extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: complete
-                  ? const Icon(Icons.check_rounded, size: 11, color: Colors.white)
+                  ? const Icon(
+                      Icons.check_rounded,
+                      size: 11,
+                      color: Colors.white,
+                    )
                   : Text(
                       step,
                       style: const TextStyle(
@@ -1112,7 +1208,9 @@ class _GroupRow extends StatelessWidget {
               const SizedBox(width: 6),
               _Tag(
                 lighthouse ? '灯塔自动' : '量表打分',
-                color: lighthouse ? DunesColors.blue : DunesColors.brandPurpleDeep,
+                color: lighthouse
+                    ? DunesColors.blue
+                    : DunesColors.brandPurpleDeep,
               ),
               const Spacer(),
               if (group.projectScore > 0)
@@ -1463,11 +1561,13 @@ class _AppealRow extends StatelessWidget {
     required this.appeal,
     required this.closing,
     required this.onClose,
+    required this.onClaim,
   });
 
   final KpiAppeal appeal;
   final bool closing;
-  final VoidCallback onClose;
+  final VoidCallback? onClose;
+  final VoidCallback? onClaim;
 
   @override
   Widget build(BuildContext context) {
@@ -1511,34 +1611,86 @@ class _AppealRow extends StatelessWidget {
                 color: DunesColors.coral,
               ),
               const Spacer(),
-              TextButton(
-                key: Key('kpi-followup-appeal-done-${appeal.id}'),
-                onPressed: closing ? null : onClose,
-                style: TextButton.styleFrom(
-                  foregroundColor: DunesColors.brandPurpleDeep,
-                  backgroundColor: DunesColors.brandPurpleSoft,
-                  minimumSize: const Size(0, 30),
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  visualDensity: VisualDensity.compact,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(7),
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w500,
-                  ),
+              if (onClaim != null)
+                TextButton(
+                  onPressed: closing ? null : onClaim,
+                  child: const Text('领取'),
                 ),
-                child: closing
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('标记已处理'),
-              ),
+              if (onClose != null)
+                TextButton(
+                  key: Key('kpi-followup-appeal-done-${appeal.id}'),
+                  onPressed: closing ? null : onClose,
+                  style: TextButton.styleFrom(
+                    foregroundColor: DunesColors.brandPurpleDeep,
+                    backgroundColor: DunesColors.brandPurpleSoft,
+                    minimumSize: const Size(0, 30),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    visualDensity: VisualDensity.compact,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  child: closing
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('处理申诉'),
+                ),
             ],
           ),
           const SizedBox(height: 8),
+          Text(
+            appeal.assignedToName.trim().isNotEmpty
+                ? '当前责任人：${appeal.assignedToName}'
+                : (appeal.assignedRole == 'supervisor'
+                      ? '待直属领导处理'
+                      : '数据负责人待领取'),
+            style: const TextStyle(fontSize: 11.5, color: DunesColors.text3),
+          ),
+          if (appeal.dueAt.trim().isNotEmpty)
+            Text(
+              _appealDueLabel(appeal.dueAt),
+              style: TextStyle(
+                fontSize: 11.5,
+                color: _appealIsOverdue(appeal.dueAt)
+                    ? DunesColors.coral
+                    : DunesColors.text3,
+                fontWeight: _appealIsOverdue(appeal.dueAt)
+                    ? FontWeight.w600
+                    : FontWeight.w400,
+              ),
+            ),
+          const SizedBox(height: 6),
+          if (appeal.subjectName.trim().isNotEmpty) ...[
+            Text(
+              '申诉指标：${appeal.subjectName}',
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: DunesColors.text,
+              ),
+            ),
+            if (appeal.snapshot.trim().isNotEmpty)
+              Text(
+                '提交时快照：${appeal.snapshot}',
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  color: DunesColors.text3,
+                ),
+              ),
+            if (appeal.expectedChange.trim().isNotEmpty)
+              Text(
+                '期望修正：${appeal.expectedChange}',
+                style: const TextStyle(fontSize: 12, color: DunesColors.coral),
+              ),
+            const SizedBox(height: 8),
+          ],
           Container(
             padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
             decoration: BoxDecoration(
@@ -1554,8 +1706,134 @@ class _AppealRow extends StatelessWidget {
               ),
             ),
           ),
+          if (!appeal.isOpen && appeal.resolution.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              '处理结论：${_appealDecisionLabel(appeal.decision)}',
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              appeal.resolution,
+              style: const TextStyle(fontSize: 12.5, color: DunesColors.text2),
+            ),
+            if (appeal.handledByName.trim().isNotEmpty)
+              Text(
+                '处理人：${appeal.handledByName}',
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  color: DunesColors.text3,
+                ),
+              ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+String _appealDecisionLabel(String decision) => switch (decision) {
+  'approved' => '申诉成立',
+  'partial' => '部分成立',
+  'rejected' => '申诉驳回',
+  _ => '已办结',
+};
+
+bool _appealIsOverdue(String raw) {
+  final due = DateTime.tryParse(raw)?.toLocal();
+  return due != null && due.isBefore(DateTime.now());
+}
+
+String _appealDueLabel(String raw) {
+  final due = DateTime.tryParse(raw)?.toLocal();
+  if (due == null) return '';
+  final date = '${due.month}月${due.day}日';
+  return _appealIsOverdue(raw) ? '已逾期 · 应于$date前处理' : '处理时限 · $date';
+}
+
+class _AppealResolutionDialog extends StatefulWidget {
+  const _AppealResolutionDialog({required this.appeal});
+  final KpiAppeal appeal;
+
+  @override
+  State<_AppealResolutionDialog> createState() =>
+      _AppealResolutionDialogState();
+}
+
+class _AppealResolutionDialogState extends State<_AppealResolutionDialog> {
+  final _controller = TextEditingController();
+  String _decision = 'approved';
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('处理 ${widget.appeal.userName} 的申诉'),
+      content: SizedBox(
+        width: 440,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.appeal.comment,
+              style: const TextStyle(color: DunesColors.text2),
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String>(
+              initialValue: _decision,
+              decoration: const InputDecoration(labelText: '处理结论'),
+              items: const [
+                DropdownMenuItem(value: 'approved', child: Text('申诉成立')),
+                DropdownMenuItem(value: 'partial', child: Text('部分成立')),
+                DropdownMenuItem(value: 'rejected', child: Text('申诉驳回')),
+              ],
+              onChanged: (value) =>
+                  setState(() => _decision = value ?? 'approved'),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              '选择“申诉成立/部分成立”前，请先在灯塔修正源数据，或由评分人完成重评。系统会校验指标已变化，然后自动重算、重新发布并通知员工。',
+              style: TextStyle(fontSize: 12, color: DunesColors.text3),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('kpi-appeal-resolution'),
+              controller: _controller,
+              maxLines: 4,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: '处理说明',
+                hintText: '填写核验结果、修正内容或驳回理由',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          key: const Key('kpi-appeal-resolution-submit'),
+          onPressed: _controller.text.trim().length < 4
+              ? null
+              : () => Navigator.pop(context, (
+                  decision: _decision,
+                  resolution: _controller.text.trim(),
+                )),
+          child: const Text('办结并通知'),
+        ),
+      ],
     );
   }
 }

@@ -71,6 +71,16 @@ void main() {
     );
     expect(kpiLighthouseSliceTitle(channel), '多渠道');
     expect(kpiLighthouseSliceSubtitle(channel), '全国');
+
+    final mapped = _slice(
+      taskName: '满减券（交易）',
+      productName: '中石油满减券',
+      productGroup: '能源',
+      province: '湖南',
+      matchSummary: '灯塔规则 产品=中石油满减券；产品=满减券（交易）',
+    );
+    expect(kpiLighthouseSliceTitle(mapped), '满减券（交易）');
+    expect(kpiLighthouseSliceSubtitle(mapped), '湖南');
   });
 
   test('量表明细用考核目标，不写成全国', () {

@@ -35,7 +35,6 @@ class NativeQianjiHubPage extends StatefulWidget {
     this.onOpenCashFlow,
     this.onOpenMonthlyBill,
     this.onOpenTravel,
-    this.onOpenTravelImport,
     this.onOpenRobotHome,
     this.onOpenRobot,
     this.onOpenDigitalEmployee,
@@ -53,7 +52,6 @@ class NativeQianjiHubPage extends StatefulWidget {
   final VoidCallback? onOpenCashFlow;
   final VoidCallback? onOpenMonthlyBill;
   final VoidCallback? onOpenTravel;
-  final VoidCallback? onOpenTravelImport;
   final VoidCallback? onOpenRobotHome;
 
   /// 点击单个机器人名片：由 Host 按 canChat 决定进聊天或提示。
@@ -330,16 +328,6 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           subtitle: '出行成本 · 地图',
           actionText: '行程地图',
           onTap: widget.onOpenTravel!,
-        ),
-      if (widget.onOpenTravelImport != null)
-        _AlipayAssetRow(
-          icon: Icons.list_alt_rounded,
-          iconBgColor: const Color(0xFFE8EEF8),
-          iconColor: const Color(0xFF3D5A99),
-          title: '列表',
-          subtitle: '差旅订单 · 导入核对',
-          actionText: '订单列表',
-          onTap: widget.onOpenTravelImport!,
         ),
     ];
 

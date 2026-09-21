@@ -235,10 +235,12 @@ class NativeQianjiTravelPage extends StatefulWidget {
     super.key,
     required this.session,
     required this.onBack,
+    this.onOpenTravelImport,
   });
 
   final AuthSession session;
   final VoidCallback onBack;
+  final VoidCallback? onOpenTravelImport;
 
   @override
   State<NativeQianjiTravelPage> createState() => _NativeQianjiTravelPageState();
@@ -454,6 +456,40 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
               ),
             ),
           ),
+          if (widget.onOpenTravelImport != null) ...[
+            const SizedBox(width: 8),
+            Material(
+              color: const Color(0xFFF3EEFA),
+              borderRadius: BorderRadius.circular(999),
+              child: InkWell(
+                key: const Key('travel-import-entry'),
+                borderRadius: BorderRadius.circular(999),
+                onTap: widget.onOpenTravelImport,
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.list_alt_rounded,
+                        size: 16,
+                        color: _themePurple,
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        '列表',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: _themePurple,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
           IconButton(
             tooltip: '出行成本怎么算',
             onPressed: () => _showTravelCostHelp(context),
@@ -542,7 +578,7 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
                 value: _view,
                 items: const [
                   (value: _TravelView.map, label: '中国地图'),
-                  (value: _TravelView.list, label: '列表'),
+                  (value: _TravelView.list, label: '行程'),
                 ],
                 onChanged: (v) => setState(() {
                   _view = v;

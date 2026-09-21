@@ -3843,11 +3843,6 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               ? () => widget.navigation.go('QJMB')
               : null,
           onOpenTravel: () => widget.navigation.go('QJTR'),
-          onOpenTravelImport:
-              !widget.session.isExternalUser &&
-                  widget.session.effectiveTravelImportAccess
-              ? () => widget.navigation.go('QJTI')
-              : null,
           onOpenRobotHome: () {
             setState(() {
               _qjrOpenedFromChat = false;
@@ -4077,6 +4072,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         return NativeQianjiTravelPage(
           session: widget.session,
           onBack: widget.navigation.back,
+          onOpenTravelImport:
+              !widget.session.isExternalUser &&
+                  widget.session.effectiveTravelImportAccess
+              ? () => widget.navigation.go('QJTI')
+              : null,
         );
       case 'QJTI':
         if (widget.session.isExternalUser ||
@@ -5841,7 +5841,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJUH' => const ['QJ', 'QJUH'],
       'QJUHD' => const ['QJ', 'QJUH', 'QJUHD'],
       'QJTR' => const ['QJ', 'QJTR'],
-      'QJTI' => const ['QJ', 'QJTI'],
+      'QJTI' => const ['QJ', 'QJTR', 'QJTI'],
       'QJCF' => const ['QJ', 'QJCF'],
       'QJMB' => const ['QJ', 'QJMB'],
       'QJFS' => const ['QJ', 'QJFS'],

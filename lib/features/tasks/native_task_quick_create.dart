@@ -99,22 +99,12 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
   Future<void> _pickDate({required bool isStart}) async {
     final now = DateTime.now();
     final initial = isStart ? (_startAt ?? now) : (_dueAt ?? _startAt ?? now);
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showTaskDatePicker(
+      context,
       initialDate: initial,
       firstDate: DateTime(now.year - 1),
       lastDate: DateTime(now.year + 5),
       helpText: isStart ? '选择开始时间' : '选择结束时间',
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(
-              context,
-            ).colorScheme.copyWith(primary: kTaskPurple),
-          ),
-          child: child!,
-        );
-      },
     );
     if (picked == null || !mounted) return;
     setState(() {
@@ -313,21 +303,28 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
                 ),
               ),
             if (!widget.asGroup && _groups.isNotEmpty)
-              DropdownButtonFormField<int?>(
-                initialValue: _groupId,
-                decoration: const InputDecoration(
-                  labelText: '属于哪一组（可选）',
-                  border: InputBorder.none,
-                ),
-                items: [
-                  const DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('不挂组，只给自己做'),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    '属于哪一组（可选）',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.text2,
+                    ),
                   ),
-                  for (final g in _groups)
-                    DropdownMenuItem<int?>(value: g.id, child: Text(g.title)),
+                  const SizedBox(height: 8),
+                  TaskDropdownField<int?>(
+                    value: _groupId,
+                    sheetTitle: '选择所属主目标',
+                    items: [
+                      (null, '不挂组，只给自己做'),
+                      for (final g in _groups) (g.id, g.title),
+                    ],
+                    onChanged: (v) => setState(() => _groupId = v),
+                  ),
                 ],
-                onChanged: (v) => setState(() => _groupId = v),
               ),
             const SizedBox(height: 12),
             FilledButton(

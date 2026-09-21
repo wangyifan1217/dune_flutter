@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import 'task_models.dart';
+import 'task_widgets.dart';
 
 class TaskChangeDraft {
   const TaskChangeDraft({
@@ -70,22 +71,12 @@ class _TaskChangeDialogState extends State<_TaskChangeDialog> {
     final first = widget.task.startAt?.toLocal() ?? DateTime(now.year - 1);
     var last = DateTime(now.year + 5);
     if (first.isAfter(last)) last = first;
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showTaskDatePicker(
+      context,
       initialDate: current.isBefore(first) ? first : current,
       firstDate: first,
       lastDate: last,
       helpText: '选择截止日',
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(
-              context,
-            ).colorScheme.copyWith(primary: DunesColors.brandPurple),
-          ),
-          child: child!,
-        );
-      },
     );
     if (picked == null || !mounted) return;
     setState(() {

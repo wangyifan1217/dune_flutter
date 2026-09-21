@@ -16,6 +16,26 @@ import 'task_widgets.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
 
+const _taskCategoryOptions = <String, List<(String, String)>>{
+  '业务': [('销售', '销售'), ('市场', '市场'), ('运营', '运营'), ('客服', '客服'), ('商务', '商务')],
+  '研发': [
+    ('技术', '技术'),
+    ('产品', '产品'),
+    ('设计', '设计'),
+    ('测试', '测试'),
+    ('运维', '运维'),
+    ('运营', '运营'),
+  ],
+  '管理': [('团队管理', '团队管理'), ('人才培养', '人才培养'), ('组织建设', '组织建设')],
+  '职能': [
+    ('财务', '财务'),
+    ('人事', '人事'),
+    ('行政', '行政'),
+    ('IT 支持', 'IT 支持'),
+    ('采购', '采购'),
+  ],
+};
+
 /// PC 弹窗；APP / 窄屏全屏页。
 Future<TaskItem?> openTaskEditor(
   BuildContext context, {
@@ -61,20 +81,22 @@ class TaskEditorPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F6F8),
-      // 点击空白处收起软键盘
-      body: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-        child: SafeArea(
-          child: _TaskEditorBody(
-            session: session,
-            parentTaskId: parentTaskId,
-            parentTask: parentTask,
-            fullscreen: true,
-            onCancel: () => Navigator.pop(context),
-            onCreated: (item) => Navigator.pop(context, item),
+    return TaskTheme(
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F6F8),
+        // 点击空白处收起软键盘
+        body: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+          child: SafeArea(
+            child: _TaskEditorBody(
+              session: session,
+              parentTaskId: parentTaskId,
+              parentTask: parentTask,
+              fullscreen: true,
+              onCancel: () => Navigator.pop(context),
+              onCreated: (item) => Navigator.pop(context, item),
+            ),
           ),
         ),
       ),
@@ -97,7 +119,8 @@ class TaskEditorDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return TaskTheme(
+      child: AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       titlePadding: EdgeInsets.zero,
       contentPadding: EdgeInsets.zero,
@@ -118,6 +141,7 @@ class TaskEditorDialog extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }
@@ -150,6 +174,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
   final _acceptCtrl = TextEditingController();
   String _priority = 'medium';
   String _category = '业务';
+  String _subCategory = '销售';
   int? _ownerId;
   String _ownerName = '';
   DateTime? _startAt;
@@ -164,6 +189,8 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
   String? _dateError;
 
   bool get _isSub => widget.parentTaskId != null;
+  List<(String, String)> get _subCategoryOptions =>
+      _taskCategoryOptions[_category] ?? const [];
 
   /// 主任务由当前用户创建 → 自建子任务免审。
   bool get _parentSelfCreated =>
@@ -204,8 +231,13 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
     if (parent.priority.trim().isNotEmpty) {
       _priority = parent.priority;
     }
-    if (parent.category.trim().isNotEmpty) {
-      _category = parent.category;
+    final parentCategory = parent.category.trim();
+    if (_taskCategoryOptions.containsKey(parentCategory)) {
+      _category = parentCategory;
+      final options = _subCategoryOptions;
+      _subCategory = options.any((item) => item.$1 == parent.subCategory)
+          ? parent.subCategory
+          : options.first.$1;
     }
     final parentStart = parent.startAt?.toLocal();
     if (_startAt == null && parentStart != null) {
@@ -332,22 +364,12 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
     final initial = isStart ? (_startAt ?? now) : (_dueAt ?? _startAt ?? now);
     final first = DateTime(now.year - 1);
     final last = DateTime(now.year + 5);
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showTaskDatePicker(
+      context,
       initialDate: initial,
       firstDate: first,
       lastDate: last,
       helpText: isStart ? '选择开始时间' : '选择结束时间',
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(
-              context,
-            ).colorScheme.copyWith(primary: _themePurple),
-          ),
-          child: child!,
-        );
-      },
     );
     if (picked == null || !mounted) return;
     setState(() {
@@ -402,6 +424,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             : _descCtrl.text.trim(),
         'priority': _priority,
         'category': _category,
+        'subCategory': _subCategory,
         'acceptanceCriteria': _acceptCtrl.text.trim(),
         'ownerUserId': _ownerId ?? widget.session.userId,
         if (_attachments.isNotEmpty)
@@ -482,15 +505,25 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
           ),
           const SizedBox(height: 14),
           _dropdownField(
-            label: '分类',
+            label: '一级分类',
             value: _category,
             items: const [
               ('业务', '业务'),
               ('研发', '研发'),
               ('管理', '管理'),
-              ('其他', '其他'),
+              ('职能', '职能'),
             ],
-            onChanged: (v) => setState(() => _category = v),
+            onChanged: (v) => setState(() {
+              _category = v;
+              _subCategory = _subCategoryOptions.first.$1;
+            }),
+          ),
+          const SizedBox(height: 14),
+          _dropdownField(
+            label: '二级分类',
+            value: _subCategory,
+            items: _subCategoryOptions,
+            onChanged: (v) => setState(() => _subCategory = v),
           ),
         ] else
           Row(
@@ -512,15 +545,27 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
               const SizedBox(width: 14),
               Expanded(
                 child: _dropdownField(
-                  label: '分类',
+                  label: '一级分类',
                   value: _category,
                   items: const [
                     ('业务', '业务'),
                     ('研发', '研发'),
                     ('管理', '管理'),
-                    ('其他', '其他'),
+                    ('职能', '职能'),
                   ],
-                  onChanged: (v) => setState(() => _category = v),
+                  onChanged: (v) => setState(() {
+                    _category = v;
+                    _subCategory = _subCategoryOptions.first.$1;
+                  }),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: _dropdownField(
+                  label: '二级分类',
+                  value: _subCategory,
+                  items: _subCategoryOptions,
+                  onChanged: (v) => setState(() => _subCategory = v),
                 ),
               ),
             ],
@@ -882,184 +927,14 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
     required List<(String, String)> items,
     required ValueChanged<String> onChanged,
   }) {
-    final current = items.firstWhere(
-      (e) => e.$1 == value,
-      orElse: () => (value, value),
-    );
-    final useSheet =
-        widget.fullscreen || MediaQuery.sizeOf(context).width < 700;
-    if (useSheet) {
-      return _Labeled(
-        label: label,
-        child: Material(
-          color: const Color(0xFFF5F6F8),
-          borderRadius: BorderRadius.circular(10),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: () async {
-              final picked = await showModalBottomSheet<String>(
-                context: context,
-                backgroundColor: Colors.white,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                builder: (ctx) => SafeArea(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            '选择$label',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                      for (final item in items)
-                        ListTile(
-                          title: Text(item.$2),
-                          trailing: item.$1 == value
-                              ? const Icon(
-                                  Icons.check_rounded,
-                                  color: _themePurple,
-                                )
-                              : null,
-                          onTap: () => Navigator.pop(ctx, item.$1),
-                        ),
-                      const SizedBox(height: 8),
-                    ],
-                  ),
-                ),
-              );
-              if (picked != null) onChanged(picked);
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      current.$2,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: DunesColors.text,
-                      ),
-                    ),
-                  ),
-                  const Icon(
-                    Icons.expand_more,
-                    size: 20,
-                    color: DunesColors.text3,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    // PC：MenuAnchor 锚定字段本身，避免 Dialog 内 showMenu 错位。
     return _Labeled(
       label: label,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final menuWidth = constraints.maxWidth.isFinite
-              ? constraints.maxWidth
-              : 220.0;
-          return MenuAnchor(
-            alignmentOffset: const Offset(0, 6),
-            style: kTaskMenuStyle,
-            builder: (context, controller, child) {
-              final open = controller.isOpen;
-              return Material(
-                color: open
-                    ? _themePurple.withValues(alpha: 0.08)
-                    : const Color(0xFFF5F6F8),
-                borderRadius: BorderRadius.circular(10),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(10),
-                  onTap: () => open ? controller.close() : controller.open(),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            current.$2,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: open ? _themePurple : DunesColors.text,
-                              fontWeight: open
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                            ),
-                          ),
-                        ),
-                        Icon(
-                          Icons.expand_more,
-                          size: 20,
-                          color: open ? _themePurple : DunesColors.text3,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-            menuChildren: [
-              for (final item in items)
-                MenuItemButton(
-                  onPressed: () => onChanged(item.$1),
-                  style: ButtonStyle(
-                    backgroundColor: WidgetStateProperty.resolveWith((states) {
-                      if (item.$1 == value) {
-                        return _themePurple.withValues(alpha: 0.1);
-                      }
-                      if (states.contains(WidgetState.hovered)) {
-                        return const Color(0xFFF5F6F8);
-                      }
-                      return Colors.transparent;
-                    }),
-                    padding: const WidgetStatePropertyAll(
-                      EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    ),
-                    minimumSize: WidgetStatePropertyAll(Size(menuWidth, 44)),
-                  ),
-                  trailingIcon: item.$1 == value
-                      ? const Icon(
-                          Icons.check_rounded,
-                          size: 16,
-                          color: _themePurple,
-                        )
-                      : null,
-                  child: SizedBox(
-                    width: menuWidth - 48,
-                    child: Text(
-                      item.$2,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: item.$1 == value
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                        color: item.$1 == value
-                            ? _themePurple
-                            : DunesColors.text,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          );
-        },
+      child: TaskDropdownField<String>(
+        value: value,
+        items: items,
+        sheetTitle: '选择$label',
+        forceSheet: widget.fullscreen,
+        onChanged: onChanged,
       ),
     );
   }

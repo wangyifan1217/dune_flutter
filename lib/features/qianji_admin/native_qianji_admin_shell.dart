@@ -23,16 +23,20 @@ import '../payroll/native_payroll_report_page.dart';
 import '../payroll/payroll_report_service.dart';
 import '../am_sso/am_sso_service.dart';
 import '../travel_import/native_travel_import_page.dart';
-import '../travel_import/travel_import_service.dart';
 import '../reconciliation/native_daily_reconciliation_page.dart';
 import '../reconciliation/reconciliation_shucai_service.dart';
 import '../tasks/native_task_home_pane.dart';
 import '../tasks/native_task_hrbp_pane.dart';
 import '../tasks/task_api.dart';
+import '../../core/platform/desktop_features.dart';
+import '../../core/widgets/dunes_choice_panel.dart';
+import '../shell/dunes_toast.dart';
+import '../../core/widgets/cached_network_image.dart';
+import '../workbench/native_avatar_sheet.dart';
 import 'qianji_admin_api.dart';
 import 'qianji_req_pool_pane.dart';
 
-const _themePurple = Color(0xFF7B5CD8);
+const _themePurple = Color(0xFF7045B2);
 const _hrbpAccent = Color(0xFF3D7A8C);
 const _ssoTileColors = <Color>[
   Color(0xFFB45309),
@@ -115,7 +119,6 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   bool? _canSeeDailyRecon;
   bool? _canSeeContracts;
   bool? _canSeeProposalIntake;
-  bool? _canSeeTravelImport;
   bool? _canSeeKpiPerformance;
   bool? _canSeePayrollReports;
   bool? _canSeePaymentInvoice;
@@ -155,11 +158,11 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_resolveDailyReconAccess());
     unawaited(_resolveContractAccess());
     unawaited(_resolveProposalIntakeAccess());
-    unawaited(_resolveTravelImportAccess());
     unawaited(_resolveKpiPerformanceAccess());
     unawaited(_resolvePayrollReportAccess());
     unawaited(_resolvePaymentInvoiceAccess());
     unawaited(_loadSsoApps());
+    userAvatarRefresh.addListener(_onAvatarRefresh);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (widget.active) _syncBackInterceptor();
@@ -188,7 +191,6 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
       unawaited(_resolveDailyReconAccess());
       unawaited(_resolveContractAccess());
       unawaited(_resolveProposalIntakeAccess());
-      unawaited(_resolveTravelImportAccess());
       unawaited(_resolveKpiPerformanceAccess());
       unawaited(_resolvePayrollReportAccess());
       unawaited(_resolvePaymentInvoiceAccess());
@@ -230,7 +232,6 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_resolveDailyReconAccess());
     unawaited(_resolveContractAccess());
     unawaited(_resolveProposalIntakeAccess());
-    unawaited(_resolveTravelImportAccess());
     unawaited(_resolveKpiPerformanceAccess());
     unawaited(_resolvePayrollReportAccess());
     unawaited(_resolvePaymentInvoiceAccess());
@@ -333,22 +334,6 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     setState(() => _canSeeProposalIntake = allowed);
   }
 
-  Future<void> _resolveTravelImportAccess() async {
-    if (_session.isExternalUser) {
-      if (mounted) setState(() => _canSeeTravelImport = false);
-      return;
-    }
-    bool allowed = _session.effectiveTravelImportAccess;
-    try {
-      final access = await TravelImportService(session: _session).fetchAccess();
-      allowed = access.canImport;
-    } catch (_) {
-      allowed = _session.effectiveTravelImportAccess;
-    }
-    if (!mounted) return;
-    setState(() => _canSeeTravelImport = allowed);
-  }
-
   Future<void> _resolveKpiPerformanceAccess() async {
     if (_session.isExternalUser) {
       if (mounted) setState(() => _canSeeKpiPerformance = false);
@@ -417,9 +402,14 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
 
   @override
   void dispose() {
+    userAvatarRefresh.removeListener(_onAvatarRefresh);
     _clearBackInterceptor();
     _pageController.dispose();
     super.dispose();
+  }
+
+  void _onAvatarRefresh() {
+    if (mounted) setState(() {});
   }
 
   bool get _isOverview => _pageIndex == 0;
@@ -493,6 +483,30 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _goPage(1);
   }
 
+  void _openMergedChoices({
+    required String title,
+    required List<_WorkbenchTile> choices,
+  }) {
+    final enabled = choices.where((t) => t.enabled && t.onTap != null).toList();
+    if (enabled.isEmpty) return;
+    unawaited(
+      showDunesChoicePanel(
+        context: context,
+        title: title,
+        items: [
+          for (final tile in enabled)
+            DunesChoiceItem(
+              title: tile.title,
+              subtitle: tile.subtitle,
+              icon: tile.icon,
+              color: tile.color,
+              onTap: tile.onTap!,
+            ),
+        ],
+      ),
+    );
+  }
+
   void _applyShellChrome({required bool overview}) {
     if (overview) {
       _hideShellHeader = false;
@@ -547,7 +561,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFFF5F6F8),
+      color: const Color(0xFFF7F5FA),
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -555,66 +569,132 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           children: [
             if (!_hideShellHeader)
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 12, 8),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
                 child: Row(
                   children: [
                     if (_isOverview && widget.onExit != null) ...[
-                      IconButton(
-                        tooltip: '返回我的',
-                        onPressed: widget.onExit,
-                        icon: const Icon(Icons.arrow_back_ios_new, size: 16),
-                        color: DunesColors.text2,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 32,
-                          minHeight: 32,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                    ],
-                    if (!_isOverview) ...[
                       InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: _onShellBackOverride ?? () => _goPage(0),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 6,
+                        onTap: widget.onExit,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFECE4F3)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF552D8E).withValues(alpha: .04),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
-                          child: Row(
+                          child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(
-                                Icons.arrow_back_ios_new,
-                                size: 14,
-                                color: DunesColors.text2,
-                              ),
-                              const SizedBox(width: 2),
+                              Icon(Icons.arrow_back_ios_new_rounded, size: 14, color: Color(0xFF6B5882)),
+                              SizedBox(width: 4),
                               Text(
-                                (_contentChrome?.backLabel ?? '').trim().isEmpty
-                                    ? '工作台'
-                                    : _contentChrome!.backLabel!.trim(),
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: DunesColors.text2,
+                                '返回我的',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF37274C),
                                 ),
                               ),
                             ],
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 10),
+                    ],
+                    if (!_isOverview) ...[
+                      InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: _onShellBackOverride ?? () => _goPage(0),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFECE4F3)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF552D8E).withValues(alpha: .04),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.arrow_back_ios_new_rounded,
+                                size: 14,
+                                color: Color(0xFF6B5882),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                (_contentChrome?.backLabel ?? '').trim().isEmpty
+                                    ? '工作台'
+                                    : _contentChrome!.backLabel!.trim(),
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF37274C),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
                     ],
                     Expanded(
                       child: Text(
                         _isOverview ? '工作台' : (_titles[_contentView] ?? ''),
                         style: TextStyle(
-                          fontSize: _isOverview ? 24 : 18,
-                          fontWeight: FontWeight.w700,
-                          color: _isOverview ? DunesColors.text : _themePurple,
+                          fontSize: _isOverview ? 20 : 17,
+                          fontWeight: FontWeight.w800,
+                          color: _isOverview ? const Color(0xFF2C1E3F) : const Color(0xFF7045B2),
                         ),
                       ),
                     ),
+                    if (_isOverview) ...[
+                      Tooltip(
+                        message: '刷新工作台数据与权限',
+                        child: InkWell(
+                          onTap: () async {
+                            await _refreshSessionOnEnter();
+                            if (!context.mounted) return;
+                            showDunesToast(context, '工作台数据与应用已刷新');
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.all(7),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFECE4F3)),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF552D8E).withValues(alpha: .04),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.refresh_rounded,
+                              size: 19,
+                              color: Color(0xFF7045B2),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                     ?_shellTrailing,
                   ],
                 ),
@@ -758,23 +838,44 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   }
 
   Widget _buildOverviewPage() {
-    final collaborationTiles = <_WorkbenchTile>[
-      _WorkbenchTile(
-        title: '任务',
-        subtitle: '待我处理 · 我发起的',
-        icon: Icons.task_alt_outlined,
-        color: _themePurple,
-        enabled: true,
-        onTap: () => _open(_WorkbenchView.tasks),
-      ),
+    final collabTiles = <_WorkbenchTile>[
       if (_canSeeTaskSummary == true)
         _WorkbenchTile(
-          title: '任务汇总',
-          subtitle: '部门进度',
-          icon: Icons.insights_outlined,
-          color: _hrbpAccent,
+          title: '任务',
+          subtitle: '待我处理 · 部门汇总',
+          icon: Icons.task_alt_outlined,
+          color: _themePurple,
           enabled: true,
-          onTap: () => _open(_WorkbenchView.hrbp),
+          onTap: () => _openMergedChoices(
+            title: '选择任务入口',
+            choices: [
+              _WorkbenchTile(
+                title: '任务',
+                subtitle: '待我处理 · 我发起的',
+                icon: Icons.task_alt_outlined,
+                color: _themePurple,
+                enabled: true,
+                onTap: () => _open(_WorkbenchView.tasks),
+              ),
+              _WorkbenchTile(
+                title: '任务汇总',
+                subtitle: '部门进度',
+                icon: Icons.insights_outlined,
+                color: _hrbpAccent,
+                enabled: true,
+                onTap: () => _open(_WorkbenchView.hrbp),
+              ),
+            ],
+          ),
+        )
+      else
+        _WorkbenchTile(
+          title: '任务',
+          subtitle: '待我处理 · 我发起的',
+          icon: Icons.task_alt_outlined,
+          color: _themePurple,
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.tasks),
         ),
       if (!_session.isExternalUser)
         _WorkbenchTile(
@@ -785,24 +886,9 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           enabled: true,
           onTap: () => _open(_WorkbenchView.drive),
         ),
-      if (!_session.isExternalUser && _canSeeDailyRecon == true)
-        _WorkbenchTile(
-          title: '每日对账',
-          subtitle: '日清月结 · 点开核对',
-          icon: Icons.sync_alt_outlined,
-          color: const Color(0xFF5B6FC4),
-          enabled: true,
-          onTap: () => _open(_WorkbenchView.dailyRecon),
-        ),
-      if (!_session.isExternalUser && _canSeeContracts == true)
-        _WorkbenchTile(
-          title: '合同归集',
-          subtitle: '编号 · 名称 · 附件',
-          icon: Icons.description_outlined,
-          color: const Color(0xFF5B6FC4),
-          enabled: true,
-          onTap: () => _open(_WorkbenchView.contracts),
-        ),
+    ];
+
+    final proposalChoices = <_WorkbenchTile>[
       if (!_session.isExternalUser && _canSeeProposalIntake == true)
         _WorkbenchTile(
           title: '销售提案',
@@ -821,6 +907,18 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           enabled: true,
           onTap: () => _open(_WorkbenchView.purchaseProposalIntake),
         ),
+    ];
+
+    final businessTiles = <_WorkbenchTile>[
+      if (proposalChoices.isNotEmpty)
+        _WorkbenchTile(
+          title: '提案填报',
+          subtitle: '销售提案 · 采购提案',
+          icon: Icons.assignment_outlined,
+          color: _themePurple,
+          enabled: true,
+          onTap: () => _openMergedChoices(title: '选择提案类型', choices: proposalChoices),
+        ),
       if (!_session.isExternalUser &&
           (_canSeePaymentInvoice == true || kPaymentInvoiceStaticPreview))
         _WorkbenchTile(
@@ -830,6 +928,75 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           color: const Color(0xFF0F766E),
           enabled: true,
           onTap: () => _open(_WorkbenchView.paymentInvoice),
+        ),
+      if (!_session.isExternalUser && _canSeeContracts == true)
+        _WorkbenchTile(
+          title: '合同归集',
+          subtitle: '编号 · 名称 · 附件',
+          icon: Icons.description_outlined,
+          color: const Color(0xFF5B6FC4),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.contracts),
+        ),
+      if (!_session.isExternalUser && _canSeeDailyRecon == true)
+        _WorkbenchTile(
+          title: '每日对账',
+          subtitle: '日清月结 · 点开核对',
+          icon: Icons.sync_alt_outlined,
+          color: const Color(0xFF5B6FC4),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.dailyRecon),
+        ),
+    ];
+
+    final noticeChoices = <_WorkbenchTile>[
+      if (!_session.isExternalUser && _canSeeAdministrativeNotice == true)
+        _WorkbenchTile(
+          title: '行政通知',
+          subtitle: '发布通知 · 查看确认进度',
+          icon: Icons.campaign_outlined,
+          color: const Color(0xFF3D7A8C),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.administrativeNotice),
+        ),
+      if (!_session.isExternalUser && _canSeeCompanyBroadcast == true)
+        _WorkbenchTile(
+          title: '公司广播',
+          subtitle: '全员推送 · 发布与历史',
+          icon: Icons.cell_tower_outlined,
+          color: const Color(0xFF7B5CD8),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.companyBroadcast),
+        ),
+    ];
+
+    final peopleTiles = <_WorkbenchTile>[
+      if (noticeChoices.isNotEmpty)
+        _WorkbenchTile(
+          title: '组织通告',
+          subtitle: '行政通知 · 公司广播',
+          icon: Icons.campaign_outlined,
+          color: const Color(0xFF3D7A8C),
+          enabled: true,
+          onTap: () => _openMergedChoices(title: '选择通告类型', choices: noticeChoices),
+        ),
+      if (!_session.isExternalUser && _canSeeKpiPerformance == true)
+        _WorkbenchTile(
+          title: '月度绩效考评',
+          subtitle: '导入量表 · 发布结果 · 导出',
+          icon: Icons.insights_outlined,
+          color: const Color(0xFF0F766E),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.kpiPerformance),
+        ),
+      if (!_session.isExternalUser && _canSeePayrollReports == true)
+        _WorkbenchTile(
+          title: '工资报表',
+          subtitle: '按月同步 · 查询与导出',
+          icon: Icons.payments_outlined,
+          color: const Color(0xFF3D7A8C),
+          enabled: true,
+          onTap: () => _open(_WorkbenchView.payrollReports),
         ),
     ];
 
@@ -864,80 +1031,428 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           ),
     ];
 
-    final administrativeTiles = <_WorkbenchTile>[
-      if (!_session.isExternalUser && _canSeeAdministrativeNotice == true)
-        _WorkbenchTile(
-          title: '行政通知',
-          subtitle: '发布通知 · 查看确认进度',
-          icon: Icons.campaign_outlined,
-          color: const Color(0xFF3D7A8C),
-          enabled: true,
-          onTap: () => _open(_WorkbenchView.administrativeNotice),
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1140),
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(
+            isDesktopCommOnly ? 24 : 16,
+            10,
+            isDesktopCommOnly ? 24 : 16,
+            40,
+          ),
+          children: [
+            _buildSuperHeroCard(
+              collaborationCount: collabTiles.length,
+              toolCount: toolTiles.length,
+              adminCount: businessTiles.length + peopleTiles.length,
+            ),
+            const SizedBox(height: 16),
+            if (collabTiles.isNotEmpty) ...[
+              _WorkbenchSection(
+                title: '协同办公',
+                subtitle: '任务流转 · 文件共享',
+                accent: _themePurple,
+                children: collabTiles,
+              ),
+              const SizedBox(height: 14),
+            ],
+            if (businessTiles.isNotEmpty) ...[
+              _WorkbenchSection(
+                title: '业务与财务',
+                subtitle: '提案 · 合同 · 发票 · 对账',
+                accent: const Color(0xFF0F766E),
+                children: businessTiles,
+              ),
+              const SizedBox(height: 14),
+            ],
+            if (peopleTiles.isNotEmpty) ...[
+              _WorkbenchSection(
+                title: '行政人事',
+                subtitle: '通告 · 绩效 · 薪酬 · 差旅',
+                accent: const Color(0xFF3D7A8C),
+                children: peopleTiles,
+              ),
+              const SizedBox(height: 14),
+            ],
+            if (toolTiles.isNotEmpty) ...[
+              _WorkbenchSection(
+                title: '企业应用',
+                subtitle: '高频直达 · 单点免登',
+                accent: const Color(0xFF3880FF),
+                children: toolTiles,
+              ),
+            ],
+          ],
         ),
-      if (!_session.isExternalUser && _canSeeCompanyBroadcast == true)
-        _WorkbenchTile(
-          title: '公司广播',
-          subtitle: '全员推送 · 发布与历史',
-          icon: Icons.cell_tower_outlined,
-          color: const Color(0xFF7B5CD8),
-          enabled: true,
-          onTap: () => _open(_WorkbenchView.companyBroadcast),
-        ),
-      if (!_session.isExternalUser && _canSeeTravelImport == true)
-        _WorkbenchTile(
-          title: '差旅导入',
-          subtitle: '携程订单 · 分类核对',
-          icon: Icons.flight_class_outlined,
-          color: const Color(0xFF5B6FC4),
-          enabled: true,
-          onTap: () => _open(_WorkbenchView.travelImport),
-        ),
-      if (!_session.isExternalUser && _canSeeKpiPerformance == true)
-        _WorkbenchTile(
-          title: '月度绩效考评',
-          subtitle: '导入量表 · 发布结果 · 导出',
-          icon: Icons.insights_outlined,
-          color: const Color(0xFF0F766E),
-          enabled: true,
-          onTap: () => _open(_WorkbenchView.kpiPerformance),
-        ),
-      if (!_session.isExternalUser && _canSeePayrollReports == true)
-        _WorkbenchTile(
-          title: '工资报表',
-          subtitle: '按月同步 · 查询与导出',
-          icon: Icons.payments_outlined,
-          color: const Color(0xFF3D7A8C),
-          enabled: true,
-          onTap: () => _open(_WorkbenchView.payrollReports),
-        ),
-    ];
+      ),
+    );
+  }
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
-      children: [
-        if (collaborationTiles.isNotEmpty)
-          _WorkbenchSection(
-            title: '协作',
-            accent: _themePurple,
-            children: collaborationTiles,
+  /// 行政级数智协同工作台看板 (Executive Digital Hub)
+  Widget _buildSuperHeroCard({
+    required int collaborationCount,
+    required int toolCount,
+    required int adminCount,
+  }) {
+    final name = _session.displayName?.trim().isNotEmpty == true
+        ? _session.displayName!.trim()
+        : (_session.phone.trim().isNotEmpty ? _session.phone.trim() : '沙丘用户');
+
+    final dept = _session.departmentName.trim();
+    final title = _session.jobTitle.trim();
+    final phone = _session.phone.trim();
+    final subParts = <String>[];
+    if (dept.isNotEmpty) subParts.add(dept);
+    if (title.isNotEmpty) subParts.add(title);
+    if (phone.isNotEmpty) subParts.add(phone);
+    final identityLine = subParts.isNotEmpty ? subParts.join(' · ') : '沙丘团队协同中枢';
+    final cached = getCachedMyPageProfile(_session.userId);
+    final snap = userAvatarRefresh.snapshotFor(_session.userId);
+    var avatarUrl = (cached?.avatarUrl ?? '').trim();
+    if (avatarUrl.isEmpty) avatarUrl = (snap?.avatarUrl ?? '').trim();
+    if (avatarUrl.isEmpty) avatarUrl = _session.avatarUrl.trim();
+    if (avatarUrl.isEmpty) {
+      final objectKey =
+          (cached?.avatarObjectKey ?? snap?.avatarObjectKey ?? '').trim();
+      if (objectKey.isNotEmpty) {
+        avatarUrl = dunesAvatarResolvedUrlCache[objectKey] ?? '';
+      }
+    }
+    var avatarPreset = (cached?.avatarPreset ?? '').trim();
+    if (avatarPreset.isEmpty) avatarPreset = (snap?.avatarPreset ?? '').trim();
+    if (avatarPreset.isEmpty) avatarPreset = _session.avatarPreset.trim();
+    final initial = name.characters.isNotEmpty ? name.characters.first : '沙';
+
+    Widget metricTile({
+      required String label,
+      required String value,
+      required IconData icon,
+    }) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withValues(alpha: .18),
+              Colors.white.withValues(alpha: .06),
+            ],
           ),
-        if (toolTiles.isNotEmpty) ...[
-          const SizedBox(height: 14),
-          _WorkbenchSection(
-            title: '工具',
-            accent: const Color(0xFF1668E8),
-            children: toolTiles,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: .26),
+            width: 0.8,
           ),
-        ],
-        if (administrativeTiles.isNotEmpty) ...[
-          const SizedBox(height: 14),
-          _WorkbenchSection(
-            title: '行政',
-            accent: const Color(0xFF3D7A8C),
-            children: administrativeTiles,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: .12),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: .14),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: .20),
+                  width: 0.6,
+                ),
+              ),
+              child: Icon(icon, size: 13, color: Colors.white.withValues(alpha: .95)),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.2,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: .75),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 640;
+
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            gradient: const LinearGradient(
+              colors: [
+                Color(0xFF140E24),
+                Color(0xFF1B132F),
+                Color(0xFF281946),
+                Color(0xFF19102C),
+              ],
+              stops: [0.0, 0.35, 0.75, 1.0],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: .22),
+              width: 0.8,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x3D110724),
+                blurRadius: 28,
+                offset: Offset(0, 10),
+              ),
+            ],
           ),
-        ],
-      ],
+          child: Stack(
+            children: [
+              Positioned(
+                right: -20,
+                top: -30,
+                child: Container(
+                  width: 180,
+                  height: 180,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        const Color(0xFF8855DF).withValues(alpha: .24),
+                        const Color(0xFF8855DF).withValues(alpha: 0),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 20,
+                right: 20,
+                top: 0,
+                child: Container(
+                  height: 0.8,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.white.withValues(alpha: 0),
+                        Colors.white.withValues(alpha: .45),
+                        Colors.white.withValues(alpha: 0),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        NativeAvatarCircle(
+                          size: 48,
+                          avatarPreset: avatarPreset,
+                          avatarUrl: avatarUrl,
+                          fallbackText: initial,
+                          borderColor: Colors.white.withValues(alpha: 0.55),
+                          borderWidth: 1.5,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Colors.white.withValues(alpha: .22),
+                                          Colors.white.withValues(alpha: .08),
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: Colors.white.withValues(alpha: .28),
+                                        width: 0.6,
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      '数智协同中枢',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                identityLine,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: .72),
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (isWide) ...[
+                          metricTile(
+                            label: '协同业务',
+                            value: '$collaborationCount项',
+                            icon: Icons.task_alt_rounded,
+                          ),
+                          const SizedBox(width: 8),
+                          metricTile(
+                            label: '敏捷工具',
+                            value: '$toolCount款',
+                            icon: Icons.rocket_launch_rounded,
+                          ),
+                          const SizedBox(width: 8),
+                          metricTile(
+                            label: '管理赋能',
+                            value: '$adminCount类',
+                            icon: Icons.shield_outlined,
+                          ),
+                          const SizedBox(width: 12),
+                        ],
+                        InkWell(
+                          onTap: () async {
+                            await _refreshSessionOnEnter();
+                            if (!context.mounted) return;
+                            showDunesToast(context, '工作台权限与应用已同步');
+                          },
+                          borderRadius: BorderRadius.circular(14),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Colors.white.withValues(alpha: .22),
+                                  Colors.white.withValues(alpha: .08),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: .32),
+                                width: 0.8,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: .16),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.sync_rounded,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  '同步状态',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: .95),
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (!isWide) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: metricTile(
+                              label: '协同业务',
+                              value: '$collaborationCount项',
+                              icon: Icons.task_alt_rounded,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: metricTile(
+                              label: '敏捷工具',
+                              value: '$toolCount款',
+                              icon: Icons.rocket_launch_rounded,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: metricTile(
+                              label: '管理赋能',
+                              value: '$adminCount类',
+                              icon: Icons.shield_outlined,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -998,11 +1513,13 @@ class _PlaceholderPane extends StatelessWidget {
 class _WorkbenchSection extends StatelessWidget {
   const _WorkbenchSection({
     required this.title,
+    required this.subtitle,
     required this.accent,
     required this.children,
   });
 
   final String title;
+  final String subtitle;
   final Color accent;
   final List<_WorkbenchTile> children;
 
@@ -1011,8 +1528,15 @@ class _WorkbenchSection extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFECE4F3), width: 0.8),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF552D8E).withValues(alpha: .04),
+            blurRadius: 14,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       child: Column(
@@ -1024,30 +1548,79 @@ class _WorkbenchSection extends StatelessWidget {
                 width: 4,
                 height: 16,
                 decoration: BoxDecoration(
-                  color: accent,
+                  gradient: LinearGradient(
+                    colors: [accent, accent.withValues(alpha: .65)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 title,
-                style: TextStyle(
-                  fontSize: 15,
+                style: const TextStyle(
+                  fontSize: 15.5,
                   fontWeight: FontWeight.w700,
-                  color: accent,
+                  color: Color(0xFF2C1E3F),
+                  letterSpacing: -0.2,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: const Color(0xFF7A688F).withValues(alpha: .85),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF6F2FA),
+                  borderRadius: BorderRadius.circular(99),
+                  border: Border.all(color: const Color(0xFFEBE3F2), width: 0.6),
+                ),
+                child: Text(
+                  '${children.length}项',
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF7045B2),
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 14),
-          // 一行 3 张；第 4 张起换到下一行，避免 APP 横向滑走看不到。
+          // 响应式排版：APP 移动端 3 列紧凑，PC 桌面端 4~6 列自适应
           LayoutBuilder(
             builder: (context, c) {
-              const gap = 10.0;
-              const perRow = 3;
-              final cardWidth = ((c.maxWidth - gap * (perRow - 1)) / perRow)
-                  .clamp(72.0, 220.0);
-              const cardHeight = 108.0;
+              final width = c.maxWidth;
+              final int perRow;
+              final double gap;
+              final double cardHeight;
+
+              if (width < 540) {
+                perRow = 3;
+                gap = 8.0;
+                cardHeight = 114.0;
+              } else if (width < 840) {
+                perRow = 4;
+                gap = 12.0;
+                cardHeight = 118.0;
+              } else {
+                perRow = width > 1000 ? 6 : 5;
+                gap = 12.0;
+                cardHeight = 120.0;
+              }
+
+              final cardWidth = ((width - gap * (perRow - 1)) / perRow).floorToDouble();
+
               return Wrap(
                 spacing: gap,
                 runSpacing: gap,
@@ -1086,40 +1659,91 @@ class _WorkbenchTile {
   final VoidCallback? onTap;
 }
 
-class _WorkbenchCard extends StatelessWidget {
+class _WorkbenchCard extends StatefulWidget {
   const _WorkbenchCard({required this.tile});
 
   final _WorkbenchTile tile;
 
   @override
+  State<_WorkbenchCard> createState() => _WorkbenchCardState();
+}
+
+class _WorkbenchCardState extends State<_WorkbenchCard> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    final opacity = tile.enabled ? 1.0 : 0.55;
-    return Opacity(
-      opacity: opacity,
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: tile.enabled ? tile.onTap : null,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFE8EAED)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+    final tile = widget.tile;
+    final opacity = tile.enabled ? 1.0 : 0.48;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: tile.enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      child: Opacity(
+        opacity: opacity,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: tile.enabled ? tile.onTap : null,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOutCubic,
+              decoration: BoxDecoration(
+                color: _hovered ? const Color(0xFFFAF7FD) : const Color(0xFFFDFDFE),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: _hovered
+                      ? tile.color.withValues(alpha: 0.45)
+                      : const Color(0xFFEFE8F5),
+                  width: _hovered ? 1.0 : 0.8,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: _hovered
+                        ? tile.color.withValues(alpha: 0.12)
+                        : const Color(0xFF552D8E).withValues(alpha: 0.03),
+                    blurRadius: _hovered ? 12 : 6,
+                    offset: _hovered ? const Offset(0, 4) : const Offset(0, 2),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 9),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: tile.color.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(tile.icon, color: tile.color, size: 17),
+                  Row(
+                    children: [
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              tile.color.withValues(alpha: 0.18),
+                              tile.color.withValues(alpha: 0.06),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: tile.color.withValues(alpha: 0.24),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Icon(tile.icon, color: tile.color, size: 18),
+                      ),
+                      const Spacer(),
+                      Icon(
+                        Icons.arrow_outward_rounded,
+                        size: 13,
+                        color: _hovered
+                            ? tile.color.withValues(alpha: 0.80)
+                            : const Color(0xFFB5A9C4).withValues(alpha: 0.60),
+                      ),
+                    ],
                   ),
                   const Spacer(),
                   Text(
@@ -1129,8 +1753,8 @@ class _WorkbenchCard extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 13,
                       height: 1.2,
-                      fontWeight: FontWeight.w600,
-                      color: DunesColors.text,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF2C1E3F),
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -1139,9 +1763,9 @@ class _WorkbenchCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: 10.5,
                       height: 1.2,
-                      color: DunesColors.text3,
+                      color: Color(0xFF7A688F),
                     ),
                   ),
                 ],

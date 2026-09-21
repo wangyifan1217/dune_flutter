@@ -1227,7 +1227,8 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
         avatarService: _avatarService,
       );
     }
-    if (c.isPrivate || c.isSelfMemo || c.peerUserId != null) {
+    if (c.isImAssistant) return _assistantAvatar(c);
+    if (c.isPrivate || c.peerUserId != null) {
       return ImUserAvatar(
         initial: _initial(c.displayTitle),
         seed: c.peerUserId ?? c.id,
@@ -1240,6 +1241,66 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
       );
     }
     return null;
+  }
+
+  Widget _assistantAvatar(NativeConversation c) {
+    const size = 36.0;
+    final (colors, icon) = switch (c) {
+      _ when c.isReconciliationAssistant => (
+        const [Color(0xFF5B6FC4), Color(0xFF7652B8)],
+        Icons.sync_alt_rounded,
+      ),
+      _ when c.isTaskAssistant => (
+        const [Color(0xFF2F8F7E), Color(0xFF5EAEDE)],
+        Icons.assignment_turned_in_outlined,
+      ),
+      _ when c.isApprovalAssistant => (
+        const [DunesColors.brandPurple, DunesColors.brandPurpleDeep],
+        Icons.fact_check_outlined,
+      ),
+      _ when c.isKpiAssistant => (
+        const [Color(0xFF8C5A91), Color(0xFFC17B7B)],
+        Icons.insights_outlined,
+      ),
+      _ when c.isDriveAssistant => (
+        const [Color(0xFF3B82F6), Color(0xFF2563EB)],
+        Icons.cloud_outlined,
+      ),
+      _ when c.isXrxsAssistant => (
+        const [Color(0xFF0F766E), Color(0xFF0D9488)],
+        Icons.badge_outlined,
+      ),
+      _ when c.isWeeklySummary => (
+        const [Color(0xFFC4A574), Color(0xFF8B6A3F)],
+        Icons.auto_stories_outlined,
+      ),
+      _ when c.isAdministrativeNotice => (
+        const [Color(0xFF3D7A8C), Color(0xFF5DA7A2)],
+        Icons.campaign_outlined,
+      ),
+      _ when c.isSelfMemo => (
+        const [Color(0xFF7B5CD8), Color(0xFF5B3FB0)],
+        Icons.folder_copy_outlined,
+      ),
+      _ => (
+        const [Color(0xFFB8A4E8), Color(0xFF7B5CD8)],
+        Icons.smart_toy_outlined,
+      ),
+    };
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(size * 0.18),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: colors,
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Icon(icon, color: Colors.white, size: 20),
+    );
   }
 
   Widget _contactAvatar(NativeContact c) {

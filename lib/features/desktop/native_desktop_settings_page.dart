@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../chat/desktop_image_preview_pref.dart';
 import '../chat/file_download.dart' as file_dl;
-import '../chat/group_info_widgets.dart';
 import '../chat/im_file_save_dir.dart';
 import '../shell/dunes_toast.dart';
 import '../update/app_update_service.dart';
@@ -130,138 +129,297 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
     return Theme(
       data: DunesTheme.light(),
       child: Scaffold(
-        backgroundColor: const Color(0xFFF2F2F2),
+        backgroundColor: const Color(0xFFF7F5FA),
         appBar: AppBar(
-          backgroundColor: const Color(0xFFF2F2F2),
+          backgroundColor: Colors.white,
           elevation: 0,
           scrolledUnderElevation: 0,
+          bottom: const PreferredSize(
+            preferredSize: Size.fromHeight(1),
+            child: Divider(height: 1, color: Color(0xFFEBE5F2)),
+          ),
           leading: IconButton(
             onPressed: widget.onBack,
-            icon: const Icon(Icons.chevron_left_rounded),
-            color: const Color(0xFF191919),
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+            color: const Color(0xFF2C1E3F),
           ),
           title: Text(
-            '设置',
+            '系统设置',
             style: DunesTypography.sans(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF191919),
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF2C1E3F),
             ),
           ),
           centerTitle: true,
         ),
-        body: ListView(
-          children: [
-            const GroupInfoSectionLabel('通用'),
-            if (widget.onOpenTextScale != null)
-              _buildActionRow(
-                icon: Icons.format_size_rounded,
-                title: '字体大小',
-                subtitle: '调整后作用于整个 App',
-                onTap: widget.onOpenTextScale!,
-              ),
-            GroupInfoRow(
-              icon: Icons.folder_outlined,
-              title: '文件保存位置',
-              subtitle: _isCustom ? '自定义目录' : '默认：下载 / 沙丘文件',
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 220),
-                    child: Text(
-                      _pathDisplay,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.right,
-                      style: DunesTypography.sans(
-                        fontSize: 13,
-                        color: const Color(0xFF888888),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 680),
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              children: [
+                _buildCardGroup(
+                  title: '通用偏好',
+                  children: [
+                    if (widget.onOpenTextScale != null)
+                      _buildActionRow(
+                        icon: Icons.format_size_rounded,
+                        iconColor: const Color(0xFF7045B2),
+                        title: '字号调节',
+                        subtitle: '调整后作用于整个客户端应用',
+                        onTap: widget.onOpenTextScale!,
                       ),
+                    _buildSettingsRow(
+                      icon: Icons.folder_outlined,
+                      iconColor: const Color(0xFF3B82F6),
+                      title: '文件保存位置',
+                      subtitle: _isCustom ? '自定义目录' : '默认：下载 / 沙丘文件',
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 240),
+                            child: Text(
+                              _pathDisplay,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.right,
+                              style: DunesTypography.sans(
+                                fontSize: 13,
+                                color: const Color(0xFF7A688F),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.chevron_right_rounded, size: 18, color: Color(0xFFB5A9C4)),
+                        ],
+                      ),
+                      onTap: _busy ? null : _chooseSaveDir,
+                    ),
+                    if (_isCustom)
+                      _buildSettingsRow(
+                        icon: Icons.restart_alt_rounded,
+                        iconColor: const Color(0xFFF59E0B),
+                        title: '恢复默认保存位置',
+                        trailing: const Icon(Icons.chevron_right_rounded, size: 18, color: Color(0xFFB5A9C4)),
+                        onTap: _busy ? null : _resetSaveDir,
+                      ),
+                    _buildSettingsRow(
+                      icon: Icons.photo_outlined,
+                      iconColor: const Color(0xFF10B981),
+                      title: '独立窗口查看图片',
+                      subtitle: _imageExtraWindow
+                          ? '点击图片时弹出额外窗口独立展示'
+                          : '默认在当前会话内直接预览',
+                      trailing: Switch(
+                        value: _imageExtraWindow,
+                        activeThumbColor: const Color(0xFF7045B2),
+                        onChanged: (val) => _setImageExtraWindow(val),
+                      ),
+                      onTap: () => _setImageExtraWindow(!_imageExtraWindow),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                if (widget.onCheckForUpdates != null ||
+                    widget.onOpenReleaseHistory != null ||
+                    widget.onScanWorkstation != null ||
+                    widget.onOpenWechatBot != null ||
+                    widget.onClearCache != null) ...[
+                  _buildCardGroup(
+                    title: '系统版本与维护',
+                    children: [
+                      if (widget.onOpenReleaseHistory != null)
+                        _buildActionRow(
+                          icon: Icons.history_rounded,
+                          iconColor: const Color(0xFF7045B2),
+                          title: '发版历史与更新日志',
+                          subtitle: '${AppUpdateService.platformDisplayName()} 版本记录与详细功能变更',
+                          onTap: widget.onOpenReleaseHistory!,
+                        ),
+                      if (widget.onCheckForUpdates != null)
+                        _buildActionRow(
+                          icon: Icons.system_update_alt_rounded,
+                          iconColor: const Color(0xFF3880FF),
+                          title: '检查客户端更新',
+                          subtitle: '检测是否有新版本发布',
+                          onTap: widget.onCheckForUpdates!,
+                        ),
+                      if (widget.onScanWorkstation != null)
+                        _buildActionRow(
+                          icon: Icons.qr_code_scanner_rounded,
+                          iconColor: const Color(0xFF0EA5E9),
+                          title: '扫码登录工作台',
+                          subtitle: '扫描沙丘工作台二维码快速授权登录',
+                          onTap: widget.onScanWorkstation!,
+                        ),
+                      if (widget.onOpenWechatBot != null)
+                        _buildActionRow(
+                          icon: Icons.chat_rounded,
+                          iconColor: const Color(0xFF10B981),
+                          title: '微信机器人设置',
+                          subtitle: '配置企业微信与群机器人联动',
+                          onTap: widget.onOpenWechatBot!,
+                        ),
+                      if (widget.onClearCache != null)
+                        _buildActionRow(
+                          icon: Icons.cleaning_services_outlined,
+                          iconColor: const Color(0xFF64748B),
+                          title: '清除本地缓存',
+                          subtitle: '清理工作画像、草稿与本地临时存储',
+                          onTap: widget.onClearCache!,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                ],
+
+                if (widget.onLogout != null) ...[
+                  _buildCardGroup(
+                    title: '账号安全',
+                    children: [
+                      _buildActionRow(
+                        icon: Icons.logout_rounded,
+                        iconColor: DunesColors.coral,
+                        title: '退出当前登录',
+                        subtitle: '退出当前账号并返回登录界面',
+                        accentIcon: true,
+                        onTap: widget.onLogout!,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                ],
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  child: Text(
+                    '聊天附件按会话分文件夹保存在上述指定目录中，同一会话的文件直接保存在对应子文件夹下。系统设置将实时自动保存并生效。',
+                    style: DunesTypography.sans(
+                      fontSize: 12,
+                      height: 1.5,
+                      color: const Color(0xFF9E8EAF),
                     ),
                   ),
-                  const GroupInfoChevron(),
-                ],
-              ),
-              onTap: _busy ? null : _chooseSaveDir,
+                ),
+              ],
             ),
-            if (_isCustom)
-              GroupInfoRow(
-                icon: Icons.restart_alt_rounded,
-                title: '恢复默认保存位置',
-                trailing: const GroupInfoChevron(),
-                onTap: _busy ? null : _resetSaveDir,
-              ),
-            GroupInfoRow(
-              icon: Icons.photo_outlined,
-              title: '独立窗口查看图片',
-              subtitle: _imageExtraWindow
-                  ? '点击图片时弹出额外窗口'
-                  : '默认在会话内预览',
-              trailing: GroupInfoToggle(value: _imageExtraWindow),
-              onTap: () => _setImageExtraWindow(!_imageExtraWindow),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardGroup({
+    required String title,
+    required List<Widget> children,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 6, bottom: 8),
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF5D4B72),
             ),
-            if (widget.onCheckForUpdates != null ||
-                widget.onOpenReleaseHistory != null ||
-                widget.onScanWorkstation != null ||
-                widget.onOpenWechatBot != null ||
-                widget.onClearCache != null) ...[
-              const GroupInfoSectionLabel('应用与工具'),
-              if (widget.onCheckForUpdates != null)
-                _buildActionRow(
-                  icon: Icons.system_update_alt_rounded,
-                  title: '检查更新',
-                  onTap: widget.onCheckForUpdates!,
-                ),
-              if (widget.onOpenReleaseHistory != null)
-                _buildActionRow(
-                  icon: Icons.history_rounded,
-                  title: '发版历史',
-                  subtitle:
-                      '${AppUpdateService.platformDisplayName()} 版本记录',
-                  onTap: widget.onOpenReleaseHistory!,
-                ),
-              if (widget.onScanWorkstation != null)
-                _buildActionRow(
-                  icon: Icons.qr_code_scanner_rounded,
-                  title: '扫码登录工作台',
-                  onTap: widget.onScanWorkstation!,
-                ),
-              if (widget.onOpenWechatBot != null)
-                _buildActionRow(
-                  icon: Icons.chat_rounded,
-                  title: '微信 Bot',
-                  onTap: widget.onOpenWechatBot!,
-                ),
-              if (widget.onClearCache != null)
-                _buildActionRow(
-                  icon: Icons.cleaning_services_outlined,
-                  title: '清除本地缓存',
-                  onTap: widget.onClearCache!,
-                ),
-            ],
-            if (widget.onLogout != null) ...[
-              const GroupInfoSectionLabel('账号'),
-              _buildActionRow(
-                icon: Icons.logout_rounded,
-                title: '退出登录',
-                onTap: widget.onLogout!,
-                accentIcon: true,
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFECE4F3), width: 0.8),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF552D8E).withValues(alpha: .04),
+                blurRadius: 12,
+                offset: const Offset(0, 3),
               ),
             ],
-            const GroupInfoSectionLabel(''),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-              child: Text(
-                '聊天附件按会话分文件夹保存在上述目录中，同一会话的文件直接放在该文件夹下。后续通用设置也会放在这里。',
-                style: DunesTypography.sans(
-                  fontSize: 12,
-                  height: 1.45,
-                  color: const Color(0xFF888888),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: children.length,
+              separatorBuilder: (ctx, i) => const Divider(
+                height: 1,
+                indent: 52,
+                endIndent: 16,
+                color: Color(0xFFF3EDF8),
+              ),
+              itemBuilder: (ctx, i) => children[i],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSettingsRow({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    String? subtitle,
+    Widget? trailing,
+    bool accentIcon = false,
+    VoidCallback? onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: .10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, size: 18, color: iconColor),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        color: accentIcon ? DunesColors.coral : const Color(0xFF2C1E3F),
+                      ),
+                    ),
+                    if (subtitle != null && subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: accentIcon
+                              ? DunesColors.coral.withValues(alpha: .8)
+                              : const Color(0xFF8A7A9E),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ),
-          ],
+              ?trailing,
+            ],
+          ),
         ),
       ),
     );
@@ -269,17 +427,23 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
 
   Widget _buildActionRow({
     required IconData icon,
+    required Color iconColor,
     required String title,
     required VoidCallback onTap,
     String? subtitle,
     bool accentIcon = false,
   }) {
-    return GroupInfoRow(
+    return _buildSettingsRow(
       icon: icon,
+      iconColor: iconColor,
       title: title,
       subtitle: subtitle,
       accentIcon: accentIcon,
-      trailing: const GroupInfoChevron(),
+      trailing: const Icon(
+        Icons.chevron_right_rounded,
+        size: 18,
+        color: Color(0xFFB5A9C4),
+      ),
       onTap: onTap,
     );
   }

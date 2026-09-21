@@ -262,22 +262,33 @@ class GlobalSearchFacade {
     var groups = convos.where((c) {
       if (!c.isGroup && !c.isWorkgroupApproval) return false;
       if (q.isEmpty) return true;
-      return c.title.toLowerCase().contains(q) ||
-          c.displayTitle.toLowerCase().contains(q);
+      return c.matchesSearchQuery(q);
     }).toList();
+    var assistants = q.isEmpty
+        ? const <NativeConversation>[]
+        : convos
+              .where(_isSearchableAssistant)
+              .where((c) => c.matchesSearchQuery(q))
+              .toList();
 
-    if (q.isNotEmpty && groups.length < 3) {
+    if (q.isNotEmpty && (groups.length < 3 || assistants.isEmpty)) {
       try {
         final remote = await _withTimeout(
           _conversations.fetchConversations(query: query),
         );
-        final seen = groups.map((c) => c.id).toSet();
+        final seenGroups = groups.map((c) => c.id).toSet();
+        final seenAssistants = assistants.map((c) => '${c.kind}:${c.id}').toSet();
         for (final c in remote) {
-          if (!c.isGroup && !c.isWorkgroupApproval) continue;
-          if (!seen.add(c.id)) continue;
-          if (c.title.toLowerCase().contains(q) ||
-              c.displayTitle.toLowerCase().contains(q)) {
+          if ((c.isGroup || c.isWorkgroupApproval) &&
+              seenGroups.add(c.id) &&
+              c.matchesSearchQuery(q)) {
             groups.add(c);
+            continue;
+          }
+          if (_isSearchableAssistant(c) &&
+              seenAssistants.add('${c.kind}:${c.id}') &&
+              c.matchesSearchQuery(q)) {
+            assistants = [...assistants, c];
           }
         }
       } catch (_) {}
@@ -315,16 +326,18 @@ class GlobalSearchFacade {
     );
 
     if (q.isNotEmpty) {
-      final privateHits = convos
-          .where((c) => c.isPrivate && !c.isSelfMemo)
-          .where(
-            (c) =>
-                c.displayTitle.toLowerCase().contains(q) ||
-                (c.peerDepartment ?? '').toLowerCase().contains(q),
-          )
-          .map(_conversationAsContactHit)
-          .toList(growable: false);
-      if (privateHits.isNotEmpty) {
+      final localContactHits = <GlobalSearchHit>[
+        ...assistants.map(_assistantHit),
+        ...convos
+            .where((c) => c.isPrivate && !c.isSelfMemo)
+            .where(
+              (c) =>
+                  c.matchesSearchQuery(q) ||
+                  (c.peerDepartment ?? '').toLowerCase().contains(q),
+            )
+            .map(_conversationAsContactHit),
+      ];
+      if (localContactHits.isNotEmpty) {
         final existing = _latest.group(GlobalSearchCategory.contacts);
         if (existing.items.isEmpty) {
           _patch(
@@ -333,8 +346,12 @@ class GlobalSearchFacade {
             GlobalSearchGroupState(
               category: GlobalSearchCategory.contacts,
               status: GlobalSearchGroupStatus.loading,
-              items: _limit(privateHits, tab, GlobalSearchCategory.contacts),
-              total: privateHits.length,
+              items: _limit(
+                localContactHits,
+                tab,
+                GlobalSearchCategory.contacts,
+              ),
+              total: localContactHits.length,
             ),
             emit,
           );
@@ -378,6 +395,7 @@ class GlobalSearchFacade {
       );
       return;
     }
+    final assistantHits = _assistantHitsForQuery(query);
     try {
       final org = await _withTimeout(
         _contacts.fetchOrgContacts(keyword: query),
@@ -389,7 +407,7 @@ class GlobalSearchFacade {
         );
       } catch (_) {}
       final seen = <int>{};
-      final hits = <GlobalSearchHit>[];
+      final hits = <GlobalSearchHit>[...assistantHits];
       for (final c in [...org.searchItems, ...external]) {
         if (c.userId <= 0 || c.userId == session.userId) continue;
         if (!seen.add(c.userId)) continue;
@@ -407,6 +425,20 @@ class GlobalSearchFacade {
         emit,
       );
     } catch (e) {
+      if (assistantHits.isNotEmpty) {
+        _patch(
+          seq,
+          GlobalSearchCategory.contacts,
+          GlobalSearchGroupState(
+            category: GlobalSearchCategory.contacts,
+            status: GlobalSearchGroupStatus.ready,
+            items: _limit(assistantHits, tab, GlobalSearchCategory.contacts),
+            total: assistantHits.length,
+          ),
+          emit,
+        );
+        return;
+      }
       _fail(seq, GlobalSearchCategory.contacts, e, emit);
     }
   }
@@ -793,6 +825,41 @@ class GlobalSearchFacade {
     );
   }
 
+  bool _isSearchableAssistant(NativeConversation c) {
+    return c.isImAssistant && !c.dissolved;
+  }
+
+  List<GlobalSearchHit> _assistantHitsForQuery(String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return const [];
+    final local = _localConversations()
+        .where(_isSearchableAssistant)
+        .where((c) => c.matchesSearchQuery(q))
+        .map(_assistantHit)
+        .toList();
+    final seen = local.map((h) => h.id).toSet();
+    for (final hit in _latest.group(GlobalSearchCategory.contacts).items) {
+      if (hit.kind != GlobalSearchHitKind.conversation) continue;
+      final raw = hit.raw;
+      if (raw is! NativeConversation || !_isSearchableAssistant(raw)) continue;
+      if (!seen.add(hit.id)) continue;
+      local.add(hit);
+    }
+    return local;
+  }
+
+  GlobalSearchHit _assistantHit(NativeConversation c) {
+    final preview = c.preview.trim();
+    return GlobalSearchHit(
+      kind: GlobalSearchHitKind.conversation,
+      id: 'assistant:${c.kind}:${c.id}',
+      title: c.inboxDisplayTitle,
+      subtitle: preview.isEmpty ? '助手' : preview,
+      time: c.updatedAt,
+      raw: c,
+    );
+  }
+
   GlobalSearchHit _conversationAsContactHit(NativeConversation c) {
     return GlobalSearchHit(
       kind: GlobalSearchHitKind.conversation,
@@ -929,7 +996,12 @@ class GlobalSearchFacade {
     final rows = <GlobalMessageHit>[];
     for (final c in convos) {
       if (c.id <= 0) continue;
-      if (!c.isPrivate && !c.isGroup && !c.isWorkgroupApproval) continue;
+      if (!c.isPrivate &&
+          !c.isGroup &&
+          !c.isWorkgroupApproval &&
+          !c.isImAssistant) {
+        continue;
+      }
       if (!c.preview.toLowerCase().contains(q)) continue;
       rows.add(_hitFromPreview(c));
     }
@@ -949,7 +1021,7 @@ class GlobalSearchFacade {
     }
     return GlobalMessageHit(
       conversationId: c.id,
-      conversationTitle: c.displayTitle,
+      conversationTitle: c.isImAssistant ? c.inboxDisplayTitle : c.displayTitle,
       messageId: 0,
       senderName: sender,
       senderUserId: c.peerUserId ?? 0,

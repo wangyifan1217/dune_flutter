@@ -8,7 +8,9 @@ import 'app_update_service.dart';
 
 /// 「我的」中的发版历史：仅展示当前运行平台对应的记录。
 class AppReleaseHistoryPage extends StatefulWidget {
-  const AppReleaseHistoryPage({super.key});
+  const AppReleaseHistoryPage({super.key, this.onBack});
+
+  final VoidCallback? onBack;
 
   @override
   State<AppReleaseHistoryPage> createState() => _AppReleaseHistoryPageState();
@@ -88,7 +90,7 @@ class _AppReleaseHistoryPageState extends State<AppReleaseHistoryPage> {
           elevation: 0,
           scrolledUnderElevation: 0,
           leading: IconButton(
-            onPressed: () => Navigator.of(context).maybePop(),
+            onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
             icon: const Icon(Icons.chevron_left_rounded, size: 28),
           ),
           title: Text(

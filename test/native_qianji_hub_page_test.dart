@@ -24,6 +24,7 @@ void main() {
             onOpenCashFlow: () => cashFlowTapped = true,
             onOpenMonthlyBill: () => monthlyBillTapped = true,
             onOpenTravel: () {},
+            onOpenTravelImport: () {},
           ),
         ),
       ),
@@ -36,8 +37,12 @@ void main() {
     expect(find.text('资金流向'), findsOneWidget);
     expect(find.text('月结'), findsOneWidget);
     expect(find.text('差旅管理'), findsOneWidget);
+    expect(find.text('列表'), findsOneWidget);
+    expect(find.text('资金看板'), findsOneWidget);
 
-    // 2. Supervise Grid (Alipay 4-col grid style)
+    // 2. Supervise Grid split: 组织汇总 / 业务查阅
+    expect(find.text('组织汇总'), findsOneWidget);
+    expect(find.text('业务查阅'), findsOneWidget);
     expect(find.text('工作情况'), findsOneWidget);
     expect(find.text('使用热力'), findsOneWidget);
     expect(find.text('本人及下级'), findsWidgets);

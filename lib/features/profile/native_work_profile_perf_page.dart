@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/dunes_month_picker.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../kpi/kpi_metric_list.dart';
 import '../shell/dunes_toast.dart';
+import 'work_profile_controls.dart';
 import 'work_profile_kpi.dart';
 
 const _perfAccent = Color(0xFF8C5A91);
@@ -154,13 +156,12 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
   }
 
   Future<void> _pickMonth() async {
-    final picked = await showDatePicker(
+    final picked = await showDunesMonthPicker(
       context: context,
-      initialDate: _month,
-      firstDate: _earliestMonth,
-      lastDate: _currentMonth,
-      helpText: '选择月份',
-      initialDatePickerMode: DatePickerMode.year,
+      initialMonth: _month,
+      firstMonth: _earliestMonth,
+      lastMonth: _currentMonth,
+      title: '选择月份',
     );
     if (picked == null || !mounted) return;
     setState(() => _month = kpiMonthStart(picked));
@@ -261,13 +262,16 @@ class _NativeWorkProfilePerfPageState extends State<NativeWorkProfilePerfPage> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
                 children: [
-                  _MonthBar(
+                  WorkProfileMonthBar(
                     label: formatKpiMonthLabel(_month),
                     canPrev: canPrev,
                     canNext: canNext,
                     onPrev: () => _shiftMonth(-1),
                     onNext: () => _shiftMonth(1),
                     onPick: _pickMonth,
+                    monthKey: const Key('work-profile-perf-month'),
+                    prevKey: const Key('work-profile-perf-month-prev'),
+                    nextKey: const Key('work-profile-perf-month-next'),
                   ),
                   const SizedBox(height: 12),
                   if (_loading)
@@ -421,69 +425,6 @@ class _KpiAppealDialogState extends State<_KpiAppealDialog> {
           child: const Text('提交'),
         ),
       ],
-    );
-  }
-}
-
-class _MonthBar extends StatelessWidget {
-  const _MonthBar({
-    required this.label,
-    required this.canPrev,
-    required this.canNext,
-    required this.onPrev,
-    required this.onNext,
-    required this.onPick,
-  });
-
-  final String label;
-  final bool canPrev;
-  final bool canNext;
-  final VoidCallback onPrev;
-  final VoidCallback onNext;
-  final VoidCallback onPick;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE6DCF0)),
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            key: const Key('work-profile-perf-month-prev'),
-            tooltip: '上个月',
-            onPressed: canPrev ? onPrev : null,
-            icon: const Icon(Icons.chevron_left_rounded),
-            color: const Color(0xFF4A3866),
-          ),
-          Expanded(
-            child: TextButton(
-              key: const Key('work-profile-perf-month'),
-              onPressed: onPick,
-              child: Text(
-                label,
-                textAlign: TextAlign.center,
-                style: DunesTypography.sans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF312249),
-                ),
-              ),
-            ),
-          ),
-          IconButton(
-            key: const Key('work-profile-perf-month-next'),
-            tooltip: '下个月',
-            onPressed: canNext ? onNext : null,
-            icon: const Icon(Icons.chevron_right_rounded),
-            color: const Color(0xFF4A3866),
-          ),
-        ],
-      ),
     );
   }
 }

@@ -1,13 +1,16 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'native_task_hrbp_pane.dart';
+import 'native_task_import_section.dart';
 import 'task_api.dart';
 import 'task_management_api.dart';
 import 'task_models.dart';
@@ -73,8 +76,12 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
   Uint8List? _selectedFileBytes;
   String _importKind = 'task';
   TaskImportPreview? _preview;
+  TaskImportCommitResult? _commitResult;
+  TaskImportEmployee? _importEmployee;
   bool _previewing = false;
   bool _committing = false;
+  bool _importDragging = false;
+  bool _downloadingTemplate = false;
 
   bool get _canPending => widget.session.taskPendingAccess;
 
@@ -121,6 +128,7 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
       _section = section;
       _error = null;
       _preview = null;
+      _commitResult = null;
     });
     switch (section) {
       case TaskManagementSection.pending:
@@ -302,17 +310,105 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
       ],
     );
     if (file == null) return;
+    await _acceptImportFile(
+      bytes: await file.readAsBytes(),
+      fileName: file.name,
+    );
+  }
+
+  Future<void> _onImportDropped(List<DropItem> files) async {
+    setState(() => _importDragging = false);
+    XFile? picked;
+    for (final item in files) {
+      if (item is DropItemDirectory) continue;
+      picked = XFile(item.path, name: item.name);
+      break;
+    }
+    if (picked == null) {
+      _showMessage('请拖入 Excel 或 CSV 文件', error: true);
+      return;
+    }
+    final name = picked.name.toLowerCase();
+    if (!name.endsWith('.xlsx') && !name.endsWith('.csv')) {
+      _showMessage('仅支持 .xlsx / .csv 文件', error: true);
+      return;
+    }
+    await _acceptImportFile(
+      bytes: await picked.readAsBytes(),
+      fileName: picked.name,
+    );
+  }
+
+  Future<void> _acceptImportFile({
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
     try {
-      final bytes = await file.readAsBytes();
       if (!mounted) return;
       setState(() {
-        _selectedFileName = file.name;
+        _selectedFileName = fileName;
         _selectedFileBytes = bytes;
         _preview = null;
+        _commitResult = null;
         _error = null;
       });
     } catch (e) {
-      if (mounted) _showMessage('读取文件失败：$e', error: true);
+      if (mounted) {
+        _showMessage(
+          '读取文件失败：${friendlyErrorText(e, fallback: '无法读取文件')}',
+          error: true,
+        );
+      }
+    }
+  }
+
+  Future<void> _pickImportEmployee() async {
+    final picked = await showTaskImportEmployeePicker(
+      context,
+      session: widget.session,
+      search: _managementApi.searchImportEmployees,
+    );
+    if (picked == null || !mounted) return;
+    try {
+      final detail = await _managementApi.lookupImportEmployee(picked.id);
+      if (!mounted) return;
+      setState(() {
+        _importEmployee = detail;
+        _preview = null;
+        _commitResult = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      _showMessage(friendlyErrorText(e, fallback: '读取员工试用期信息失败'), error: true);
+    }
+  }
+
+  Future<void> _downloadImportTemplate() async {
+    setState(() => _downloadingTemplate = true);
+    try {
+      final bytes = await _managementApi.downloadImportTemplate(_importKind);
+      final name = _importKind == 'probation' ? '试用期目标模板.xlsx' : '任务导入模板.xlsx';
+      final location = await getSaveLocation(
+        suggestedName: name,
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'Excel', extensions: <String>['xlsx']),
+        ],
+      );
+      if (location == null) return;
+      final file = XFile.fromData(
+        bytes,
+        mimeType:
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        name: name,
+      );
+      await file.saveTo(location.path);
+      if (mounted) _showMessage('模板已保存');
+    } catch (e) {
+      if (mounted) {
+        _showMessage(friendlyErrorText(e, fallback: '下载模板失败'), error: true);
+      }
+    } finally {
+      if (mounted) setState(() => _downloadingTemplate = false);
     }
   }
 
@@ -323,20 +419,28 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
       _showMessage('请先选择 Excel 文件', error: true);
       return;
     }
+    if (_importKind == 'probation' && (_importEmployee?.id ?? 0) <= 0) {
+      _showMessage('请先选择试用期员工', error: true);
+      return;
+    }
     setState(() {
       _previewing = true;
       _error = null;
+      _commitResult = null;
     });
     try {
       final preview = await _managementApi.previewImport(
         bytes: bytes,
         fileName: fileName,
         importKind: _importKind,
+        targetUserId: _importEmployee?.id,
       );
       if (!mounted) return;
       setState(() => _preview = preview);
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) {
+        _showMessage(friendlyErrorText(e, fallback: '预览校验失败'), error: true);
+      }
     } finally {
       if (mounted) setState(() => _previewing = false);
     }
@@ -344,25 +448,27 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
 
   Future<void> _commitImport() async {
     final importId = _preview?.importId.trim() ?? '';
-    if (importId.isEmpty) {
+    if (importId.isEmpty || _preview?.canCommit != true) {
       _showMessage('当前预览结果不可提交', error: true);
       return;
     }
     setState(() => _committing = true);
     try {
-      await _managementApi.commitImport(importId);
+      final result = await _managementApi.commitImport(importId);
       if (!mounted) return;
       setState(() {
         _committing = false;
         _selectedFileName = null;
         _selectedFileBytes = null;
         _preview = null;
+        _commitResult = result;
       });
-      _showMessage('导入任务已提交');
+      _showMessage(result.summary);
+      if (_canHistory) unawaited(_loadHistory());
     } catch (e) {
       if (!mounted) return;
       setState(() => _committing = false);
-      _showMessage('提交导入失败：$e', error: true);
+      _showMessage(friendlyErrorText(e, fallback: '提交导入失败'), error: true);
     }
   }
 
@@ -459,7 +565,8 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
+    return TaskTheme(
+      child: ColoredBox(
       color: const Color(0xFFF5F6F8),
       child: Column(
         children: [
@@ -467,6 +574,7 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
           Expanded(child: _buildBody()),
         ],
       ),
+    ),
     );
   }
 
@@ -762,11 +870,7 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
         ),
         Expanded(
           child: _rules.isEmpty
-              ? _emptyState(
-                  Icons.repeat_rounded,
-                  '暂无周期任务',
-                  '创建后将在下一周期生成任务。',
-                )
+              ? _emptyState(Icons.repeat_rounded, '暂无周期任务', '创建后将在下一周期生成任务。')
               : ListView.separated(
                   padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
                   itemCount: _rules.length,
@@ -894,7 +998,9 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
                   onSelected: (value) {
                     if (value == 'toggle') unawaited(_toggleRule(rule));
                     if (value == 'execute') unawaited(_executeRule(rule));
-                    if (value == 'history') unawaited(_showRuleExecutions(rule));
+                    if (value == 'history') {
+                      unawaited(_showRuleExecutions(rule));
+                    }
                   },
                   itemBuilder: (context) => [
                     PopupMenuItem(
@@ -949,7 +1055,7 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
           title: '日报提醒',
           child: Column(
             children: [
-              SwitchListTile.adaptive(
+              SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('开启日报提醒'),
                 value: _reportReminderEnabled,
@@ -970,22 +1076,24 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
           title: '任务规则',
           child: Column(
             children: [
-              SwitchListTile.adaptive(
+              SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('允许使用周期任务'),
                 value: _recurringTaskEnabled,
                 onChanged: (value) =>
                     setState(() => _recurringTaskEnabled = value),
               ),
-              SwitchListTile.adaptive(
+              SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('启用任务变更审批'),
-                subtitle: const Text('修改标题、内容、截止日或负责人时，由发起人直属上级一级审批；无直属上级则当场生效'),
+                subtitle: const Text(
+                  '修改标题、内容、截止日或负责人时，由发起人直属上级一级审批；无直属上级则当场生效',
+                ),
                 value: _taskApprovalEnabled,
                 onChanged: (value) =>
                     setState(() => _taskApprovalEnabled = value),
               ),
-              SwitchListTile.adaptive(
+              SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('指派需要接收确认'),
                 subtitle: const Text('仅新建子目标指派他人时生效；运行中转派走直属上级审批'),
@@ -1000,10 +1108,13 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
         FilledButton.icon(
           onPressed: _saving ? null : _saveConfig,
           icon: _saving
-              ? const SizedBox(
+                ? const SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 )
               : const Icon(Icons.save_outlined),
           label: const Text('保存任务配置'),
@@ -1103,11 +1214,14 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
                 FilledButton.icon(
                   onPressed: _syncingCalendar ? null : _syncCalendar,
                   icon: _syncingCalendar
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
                       : const Icon(Icons.sync_rounded),
                   label: Text(_syncingCalendar ? '同步中…' : '同步节假日'),
                 ),
@@ -1184,9 +1298,21 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
   }
 
   Widget _calendarFilterChip(String value, String label) {
+    final selected = _calendarFilter == value;
     return ChoiceChip(
       label: Text(label),
-      selected: _calendarFilter == value,
+      selected: selected,
+      selectedColor: kTaskPurple.withValues(alpha: 0.14),
+      checkmarkColor: kTaskPurple,
+      labelStyle: TextStyle(
+        color: selected ? kTaskPurple : DunesColors.text2,
+        fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+      ),
+      side: BorderSide(
+        color: selected
+            ? kTaskPurple.withValues(alpha: 0.45)
+            : const Color(0xFFE8EAED),
+      ),
       onSelected: (_) => setState(() => _calendarFilter = value),
     );
   }
@@ -1220,104 +1346,158 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
 
   Widget _buildImport() {
     final preview = _preview;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
-      children: [
-        const Text(
-          '选择任务或试用期任务模板，先校验再提交，不会直接修改现有任务。',
-          style: TextStyle(fontSize: 13, color: DunesColors.text3, height: 1.4),
-        ),
-        const SizedBox(height: 14),
-        Wrap(
-          spacing: 8,
-          children: [
-            ChoiceChip(
-              label: const Text('任务'),
-              selected: _importKind == 'task',
-              onSelected: (_) => setState(() {
-                _importKind = 'task';
-                _preview = null;
-              }),
+    final result = _commitResult;
+    final busy = _previewing || _committing || _downloadingTemplate;
+    return TaskImportDropHost(
+      enabled: !busy,
+      onDragging: (value) {
+        if (_importDragging != value) setState(() => _importDragging = value);
+      },
+      onDropped: (files) => unawaited(_onImportDropped(files)),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
+        children: [
+          Text(
+            _importKind == 'probation'
+                ? '先选择试用期员工并下载目标模板，校验通过后再创建主任务和验收子任务。'
+                : '选择任务模板后先预览校验，再确认写入任务数据。',
+            style: const TextStyle(
+              fontSize: 13,
+              color: DunesColors.text3,
+              height: 1.4,
             ),
-            ChoiceChip(
-              label: const Text('试用期任务'),
-              selected: _importKind == 'probation',
-              onSelected: (_) => setState(() {
-                _importKind = 'probation';
-                _preview = null;
-              }),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: TaskImportKindTabs(
+                  kind: _importKind,
+                  onChanged: (kind) => setState(() {
+                    _importKind = kind;
+                    _preview = null;
+                    _commitResult = null;
+                  }),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: busy
+                    ? null
+                    : () => unawaited(_downloadImportTemplate()),
+                icon: _downloadingTemplate
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.download_outlined, size: 18),
+                label: const Text('下载模板'),
+                style: TextButton.styleFrom(foregroundColor: kTaskPurple),
+              ),
+            ],
+          ),
+          if (_importKind == 'probation') ...[
+            const SizedBox(height: 12),
+            TaskImportEmployeeCard(
+              session: widget.session,
+              employee: _importEmployee,
+              onPick: () => unawaited(_pickImportEmployee()),
             ),
           ],
-        ),
-        const SizedBox(height: 14),
-        Card(
-          elevation: 0,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                const Icon(Icons.table_chart_outlined, color: kTaskPurple),
-                const SizedBox(width: 10),
-                Expanded(
+          const SizedBox(height: 12),
+          TaskImportDropZone(
+            fileName: _selectedFileName,
+            dragging: _importDragging,
+            busy: busy,
+            onPick: () => unawaited(_pickImportFile()),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            style: taskImportFilledStyle(),
+            onPressed: busy ? null : () => unawaited(_previewImport()),
+            icon: _previewing
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.fact_check_outlined),
+            label: const Text('预览并校验'),
+          ),
+          if (preview != null) ...[
+            const SizedBox(height: 16),
+            TaskImportPreviewStats(preview: preview),
+            if (preview.parentCount > 0 || preview.childCount > 0) ...[
+              const SizedBox(height: 8),
+              Text(
+                '将创建 ${preview.parentCount} 项主任务、${preview.childCount} 项验收目标'
+                '${preview.targetUserName.isEmpty ? '' : '，负责人 ${preview.targetUserName}'}'
+                '${preview.periodLabel.isEmpty ? '' : ' · ${preview.periodLabel}'}',
+                style: const TextStyle(fontSize: 12, color: DunesColors.text2),
+              ),
+            ],
+            if (preview.warnings.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              for (final warning in preview.warnings)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
                   child: Text(
-                    _selectedFileName ?? '尚未选择 Excel 文件',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    warning,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFFB45309),
+                    ),
                   ),
                 ),
-                OutlinedButton(
-                  onPressed: _pickImportFile,
-                  child: const Text('选择文件'),
+            ],
+            if (preview.errors.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              for (final error in preview.errors.take(12))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    '• $error',
+                    style: const TextStyle(color: Color(0xFFBE123C)),
+                  ),
                 ),
-              ],
+            ],
+            const SizedBox(height: 12),
+            FilledButton(
+              style: taskImportFilledStyle(),
+              onPressed: busy || !preview.canCommit
+                  ? null
+                  : () => unawaited(_commitImport()),
+              child: Text(_committing ? '提交中…' : '确认导入'),
             ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        FilledButton.icon(
-          onPressed: _previewing ? null : _previewImport,
-          icon: _previewing
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.fact_check_outlined),
-          label: const Text('预览并校验'),
-        ),
-        if (preview != null) ...[
-          const SizedBox(height: 14),
-          _configCard(
-            title: '校验结果',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '共 ${preview.total} 行 · ${preview.valid} 行可导入 · ${preview.invalid} 行有错误',
-                ),
-                if (preview.errors.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  for (final error in preview.errors.take(8))
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        '• $error',
-                        style: const TextStyle(color: Colors.redAccent),
+          ],
+          if (result != null) ...[
+            const SizedBox(height: 16),
+            _configCard(
+              title: '导入结果',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(result.summary),
+                  if (result.errors.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    for (final error in result.errors.take(8))
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          '• $error',
+                          style: const TextStyle(color: Color(0xFFBE123C)),
+                        ),
                       ),
-                    ),
+                  ],
                 ],
-                const SizedBox(height: 10),
-                FilledButton(
-                  onPressed: _committing || preview.invalid > 0
-                      ? null
-                      : _commitImport,
-                  child: Text(_committing ? '提交中…' : '确认导入'),
-                ),
-              ],
+              ),
             ),
-          ),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -1338,9 +1518,13 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
             title: Text(item.fileName.isEmpty ? '未命名文件' : item.fileName),
             subtitle: Text(
               [
-                if (item.importKind.isNotEmpty) item.importKind,
+                item.kindLabel,
+                if (item.targetUserName.isNotEmpty) item.targetUserName,
                 if (item.createdAt.isNotEmpty) item.createdAt,
-                if (item.total > 0) '${item.total} 行',
+                if (item.parentCount > 0)
+                  '${item.parentCount} 主任务'
+                else if (item.total > 0)
+                  '${item.total} 行',
               ].join(' · '),
             ),
             trailing: _statusPill(

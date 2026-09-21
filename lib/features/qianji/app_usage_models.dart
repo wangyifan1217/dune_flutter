@@ -1,3 +1,5 @@
+import '../../core/analytics/usage_module_map.dart';
+
 class AppUsageHeatmap {
   const AppUsageHeatmap({
     required this.from,
@@ -266,6 +268,56 @@ List<T> _list<T>(
       .whereType<Map>()
       .map((e) => map(Map<String, dynamic>.from(e)))
       .toList(growable: false);
+}
+
+String usagePageStayLabel(AppUsagePageStay page) {
+  return usagePageLabel(screenId: page.screenId, screenName: page.screenName);
+}
+
+/// 同一展示名合并停留，避免 C4/QJ 都叫「小饕」时拆成两条。
+List<AppUsagePageStay> groupedUsagePages(List<AppUsagePageStay> pages) {
+  if (pages.length <= 1) {
+    return [
+      for (final page in pages)
+        AppUsagePageStay(
+          screenId: page.screenId,
+          screenName: usagePageStayLabel(page),
+          moduleKey: page.moduleKey,
+          uv: page.uv,
+          pv: page.pv,
+          durationMs: page.durationMs,
+        ),
+    ];
+  }
+  final grouped = <String, AppUsagePageStay>{};
+  final order = <String>[];
+  for (final page in pages) {
+    final label = usagePageStayLabel(page);
+    final existing = grouped[label];
+    if (existing == null) {
+      grouped[label] = AppUsagePageStay(
+        screenId: page.screenId,
+        screenName: label,
+        moduleKey: page.moduleKey,
+        uv: page.uv,
+        pv: page.pv,
+        durationMs: page.durationMs,
+      );
+      order.add(label);
+      continue;
+    }
+    grouped[label] = AppUsagePageStay(
+      screenId: existing.screenId,
+      screenName: label,
+      moduleKey: existing.moduleKey,
+      uv: existing.uv + page.uv,
+      pv: existing.pv + page.pv,
+      durationMs: existing.durationMs + page.durationMs,
+    );
+  }
+  final merged = [for (final key in order) grouped[key]!];
+  merged.sort((a, b) => b.durationMs.compareTo(a.durationMs));
+  return merged;
 }
 
 String formatUsageStay(int durationMs) {

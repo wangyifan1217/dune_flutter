@@ -6,11 +6,13 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
+import '../../core/widgets/dunes_month_picker.dart';
 import '../auth/auth_session.dart';
+import '../profile/work_profile_controls.dart';
 import '../shell/dunes_toast.dart';
 import 'payroll_report_service.dart';
 
-const _payrollAccent = Color(0xFF3D7A8C);
+const _payrollAccent = Color(0xFF7B5CD8);
 const _identityTokens = [
   '姓名',
   '人员',
@@ -267,6 +269,18 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
       '${_month.year.toString().padLeft(4, '0')}${_month.month.toString().padLeft(2, '0')}';
   String get _monthLabel => '${_month.year}年${_month.month}月';
 
+  DateTime get _firstMonth {
+    final now = widget.now ?? DateTime.now();
+    return DateTime(now.year - 5, 1);
+  }
+
+  DateTime get _lastMonth {
+    final now = widget.now ?? DateTime.now();
+    return DateTime(now.year, now.month);
+  }
+
+  bool get _monthLocked => _busy || _loadingSheets;
+
   @override
   void initState() {
     super.initState();
@@ -350,17 +364,24 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
   }
 
   Future<void> _pickMonth() async {
-    final now = widget.now ?? DateTime.now();
-    final picked = await showDialog<DateTime>(
+    final picked = await showDunesMonthPicker(
       context: context,
-      builder: (context) => _PayrollMonthPickerDialog(
-        initial: _month,
-        firstMonth: DateTime(now.year - 5, 1),
-        lastMonth: DateTime(now.year, now.month),
-      ),
+      initialMonth: _month,
+      firstMonth: _firstMonth,
+      lastMonth: _lastMonth,
+      title: '选择工资月份',
+      accent: _payrollAccent,
     );
     if (picked == null || !mounted) return;
     setState(() => _month = DateTime(picked.year, picked.month));
+    await _loadSheets();
+  }
+
+  Future<void> _shiftMonth(int delta) async {
+    if (_monthLocked) return;
+    final next = DateTime(_month.year, _month.month + delta);
+    if (next.isBefore(_firstMonth) || next.isAfter(_lastMonth)) return;
+    setState(() => _month = DateTime(next.year, next.month));
     await _loadSheets();
   }
 
@@ -468,7 +489,7 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFFF7F8FA),
+      color: const Color(0xFFF8F5FC),
       child: Column(
         children: [
           Padding(
@@ -476,64 +497,74 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                WorkProfileMonthBar(
+                  label: _monthLabel,
+                  canPrev:
+                      DateTime(
+                        _month.year,
+                        _month.month - 1,
+                      ).compareTo(_firstMonth) >=
+                      0,
+                  canNext:
+                      DateTime(
+                        _month.year,
+                        _month.month + 1,
+                      ).compareTo(_lastMonth) <=
+                      0,
+                  onPrev: () => unawaited(_shiftMonth(-1)),
+                  onNext: () => unawaited(_shiftMonth(1)),
+                  onPick: _monthLocked ? () {} : _pickMonth,
+                  loading: _busy,
+                  monthKey: const Key('payroll-month'),
+                  prevKey: const Key('payroll-month-prev'),
+                  nextKey: const Key('payroll-month-next'),
+                ),
+                const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    TextButton.icon(
-                      key: const Key('payroll-month'),
-                      onPressed: _busy ? null : _pickMonth,
-                      icon: const Icon(Icons.calendar_month_outlined, size: 18),
-                      label: Text(_monthLabel),
-                    ),
-                    FilledButton.icon(
+                    _PayrollToolbarChip(
                       key: const Key('payroll-sync'),
+                      icon: Icons.sync_rounded,
+                      label: '同步',
+                      filled: true,
                       onPressed: _busy ? null : () => unawaited(_sync()),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: _payrollAccent,
-                      ),
-                      icon: const Icon(Icons.sync_rounded, size: 18),
-                      label: const Text('同步'),
                     ),
-                    OutlinedButton.icon(
+                    _PayrollToolbarChip(
                       key: const Key('payroll-export'),
+                      icon: Icons.download_outlined,
+                      label: '导出',
                       onPressed: _busy || _selected == null
                           ? null
                           : () => unawaited(_export()),
-                      icon: const Icon(Icons.download_outlined, size: 18),
-                      label: const Text('导出'),
                     ),
-                    FilterChip(
+                    _PayrollToolbarChip(
                       key: const Key('payroll-group-dept'),
-                      label: const Text('按部门'),
+                      label: '按部门',
                       selected: _groupByDept,
-                      visualDensity: VisualDensity.compact,
-                      selectedColor: _payrollAccent.withValues(alpha: 0.16),
-                      checkmarkColor: _payrollAccent,
-                      onSelected: (value) =>
-                          setState(() => _groupByDept = value),
+                      onPressed: _busy
+                          ? null
+                          : () => setState(() => _groupByDept = !_groupByDept),
                     ),
-                    FilterChip(
+                    _PayrollToolbarChip(
                       key: const Key('payroll-view-list'),
-                      label: const Text('列表'),
+                      label: '列表',
                       selected: _listView,
-                      visualDensity: VisualDensity.compact,
-                      selectedColor: _payrollAccent.withValues(alpha: 0.16),
-                      checkmarkColor: _payrollAccent,
-                      onSelected: (value) => setState(() => _listView = value),
+                      onPressed: _busy
+                          ? null
+                          : () => setState(() => _listView = !_listView),
                     ),
-                    ActionChip(
+                    _PayrollToolbarChip(
                       key: const Key('payroll-sort'),
-                      avatar: Icon(
-                        _sortDesc
-                            ? Icons.arrow_downward_rounded
-                            : Icons.arrow_upward_rounded,
-                        size: 16,
-                        color: _payrollAccent,
-                      ),
-                      label: Text(_sortDesc ? '成本高→低' : '成本低→高'),
-                      onPressed: () => setState(() => _sortDesc = !_sortDesc),
+                      icon: _sortDesc
+                          ? Icons.arrow_downward_rounded
+                          : Icons.arrow_upward_rounded,
+                      label: _sortDesc ? '成本高→低' : '成本低→高',
+                      onPressed: _busy
+                          ? null
+                          : () => setState(() => _sortDesc = !_sortDesc),
                     ),
                     if (_busy)
                       const SizedBox(
@@ -552,9 +583,21 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
                     isDense: true,
                     filled: true,
                     fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: Color(0xFFE6DCF0)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: Color(0xFFE6DCF0)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: Color(0xFFC2AEE7)),
                     ),
                   ),
                 ),
@@ -567,15 +610,12 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
                         for (final sheet in _sheets)
                           Padding(
                             padding: const EdgeInsets.only(right: 8),
-                            child: ChoiceChip(
-                              label: Text(sheet.name),
+                            child: _PayrollToolbarChip(
+                              label: sheet.name,
                               selected: sheet == _selected,
-                              selectedColor: _payrollAccent.withValues(
-                                alpha: 0.16,
-                              ),
-                              onSelected: _busy
+                              onPressed: _busy
                                   ? null
-                                  : (_) {
+                                  : () {
                                       setState(() => _selected = sheet);
                                       unawaited(_loadRows());
                                     },
@@ -761,7 +801,7 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5ECEE)),
+        border: Border.all(color: const Color(0xFFE6DCF0)),
       ),
       child: Row(
         children: [
@@ -874,10 +914,10 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE5ECEE)),
+        border: Border.all(color: const Color(0xFFE6DCF0)),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x0D20343A),
+            color: Color(0x0D6B5882),
             blurRadius: 12,
             offset: Offset(0, 4),
           ),
@@ -965,128 +1005,72 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
   }
 }
 
-class _PayrollMonthPickerDialog extends StatefulWidget {
-  const _PayrollMonthPickerDialog({
-    required this.initial,
-    required this.firstMonth,
-    required this.lastMonth,
+class _PayrollToolbarChip extends StatelessWidget {
+  const _PayrollToolbarChip({
+    super.key,
+    required this.label,
+    this.icon,
+    this.selected = false,
+    this.filled = false,
+    required this.onPressed,
   });
 
-  final DateTime initial;
-  final DateTime firstMonth;
-  final DateTime lastMonth;
-
-  @override
-  State<_PayrollMonthPickerDialog> createState() =>
-      _PayrollMonthPickerDialogState();
-}
-
-class _PayrollMonthPickerDialogState extends State<_PayrollMonthPickerDialog> {
-  late int _year;
-
-  @override
-  void initState() {
-    super.initState();
-    _year = widget.initial.year.clamp(
-      widget.firstMonth.year,
-      widget.lastMonth.year,
-    );
-  }
-
-  bool _canSelect(int year, int month) {
-    final value = year * 100 + month;
-    return value >= widget.firstMonth.year * 100 + widget.firstMonth.month &&
-        value <= widget.lastMonth.year * 100 + widget.lastMonth.month;
-  }
+  final String label;
+  final IconData? icon;
+  final bool selected;
+  final bool filled;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('选择工资月份'),
-      content: SizedBox(
-        width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  tooltip: '上一年',
-                  onPressed: _year <= widget.firstMonth.year
-                      ? null
-                      : () => setState(() => _year--),
-                  icon: const Icon(Icons.chevron_left_rounded),
-                ),
-                Expanded(
-                  child: Text(
-                    '$_year年',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  tooltip: '下一年',
-                  onPressed: _year >= widget.lastMonth.year
-                      ? null
-                      : () => setState(() => _year++),
-                  icon: const Icon(Icons.chevron_right_rounded),
-                ),
+    final enabled = onPressed != null;
+    final Color background;
+    final Color foreground;
+    final Color border;
+    if (filled) {
+      background = enabled ? _payrollAccent : _payrollAccent.withValues(alpha: 0.4);
+      foreground = Colors.white;
+      border = background;
+    } else if (selected) {
+      background = const Color(0xFFF6F0FC);
+      foreground = const Color(0xFF6B46A8);
+      border = const Color(0xFFD2BBE8);
+    } else {
+      background = Colors.white;
+      foreground = const Color(0xFF5D536B);
+      border = const Color(0xFFE6DCF0);
+    }
+    return Material(
+      color: background,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onPressed,
+        child: Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 16, color: foreground),
+                const SizedBox(width: 4),
               ],
-            ),
-            const SizedBox(height: 8),
-            GridView.count(
-              shrinkWrap: true,
-              crossAxisCount: 4,
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-              childAspectRatio: 1.7,
-              children: [
-                for (var month = 1; month <= 12; month++) _monthCell(month),
-              ],
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-      ],
-    );
-  }
-
-  Widget _monthCell(int month) {
-    final enabled = _canSelect(_year, month);
-    final selected =
-        _year == widget.initial.year && month == widget.initial.month;
-    return InkWell(
-      onTap: enabled
-          ? () => Navigator.pop(context, DateTime(_year, month))
-          : null,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected
-              ? _payrollAccent
-              : enabled
-              ? _payrollAccent.withValues(alpha: 0.08)
-              : const Color(0xFFF3F4F6),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          '$month月',
-          style: TextStyle(
-            color: selected
-                ? Colors.white
-                : enabled
-                ? DunesColors.text
-                : DunesColors.text3,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: selected || filled
+                      ? FontWeight.w700
+                      : FontWeight.w600,
+                  color: foreground,
+                ),
+              ),
+            ],
           ),
         ),
       ),

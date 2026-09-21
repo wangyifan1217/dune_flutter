@@ -6,6 +6,7 @@ class TaskItem {
     this.description = '',
     this.priority = 'medium',
     this.category = '',
+    this.subCategory = '',
     required this.ownerUserId,
     required this.creatorUserId,
     this.departmentId,
@@ -52,6 +53,7 @@ class TaskItem {
   final String description;
   final String priority;
   final String category;
+  final String subCategory;
   final int ownerUserId;
   final int creatorUserId;
   final int? departmentId;
@@ -94,6 +96,9 @@ class TaskItem {
   final String pendingChangeKind;
 
   bool get isMain => parentId == null;
+  String get categoryLabel => subCategory.trim().isEmpty
+      ? category
+      : '${category.trim()} · ${subCategory.trim()}';
   bool get isPending =>
       status == 'pending_approval' || status == 'pending_assignment';
   bool get hasEval =>
@@ -114,6 +119,7 @@ class TaskItem {
       description: '${json['description'] ?? ''}',
       priority: '${json['priority'] ?? 'medium'}',
       category: '${json['category'] ?? ''}',
+      subCategory: '${json['subCategory'] ?? json['subcategory'] ?? ''}',
       ownerUserId: (json['ownerUserId'] as num?)?.toInt() ?? 0,
       creatorUserId: (json['creatorUserId'] as num?)?.toInt() ?? 0,
       departmentId: (json['departmentId'] as num?)?.toInt(),
@@ -225,11 +231,7 @@ class TaskDetail {
 }
 
 class TaskChangeField {
-  const TaskChangeField({
-    required this.field,
-    this.from = '',
-    this.to = '',
-  });
+  const TaskChangeField({required this.field, this.from = '', this.to = ''});
 
   final String field;
   final String from;
@@ -873,6 +875,9 @@ class TaskDailyReportBundle {
     this.backfillUntil = '',
     this.isWorkday = true,
     this.nonWorkReason = '',
+    this.attendanceStatus = 0,
+    this.leaveExempt = false,
+    this.leaveReason = '',
   });
 
   final TaskDailyReport? report;
@@ -883,6 +888,9 @@ class TaskDailyReportBundle {
   final String backfillUntil;
   final bool isWorkday;
   final String nonWorkReason;
+  final int attendanceStatus;
+  final bool leaveExempt;
+  final String leaveReason;
 
   factory TaskDailyReportBundle.fromJson(Map<String, dynamic> json) {
     return TaskDailyReportBundle(
@@ -903,6 +911,157 @@ class TaskDailyReportBundle {
       backfillUntil: '${json['backfillUntil'] ?? ''}',
       isWorkday: json['isWorkday'] != false,
       nonWorkReason: '${json['nonWorkReason'] ?? ''}',
+      attendanceStatus: (json['attendanceStatus'] as num?)?.toInt() ?? 0,
+      leaveExempt: json['leaveExempt'] == true,
+      leaveReason: '${json['leaveReason'] ?? ''}',
+    );
+  }
+}
+
+class TaskDailyReportMissing {
+  const TaskDailyReportMissing({
+    required this.id,
+    required this.userId,
+    required this.reportDate,
+    required this.detectedAt,
+    this.resolvedAt,
+  });
+
+  final int id;
+  final int userId;
+  final String reportDate;
+  final DateTime? detectedAt;
+  final DateTime? resolvedAt;
+
+  bool get resolved => resolvedAt != null;
+
+  factory TaskDailyReportMissing.fromJson(Map<String, dynamic> json) {
+    DateTime? parseTime(dynamic value) =>
+        value == null ? null : DateTime.tryParse(value.toString());
+    return TaskDailyReportMissing(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      userId: (json['userId'] as num?)?.toInt() ?? 0,
+      reportDate: '${json['reportDate'] ?? ''}',
+      detectedAt: parseTime(json['detectedAt']),
+      resolvedAt: parseTime(json['resolvedAt']),
+    );
+  }
+}
+
+class TaskDailyReportCalendarDay {
+  const TaskDailyReportCalendarDay({
+    required this.date,
+    this.status = 'pending',
+    this.attendanceStatus = 0,
+    this.reason = '',
+  });
+
+  final String date;
+  final String status;
+  final int attendanceStatus;
+  final String reason;
+
+  factory TaskDailyReportCalendarDay.fromJson(Map<String, dynamic> json) {
+    return TaskDailyReportCalendarDay(
+      date: '${json['date'] ?? ''}',
+      status: '${json['status'] ?? 'pending'}',
+      attendanceStatus: (json['attendanceStatus'] as num?)?.toInt() ?? 0,
+      reason: '${json['reason'] ?? ''}',
+    );
+  }
+}
+
+class TaskDailyReportCalendarUser {
+  const TaskDailyReportCalendarUser({
+    required this.userId,
+    this.userName = '',
+    this.departmentName = '',
+    this.days = const [],
+  });
+
+  final int userId;
+  final String userName;
+  final String departmentName;
+  final List<TaskDailyReportCalendarDay> days;
+
+  factory TaskDailyReportCalendarUser.fromJson(Map<String, dynamic> json) {
+    return TaskDailyReportCalendarUser(
+      userId: (json['userId'] as num?)?.toInt() ?? 0,
+      userName: '${json['userName'] ?? ''}',
+      departmentName: '${json['departmentName'] ?? ''}',
+      days: (json['days'] as List?)
+              ?.whereType<Map>()
+              .map(
+                (item) => TaskDailyReportCalendarDay.fromJson(
+                  Map<String, dynamic>.from(item),
+                ),
+              )
+              .toList(growable: false) ??
+          const [],
+    );
+  }
+}
+
+class TaskDailyReportCalendarSummary {
+  const TaskDailyReportCalendarSummary({
+    this.expected = 0,
+    this.submitted = 0,
+    this.leave = 0,
+    this.missing = 0,
+    this.pending = 0,
+  });
+
+  final int expected;
+  final int submitted;
+  final int leave;
+  final int missing;
+  final int pending;
+
+  factory TaskDailyReportCalendarSummary.fromJson(Map<String, dynamic> json) {
+    return TaskDailyReportCalendarSummary(
+      expected: (json['expected'] as num?)?.toInt() ?? 0,
+      submitted: (json['submitted'] as num?)?.toInt() ?? 0,
+      leave: (json['leave'] as num?)?.toInt() ?? 0,
+      missing: (json['missing'] as num?)?.toInt() ?? 0,
+      pending: (json['pending'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class TaskDailyReportCalendar {
+  const TaskDailyReportCalendar({
+    this.month = '',
+    this.days = const [],
+    this.users = const [],
+    this.summary = const TaskDailyReportCalendarSummary(),
+  });
+
+  final String month;
+  final List<String> days;
+  final List<TaskDailyReportCalendarUser> users;
+  final TaskDailyReportCalendarSummary summary;
+
+  factory TaskDailyReportCalendar.fromJson(Map<String, dynamic> json) {
+    return TaskDailyReportCalendar(
+      month: '${json['month'] ?? ''}',
+      days: (json['days'] as List?)
+              ?.map((item) => '$item')
+              .toList(growable: false) ??
+          const [],
+      users: (json['users'] as List?)
+              ?.whereType<Map>()
+              .map(
+                (item) => TaskDailyReportCalendarUser.fromJson(
+                  Map<String, dynamic>.from(item),
+                ),
+              )
+              .toList(growable: false) ??
+          const [],
+      summary: json['summary'] is Map
+          ? TaskDailyReportCalendarSummary.fromJson(
+              Map<String, dynamic>.from(json['summary'] as Map),
+            )
+          : const TaskDailyReportCalendarSummary(),
     );
   }
 }

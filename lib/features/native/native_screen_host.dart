@@ -80,6 +80,7 @@ import '../xflow/approval_detail_dialog.dart';
 import '../xflow/proposal_launch_config.dart';
 import '../xflow/xflow_models.dart';
 import '../xflow/xflow_service.dart';
+import '../proposal_intake/native_proposal_intake_page.dart';
 import '../nova/native_nova_history_page.dart';
 import '../nova/native_nova_page.dart';
 import '../nova/nova_background_coordinator.dart';
@@ -113,6 +114,7 @@ import '../qianji/native_qianji_team_perf_page.dart';
 import '../qianji/native_qianji_cash_flow_board_page.dart';
 import '../qianji/native_qianji_monthly_bill_page.dart';
 import '../qianji/travel/native_qianji_travel_page.dart';
+import '../travel_import/native_travel_import_page.dart';
 import '../qianji/qianji_models.dart';
 import '../qianji/qianji_project_models.dart';
 import '../qianji_admin/native_qianji_admin_shell.dart';
@@ -153,10 +155,10 @@ import '../drive/native_drive_assistant_page.dart';
 import '../xrxs/native_xrxs_assistant_page.dart';
 import '../administrative_notice/native_administrative_notice_page.dart';
 import '../profile/native_profile_tour.dart';
-import '../profile/native_user_work_profile_page.dart';
 import '../profile/native_work_profile_collaboration_page.dart';
 import '../profile/native_work_profile_detail_pages.dart';
 import '../profile/native_work_profile_perf_page.dart';
+import '../profile/native_my_work_profile_center_page.dart';
 
 class NativeScreenHost extends StatefulWidget {
   const NativeScreenHost({
@@ -339,6 +341,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     debugLabel: 'workbench-keep-alive',
   );
 
+  /// Keep「我的」主页 alive：进审批/会议/画像详情再返回时不 dispose，保留滚动位置与当前 Tab。
+  bool _myPageMounted = false;
+  final GlobalKey _myPageKeepAliveKey = GlobalKey(
+    debugLabel: 'my-page-keep-alive',
+  );
+
   /// 允许在已读回执或重新拿到服务端快照后把桌面角标同步为 0。
   ///
   /// APP 可能在后台时收不到 PC 端发出的实时已读事件；下次恢复/启动
@@ -370,6 +378,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   /// PC 侧栏「设置」页（保留侧栏，内容区切换）。
   bool _desktopSettingsOpen = false;
   bool _desktopSettingsChildReturnPending = false;
+  bool _desktopReleaseHistoryOpen = false;
+  bool _desktopReleaseHistoryFromSettings = false;
   bool _desktopQrLoginOpening = false;
 
   void _markUserEnteredChat() {
@@ -3644,9 +3654,76 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     widget.navigation.go('MM0');
   }
 
-  /// APP 工作台滑入时垫在底下的「我的」，避免 keep-alive 瞬切丢滑动感。
-  Widget _buildMyWorkbenchUnderlay() {
-    return _NativeB2Page(
+  Widget _buildMyProposalIntakePage({
+    required String kind,
+    required String title,
+  }) {
+    return ColoredBox(
+      color: const Color(0xFFF5F6F8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 10, 16, 4),
+              child: Row(
+                children: [
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: widget.navigation.back,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.arrow_back_ios_new,
+                            size: 14,
+                            color: DunesColors.text2,
+                          ),
+                          SizedBox(width: 2),
+                          Text(
+                            '我的',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: DunesColors.text2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF7B5CD8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: NativeProposalIntakePage(
+              session: widget.session,
+              kind: kind,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 「我的」主页 keep-alive：详情页返回时保留滚动位置、Tab 与月份。
+  Widget _buildMyCenterPage() {
+    return NativeMyWorkProfileCenterPage(
+      key: _myPageKeepAliveKey,
       session: widget.session,
       navigation: widget.navigation,
       commUnread: _commUnread,
@@ -3655,10 +3732,35 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       onOpenB14: _goB14,
       onOpenB3: _goB3,
       onOpenXflowForm: _openXflowFormFromB2,
-      onOpenWorkbench: !widget.session.isExternalUser
+      onOpenWorkbench: !isDesktopCommOnly && !widget.session.isExternalUser
           ? () => widget.navigation.go('QJA')
           : null,
+      onOpenReleaseHistory: isDesktopCommOnly
+          ? () => _openDesktopReleaseHistory(fromSettings: false)
+          : null,
       onLogout: widget.onLogout,
+      initialMonth: _workProfileMonth,
+      initialTabIndex: 0,
+      onOpenWorkRhythmMonth: (month) {
+        _workProfileMonth = month;
+        widget.navigation.go('B2RHYTHM');
+      },
+      onOpenCollaborationMonth: (month) {
+        _workProfileMonth = month;
+        widget.navigation.go('B2COLLAB');
+      },
+      onOpenKnowledgeMonth: (month) {
+        _workProfileMonth = month;
+        widget.navigation.go('B2KNOWLEDGE');
+      },
+      onOpenBusinessMonth: (month) {
+        _workProfileMonth = month;
+        widget.navigation.go('B2BUSINESS');
+      },
+      onOpenPerformanceMonth: (month) {
+        _workProfileMonth = month;
+        widget.navigation.go('B2PERF');
+      },
     );
   }
 
@@ -3741,6 +3843,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               ? () => widget.navigation.go('QJMB')
               : null,
           onOpenTravel: () => widget.navigation.go('QJTR'),
+          onOpenTravelImport:
+              !widget.session.isExternalUser &&
+                  widget.session.effectiveTravelImportAccess
+              ? () => widget.navigation.go('QJTI')
+              : null,
           onOpenRobotHome: () {
             setState(() {
               _qjrOpenedFromChat = false;
@@ -3968,6 +4075,21 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         );
       case 'QJTR':
         return NativeQianjiTravelPage(
+          session: widget.session,
+          onBack: widget.navigation.back,
+        );
+      case 'QJTI':
+        if (widget.session.isExternalUser ||
+            !widget.session.effectiveTravelImportAccess) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.go('QJ');
+          });
+          return const Scaffold(
+            backgroundColor: DunesColors.bgApp,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return NativeQianjiTravelImportHost(
           session: widget.session,
           onBack: widget.navigation.back,
         );
@@ -4256,46 +4378,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       case 'LM':
         return _NativePlatformTreeShell(navigation: widget.navigation);
       case 'B2':
-        return _NativeB2Page(
-          session: widget.session,
-          navigation: widget.navigation,
-          commUnread: _commUnread,
-          workbenchBadge: _workbenchBadge,
-          workbenchRefresh: _workbenchRefresh,
-          onOpenB14: _goB14,
-          onOpenB3: _goB3,
-          onOpenXflowForm: _openXflowFormFromB2,
-          onOpenWorkbench: !isDesktopCommOnly && !widget.session.isExternalUser
-              ? () => widget.navigation.go('QJA')
-              : null,
-          onLogout: widget.onLogout,
-        );
       case 'B2P':
-        return NativeUserWorkProfilePage(
-          session: widget.session,
-          onBack: widget.navigation.back,
-          initialMonth: _workProfileMonth,
-          onOpenWorkRhythmMonth: (month) {
-            _workProfileMonth = month;
-            widget.navigation.go('B2RHYTHM');
-          },
-          onOpenCollaborationMonth: (month) {
-            _workProfileMonth = month;
-            widget.navigation.go('B2COLLAB');
-          },
-          onOpenKnowledgeMonth: (month) {
-            _workProfileMonth = month;
-            widget.navigation.go('B2KNOWLEDGE');
-          },
-          onOpenBusinessMonth: (month) {
-            _workProfileMonth = month;
-            widget.navigation.go('B2BUSINESS');
-          },
-          onOpenPerformanceMonth: (month) {
-            _workProfileMonth = month;
-            widget.navigation.go('B2PERF');
-          },
-        );
+        // 「我的」主页由 keep-alive 承载，避免进详情再返回时重建、丢掉滚动位置。
+        return const SizedBox.shrink();
       case 'B2RHYTHM':
         return NativeWorkProfileRhythmPage(
           session: widget.session,
@@ -4362,6 +4447,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           session: widget.session,
           onBack: widget.navigation.back,
         );
+      case 'B2SALES':
+        return _buildMyProposalIntakePage(kind: 'sales', title: '销售提案');
+      case 'B2PURCHASE':
+        return _buildMyProposalIntakePage(kind: 'purchase', title: '采购提案');
       case 'C1':
         return _buildConversationListPage();
       case 'AN1':
@@ -5002,6 +5091,23 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final previousScreen = _lastScreen;
     final isBack = previousScreen != null && depth < _lastHistoryDepth;
 
+    if (isDesktopCommOnly && _desktopReleaseHistoryOpen) {
+      return _wrapWithMainNavigation(
+        AppReleaseHistoryPage(
+          onBack: () {
+            if (!mounted) return;
+            setState(() {
+              _desktopReleaseHistoryOpen = false;
+              if (_desktopReleaseHistoryFromSettings) {
+                _desktopSettingsOpen = true;
+              }
+            });
+          },
+        ),
+        screen: screen,
+      );
+    }
+
     if (isDesktopCommOnly && _desktopSettingsOpen) {
       return _wrapWithMainNavigation(
         NativeDesktopSettingsPage(
@@ -5016,13 +5122,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onCheckForUpdates: isWindowsDesktopCommOnly
               ? () => unawaited(_checkDesktopAppUpdate())
               : null,
-          onOpenReleaseHistory: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const AppReleaseHistoryPage(),
-              ),
-            );
-          },
+          onOpenReleaseHistory: () =>
+              _openDesktopReleaseHistory(fromSettings: true),
           onScanWorkstation: !isWindowsDesktopCommOnly
               ? () {
                   _leaveDesktopSettingsForChild();
@@ -5121,6 +5222,19 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               ),
             ),
           if (_workbenchMounted) _buildWorkbenchKeepAlive(active: false),
+          if (_myPageMounted)
+            Positioned.fill(
+              child: TickerMode(
+                enabled: false,
+                child: IgnorePointer(
+                  ignoring: true,
+                  child: Opacity(
+                    opacity: 0,
+                    child: _buildMyCenterPage(),
+                  ),
+                ),
+              ),
+            ),
           if (_searchMounted)
             SearchSlideLayer(
               open: false,
@@ -5164,23 +5278,30 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     if (isWorkbench) {
       _workbenchMounted = true;
     }
-    // 双栏 / 灯塔 / 会话列表 / 通讯录 / 工作台由 keep-alive 承载；此处占位避免 AnimatedSwitcher 再造一份。
-    // APP 打开工作台时 AnimatedSwitcher 继续渲染「我的」底页，配合右侧滑入。
+    final isMyHub = screen == 'B2' || screen == 'B2P';
+    final isMyDetail = _isMyRoute(screen) && !isMyHub;
+    if (isMyHub || isMyDetail || workbenchAsSlideOver) {
+      _myPageMounted = true;
+    }
+    // 双栏 / 灯塔 / 会话列表 / 通讯录 / 工作台 / 「我的」主页由 keep-alive 承载；
+    // 此处占位避免 AnimatedSwitcher 再造一份，返回详情时才能保住滚动位置。
+    // APP 打开工作台时底下继续显示 keep-alive 的「我的」，配合右侧滑入。
     final switcherScreenId = workbenchAsSlideOver
         ? 'B2'
         : (isSearch ? _searchUnderlayScreen : screen);
     final switcherIsInbox = switcherScreenId == 'C1';
     final switcherIsContacts =
         switcherScreenId == 'C3' && !_contactsGroupPickMode;
+    final switcherIsMyHub = switcherScreenId == 'B2' || switcherScreenId == 'B2P';
     final currentScreen = dualNow
         ? const SizedBox.shrink()
         : (isLighthouse ||
               switcherIsInbox ||
               switcherIsContacts ||
+              switcherIsMyHub ||
+              workbenchAsSlideOver ||
               (isWorkbench && isDesktopCommOnly))
         ? const SizedBox.shrink()
-        : workbenchAsSlideOver
-        ? _buildMyWorkbenchUnderlay()
         : _buildCurrentScreen(context);
     final child = KeyedSubtree(
       key: ValueKey<String>(
@@ -5325,6 +5446,19 @@ class _NativeScreenHostState extends State<NativeScreenHost>
               ),
             ),
           ),
+        if (_myPageMounted && !dualNow)
+          Positioned.fill(
+            child: TickerMode(
+              enabled: isMyHub || workbenchAsSlideOver,
+              child: IgnorePointer(
+                ignoring: !isMyHub,
+                child: Opacity(
+                  opacity: (isMyHub || workbenchAsSlideOver) ? 1 : 0,
+                  child: _buildMyCenterPage(),
+                ),
+              ),
+            ),
+          ),
         if (!isLighthouse && !dualNow && !(isWorkbench && isDesktopCommOnly))
           animatedContent,
         // 须叠在「我的」之上，否则 APP 侧滑展开后仍被 B2 挡住、看起来像点不动。
@@ -5397,6 +5531,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'B2KNOWLEDGE',
       'B2BUSINESS',
       'B2PERF',
+      'B2SALES',
+      'B2PURCHASE',
       'B1',
       'B3',
       'B10',
@@ -5450,6 +5586,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJFS',
       'QJFSD',
       'QJTR',
+      'QJTI',
       'QJCF',
       'QJMB',
       'QJR',
@@ -5463,7 +5600,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   Widget _wrapWithMainNavigation(Widget content, {required String screen}) {
     final tabBar = DunesMainTabBar(
       navigation: widget.navigation,
-      activeScreen: _desktopSettingsOpen
+      activeScreen: _desktopSettingsOpen ||
+              (_desktopReleaseHistoryOpen && _desktopReleaseHistoryFromSettings)
           ? '__desktop_settings__'
           : _mainTabScreenFor(screen),
       axis: isDesktopCommOnly ? Axis.vertical : Axis.horizontal,
@@ -5545,6 +5683,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'QJFS' ||
         screen == 'QJFSD' ||
         screen == 'QJTR' ||
+        screen == 'QJTI' ||
         screen == 'QJCF' ||
         screen == 'QJMB' ||
         screen == 'QJR' ||
@@ -5569,10 +5708,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   /// 主 Tab 在板块之间切换时，保留「我的 / NOVA」最后打开的子页面。
   void _switchMainTab(String screen) {
-    if (_desktopSettingsOpen || _desktopSettingsChildReturnPending) {
+    if (_desktopSettingsOpen ||
+        _desktopSettingsChildReturnPending ||
+        _desktopReleaseHistoryOpen) {
       setState(() {
         _desktopSettingsOpen = false;
         _desktopSettingsChildReturnPending = false;
+        _desktopReleaseHistoryOpen = false;
       });
     }
     final current = widget.navigation.currentScreen;
@@ -5648,6 +5790,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJFS',
       'QJFSD',
       'QJTR',
+      'QJTI',
       'QJCF',
       'QJMB',
       'QJR',
@@ -5698,6 +5841,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJUH' => const ['QJ', 'QJUH'],
       'QJUHD' => const ['QJ', 'QJUH', 'QJUHD'],
       'QJTR' => const ['QJ', 'QJTR'],
+      'QJTI' => const ['QJ', 'QJTI'],
       'QJCF' => const ['QJ', 'QJCF'],
       'QJMB' => const ['QJ', 'QJMB'],
       'QJFS' => const ['QJ', 'QJFS'],
@@ -5840,6 +5984,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     setState(() {
       _desktopSettingsOpen = true;
       _desktopSettingsChildReturnPending = false;
+      _desktopReleaseHistoryOpen = false;
+    });
+  }
+
+  void _openDesktopReleaseHistory({required bool fromSettings}) {
+    if (!isDesktopCommOnly || !mounted) return;
+    setState(() {
+      _desktopReleaseHistoryOpen = true;
+      _desktopReleaseHistoryFromSettings = fromSettings;
+      _desktopSettingsOpen = false;
     });
   }
 

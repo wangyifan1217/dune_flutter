@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/widgets/horizontal_drag_scroll_view.dart';
 import '../auth/auth_session.dart';
+import '../shell/dunes_toast.dart';
 import 'native_task_action_page.dart';
 import 'native_task_detail_page.dart';
 import 'native_task_home_pane.dart';
@@ -43,8 +44,12 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
 
   List<HrbpDeptStat> _depts = const [];
   List<TaskItem> _deptTasks = const [];
+  List<TaskAssignee> _reportUsers = const [];
+  List<TaskDailyReportMissing> _missingReports = const [];
+  int? _missingUserId;
   bool _loading = true;
   bool _loadingMore = false;
+  bool _loadingMissingReports = false;
   bool _hasMoreTasks = false;
   int _taskPage = 0;
   String? _error;
@@ -157,6 +162,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
         dateFrom: _dateFrom,
         dateTo: _dateTo,
       );
+      final users = await _api.listAssignees();
       if (!mounted) return;
       var filter = _deptFilter;
       if (filter != null && !depts.any((d) => d.departmentId == filter)) {
@@ -164,10 +170,14 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
       }
       setState(() {
         _depts = depts;
+        _reportUsers = users;
         _deptFilter = filter;
         _loading = false;
       });
       _publishChrome();
+      if (_missingUserId != null) {
+        unawaited(_loadMissingReports());
+      }
       if (filter != null) {
         await _loadDeptTasks(reset: true);
       }
@@ -177,6 +187,33 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
         _error = '$e';
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _loadMissingReports() async {
+    final userId = _missingUserId;
+    if (userId == null) {
+      setState(() => _missingReports = const []);
+      return;
+    }
+    setState(() => _loadingMissingReports = true);
+    try {
+      final rows = await _api.listDailyReportMissing(
+        userId: userId,
+        startDate: _dateFrom,
+        endDate: _dateTo,
+      );
+      if (mounted && _missingUserId == userId) {
+        setState(() => _missingReports = rows);
+      }
+    } catch (e) {
+      if (mounted) {
+        showDunesCenterToast(context, '加载漏交记录失败：$e');
+      }
+    } finally {
+      if (mounted && _missingUserId == userId) {
+        setState(() => _loadingMissingReports = false);
+      }
     }
   }
 
@@ -448,7 +485,8 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
   Widget build(BuildContext context) {
     final isBack = _pageNavBack;
     final child = KeyedSubtree(key: _pageKey, child: _pageBody());
-    return AnimatedSwitcher(
+    return TaskTheme(
+      child: AnimatedSwitcher(
       duration: const Duration(milliseconds: 280),
       reverseDuration: const Duration(milliseconds: 240),
       switchInCurve: Curves.easeOutCubic,
@@ -476,6 +514,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
         );
       },
       child: child,
+    ),
     );
   }
 
@@ -637,6 +676,8 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
                         reportRate: _reportRateLabel,
                       ),
                       const SizedBox(height: 14),
+                      _buildMissingReportCard(),
+                      const SizedBox(height: 14),
                       _buildChartCard(),
                     ],
                   ),
@@ -662,6 +703,118 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildMissingReportCard() {
+    final users = _reportUsers;
+    final selected = _missingUserId;
+    final name = users
+        .where((user) => user.id == selected)
+        .map((user) => user.displayName)
+        .firstOrNull;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE8EAED)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '日报漏交记录',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            '补填截止后生成的记录；已补交的记录会保留并标记为已解决。',
+            style: TextStyle(fontSize: 12, color: DunesColors.text3),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            '选择员工',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: DunesColors.text2,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TaskDropdownField<int?>(
+            key: ValueKey(selected),
+            value: selected,
+            sheetTitle: '选择员工',
+            items: [
+              (null, '请选择员工'),
+              for (final user in users)
+                (
+                  user.id,
+                  user.departmentName.isEmpty
+                      ? user.displayName
+                      : '${user.displayName} · ${user.departmentName}',
+                ),
+            ],
+            onChanged: (value) {
+              setState(() {
+                _missingUserId = value;
+                _missingReports = const [];
+              });
+              unawaited(_loadMissingReports());
+            },
+          ),
+          const SizedBox(height: 12),
+          if (_loadingMissingReports)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(8),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          else if (selected == null)
+            const Text(
+              '选择员工后查看漏交日报。',
+              style: TextStyle(color: DunesColors.text3),
+            )
+          else if (_missingReports.isEmpty)
+            Text(
+              '${name ?? '该员工'}在所选周期内没有漏交记录。',
+              style: const TextStyle(color: DunesColors.text3),
+            )
+          else
+            ..._missingReports.map(
+              (report) => Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.event_busy_outlined,
+                      size: 16,
+                      color: Color(0xFFB45309),
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(child: Text(report.reportDate)),
+                    Text(
+                      report.resolved ? '已补交' : '未补交',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: report.resolved
+                            ? const Color(0xFF1F9D76)
+                            : const Color(0xFFB45309),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

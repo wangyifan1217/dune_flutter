@@ -2699,6 +2699,46 @@ void main() {
     expect(find.text('标签三-二级'), findsNothing);
   });
 
+  testWidgets('product settle card shows income cost and profit outside', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        1440,
+        row: ProposalIntakeRow.fromJson({
+          'id': 1,
+          'code': 'TA-2026-0001',
+          'title': '测试提案',
+          'status': 'filling',
+          'createdBy': 11,
+          'form': {
+            'salesScale': 100,
+            'skuDetails': [
+              {
+                'id': 'sku-1',
+                'productName': '中石油100元',
+                'faceValue': '100',
+                'settlements': [
+                  {'id': 'st-in', 'kind': 'income', 'settleRatio': '0.9'},
+                  {'id': 'st-cost', 'kind': 'cost', 'settleRatio': '0.8'},
+                ],
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    await tester.pump();
+    await _scrollUntil(tester, '产品结算');
+    expect(find.text('收入 90万'), findsWidgets);
+    expect(find.text('成本 80万'), findsWidgets);
+    expect(find.text('利润 10万'), findsWidgets);
+  });
+
   testWidgets('finance reviews product settlements on the outer block', (
     tester,
   ) async {

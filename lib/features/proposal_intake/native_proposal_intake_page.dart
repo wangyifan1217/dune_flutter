@@ -9177,6 +9177,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       proposalIntakeSkuRollbackValue(row, form: _form),
       if (child && parentName.isNotEmpty) '关联 $parentName',
       if (child) '数量 ${proposalIntakeChildProductQuantity(_form, row.id)}',
+      ...proposalSkuSettleMoneyBits(
+        proposalSkuSettleMoney(row, form: _form),
+      ),
     ];
     return Container(
       width: double.infinity,
@@ -10549,15 +10552,26 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     VoidCallback? onClipboardChanged,
     ProposalSkuDetailRow? product,
   }) {
+    final money = product == null
+        ? null
+        : proposalSkuSettleMoney(product, form: _form);
+    final moneyBits = money == null
+        ? const <String>[]
+        : proposalSkuSettleMoneyBits(money);
     final summaryBits = <String>[
-      if (settlements.isEmpty) '尚未填写' else '结算 ${settlements.length} 条',
-      if (settlements.isNotEmpty &&
+      if (moneyBits.isEmpty && settlements.isEmpty) '尚未填写',
+      if (moneyBits.isEmpty && settlements.isNotEmpty)
+        '结算 ${settlements.length} 条',
+      if (moneyBits.isEmpty &&
+          settlements.isNotEmpty &&
           settlements.first.terms.scale.trim().isNotEmpty)
         '规模 ${settlements.first.terms.scale.trim()}',
-      if (settlements.isNotEmpty &&
+      if (moneyBits.isEmpty &&
+          settlements.isNotEmpty &&
           settlements.first.terms.displayRatio.trim().isNotEmpty)
         '比例 ${settlements.first.terms.displayRatio.trim()}',
-      if (settlements.isNotEmpty &&
+      if (moneyBits.isEmpty &&
+          settlements.isNotEmpty &&
           settlements.first.terms.displayUnitPrice.trim().isNotEmpty)
         '单价 ${settlements.first.terms.displayUnitPrice.trim()}',
     ];
@@ -10644,6 +10658,24 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 ),
             ],
           ),
+          if (compact && moneyBits.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 16,
+              runSpacing: 4,
+              children: [
+                for (final bit in moneyBits)
+                  Text(
+                    bit,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: ProposalPalette.text,
+                    ),
+                  ),
+              ],
+            ),
+          ],
           if (!compact && scaleOnly)
             const Padding(
               padding: EdgeInsets.only(top: 4),

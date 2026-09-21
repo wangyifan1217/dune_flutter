@@ -160,6 +160,45 @@ void main() {
     );
   });
 
+  testWidgets('month picker only offers year and month', (tester) async {
+    final loadedMonths = <DateTime>[];
+
+    Future<UserWorkProfileSnapshot> load(DateTime month) async {
+      loadedMonths.add(month);
+      return const UserWorkProfileSnapshot(modules: <UserWorkProfileModule>[]);
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeUserWorkProfilePage(
+          session: session,
+          onBack: () {},
+          initialMonth: DateTime(2026, 9),
+          now: DateTime(2026, 9, 7),
+          loadSnapshot: load,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('work-profile-month')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('选择月份'), findsOneWidget);
+    expect(find.text('2026年'), findsOneWidget);
+    expect(find.text('8月'), findsOneWidget);
+    expect(find.text('1日'), findsNothing);
+
+    await tester.tap(find.text('8月'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2026年8月'), findsOneWidget);
+    expect(
+      loadedMonths.map((month) => '${month.year}-${month.month}'),
+      <String>['2026-9', '2026-8'],
+    );
+  });
+
   testWidgets('performance callback receives selected month', (tester) async {
     DateTime? openedMonth;
     const snapshot = UserWorkProfileSnapshot(

@@ -196,6 +196,103 @@ class WorkProfileGhostButton extends StatelessWidget {
   }
 }
 
+class WorkProfileMonthBar extends StatelessWidget {
+  const WorkProfileMonthBar({
+    super.key,
+    required this.label,
+    required this.canPrev,
+    required this.canNext,
+    required this.onPrev,
+    required this.onNext,
+    required this.onPick,
+    this.loading = false,
+    this.monthKey = const Key('work-profile-month'),
+    this.prevKey = const Key('work-profile-month-prev'),
+    this.nextKey = const Key('work-profile-month-next'),
+  });
+
+  final String label;
+  final bool canPrev;
+  final bool canNext;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+  final VoidCallback onPick;
+  final bool loading;
+  final Key monthKey;
+  final Key prevKey;
+  final Key nextKey;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE6DCF0)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              IconButton(
+                key: prevKey,
+                tooltip: '上个月',
+                onPressed: canPrev && !loading ? onPrev : null,
+                icon: const Icon(Icons.chevron_left_rounded),
+                color: const Color(0xFF4A3866),
+              ),
+              Expanded(
+                child: TextButton.icon(
+                  key: monthKey,
+                  onPressed: loading ? null : onPick,
+                  icon: loading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFF7045B2),
+                          ),
+                        )
+                      : const Icon(Icons.calendar_month_rounded, size: 17),
+                  label: Text(
+                    loading ? '$label 加载中' : label,
+                    style: DunesTypography.sans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF312249),
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                key: nextKey,
+                tooltip: '下个月',
+                onPressed: canNext && !loading ? onNext : null,
+                icon: const Icon(Icons.chevron_right_rounded),
+                color: const Color(0xFF4A3866),
+              ),
+            ],
+          ),
+          if (loading)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: ClipRRect(
+                borderRadius: BorderRadius.all(Radius.circular(99)),
+                child: LinearProgressIndicator(
+                  minHeight: 2.5,
+                  backgroundColor: Color(0xFFEFE8F5),
+                  color: Color(0xFF7045B2),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _FilterPill extends StatelessWidget {
   const _FilterPill({
     required this.id,

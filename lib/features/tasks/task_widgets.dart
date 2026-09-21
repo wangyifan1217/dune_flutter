@@ -708,7 +708,7 @@ class TaskNameCard extends StatelessWidget {
                     color: _kindColor,
                   ),
                   if (task.category.isNotEmpty)
-                    TaskMetaChip(text: task.category, color: kTaskPurple),
+                    TaskMetaChip(text: task.categoryLabel, color: kTaskPurple),
                   TaskMetaChip(
                     text: taskPriorityLabel(task.priority),
                     color: _priorityColor,
@@ -1054,6 +1054,318 @@ MenuStyle get kTaskMenuStyle => MenuStyle(
   padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
 );
 
+ThemeData taskThemeData(BuildContext context) {
+  final base = Theme.of(context);
+  final colorScheme = base.colorScheme.copyWith(
+    primary: kTaskPurple,
+    onPrimary: Colors.white,
+    secondary: kTaskPurple,
+    onSecondary: Colors.white,
+    primaryContainer: kTaskPurple.withValues(alpha: 0.12),
+    onPrimaryContainer: kTaskPurple,
+    secondaryContainer: kTaskPurple.withValues(alpha: 0.12),
+    onSecondaryContainer: kTaskPurple,
+  );
+  return base.copyWith(
+    colorScheme: colorScheme,
+    primaryColor: kTaskPurple,
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: kTaskPurple,
+        foregroundColor: Colors.white,
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(foregroundColor: kTaskPurple),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(foregroundColor: kTaskPurple),
+    ),
+    progressIndicatorTheme: const ProgressIndicatorThemeData(
+      color: kTaskPurple,
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) return Colors.white;
+        return Colors.white;
+      }),
+      trackColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) return kTaskPurple;
+        return const Color(0xFFD1D5DB);
+      }),
+      trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
+    ),
+    checkboxTheme: CheckboxThemeData(
+      fillColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) return kTaskPurple;
+        return Colors.transparent;
+      }),
+      checkColor: const WidgetStatePropertyAll(Colors.white),
+      side: const BorderSide(color: Color(0xFFC4C8CC), width: 1.6),
+    ),
+    sliderTheme: SliderThemeData(
+      activeTrackColor: kTaskPurple,
+      thumbColor: kTaskPurple,
+      overlayColor: kTaskPurple.withValues(alpha: 0.12),
+      inactiveTrackColor: kTaskPurple.withValues(alpha: 0.18),
+    ),
+    chipTheme: base.chipTheme.copyWith(
+      selectedColor: kTaskPurple.withValues(alpha: 0.14),
+      checkmarkColor: kTaskPurple,
+      labelStyle: const TextStyle(color: DunesColors.text2),
+      secondaryLabelStyle: const TextStyle(
+        color: kTaskPurple,
+        fontWeight: FontWeight.w600,
+      ),
+      side: const BorderSide(color: Color(0xFFE8EAED)),
+    ),
+    listTileTheme: ListTileThemeData(
+      selectedColor: kTaskPurple,
+      selectedTileColor: kTaskPurple.withValues(alpha: 0.08),
+      iconColor: DunesColors.text2,
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: Colors.white,
+      surfaceTintColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+    dropdownMenuTheme: DropdownMenuThemeData(menuStyle: kTaskMenuStyle),
+    datePickerTheme: DatePickerThemeData(
+      backgroundColor: Colors.white,
+      headerBackgroundColor: kTaskPurple,
+      headerForegroundColor: Colors.white,
+      rangeSelectionBackgroundColor: kTaskPurple.withValues(alpha: 0.14),
+      rangeSelectionOverlayColor: WidgetStatePropertyAll(
+        kTaskPurple.withValues(alpha: 0.08),
+      ),
+      dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) return kTaskPurple;
+        return null;
+      }),
+      dayForegroundColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) return Colors.white;
+        if (states.contains(WidgetState.disabled)) return DunesColors.text3;
+        return DunesColors.text;
+      }),
+      todayForegroundColor: const WidgetStatePropertyAll(kTaskPurple),
+      todayBackgroundColor: WidgetStatePropertyAll(
+        kTaskPurple.withValues(alpha: 0.12),
+      ),
+      todayBorder: const BorderSide(color: kTaskPurple),
+      confirmButtonStyle: TextButton.styleFrom(foregroundColor: kTaskPurple),
+      cancelButtonStyle: TextButton.styleFrom(foregroundColor: kTaskPurple),
+    ),
+  );
+}
+
+class TaskTheme extends StatelessWidget {
+  const TaskTheme({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Theme(data: taskThemeData(context), child: child);
+  }
+}
+
+class TaskDropdownField<T> extends StatelessWidget {
+  const TaskDropdownField({
+    super.key,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    this.sheetTitle = '请选择',
+    this.forceSheet = false,
+  });
+
+  final T value;
+  final List<(T, String)> items;
+  final ValueChanged<T> onChanged;
+  final String sheetTitle;
+  final bool forceSheet;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = items.firstWhere(
+      (e) => e.$1 == value,
+      orElse: () => (value, '$value'),
+    );
+    final useSheet = forceSheet || MediaQuery.sizeOf(context).width < 700;
+    if (useSheet) {
+      return Material(
+        color: const Color(0xFFF5F6F8),
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () async {
+            final picked = await showModalBottomSheet<(T,)>(
+              context: context,
+              backgroundColor: Colors.white,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              builder: (ctx) => SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          sheetTitle,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    for (final item in items)
+                      ListTile(
+                        selected: item.$1 == value,
+                        selectedColor: kTaskPurple,
+                        selectedTileColor: kTaskPurple.withValues(alpha: 0.08),
+                        title: Text(item.$2),
+                        trailing: item.$1 == value
+                            ? const Icon(
+                                Icons.check_rounded,
+                                color: kTaskPurple,
+                              )
+                            : null,
+                        onTap: () => Navigator.pop(ctx, (item.$1,)),
+                      ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+            );
+            if (picked != null) onChanged(picked.$1);
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    current.$2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: DunesColors.text,
+                    ),
+                  ),
+                ),
+                const Icon(
+                  Icons.expand_more,
+                  size: 20,
+                  color: DunesColors.text3,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final menuWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : 220.0;
+        return MenuAnchor(
+          alignmentOffset: const Offset(0, 6),
+          style: kTaskMenuStyle,
+          builder: (context, controller, child) {
+            final open = controller.isOpen;
+            return Material(
+              color: open
+                  ? kTaskPurple.withValues(alpha: 0.08)
+                  : const Color(0xFFF5F6F8),
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () => open ? controller.close() : controller.open(),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          current.$2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: open ? kTaskPurple : DunesColors.text,
+                            fontWeight: open
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        Icons.expand_more,
+                        size: 20,
+                        color: open ? kTaskPurple : DunesColors.text3,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+          menuChildren: [
+            for (final item in items)
+              MenuItemButton(
+                onPressed: () => onChanged(item.$1),
+                style: ButtonStyle(
+                  backgroundColor: WidgetStateProperty.resolveWith((states) {
+                    if (item.$1 == value) {
+                      return kTaskPurple.withValues(alpha: 0.1);
+                    }
+                    if (states.contains(WidgetState.hovered)) {
+                      return const Color(0xFFF5F6F8);
+                    }
+                    return Colors.transparent;
+                  }),
+                  padding: const WidgetStatePropertyAll(
+                    EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  ),
+                  minimumSize: WidgetStatePropertyAll(Size(menuWidth, 44)),
+                ),
+                trailingIcon: item.$1 == value
+                    ? const Icon(
+                        Icons.check_rounded,
+                        size: 16,
+                        color: kTaskPurple,
+                      )
+                    : null,
+                child: SizedBox(
+                  width: menuWidth - 48,
+                  child: Text(
+                    item.$2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: item.$1 == value
+                          ? FontWeight.w600
+                          : FontWeight.w400,
+                      color: item.$1 == value ? kTaskPurple : DunesColors.text,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class TaskFilterChipDropdown<T> extends StatelessWidget {
   const TaskFilterChipDropdown({
     super.key,
@@ -1149,6 +1461,26 @@ class TaskFilterChipDropdown<T> extends StatelessWidget {
   }
 }
 
+Future<DateTime?> showTaskDatePicker(
+  BuildContext context, {
+  required DateTime initialDate,
+  required DateTime firstDate,
+  required DateTime lastDate,
+  String? helpText,
+}) {
+  return showDatePicker(
+    context: context,
+    initialDate: initialDate,
+    firstDate: firstDate,
+    lastDate: lastDate,
+    helpText: helpText,
+    cancelText: '取消',
+    confirmText: '确定',
+    builder: (context, child) =>
+        Theme(data: taskThemeData(context), child: child!),
+  );
+}
+
 /// 浅色区间选中，避免沿用深色 ColorScheme 导致中间日期发黑。
 Future<DateTimeRange?> showTaskDateRangePicker(
   BuildContext context, {
@@ -1171,44 +1503,7 @@ Future<DateTimeRange?> showTaskDateRangePicker(
     cancelText: '取消',
     confirmText: '确定',
     saveText: '确定',
-    builder: (context, child) {
-      final light = ColorScheme.light(
-        primary: kTaskPurple,
-        onPrimary: Colors.white,
-        secondary: kTaskPurple.withValues(alpha: 0.18),
-        onSecondary: DunesColors.text,
-        surface: Colors.white,
-        onSurface: DunesColors.text,
-      );
-      return Theme(
-        data: ThemeData(
-          useMaterial3: true,
-          colorScheme: light,
-          datePickerTheme: DatePickerThemeData(
-            backgroundColor: Colors.white,
-            headerBackgroundColor: kTaskPurple,
-            headerForegroundColor: Colors.white,
-            rangeSelectionBackgroundColor: kTaskPurple.withValues(alpha: 0.14),
-            rangeSelectionOverlayColor: WidgetStatePropertyAll(
-              kTaskPurple.withValues(alpha: 0.08),
-            ),
-            dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
-              if (states.contains(WidgetState.selected)) return kTaskPurple;
-              return null;
-            }),
-            dayForegroundColor: WidgetStateProperty.resolveWith((states) {
-              if (states.contains(WidgetState.selected)) return Colors.white;
-              if (states.contains(WidgetState.disabled)) {
-                return DunesColors.text3;
-              }
-              return DunesColors.text;
-            }),
-            todayForegroundColor: const WidgetStatePropertyAll(kTaskPurple),
-            todayBorder: const BorderSide(color: kTaskPurple),
-          ),
-        ),
-        child: child!,
-      );
-    },
+    builder: (context, child) =>
+        Theme(data: taskThemeData(context), child: child!),
   );
 }

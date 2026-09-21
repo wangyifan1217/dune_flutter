@@ -8,8 +8,30 @@ import '../shell/dunes_toast.dart';
 import 'task_api.dart';
 import 'task_first_use_guide.dart';
 import 'task_models.dart';
+import 'task_widgets.dart';
 
-const _accent = Color(0xFF2F8F7E);
+class _CalendarLegend extends StatelessWidget {
+  const _CalendarLegend(this.label, this.color);
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontSize: 11, color: DunesColors.text3)),
+      ],
+    );
+  }
+}
 
 class NativeTaskDailyReportPage extends StatefulWidget {
   const NativeTaskDailyReportPage({
@@ -49,9 +71,13 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
   final _otherWork = TextEditingController();
   final _nextPlan = TextEditingController();
   List<TaskDailyReport> _history = const [];
+  TaskDailyReportCalendar? _calendar;
   bool _loading = true;
+  bool _calendarLoading = false;
   bool _saving = false;
   bool _showHistory = false;
+  bool _showCalendar = false;
+  bool _teamCalendar = false;
   bool _guideAutoStarted = false;
   String? _error;
 
@@ -151,9 +177,26 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
     }
   }
 
+  Future<void> _loadCalendar({bool team = false}) async {
+    setState(() {
+      _calendarLoading = true;
+      _teamCalendar = team;
+    });
+    try {
+      final calendar = team
+          ? await _api.getTeamDailyReportCalendar(month: _date)
+          : await _api.getDailyReportCalendar(month: _date);
+      if (mounted) setState(() => _calendar = calendar);
+    } catch (e) {
+      if (mounted) showDunesCenterToast(context, '$e');
+    } finally {
+      if (mounted) setState(() => _calendarLoading = false);
+    }
+  }
+
   Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showTaskDatePicker(
+      context,
       initialDate: _date,
       firstDate: DateTime.now().subtract(const Duration(days: 14)),
       lastDate: DateTime.now(),
@@ -205,7 +248,7 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
             child: const Text('取消'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: _accent),
+            style: FilledButton.styleFrom(backgroundColor: kTaskPurple),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('提交'),
           ),
@@ -234,7 +277,8 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    return TaskTheme(
+      child: Material(
       color: DunesColors.bgApp,
       child: Column(
         children: [
@@ -277,19 +321,229 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
                 ),
                 TextButton(
                   onPressed: () {
-                    setState(() => _showHistory = !_showHistory);
+                    setState(() {
+                      _showHistory = !_showHistory;
+                      _showCalendar = false;
+                    });
                     if (_showHistory) unawaited(_loadHistory());
                   },
                   child: Text(_showHistory ? '返回填写' : '历史日报'),
                 ),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _showCalendar = !_showCalendar;
+                      _showHistory = false;
+                    });
+                    if (_showCalendar) unawaited(_loadCalendar());
+                  },
+                  child: Text(_showCalendar ? '返回填写' : '月历'),
+                ),
               ],
             ),
           ),
-          Expanded(child: _showHistory ? _buildHistory() : _buildForm()),
+          Expanded(
+            child: _showCalendar
+                ? _buildCalendar()
+                : (_showHistory ? _buildHistory() : _buildForm()),
+          ),
+        ],
+      ),
+    ),
+    );
+  }
+
+  Widget _buildCalendar() {
+    if (_calendarLoading && _calendar == null) {
+      return const Center(child: CircularProgressIndicator(color: kTaskPurple));
+    }
+    final calendar = _calendar;
+    if (calendar == null) {
+      return const Center(
+        child: Text('暂无日报日历数据', style: TextStyle(color: DunesColors.text3)),
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      children: [
+        Row(
+          children: [
+            IconButton(
+              tooltip: '上月',
+              onPressed: () {
+                setState(() => _date = DateTime(_date.year, _date.month - 1));
+                unawaited(_loadCalendar(team: _teamCalendar));
+              },
+              icon: const Icon(Icons.chevron_left),
+            ),
+            Expanded(
+              child: Text(
+                '${calendar.month} 日报状态',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            IconButton(
+              tooltip: '下月',
+              onPressed: () {
+                setState(() => _date = DateTime(_date.year, _date.month + 1));
+                unawaited(_loadCalendar(team: _teamCalendar));
+              },
+              icon: const Icon(Icons.chevron_right),
+            ),
+            TaskFilterChipDropdown<bool>(
+              value: _teamCalendar,
+              label: _teamCalendar ? '团队月历' : '我的月历',
+              items: const [
+                (false, '我的日报月历'),
+                (true, '团队日报月历'),
+              ],
+              onChanged: (team) => unawaited(_loadCalendar(team: team)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _calendarSummary(calendar.summary),
+        const SizedBox(height: 14),
+        if (_teamCalendar)
+          _teamCalendarTable(calendar)
+        else
+          _personalCalendarGrid(calendar),
+        const SizedBox(height: 12),
+        const Wrap(
+          spacing: 10,
+          runSpacing: 6,
+          children: [
+            _CalendarLegend('已填', Color(0xFF1F9D76)),
+            _CalendarLegend('请假', Color(0xFF4C7FD4)),
+            _CalendarLegend('漏交', Color(0xFFBE123C)),
+            _CalendarLegend('待填', Color(0xFFB45309)),
+            _CalendarLegend('休息日', Color(0xFF94A3B8)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _calendarSummary(TaskDailyReportCalendarSummary summary) {
+    return Row(
+      children: [
+        _summaryTile('应填', summary.expected, DunesColors.text),
+        _summaryTile('已填', summary.submitted, const Color(0xFF1F9D76)),
+        _summaryTile('请假', summary.leave, const Color(0xFF4C7FD4)),
+        _summaryTile('漏交', summary.missing, const Color(0xFFBE123C)),
+      ],
+    );
+  }
+
+  Widget _summaryTile(String label, int value, Color color) {
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.only(right: 6),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          children: [
+            Text('$value', style: TextStyle(fontWeight: FontWeight.w800, color: color)),
+            Text(label, style: const TextStyle(fontSize: 11, color: DunesColors.text3)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _personalCalendarGrid(TaskDailyReportCalendar calendar) {
+    final days = calendar.users.isEmpty ? const <TaskDailyReportCalendarDay>[] : calendar.users.first.days;
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 7,
+        crossAxisSpacing: 5,
+        mainAxisSpacing: 5,
+      ),
+      itemCount: days.length,
+      itemBuilder: (_, index) {
+        final day = days[index];
+        final parsed = DateTime.tryParse(day.date);
+        return InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () {
+            if (parsed == null) return;
+            setState(() {
+              _date = parsed;
+              _showCalendar = false;
+            });
+            unawaited(_reload());
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: _calendarColor(day.status).withValues(alpha: 0.13),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _calendarColor(day.status).withValues(alpha: 0.28)),
+            ),
+            child: Center(
+              child: Text(
+                '${parsed?.day ?? ''}',
+                style: TextStyle(fontWeight: FontWeight.w700, color: _calendarColor(day.status)),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _teamCalendarTable(TaskDailyReportCalendar calendar) {
+    if (calendar.users.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Center(child: Text('暂无可查看的团队成员')),
+      );
+    }
+    final limit = calendar.days.length.clamp(0, 31);
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columnSpacing: 6,
+        horizontalMargin: 8,
+        columns: [
+          const DataColumn(label: Text('员工')),
+          for (var i = 0; i < limit; i++)
+            DataColumn(label: Text('${DateTime.tryParse(calendar.days[i])?.day ?? ''}')),
+        ],
+        rows: [
+          for (final user in calendar.users)
+            DataRow(
+              cells: [
+                DataCell(SizedBox(width: 72, child: Text(user.userName.isEmpty ? '员工${user.userId}' : user.userName, overflow: TextOverflow.ellipsis))),
+                for (var i = 0; i < limit; i++)
+                  DataCell(_statusDot(i < user.days.length ? user.days[i].status : 'rest')),
+              ],
+            ),
         ],
       ),
     );
   }
+
+  Widget _statusDot(String status) {
+    return Container(
+      width: 16,
+      height: 16,
+      decoration: BoxDecoration(color: _calendarColor(status), shape: BoxShape.circle),
+    );
+  }
+
+  Color _calendarColor(String status) => switch (status) {
+    'submitted' => const Color(0xFF1F9D76),
+    'leave' => const Color(0xFF4C7FD4),
+    'missing' => const Color(0xFFBE123C),
+    'pending' => const Color(0xFFB45309),
+    _ => const Color(0xFF94A3B8),
+  };
 
   Widget _buildHistory() {
     if (_history.isEmpty) {
@@ -309,7 +563,7 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
             borderRadius: BorderRadius.circular(12),
           ),
           title: Text(r.reportDate),
-          subtitle: Text(r.source == 'backfill' ? '补填' : '已提交'),
+          subtitle: Text(r.source == 'backfill' ? '补交' : '按时提交'),
           onTap: () {
             final parsed = DateTime.tryParse(r.reportDate);
             if (parsed == null) return;
@@ -326,7 +580,7 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
 
   Widget _buildForm() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: _accent));
+      return const Center(child: CircularProgressIndicator(color: kTaskPurple));
     }
     if (_error != null) {
       return Center(
@@ -349,7 +603,7 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.event, color: _accent),
+                const Icon(Icons.event, color: kTaskPurple),
                 const SizedBox(width: 8),
                 Text(
                   formatTaskYmd(_date),
@@ -357,7 +611,14 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
                 ),
                 const Spacer(),
                 if (submitted)
-                  const Text('已提交', style: TextStyle(color: Color(0xFF1F9D76)))
+                  Text(
+                    bundle?.report?.source == 'backfill' ? '已补交' : '已按时提交',
+                    style: TextStyle(
+                      color: bundle?.report?.source == 'backfill'
+                          ? const Color(0xFFB45309)
+                          : const Color(0xFF1F9D76),
+                    ),
+                  )
                 else if (bundle?.canBackfill == true)
                   Text(
                     '可补填至 ${bundle?.backfillUntil}',
@@ -365,12 +626,28 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
                   )
                 else if (bundle?.canSubmit == true)
                   const Text('待填', style: TextStyle(color: Color(0xFFB45309))),
+                if (bundle?.leaveExempt == true)
+                  const Text(
+                    '请假免填',
+                    style: TextStyle(color: Color(0xFF1F9D76)),
+                  ),
               ],
             ),
           ),
         ),
         const SizedBox(height: 12),
-        if (bundle != null && !bundle.isWorkday) ...[
+        if (bundle?.leaveExempt == true) ...[
+          _box(
+            '请假免填',
+            Text(
+              bundle?.leaveReason.isNotEmpty == true
+                  ? bundle!.leaveReason
+                  : '已同步请假状态，当天不要求填写日报。',
+              style: const TextStyle(color: Color(0xFF1F9D76), height: 1.4),
+            ),
+          ),
+          const SizedBox(height: 10),
+        ] else if (bundle != null && !bundle.isWorkday) ...[
           _box(
             '非工作日',
             Text(
@@ -394,15 +671,20 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
           _lineCard(line, readOnly: readOnly),
           const SizedBox(height: 10),
         ],
-        if (!submitted && bundle?.canSubmit != true)
+        if (!submitted &&
+            bundle?.canSubmit != true &&
+            bundle?.leaveExempt != true)
           _box(
             '填报状态',
-            const Text(
-              '当前日期不在可提交窗口内，请切换日期或查看历史日报。',
-              style: TextStyle(color: DunesColors.text2, height: 1.4),
+            Text(
+              _lateReportHint(bundle),
+              style: const TextStyle(color: DunesColors.text2, height: 1.4),
             ),
           ),
-        if (!submitted && bundle?.canSubmit != true) const SizedBox(height: 10),
+        if (!submitted &&
+            bundle?.canSubmit != true &&
+            bundle?.leaveExempt != true)
+          const SizedBox(height: 10),
         _box(
           '阻塞',
           TextField(
@@ -437,7 +719,7 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
           FilledButton(
             onPressed: _saving ? null : _submit,
             style: FilledButton.styleFrom(
-              backgroundColor: _accent,
+              backgroundColor: kTaskPurple,
               minimumSize: const Size.fromHeight(44),
             ),
             child: Text(_saving ? '提交中…' : '提交日报'),
@@ -626,16 +908,16 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
 
   Color _lineAccent(TaskItem task) {
     const colors = <Color>[
+      kTaskPurple,
       Color(0xFF5B6FC4),
-      Color(0xFF2F8F7E),
+      Color(0xFF4A7C9B),
       Color(0xFFB7791F),
       Color(0xFF9C5FB5),
-      Color(0xFF3D7A8C),
     ];
     return colors[task.id.abs() % colors.length];
   }
 
-  InputDecoration _inputDecoration(String hint, {Color accent = _accent}) {
+  InputDecoration _inputDecoration(String hint, {Color accent = kTaskPurple}) {
     return InputDecoration(
       hintText: hint,
       hintStyle: const TextStyle(color: DunesColors.text3, fontSize: 13),
@@ -655,5 +937,12 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
         borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
       ),
     );
+  }
+
+  String _lateReportHint(TaskDailyReportBundle? bundle) {
+    if (bundle?.canBackfill == true) {
+      return '这是补填时段，请在 ${bundle?.backfillUntil} 前完成提交；提交后会标记为补交。';
+    }
+    return '当前日期已超过填报或补填截止时间，不能再提交日报。';
   }
 }

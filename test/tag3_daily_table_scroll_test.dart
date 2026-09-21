@@ -66,9 +66,46 @@ void main() {
     final state = tester.state<ScrollableState>(vertical.first);
     final box = tester.getRect(find.byType(Tag3DailyTable));
     await tester.sendEventToBinding(
-      PointerScrollEvent(position: box.center, scrollDelta: const Offset(0, 160)),
+      PointerScrollEvent(
+        position: box.center,
+        scrollDelta: const Offset(0, 160),
+      ),
     );
     await tester.pumpAndSettle();
     expect(state.position.pixels, greaterThan(0));
+  });
+
+  testWidgets('header stays pinned while rows scroll vertically', (
+    tester,
+  ) async {
+    await _pumpTable(tester);
+    final headerY = tester.getTopLeft(find.text('渠道')).dy;
+    final origin = tester.getRect(find.byType(Tag3DailyTable)).center;
+    await tester.dragFrom(origin, const Offset(0, -180));
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(find.text('渠道')).dy, headerY);
+    expect(find.text('操作'), findsOneWidget);
+  });
+
+  testWidgets('action buttons stay pinned while panning horizontally', (
+    tester,
+  ) async {
+    await _pumpTable(tester, height: 640);
+    final actionX = tester.getTopLeft(find.text('操作')).dx;
+    final opinion = find.text('意见').first;
+    final opinionX = tester.getTopLeft(opinion).dx;
+    final origin = tester.getRect(find.byType(Tag3DailyTable)).center;
+    await tester.dragFrom(origin, const Offset(-280, 0));
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(find.text('操作')).dx, actionX);
+    expect(tester.getTopLeft(find.text('意见').first).dx, closeTo(opinionX, 1));
+  });
+
+  testWidgets('action buttons are visible without opening a menu', (
+    tester,
+  ) async {
+    await _pumpTable(tester, height: 640);
+    expect(find.text('意见'), findsWidgets);
+    expect(find.text('确认'), findsWidgets);
   });
 }

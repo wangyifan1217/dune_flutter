@@ -153,7 +153,9 @@ class TaskApi {
     TaskChangeRequest? pending;
     final pendingRaw = map['pendingChangeRequest'];
     if (pendingRaw is Map) {
-      pending = TaskChangeRequest.fromJson(Map<String, dynamic>.from(pendingRaw));
+      pending = TaskChangeRequest.fromJson(
+        Map<String, dynamic>.from(pendingRaw),
+      );
     }
     final history = (map['changeHistory'] as List? ?? const [])
         .whereType<Map>()
@@ -243,10 +245,7 @@ class TaskApi {
     final resp = await http.post(
       _uri('$id/assign'),
       headers: _headers,
-      body: jsonEncode({
-        'ownerUserId': ownerUserId,
-        'comment': comment,
-      }),
+      body: jsonEncode({'ownerUserId': ownerUserId, 'comment': comment}),
     );
     final data = _unwrap(resp);
     return TaskItem.fromJson(Map<String, dynamic>.from(data as Map));
@@ -543,6 +542,63 @@ class TaskApi {
       }
     }
     return const [];
+  }
+
+  Future<TaskDailyReportCalendar> getDailyReportCalendar({
+    required DateTime month,
+  }) async {
+    final value =
+        '${month.year.toString().padLeft(4, '0')}-${month.month.toString().padLeft(2, '0')}';
+    final resp = await http.get(
+      _dailyUri('calendar', {'month': value}),
+      headers: _headers,
+    );
+    final data = _unwrap(resp);
+    return TaskDailyReportCalendar.fromJson(
+      Map<String, dynamic>.from(data as Map),
+    );
+  }
+
+  Future<TaskDailyReportCalendar> getTeamDailyReportCalendar({
+    required DateTime month,
+    String? q,
+  }) async {
+    final query = <String, String>{
+      'month':
+          '${month.year.toString().padLeft(4, '0')}-${month.month.toString().padLeft(2, '0')}',
+    };
+    if (q != null && q.trim().isNotEmpty) query['q'] = q.trim();
+    final resp = await http.get(
+      _dailyUri('team-calendar', query),
+      headers: _headers,
+    );
+    final data = _unwrap(resp);
+    return TaskDailyReportCalendar.fromJson(
+      Map<String, dynamic>.from(data as Map),
+    );
+  }
+
+  /// Supervisor/HRBP audit rows materialized after the backfill cutoff.
+  Future<List<TaskDailyReportMissing>> listDailyReportMissing({
+    required int userId,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final query = <String, String>{'userId': '$userId'};
+    final start = _dateQuery(startDate);
+    final end = _dateQuery(endDate);
+    if (start != null) query['startDate'] = start;
+    if (end != null) query['endDate'] = end;
+    final resp = await http.get(_dailyUri('missing', query), headers: _headers);
+    final data = _unwrap(resp);
+    if (data is! Map || data['items'] is! List) return const [];
+    return (data['items'] as List)
+        .whereType<Map>()
+        .map(
+          (item) =>
+              TaskDailyReportMissing.fromJson(Map<String, dynamic>.from(item)),
+        )
+        .toList(growable: false);
   }
 
   Future<void> commentDailyReport(int id, String body) async {

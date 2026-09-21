@@ -579,7 +579,8 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         child: _pageBody(),
       ),
     );
-    return AnimatedSwitcher(
+    return TaskTheme(
+      child: AnimatedSwitcher(
       duration: const Duration(milliseconds: 280),
       reverseDuration: const Duration(milliseconds: 240),
       switchInCurve: Curves.easeOutCubic,
@@ -607,6 +608,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         );
       },
       child: child,
+    ),
     );
   }
 

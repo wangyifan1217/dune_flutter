@@ -966,7 +966,8 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
   @override
   Widget build(BuildContext context) {
     final d = _detail;
-    return ColoredBox(
+    return TaskTheme(
+      child: ColoredBox(
       color: const Color(0xFFF5F6F8),
       // 点击输入框外的空白处收起软键盘（详情页含描述内联编辑）
       child: GestureDetector(
@@ -974,6 +975,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
         onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
         child: _buildContent(d),
       ),
+    ),
     );
   }
 

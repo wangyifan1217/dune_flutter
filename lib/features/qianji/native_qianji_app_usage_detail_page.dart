@@ -196,10 +196,12 @@ class _NativeQianjiAppUsageDetailPageState
       0,
       (m, e) => e.durationMs > m ? e.durationMs : m,
     );
-    final maxPage = detail.pages.fold<int>(
+    final pages = groupedUsagePages(detail.pages);
+    final maxPage = pages.fold<int>(
       0,
       (m, e) => e.durationMs > m ? e.durationMs : m,
     );
+    final topModule = usageModuleLabel(detail.topModule, detail.topModuleName);
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
@@ -220,7 +222,7 @@ class _NativeQianjiAppUsageDetailPageState
             const SizedBox(width: 8),
             _Stat(
               label: '最常用',
-              value: detail.topModuleName.isEmpty ? '-' : detail.topModuleName,
+              value: topModule.isEmpty ? '-' : topModule,
             ),
           ],
         ),
@@ -234,10 +236,10 @@ class _NativeQianjiAppUsageDetailPageState
           ),
         ),
         const SizedBox(height: 10),
-        if (detail.pages.isEmpty)
+        if (pages.isEmpty)
           const Text('暂无页面数据', style: TextStyle(color: DunesColors.text3))
         else
-          for (final page in detail.pages)
+          for (final page in pages)
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: _PageBar(page: page, maxDuration: maxPage),
@@ -337,7 +339,7 @@ class _PageBar extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                usageScreenName(page.screenName),
+                usagePageStayLabel(page),
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,

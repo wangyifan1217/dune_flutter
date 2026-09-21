@@ -50,7 +50,7 @@ class NativeReconciliationAssistantPage extends StatefulWidget {
   final bool autoMarkRead;
   final ValueChanged<int>? onConversationRead;
   final void Function(String asOfDate, {String cardType})?
-      onOpenWorkbenchDailyRecon;
+  onOpenWorkbenchDailyRecon;
 
   @override
   State<NativeReconciliationAssistantPage> createState() =>
@@ -216,10 +216,7 @@ class _NativeReconciliationAssistantPageState
     return true;
   }
 
-  bool _sameMessageIds(
-    List<NativeChatMessage> a,
-    List<NativeChatMessage> b,
-  ) {
+  bool _sameMessageIds(List<NativeChatMessage> a, List<NativeChatMessage> b) {
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
       if (a[i].id != b[i].id) return false;
@@ -433,7 +430,10 @@ class _NativeReconciliationAssistantPageState
       return null;
     }
     final payload = msg.payload ?? const <String, dynamic>{};
-    final cardType = (payload['cardType'] ?? '').toString().trim().toUpperCase();
+    final cardType = (payload['cardType'] ?? '')
+        .toString()
+        .trim()
+        .toUpperCase();
     if (cardType.isEmpty) return null;
     return _ReconCardPayload(
       cardType: cardType,
@@ -446,17 +446,17 @@ class _NativeReconciliationAssistantPageState
     );
   }
 
-  Future<void> _openDetails(_ReconCardPayload card, {bool refresh = false}) async {
+  Future<void> _openDetails(
+    _ReconCardPayload card, {
+    bool refresh = false,
+  }) async {
     if (isTag3DailyCard(card.cardType)) {
       await _openTag3Daily(card, refresh: refresh);
       return;
     }
     final jump = widget.onOpenWorkbenchDailyRecon;
     if (jump != null && card.asOfDate.trim().isNotEmpty && !refresh) {
-      jump(
-        card.asOfDate.trim(),
-        cardType: reconSectorFromCard(card.cardType),
-      );
+      jump(card.asOfDate.trim(), cardType: reconSectorFromCard(card.cardType));
       return;
     }
     final sector = reconSectorFromCard(card.cardType);
@@ -471,7 +471,8 @@ class _NativeReconciliationAssistantPageState
       _detailAsOfDate = card.asOfDate;
       _showDetails = true;
       if (!refresh) _snapshot = null;
-      final mine = _status[_statusKey(sector, card.asOfDate)]?.mine ??
+      final mine =
+          _status[_statusKey(sector, card.asOfDate)]?.mine ??
           _status[_statusKey(card.cardType, card.asOfDate)]?.mine;
       _commentController.text = mine?.comment ?? '';
       switch (sector) {
@@ -505,7 +506,10 @@ class _NativeReconciliationAssistantPageState
     }
   }
 
-  Future<void> _openTag3Daily(_ReconCardPayload card, {bool refresh = false}) async {
+  Future<void> _openTag3Daily(
+    _ReconCardPayload card, {
+    bool refresh = false,
+  }) async {
     setState(() {
       _detailCardType = 'TAG3_DAILY';
       _detailAsOfDate = card.asOfDate;
@@ -517,7 +521,8 @@ class _NativeReconciliationAssistantPageState
     try {
       final snap = await _shucai.fetchTag3Daily(asOfDate: card.asOfDate);
       if (!mounted) return;
-      final usePreview = kTag3DailyStaticPreview &&
+      final usePreview =
+          kTag3DailyStaticPreview &&
           card.asOfDate.trim() == tag3DailyPreviewAsOfDate() &&
           snap.rows.isEmpty;
       setState(() {
@@ -768,24 +773,25 @@ class _NativeReconciliationAssistantPageState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
               child: _CardSurface(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       '$_dateLabel · 日清月结',
                       style: DunesTypography.sans(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
                         color: DunesColors.text,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Text(
                       confirmable.isEmpty
-                          ? '当前没有需要你确认的日行。可以只填意见；业务和运营同时审核，记录按人保留。'
-                          : '业务和运营一起审、不排队。轮到你名下的行点确认即可，不用填内容。意见另填。本月累计只展示。',
+                          ? '没有待你确认的日行，仍可填意见。'
+                          : '右侧可直接确认，意见选填。',
                       style: DunesTypography.sans(
                         fontSize: 12.5,
                         color: DunesColors.text2,
@@ -1050,18 +1056,14 @@ class _NativeReconciliationAssistantPageState
       builder: (ctx) {
         return AlertDialog(
           title: Text(
-            count <= 0
-                ? '驳回本板块'
-                : (count > 1 ? '反驳 $count 条明细' : '反驳该明细'),
+            count <= 0 ? '驳回本板块' : (count > 1 ? '反驳 $count 条明细' : '反驳该明细'),
           ),
           content: TextField(
             controller: controller,
             autofocus: true,
             maxLines: 4,
             decoration: InputDecoration(
-              hintText: count <= 0
-                  ? '请填写驳回原因（将写到每一条上）'
-                  : '请填写反驳原因（必填）',
+              hintText: count <= 0 ? '请填写驳回原因（将写到每一条上）' : '请填写反驳原因（必填）',
             ),
           ),
           actions: [
@@ -1087,7 +1089,10 @@ class _NativeReconciliationAssistantPageState
 
   Future<void> _rejectCard() async {
     final status = _currentStatus;
-    if (status == null || !status.canConfirm || status.confirmed || _confirming) {
+    if (status == null ||
+        !status.canConfirm ||
+        status.confirmed ||
+        _confirming) {
       return;
     }
     final reason = await _askRejectReason(0);
@@ -1290,7 +1295,8 @@ class _NativeReconciliationAssistantPageState
       'L2',
       'FINAL',
     ];
-    final groups = <String, List<({NativeChatMessage msg, _ReconCardPayload card})>>{};
+    final groups =
+        <String, List<({NativeChatMessage msg, _ReconCardPayload card})>>{};
     final extras = <NativeChatMessage>[];
     for (final msg in _messages) {
       final kind = msg.kind.trim().toUpperCase();
@@ -1324,7 +1330,8 @@ class _NativeReconciliationAssistantPageState
     }
     final out = <Widget>[];
     for (final date in dates) {
-      final byType = <String, ({NativeChatMessage msg, _ReconCardPayload card})>{};
+      final byType =
+          <String, ({NativeChatMessage msg, _ReconCardPayload card})>{};
       for (final item in groups[date]!) {
         final typeKey = item.card.cardType.toUpperCase();
         final prev = byType[typeKey];
@@ -1373,9 +1380,7 @@ class _NativeReconciliationAssistantPageState
                       ? '${item.card.asOfDate} · 点击查看明细'
                       : item.card.subtitle,
                   metric: item.card.metric.isEmpty
-                      ? (_cardViewerOnly(item.card)
-                            ? '查看详情'
-                            : '查看详情并确认')
+                      ? (_cardViewerOnly(item.card) ? '查看详情' : '查看详情并确认')
                       : item.card.metric,
                   confirmed:
                       _status[_statusKey(
@@ -1428,9 +1433,7 @@ class _NativeReconciliationAssistantPageState
       final channels = (payload['channels'] as List? ?? const [])
           .whereType<Map>()
           .map(
-            (e) => ReconChannelSnapshot.fromJson(
-              Map<String, dynamic>.from(e),
-            ),
+            (e) => ReconChannelSnapshot.fromJson(Map<String, dynamic>.from(e)),
           )
           .toList(growable: false);
       if (channels.isNotEmpty) {
@@ -1502,9 +1505,9 @@ class _NativeReconciliationAssistantPageState
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorText(e))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(friendlyErrorText(e))));
     }
   }
 
@@ -1522,9 +1525,7 @@ class _NativeReconciliationAssistantPageState
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('清空通知记录'),
-        content: const Text(
-          '将清空对账助手里的历史推送（仅自己不可见），日清数据和确认记录不受影响。确定清空吗？',
-        ),
+        content: const Text('将清空对账助手里的历史推送（仅自己不可见），日清数据和确认记录不受影响。确定清空吗？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -1567,9 +1568,7 @@ class _NativeReconciliationAssistantPageState
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('对账助手'),
-        content: const Text(
-          '对账助手只推送日清月结。点卡片打开同一张表：日行可确认和填意见，本月累计只展示。没有驳回。',
-        ),
+        content: const Text('对账助手只推送日清月结。点卡片打开同一张表：日行可确认和填意见，本月累计只展示。没有驳回。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -1728,9 +1727,7 @@ class _NativeReconciliationAssistantPageState
               ? '你已完成确认'
               : (waiting
                     ? (status?.waitingReason ?? '请等待上一层确认完成')
-                    : (isL2
-                          ? '请确认或驳回本张对账表，无需逐条确认'
-                          : '请核对本张对账表并留下你的意见')));
+                    : (isL2 ? '请确认或驳回本张对账表，无需逐条确认' : '请核对本张对账表并留下你的意见')));
     final pillLabel = viewerOnly
         ? '查阅'
         : (confirmed ? '已确认' : (waiting ? '等待中' : '待确认'));
@@ -1792,12 +1789,8 @@ class _NativeReconciliationAssistantPageState
           ),
           _StatusPill(
             label: pillLabel,
-            color: confirmed
-                ? const Color(0xFFD7F3E1)
-                : Colors.white,
-            textColor: confirmed
-                ? const Color(0xFF267449)
-                : DunesColors.accent,
+            color: confirmed ? const Color(0xFFD7F3E1) : Colors.white,
+            textColor: confirmed ? const Color(0xFF267449) : DunesColors.accent,
           ),
         ],
       ),
@@ -1963,8 +1956,9 @@ class _NativeReconciliationAssistantPageState
         selectedRowKeys: _selectedRowKeys,
         decisions: _decisionsForTab(tab),
         onToggleRow: _rowActionsLocked ? null : _toggleRow,
-        onToggleSelectAll:
-            _rowActionsLocked ? null : () => _toggleSelectAll(report),
+        onToggleSelectAll: _rowActionsLocked
+            ? null
+            : () => _toggleSelectAll(report),
         onConfirmRow: _rowActionsLocked
             ? null
             : (key) => _confirmRows([key], tab),
@@ -1983,8 +1977,9 @@ class _NativeReconciliationAssistantPageState
       selectedRowKeys: _selectedRowKeys,
       decisions: _decisionsForTab(tab),
       onToggleRow: _rowActionsLocked ? null : _toggleRow,
-      onToggleSelectAll:
-          _rowActionsLocked ? null : () => _toggleSelectAll(report),
+      onToggleSelectAll: _rowActionsLocked
+          ? null
+          : () => _toggleSelectAll(report),
       onConfirmRow: _rowActionsLocked
           ? null
           : (key) => _confirmRows([key], tab),
@@ -2046,11 +2041,13 @@ class _NativeReconciliationAssistantPageState
             Text(
               status!.layers
                   .map(
-                    (l) =>
-                        '${l.label} ${l.confirmedCount}/${l.expectedCount}',
+                    (l) => '${l.label} ${l.confirmedCount}/${l.expectedCount}',
                   )
                   .join(' · '),
-              style: DunesTypography.sans(fontSize: 12, color: DunesColors.text2),
+              style: DunesTypography.sans(
+                fontSize: 12,
+                color: DunesColors.text2,
+              ),
             ),
             const SizedBox(height: 8),
           ],
@@ -2058,14 +2055,10 @@ class _NativeReconciliationAssistantPageState
             status?.waitingPrevious == true
                 ? (status?.waitingReason ?? '请等待上一层确认完成')
                 : expected <= 0
-                    ? (status?.viewerOnly == true
-                          ? '本张名片无需你确认'
-                          : (status?.confirmed == true
-                                ? '你已完成本次确认'
-                                : '请完成本次确认'))
-                    : (remain == 0
-                        ? '可见范围内已全部确认'
-                        : '还有 $remain 位参与人待确认'),
+                ? (status?.viewerOnly == true
+                      ? '本张名片无需你确认'
+                      : (status?.confirmed == true ? '你已完成本次确认' : '请完成本次确认'))
+                : (remain == 0 ? '可见范围内已全部确认' : '还有 $remain 位参与人待确认'),
             style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
           ),
         ],
@@ -2079,7 +2072,9 @@ class _NativeReconciliationAssistantPageState
     final ackedIds = {
       for (final p in status?.acks ?? const <ReconPerson>[]) p.userId,
     };
-    final pending = expected.where((p) => !ackedIds.contains(p.userId)).toList();
+    final pending = expected
+        .where((p) => !ackedIds.contains(p.userId))
+        .toList();
     final expectedById = <int, ReconPerson>{
       for (final p in expected) p.userId: p,
     };
@@ -2091,7 +2086,9 @@ class _NativeReconciliationAssistantPageState
           person: merged,
           confirmed: true,
           isSelf: false,
-          comment: merged.comment.trim().isEmpty ? '已确认' : merged.comment.trim(),
+          comment: merged.comment.trim().isEmpty
+              ? '已确认'
+              : merged.comment.trim(),
         ),
       );
     }
@@ -2131,8 +2128,9 @@ class _NativeReconciliationAssistantPageState
       );
     }
     entries.sort((a, b) {
-      final layerCmp = reconRoleLayer(a.person.role)
-          .compareTo(reconRoleLayer(b.person.role));
+      final layerCmp = reconRoleLayer(
+        a.person.role,
+      ).compareTo(reconRoleLayer(b.person.role));
       if (layerCmp != 0) return layerCmp;
       if (a.confirmed != b.confirmed) return a.confirmed ? -1 : 1;
       if (a.isSelf != b.isSelf) return a.isSelf ? 1 : -1;
@@ -2180,12 +2178,12 @@ class _NativeReconciliationAssistantPageState
           avatarTextColor: item.isSelf || !item.confirmed
               ? DunesColors.accent
               : DunesColors.brandPurpleDeep,
-          avatarPreset: item.isSelf &&
-                  (selfSnap?.avatarPreset ?? '').trim().isNotEmpty
+          avatarPreset:
+              item.isSelf && (selfSnap?.avatarPreset ?? '').trim().isNotEmpty
               ? selfSnap!.avatarPreset
               : merged.avatarPreset,
-          avatarObjectKey: item.isSelf &&
-                  (selfSnap?.avatarObjectKey ?? '').trim().isNotEmpty
+          avatarObjectKey:
+              item.isSelf && (selfSnap?.avatarObjectKey ?? '').trim().isNotEmpty
               ? selfSnap!.avatarObjectKey
               : merged.avatarObjectKey,
           avatarUrl: item.isSelf ? (selfSnap?.avatarUrl ?? '').trim() : '',
@@ -2307,9 +2305,7 @@ class _NativeReconciliationAssistantPageState
             width: double.infinity,
             height: 46,
             child: FilledButton.icon(
-              onPressed: confirmed ||
-                      _confirming ||
-                      _pendingRowCount() > 0
+              onPressed: confirmed || _confirming || _pendingRowCount() > 0
                   ? null
                   : _confirm,
               icon: Icon(
@@ -2511,9 +2507,7 @@ class _ReconciliationMessageCard extends StatelessWidget {
                       ),
                       _StatusPill(
                         compact: true,
-                        label: viewerOnly
-                            ? '查阅'
-                            : (confirmed ? '已确认' : '待确认'),
+                        label: viewerOnly ? '查阅' : (confirmed ? '已确认' : '待确认'),
                         color: viewerOnly
                             ? const Color(0xFFE4EEEC)
                             : (confirmed
@@ -2753,8 +2747,9 @@ class _ReviewRow extends StatelessWidget {
             seed: userId,
             size: 38,
             avatarPreset: avatarPreset.trim().isEmpty ? null : avatarPreset,
-            avatarObjectKey:
-                avatarObjectKey.trim().isEmpty ? null : avatarObjectKey,
+            avatarObjectKey: avatarObjectKey.trim().isEmpty
+                ? null
+                : avatarObjectKey,
             avatarUrl: avatarUrl.trim().isEmpty ? null : avatarUrl,
             avatarService: avatarService,
             fallbackBackground: avatarColor,

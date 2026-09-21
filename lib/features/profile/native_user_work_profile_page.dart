@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/dunes_month_picker.dart';
 import '../auth/auth_session.dart';
 import '../conversation/conversation_models.dart';
 import '../conversation/conversation_service.dart';
@@ -17,6 +18,7 @@ import '../tasks/task_models.dart';
 import '../workbench/native_avatar_sheet.dart';
 import '../xflow/xflow_models.dart';
 import '../xflow/xflow_service.dart';
+import 'work_profile_controls.dart';
 import 'work_profile_kpi.dart';
 import 'work_profile_month.dart';
 
@@ -111,6 +113,246 @@ double workProfileRadarValue({
   };
 }
 
+String formatWorkProfileMonth(DateTime value) =>
+    '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}';
+
+String formatWorkProfileMonthLabel(DateTime value) => '${value.year}年${value.month}月';
+
+Future<T?> _nullableWorkProfile<T>(Future<T> future) async {
+  try {
+    return await future;
+  } catch (_) {
+    return null;
+  }
+}
+
+Future<List<NativeConversation>> _fetchWorkProfileConversations(
+  AuthSession session,
+) async {
+  final service = ConversationService(session: session);
+  try {
+    return await service.fetchConversations();
+  } finally {
+    service.close();
+  }
+}
+
+UserWorkProfileModule _unavailableWorkProfileModule(
+  UserWorkProfileModuleType type,
+) => UserWorkProfileModule(
+  type: type,
+  status: UserWorkProfileModuleStatus.unavailable,
+  summary: '数据暂时无法加载',
+);
+
+bool _meetingInWorkProfileMonth(NativeMeetingSummary meeting, DateTime month) {
+  final date =
+      NativeMeetingTime.tryParse(meeting.meetingDate) ??
+      NativeMeetingTime.tryParse(meeting.createdAt);
+  return isSameWorkProfileMonth(date, month);
+}
+
+Future<UserWorkProfileSnapshot> loadUserWorkProfileSnapshot(
+  AuthSession session,
+  DateTime month,
+) async {
+  final monthText = formatWorkProfileMonth(month);
+  final monthLabel = formatWorkProfileMonthLabel(month);
+  final monthEnd = DateTime(month.year, month.month + 1, 0);
+  final scoreFuture = _nullableWorkProfile(
+    WorkProfileKpiService(
+      session: session,
+    ).fetchMyScore(month: monthText),
+  );
+  final taskFuture = _nullableWorkProfile(
+    TaskApi(session).listTasks(
+      scope: 'mine',
+      dateFrom: month,
+      dateTo: monthEnd,
+      size: 100,
+      maxPages: 5,
+    ),
+  );
+  final kbFuture = _nullableWorkProfile(
+    NativeKbService(session: session).fetchSummary(),
+  );
+  final meetingFuture = _nullableWorkProfile(
+    NativeMeetingService(
+      session: session,
+    ).fetchList(page: 0, size: 100),
+  );
+  final initiatedFuture = _nullableWorkProfile(
+    XflowService(session: session).fetchB14Initiated(),
+  );
+  final conversationFuture = _nullableWorkProfile(
+    _fetchWorkProfileConversations(session),
+  );
+
+  final results = await Future.wait<Object?>([
+    scoreFuture,
+    taskFuture,
+    kbFuture,
+    meetingFuture,
+    initiatedFuture,
+    conversationFuture,
+  ]);
+  final score = results[0] as WorkProfileKpiScore?;
+  final tasks = results[1] as List<TaskItem>?;
+  final kb = results[2] as NativeKbSummary?;
+  final meetings = results[3] as List<NativeMeetingSummary>?;
+  final initiated = results[4] as List<XflowProposalItem>?;
+  final conversations = results[5] as List<NativeConversation>?;
+
+  final modules = <UserWorkProfileModule>[];
+  if (tasks == null) {
+    modules.add(_unavailableWorkProfileModule(UserWorkProfileModuleType.workRhythm));
+  } else {
+    final active = tasks.where((item) => item.status == 'active').length;
+    final pending = tasks
+        .where((item) => item.status == 'pending_approval')
+        .length;
+    final completed = tasks.where((item) => item.status == 'completed').length;
+    final overdue = tasks.where((item) => item.overdue).length;
+    const type = UserWorkProfileModuleType.workRhythm;
+    const status = UserWorkProfileModuleStatus.ready;
+    modules.add(
+      UserWorkProfileModule(
+        type: type,
+        status: status,
+        summary:
+            '$monthLabel 进行中 $active · 待审核 $pending · 已完成 $completed · 已逾期 $overdue',
+        radarValue: workProfileRadarValue(
+          type: type,
+          status: status,
+          count: active + pending + completed,
+        ),
+      ),
+    );
+  }
+
+  if (conversations == null) {
+    modules.add(_unavailableWorkProfileModule(UserWorkProfileModuleType.collaboration));
+  } else {
+    final monthly = conversations.where(
+      (item) =>
+          item.isListedInInbox &&
+          (item.kind == 'PRIVATE' || item.isGroup) &&
+          isSameWorkProfileMonth(item.updatedAt, month),
+    );
+    final privateCount = monthly
+        .where((item) => item.kind == 'PRIVATE')
+        .length;
+    final groupCount = monthly.where((item) => item.isGroup).length;
+    final unreadCount = monthly.fold<int>(
+      0,
+      (sum, item) => sum + item.unreadCount,
+    );
+    const type = UserWorkProfileModuleType.collaboration;
+    const status = UserWorkProfileModuleStatus.ready;
+    modules.add(
+      UserWorkProfileModule(
+        type: type,
+        status: status,
+        summary:
+            '$monthLabel 协作联系人 $privateCount · 群聊 $groupCount · 当前未读 $unreadCount',
+        radarValue: workProfileRadarValue(
+          type: type,
+          status: status,
+          count: privateCount + groupCount,
+        ),
+      ),
+    );
+  }
+
+  if (kb == null && meetings == null) {
+    modules.add(_unavailableWorkProfileModule(UserWorkProfileModuleType.knowledge));
+  } else {
+    final meetingCount = meetings
+        ?.where((item) => _meetingInWorkProfileMonth(item, month))
+        .length;
+    final facts = <String>[
+      if (kb != null) '知识文档 ${kb.documentCount}',
+      if (kb != null) '知识分类 ${kb.categoryCount}',
+      if (kb != null) '未读文档 ${kb.unreadCount}',
+      if (meetingCount != null) '会议纪要 $meetingCount',
+    ];
+    const type = UserWorkProfileModuleType.knowledge;
+    const status = UserWorkProfileModuleStatus.ready;
+    modules.add(
+      UserWorkProfileModule(
+        type: type,
+        status: status,
+        summary: '$monthLabel ${facts.join(' · ')}',
+        radarValue: workProfileRadarValue(
+          type: type,
+          status: status,
+          count: meetingCount ?? 0,
+        ),
+      ),
+    );
+  }
+
+  final person = score?.me;
+  final countedTasks =
+      person?.categories.fold<int>(
+        0,
+        (sum, category) => sum + category.tasks.length,
+      ) ??
+      0;
+  int? proposalCount;
+  if (initiated != null) {
+    proposalCount = initiated.where((item) {
+      final createdAt = item.createdAt;
+      return createdAt != null &&
+          createdAt.year == month.year &&
+          createdAt.month == month.month;
+    }).length;
+  }
+  if (score == null && proposalCount == null) {
+    modules.add(_unavailableWorkProfileModule(UserWorkProfileModuleType.business));
+  } else {
+    final facts = <String>[
+      if (proposalCount != null) '发起提案 $proposalCount',
+      if (score != null) '灯塔规则 $countedTasks',
+    ];
+    const type = UserWorkProfileModuleType.business;
+    const status = UserWorkProfileModuleStatus.ready;
+    modules.add(
+      UserWorkProfileModule(
+        type: type,
+        status: status,
+        summary: '$monthLabel ${facts.join(' · ')}',
+        radarValue: workProfileRadarValue(
+          type: type,
+          status: status,
+          count: (proposalCount ?? 0) + (score == null ? 0 : countedTasks),
+        ),
+      ),
+    );
+  }
+
+  modules.add(
+    score == null
+        ? _unavailableWorkProfileModule(UserWorkProfileModuleType.performance)
+        : UserWorkProfileModule(
+            type: UserWorkProfileModuleType.performance,
+            status: UserWorkProfileModuleStatus.ready,
+            summary: person == null
+                ? '$monthLabel 暂无绩效数据'
+                : '$monthLabel ${person.isRubric ? '量表' : '主营'} ${person.mainScore.toStringAsFixed(2)} · ${person.resolvedGrade.label}',
+            radarValue: workProfileRadarValue(
+              type: UserWorkProfileModuleType.performance,
+              status: UserWorkProfileModuleStatus.ready,
+              score: person?.mainScore ?? 0,
+            ),
+          ),
+  );
+  modules.add(
+    UserWorkProfileModule.connecting(UserWorkProfileModuleType.benefits),
+  );
+  return UserWorkProfileSnapshot(modules: modules);
+}
+
 /// A self-only personal work portrait.
 ///
 /// Identity comes from [AuthSession]. Modules start as “数据对接中”;
@@ -180,7 +422,7 @@ class _NativeUserWorkProfilePageState extends State<NativeUserWorkProfilePage> {
     try {
       final snapshot = widget.loadSnapshot != null
           ? await widget.loadSnapshot!(_month)
-          : await _loadExistingData(_month);
+          : await loadUserWorkProfileSnapshot(widget.session, _month);
       if (!mounted || generation != _loadGeneration) return;
       setState(() => _loaded = snapshot);
     } catch (_) {
@@ -205,256 +447,15 @@ class _NativeUserWorkProfilePageState extends State<NativeUserWorkProfilePage> {
     }
   }
 
-  Future<UserWorkProfileSnapshot> _loadExistingData(DateTime month) async {
-    final monthText = _formatMonth(month);
-    final monthLabel = _formatMonthLabel(month);
-    final monthEnd = DateTime(month.year, month.month + 1, 0);
-    final taskApi = TaskApi(widget.session);
-    final scoreFuture = _nullable(
-      WorkProfileKpiService(
-        session: widget.session,
-      ).fetchMyScore(month: monthText),
-    );
-    final taskFuture = _nullable(
-      Future.wait([
-        taskApi.listTasksPage(
-          scope: 'mine',
-          status: 'active',
-          dateFrom: month,
-          dateTo: monthEnd,
-          size: 1,
-        ),
-        taskApi.listTasksPage(
-          scope: 'mine',
-          status: 'pending_approval',
-          dateFrom: month,
-          dateTo: monthEnd,
-          size: 1,
-        ),
-        taskApi.listTasksPage(
-          scope: 'mine',
-          status: 'completed',
-          dateFrom: month,
-          dateTo: monthEnd,
-          size: 1,
-        ),
-      ]),
-    );
-    final kbFuture = _nullable(
-      NativeKbService(session: widget.session).fetchSummary(),
-    );
-    final meetingFuture = _nullable(
-      NativeMeetingService(
-        session: widget.session,
-      ).fetchList(page: 0, size: 100),
-    );
-    final initiatedFuture = _nullable(
-      XflowService(session: widget.session).fetchB14Initiated(),
-    );
-    final conversationFuture = _nullable(_fetchConversations());
-
-    final results = await Future.wait<Object?>([
-      scoreFuture,
-      taskFuture,
-      kbFuture,
-      meetingFuture,
-      initiatedFuture,
-      conversationFuture,
-    ]);
-    final score = results[0] as WorkProfileKpiScore?;
-    final taskPages = results[1] as List<TaskListPage>?;
-    final kb = results[2] as NativeKbSummary?;
-    final meetings = results[3] as List<NativeMeetingSummary>?;
-    final initiated = results[4] as List<XflowProposalItem>?;
-    final conversations = results[5] as List<NativeConversation>?;
-
-    final modules = <UserWorkProfileModule>[];
-    if (taskPages == null) {
-      modules.add(_unavailable(UserWorkProfileModuleType.workRhythm));
-    } else {
-      final active = taskPages[0].total;
-      final pending = taskPages[1].total;
-      final completed = taskPages[2].total;
-      const type = UserWorkProfileModuleType.workRhythm;
-      const status = UserWorkProfileModuleStatus.ready;
-      modules.add(
-        UserWorkProfileModule(
-          type: type,
-          status: status,
-          summary: '$monthLabel 进行中 $active · 待审核 $pending · 已完成 $completed',
-          radarValue: workProfileRadarValue(
-            type: type,
-            status: status,
-            count: active + pending + completed,
-          ),
-        ),
-      );
-    }
-
-    if (conversations == null) {
-      modules.add(_unavailable(UserWorkProfileModuleType.collaboration));
-    } else {
-      final monthly = conversations.where(
-        (item) =>
-            item.isListedInInbox &&
-            isSameWorkProfileMonth(item.updatedAt, month),
-      );
-      final privateCount = monthly
-          .where((item) => item.kind == 'PRIVATE')
-          .length;
-      final groupCount = monthly.where((item) => item.isGroup).length;
-      const type = UserWorkProfileModuleType.collaboration;
-      const status = UserWorkProfileModuleStatus.ready;
-      modules.add(
-        UserWorkProfileModule(
-          type: type,
-          status: status,
-          summary: '$monthLabel 协作联系人 $privateCount · 群聊 $groupCount',
-          radarValue: workProfileRadarValue(
-            type: type,
-            status: status,
-            count: privateCount + groupCount,
-          ),
-        ),
-      );
-    }
-
-    if (kb == null && meetings == null) {
-      modules.add(_unavailable(UserWorkProfileModuleType.knowledge));
-    } else {
-      final meetingCount = meetings
-          ?.where((item) => _meetingInMonth(item, month))
-          .length;
-      final facts = <String>[
-        if (meetingCount != null) '会议纪要 $meetingCount',
-        if (kb != null) '当前累计 文档 ${kb.documentCount}',
-        if (kb != null) '分类 ${kb.categoryCount}',
-      ];
-      const type = UserWorkProfileModuleType.knowledge;
-      const status = UserWorkProfileModuleStatus.ready;
-      modules.add(
-        UserWorkProfileModule(
-          type: type,
-          status: status,
-          summary: '$monthLabel ${facts.join(' · ')}',
-          radarValue: workProfileRadarValue(
-            type: type,
-            status: status,
-            count: meetingCount ?? 0,
-          ),
-        ),
-      );
-    }
-
-    final person = score?.me;
-    final countedTasks =
-        person?.categories.fold<int>(
-          0,
-          (sum, category) => sum + category.tasks.length,
-        ) ??
-        0;
-    int? proposalCount;
-    if (initiated != null) {
-      proposalCount = initiated.where((item) {
-        final createdAt = item.createdAt;
-        return createdAt != null &&
-            createdAt.year == month.year &&
-            createdAt.month == month.month;
-      }).length;
-    }
-    if (score == null && proposalCount == null) {
-      modules.add(_unavailable(UserWorkProfileModuleType.business));
-    } else {
-      final facts = <String>[
-        if (proposalCount != null) '发起提案 $proposalCount',
-        if (score != null) 'KPI任务 $countedTasks',
-      ];
-      const type = UserWorkProfileModuleType.business;
-      const status = UserWorkProfileModuleStatus.ready;
-      modules.add(
-        UserWorkProfileModule(
-          type: type,
-          status: status,
-          summary: '$monthLabel ${facts.join(' · ')}',
-          radarValue: workProfileRadarValue(
-            type: type,
-            status: status,
-            count: (proposalCount ?? 0) + (score == null ? 0 : countedTasks),
-          ),
-        ),
-      );
-    }
-
-    modules.add(
-      score == null
-          ? _unavailable(UserWorkProfileModuleType.performance)
-          : UserWorkProfileModule(
-              type: UserWorkProfileModuleType.performance,
-              status: UserWorkProfileModuleStatus.ready,
-              summary: person == null
-                  ? '$monthLabel 暂无绩效数据'
-                  : '$monthLabel 主分 ${_formatNumber(person.mainScore)} · ${person.resolvedGrade.label}',
-              radarValue: workProfileRadarValue(
-                type: UserWorkProfileModuleType.performance,
-                status: UserWorkProfileModuleStatus.ready,
-                score: person?.mainScore ?? 0,
-              ),
-            ),
-    );
-    modules.add(
-      UserWorkProfileModule.connecting(UserWorkProfileModuleType.benefits),
-    );
-    return UserWorkProfileSnapshot(modules: modules);
-  }
-
-  Future<T?> _nullable<T>(Future<T> future) async {
-    try {
-      return await future;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<List<NativeConversation>> _fetchConversations() async {
-    final service = ConversationService(session: widget.session);
-    try {
-      return await service.fetchConversations();
-    } finally {
-      service.close();
-    }
-  }
-
-  UserWorkProfileModule _unavailable(UserWorkProfileModuleType type) =>
-      UserWorkProfileModule(
-        type: type,
-        status: UserWorkProfileModuleStatus.unavailable,
-        summary: '数据暂时无法加载',
-      );
-
-  String _formatMonth(DateTime value) =>
-      '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}';
-
-  String _formatMonthLabel(DateTime value) => '${value.year}年${value.month}月';
-
-  String _formatNumber(double value) => value == value.roundToDouble()
-      ? value.toInt().toString()
-      : value.toStringAsFixed(1);
-
-  bool _meetingInMonth(NativeMeetingSummary meeting, DateTime month) {
-    final date =
-        NativeMeetingTime.tryParse(meeting.meetingDate) ??
-        NativeMeetingTime.tryParse(meeting.createdAt);
-    return isSameWorkProfileMonth(date, month);
-  }
+  String _formatMonthLabel(DateTime value) => formatWorkProfileMonthLabel(value);
 
   Future<void> _pickMonth() async {
-    final picked = await showDatePicker(
+    final picked = await showDunesMonthPicker(
       context: context,
-      initialDate: _month,
-      firstDate: _earliestMonth,
-      lastDate: _currentMonth,
-      helpText: '选择画像月份',
-      initialDatePickerMode: DatePickerMode.year,
+      initialMonth: _month,
+      firstMonth: _earliestMonth,
+      lastMonth: _currentMonth,
+      title: '选择月份',
     );
     if (!mounted || picked == null) return;
     _setMonth(DateTime(picked.year, picked.month));
@@ -529,7 +530,7 @@ class _NativeUserWorkProfilePageState extends State<NativeUserWorkProfilePage> {
                       const SizedBox(height: 16),
                       const _ExplanationCard(),
                       const SizedBox(height: 14),
-                      _MonthBar(
+                      WorkProfileMonthBar(
                         label: _formatMonthLabel(_month),
                         canPrev:
                             DateTime(
@@ -541,9 +542,10 @@ class _NativeUserWorkProfilePageState extends State<NativeUserWorkProfilePage> {
                         onPrev: () => _shiftMonth(-1),
                         onNext: () => _shiftMonth(1),
                         onPick: _pickMonth,
+                        loading: false,
                       ),
                       const SizedBox(height: 22),
-                      _ConnectingRadarCard(modules: portrait.modules),
+                      ConnectingRadarCard(modules: portrait.modules),
                       const SizedBox(height: 22),
                       Text(
                         '我的工作画像',
@@ -639,69 +641,6 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _MonthBar extends StatelessWidget {
-  const _MonthBar({
-    required this.label,
-    required this.canPrev,
-    required this.canNext,
-    required this.onPrev,
-    required this.onNext,
-    required this.onPick,
-  });
-
-  final String label;
-  final bool canPrev;
-  final bool canNext;
-  final VoidCallback onPrev;
-  final VoidCallback onNext;
-  final VoidCallback onPick;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE6DCF0)),
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            key: const Key('work-profile-month-prev'),
-            tooltip: '上个月',
-            onPressed: canPrev ? onPrev : null,
-            icon: const Icon(Icons.chevron_left_rounded),
-            color: const Color(0xFF4A3866),
-          ),
-          Expanded(
-            child: TextButton.icon(
-              key: const Key('work-profile-month'),
-              onPressed: onPick,
-              icon: const Icon(Icons.calendar_month_rounded, size: 17),
-              label: Text(
-                label,
-                style: DunesTypography.sans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF312249),
-                ),
-              ),
-            ),
-          ),
-          IconButton(
-            key: const Key('work-profile-month-next'),
-            tooltip: '下个月',
-            onPressed: canNext ? onNext : null,
-            icon: const Icon(Icons.chevron_right_rounded),
-            color: const Color(0xFF4A3866),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _IdentityHero extends StatelessWidget {
   const _IdentityHero({
     required this.name,
@@ -750,12 +689,12 @@ class _IdentityHero extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'SELF · WORK PORTRAIT',
+                  '个人工作画像',
                   style: TextStyle(
                     color: Color(0xCCFFFFFF),
-                    fontSize: 10,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 1.1,
+                    letterSpacing: 0.6,
                   ),
                 ),
                 const SizedBox(height: 7),
@@ -833,16 +772,23 @@ class _ExplanationCard extends StatelessWidget {
   }
 }
 
-class _ConnectingRadarCard extends StatefulWidget {
-  const _ConnectingRadarCard({required this.modules});
+class ConnectingRadarCard extends StatefulWidget {
+  const ConnectingRadarCard({
+    super.key,
+    required this.modules,
+    this.compact = false,
+    this.onExpand,
+  });
 
   final List<UserWorkProfileModule> modules;
+  final bool compact;
+  final VoidCallback? onExpand;
 
   @override
-  State<_ConnectingRadarCard> createState() => _ConnectingRadarCardState();
+  State<ConnectingRadarCard> createState() => _ConnectingRadarCardState();
 }
 
-class _ConnectingRadarCardState extends State<_ConnectingRadarCard>
+class _ConnectingRadarCardState extends State<ConnectingRadarCard>
     with SingleTickerProviderStateMixin {
   static const _duration = Duration(milliseconds: 780);
 
@@ -868,7 +814,7 @@ class _ConnectingRadarCardState extends State<_ConnectingRadarCard>
   }
 
   @override
-  void didUpdateWidget(covariant _ConnectingRadarCard oldWidget) {
+  void didUpdateWidget(covariant ConnectingRadarCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     final next = _radarValuesOf(widget.modules);
     if (_sameRadarValues(next, _to)) return;
@@ -890,8 +836,10 @@ class _ConnectingRadarCardState extends State<_ConnectingRadarCard>
   @override
   Widget build(BuildContext context) {
     final hasPlot = _to.any((value) => value > 0);
+    final radarHeight = widget.compact ? 172.0 : 268.0;
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
+      padding: EdgeInsets.fromLTRB(16, widget.compact ? 14 : 18, 16, widget.compact ? 12 : 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -900,29 +848,73 @@ class _ConnectingRadarCardState extends State<_ConnectingRadarCard>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '能力维度',
-            style: DunesTypography.sans(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: const Color(0xFF342740),
-            ),
+          Row(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '能力维度',
+                    style: DunesTypography.sans(
+                      fontSize: widget.compact ? 15 : 16,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF342740),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    widget.compact
+                        ? '当月相对活跃度 · 点击放大全景看板'
+                        : '按当月可追溯指标绘制相对活跃度，不是综合评分',
+                    style: TextStyle(
+                      fontSize: widget.compact ? 11 : 12,
+                      color: const Color(0xFF817589),
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              if (widget.onExpand != null)
+                InkWell(
+                  onTap: widget.onExpand,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3EDF9),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFE2D6EE)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.open_in_full_rounded, size: 12, color: Color(0xFF7651B8)),
+                        SizedBox(width: 4),
+                        Text(
+                          '放大看',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF7651B8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(height: 4),
-          const Text(
-            '按当月可追溯指标绘制相对活跃度，不是综合评分',
-            style: TextStyle(fontSize: 12, color: Color(0xFF817589)),
-          ),
-          const SizedBox(height: 12),
+          SizedBox(height: widget.compact ? 8 : 12),
           SizedBox(
-            height: 268,
+            height: radarHeight,
             child: AnimatedBuilder(
               animation: _progress,
               builder: (context, _) {
                 final values = _lerpRadarValues(_from, _to, _progress.value);
                 return LayoutBuilder(
                   builder: (context, constraints) {
-                    final size = Size(constraints.maxWidth, 268);
+                    final size = Size(constraints.maxWidth, radarHeight);
+                    final radius = math.min(size.width, size.height) * .31;
                     return Stack(
                       alignment: Alignment.center,
                       children: [
@@ -968,6 +960,7 @@ class _ConnectingRadarCardState extends State<_ConnectingRadarCard>
                             label: widget.modules[index].type.label,
                             index: index,
                             total: widget.modules.length,
+                            radius: radius,
                             emphasized: _hovered == index,
                             appear: Curves.easeOut.transform(
                               ((_progress.value - index * 0.06) / 0.7).clamp(
@@ -1044,6 +1037,7 @@ class _RadarLabel extends StatelessWidget {
     required this.index,
     required this.total,
     required this.appear,
+    required this.radius,
     this.emphasized = false,
   });
 
@@ -1051,12 +1045,16 @@ class _RadarLabel extends StatelessWidget {
   final int index;
   final int total;
   final double appear;
+  final double radius;
   final bool emphasized;
 
   @override
   Widget build(BuildContext context) {
     final angle = _radarAngle(index, total);
-    final offset = Offset(math.cos(angle) * 108, math.sin(angle) * 104);
+    final offset = Offset(
+      math.cos(angle) * (radius * 1.32),
+      math.sin(angle) * (radius * 1.25),
+    );
     return Opacity(
       opacity: appear,
       child: Transform.translate(
@@ -1360,3 +1358,7 @@ class _ModuleCard extends StatelessWidget {
     );
   }
 }
+
+typedef WorkProfileModuleCard = _ModuleCard;
+typedef WorkProfileExplanationCard = _ExplanationCard;
+

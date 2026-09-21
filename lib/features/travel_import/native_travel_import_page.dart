@@ -1262,3 +1262,76 @@ class _TravelUserPickerBodyState extends State<_TravelUserPickerBody> {
     );
   }
 }
+
+/// 饕板块内的差旅订单列表：自带返回顶栏，嵌入主导航。
+class NativeQianjiTravelImportHost extends StatelessWidget {
+  const NativeQianjiTravelImportHost({
+    super.key,
+    required this.session,
+    required this.onBack,
+  });
+
+  final AuthSession session;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: const Color(0xFFF5F6F8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 10, 16, 4),
+              child: Row(
+                children: [
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: onBack,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.arrow_back_ios_new,
+                            size: 14,
+                            color: DunesColors.text2,
+                          ),
+                          SizedBox(width: 2),
+                          Text(
+                            '饕',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: DunesColors.text2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      '差旅列表',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: _themePurple,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: NativeTravelImportPage(session: session),
+          ),
+        ],
+      ),
+    );
+  }
+}

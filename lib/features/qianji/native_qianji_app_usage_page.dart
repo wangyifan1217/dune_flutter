@@ -7,8 +7,12 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/widgets/horizontal_drag_scroll_view.dart';
 import '../auth/auth_session.dart';
+import '../chat/user_avatar_widget.dart';
+import '../conversation/conversation_service.dart';
 import 'app_usage_models.dart';
 import 'app_usage_service.dart';
+import 'efficiency/efficiency_models.dart';
+import 'efficiency/efficiency_service.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
 const _deepPurple = Color(0xFF4A2FA0);
@@ -38,6 +42,12 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
   late final AppUsageService _service = AppUsageService(
     session: widget.session,
   );
+  late final EfficiencyService _avatarLookup = EfficiencyService(
+    session: widget.session,
+  );
+  late final ConversationService _avatarService = ConversationService(
+    session: widget.session,
+  );
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _keywordCtrl = TextEditingController();
 
@@ -49,7 +59,10 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
   bool _loadingMore = false;
   bool _hasMore = true;
   bool _superviseAll = false;
+  bool _moduleTotalsExpanded = false;
   int _page = 0;
+  int _avatarLoadGeneration = 0;
+  Map<int, WorkSituationAvatar> _userAvatars = const {};
   static const int _pageSize = 20;
   String? _error;
   Timer? _keywordDebounce;
@@ -85,12 +98,20 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
         return (monday, DateTime(now.year, now.month, now.day));
       case _UsageRangePreset.d7:
         return (
-          DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6)),
+          DateTime(
+            now.year,
+            now.month,
+            now.day,
+          ).subtract(const Duration(days: 6)),
           DateTime(now.year, now.month, now.day),
         );
       case _UsageRangePreset.d30:
         return (
-          DateTime(now.year, now.month, now.day).subtract(const Duration(days: 29)),
+          DateTime(
+            now.year,
+            now.month,
+            now.day,
+          ).subtract(const Duration(days: 29)),
           DateTime(now.year, now.month, now.day),
         );
       case _UsageRangePreset.custom:
@@ -173,7 +194,11 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
     if (range == null) return;
     setState(() {
       _rangePreset = _UsageRangePreset.custom;
-      _customFrom = DateTime(range.start.year, range.start.month, range.start.day);
+      _customFrom = DateTime(
+        range.start.year,
+        range.start.month,
+        range.start.day,
+      );
       _customTo = DateTime(range.end.year, range.end.month, range.end.day);
     });
     unawaited(_load(reset: true));
@@ -233,6 +258,7 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
         _page = 1;
         _loading = false;
       });
+      unawaited(_loadUserAvatars(users.items));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -262,10 +288,22 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
         _page += 1;
         _loadingMore = false;
       });
+      unawaited(_loadUserAvatars(users.items));
     } catch (_) {
       if (!mounted) return;
       setState(() => _loadingMore = false);
     }
+  }
+
+  Future<void> _loadUserAvatars(Iterable<AppUsageUserRow> users) async {
+    final ids = users.map((user) => user.userId).where((id) => id > 0).toSet();
+    if (ids.isEmpty) return;
+    final generation = ++_avatarLoadGeneration;
+    final avatars = await _avatarLookup.fetchUserAvatars(ids);
+    if (!mounted || generation != _avatarLoadGeneration || avatars.isEmpty) {
+      return;
+    }
+    setState(() => _userAvatars = {..._userAvatars, ...avatars});
   }
 
   @override
@@ -561,6 +599,8 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
             _UserCard(
               row: row,
               maxDuration: _users.first.durationMs,
+              avatar: _userAvatars[row.userId],
+              avatarService: _avatarService,
               onTap: () {
                 final (from, to) = _rangeBounds;
                 widget.onOpenUser(row, from, to);
@@ -600,13 +640,25 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
   }
 
   Widget _buildModuleHeat(AppUsageHeatmap heatmap) {
-    final modules = heatmap.modules;
+    final modules = heatmap.modules.where((m) {
+      if (m.moduleKey == '_session') return false;
+      if (_selectedModule != null && m.moduleKey == _selectedModule) {
+        return true;
+      }
+      return m.durationMs > 0;
+    }).toList();
+    final matrix = heatmap.matrix.where((row) {
+      if (_selectedModule != null && row.moduleKey == _selectedModule) {
+        return true;
+      }
+      return row.values.any((v) => v > 0);
+    }).toList();
     final maxDur = modules.fold<int>(
       0,
       (m, e) => e.durationMs > m ? e.durationMs : m,
     );
     var maxCell = 0;
-    for (final row in heatmap.matrix) {
+    for (final row in matrix) {
       for (final v in row.values) {
         if (v > maxCell) maxCell = v;
       }
@@ -624,11 +676,11 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
         ),
         const SizedBox(height: 4),
         const Text(
-          '格子越深，当天在该模块停得越久',
+          '格子越深，当天停得越久。网页应用指薪人薪事、携程、资管等内嵌页。',
           style: TextStyle(fontSize: 12, color: DunesColors.text3),
         ),
         const SizedBox(height: 10),
-        if (heatmap.matrix.isEmpty)
+        if (matrix.isEmpty)
           const Text('暂无模块数据', style: TextStyle(color: DunesColors.text3))
         else
           Container(
@@ -640,7 +692,7 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
             ),
             child: _HeatMatrix(
               dates: heatmap.dates,
-              rows: heatmap.matrix,
+              rows: matrix,
               maxValue: maxCell,
               selectedModule: _selectedModule,
               onSelect: (key) {
@@ -652,46 +704,64 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
             ),
           ),
         const SizedBox(height: 16),
-        const Text(
-          '模块总停留',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF261D38),
-          ),
-        ),
-        const SizedBox(height: 10),
-        if (modules.isNotEmpty)
-          Container(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFEDE8F5)),
-            ),
-            child: Column(
+        InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () {
+            setState(() => _moduleTotalsExpanded = !_moduleTotalsExpanded);
+          },
+          child: const Padding(
+            padding: EdgeInsets.symmetric(vertical: 4),
+            child: Row(
               children: [
-                for (final m in modules)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: _ModuleBar(
-                      module: m,
-                      ratio: maxDur <= 0 ? 0 : m.durationMs / maxDur,
+                Expanded(
+                  child: Text(
+                    '模块总停留',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF261D38),
                     ),
                   ),
+                ),
+                Icon(Icons.expand_more_rounded, color: DunesColors.text3),
               ],
             ),
           ),
+        ),
+        if (_moduleTotalsExpanded) ...[
+          const SizedBox(height: 10),
+          if (modules.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFEDE8F5)),
+              ),
+              child: Column(
+                children: [
+                  for (final m in modules)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _ModuleBar(
+                        module: m,
+                        ratio: maxDur <= 0 ? 0 : m.durationMs / maxDur,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
         if (_selectedModule != null && heatmap.pages.isNotEmpty) ...[
           const SizedBox(height: 12),
-          for (final p in heatmap.pages.take(8))
+          for (final p in groupedUsagePages(heatmap.pages).take(8))
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Row(
                 children: [
                   Expanded(
                     child: Text(
-                      usageScreenName(p.screenName),
+                      usagePageStayLabel(p),
                       style: const TextStyle(
                         fontSize: 13,
                         color: Color(0xFF261D38),
@@ -780,84 +850,116 @@ class _HeatMatrix extends StatelessWidget {
     return date;
   }
 
+  static const _labelW = 56.0;
+  static const _gap = 3.0;
+  static const _maxCell = 18.0;
+  static const _minCell = 12.0;
+
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cols = dates.length;
+        if (cols <= 0) return const SizedBox.shrink();
+        final available = (constraints.maxWidth - _labelW).clamp(0.0, 4000.0);
+        final raw = (available - _gap * (cols - 1)) / cols;
+        final cell = raw.clamp(_minCell, _maxCell);
+        final gridW = _labelW + cols * cell + (cols - 1) * _gap;
+        final grid = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(width: 42),
-            for (final d in dates)
-              Expanded(
-                child: Text(
-                  _dayLabel(d),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 10, color: DunesColors.text3),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        for (final row in rows)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: InkWell(
-              onTap: () => onSelect(row.moduleKey),
-              child: Row(
-                children: [
+            Row(
+              children: [
+                const SizedBox(width: _labelW),
+                for (var i = 0; i < cols; i++) ...[
+                  if (i > 0) const SizedBox(width: _gap),
                   SizedBox(
-                    width: 42,
+                    width: cell,
                     child: Text(
-                      row.moduleName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: selectedModule == row.moduleKey
-                            ? _themePurple
-                            : const Color(0xFF261D38),
+                      _dayLabel(dates[i]),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: DunesColors.text3,
                       ),
                     ),
                   ),
-                  for (var i = 0; i < dates.length; i++)
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 1.5),
-                        child: AspectRatio(
-                          aspectRatio: 1,
+                ],
+              ],
+            ),
+            const SizedBox(height: 4),
+            for (final row in rows)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: InkWell(
+                  onTap: () => onSelect(row.moduleKey),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: _labelW,
+                        child: Text(
+                          usageModuleLabel(row.moduleKey, row.moduleName),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: selectedModule == row.moduleKey
+                                ? _themePurple
+                                : const Color(0xFF261D38),
+                          ),
+                        ),
+                      ),
+                      for (var i = 0; i < cols; i++) ...[
+                        if (i > 0) const SizedBox(width: _gap),
+                        SizedBox(
+                          width: cell,
+                          height: cell,
                           child: DecoratedBox(
                             decoration: BoxDecoration(
                               color: _heatColor(
                                 i < row.values.length ? row.values[i] : 0,
                                 maxValue,
                               ),
-                              borderRadius: BorderRadius.circular(5),
+                              borderRadius: BorderRadius.circular(3),
                               border: selectedModule == row.moduleKey
                                   ? Border.all(color: _deepPurple)
                                   : null,
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                ],
+                      ],
+                    ],
+                  ),
+                ),
               ),
+            const SizedBox(height: 6),
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  '低 ',
+                  style: TextStyle(fontSize: 10, color: DunesColors.text3),
+                ),
+                _LegendDot(color: Color(0xFFEEE8F8)),
+                _LegendDot(color: Color(0xFFD4C4F4)),
+                _LegendDot(color: Color(0xFF9B7EE8)),
+                _LegendDot(color: Color(0xFF4A2FA0)),
+                Text(
+                  ' 高',
+                  style: TextStyle(fontSize: 10, color: DunesColors.text3),
+                ),
+              ],
             ),
-          ),
-        const SizedBox(height: 6),
-        const Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Text('低 ', style: TextStyle(fontSize: 10, color: DunesColors.text3)),
-            _LegendDot(color: Color(0xFFEEE8F8)),
-            _LegendDot(color: Color(0xFFD4C4F4)),
-            _LegendDot(color: Color(0xFF9B7EE8)),
-            _LegendDot(color: Color(0xFF4A2FA0)),
-            Text(' 高', style: TextStyle(fontSize: 10, color: DunesColors.text3)),
           ],
-        ),
-      ],
+        );
+        if (gridW > constraints.maxWidth + 0.5) {
+          return HorizontalDragScrollView(
+            child: SizedBox(width: gridW, child: grid),
+          );
+        }
+        return grid;
+      },
     );
   }
 }
@@ -891,9 +993,9 @@ class _ModuleBar extends StatelessWidget {
     return Row(
       children: [
         SizedBox(
-          width: 42,
+          width: 56,
           child: Text(
-            module.moduleName,
+            usageModuleLabel(module.moduleKey, module.moduleName),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -936,11 +1038,15 @@ class _UserCard extends StatelessWidget {
   const _UserCard({
     required this.row,
     required this.maxDuration,
+    required this.avatar,
+    required this.avatarService,
     required this.onTap,
   });
 
   final AppUsageUserRow row;
   final int maxDuration;
+  final WorkSituationAvatar? avatar;
+  final ConversationService avatarService;
   final VoidCallback onTap;
 
   @override
@@ -957,16 +1063,16 @@ class _UserCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: const Color(0xFFF1EBF9),
-                child: Text(
-                  initial,
-                  style: const TextStyle(
-                    color: _themePurple,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+              ImUserAvatar(
+                initial: initial,
+                seed: row.userId,
+                size: 36,
+                avatarPreset: avatar?.preset,
+                avatarObjectKey: avatar?.objectKey,
+                avatarUrl: avatar?.url,
+                avatarService: avatarService,
+                fallbackBackground: const Color(0xFFF1EBF9),
+                fallbackForeground: _themePurple,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -985,8 +1091,9 @@ class _UserCard extends StatelessWidget {
                     Text(
                       [
                         if (row.departmentName.isNotEmpty) row.departmentName,
-                        if (row.topModuleName.isNotEmpty)
-                          '常用${row.topModuleName}',
+                        if (row.topModule.isNotEmpty ||
+                            row.topModuleName.isNotEmpty)
+                          '常用${usageModuleLabel(row.topModule, row.topModuleName)}',
                       ].join(' · '),
                       style: const TextStyle(
                         fontSize: 12,

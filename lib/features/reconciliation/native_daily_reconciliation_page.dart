@@ -147,7 +147,8 @@ class _NativeDailyReconciliationPageState
     try {
       final snap = await _api.fetchTag3Daily(asOfDate: asOfDate);
       if (!mounted || gen != _loadGen) return;
-      final usePreview = kTag3DailyStaticPreview &&
+      final usePreview =
+          kTag3DailyStaticPreview &&
           asOfDate.trim() == tag3DailyPreviewAsOfDate() &&
           snap.rows.isEmpty;
       setState(() {
@@ -336,10 +337,7 @@ class _NativeDailyReconciliationPageState
       child: _buildBody(),
     );
     if (_level != _ReconLevel.dates) return body;
-    return RefreshIndicator(
-      onRefresh: _loadDates,
-      child: body,
-    );
+    return RefreshIndicator(onRefresh: _loadDates, child: body);
   }
 
   Widget _buildBody() {
@@ -452,7 +450,8 @@ class _NativeDailyReconciliationPageState
                           ),
                           style: DunesTypography.sans(
                             fontSize: 12,
-                            color: item.tag3ConfirmRows > 0 ||
+                            color:
+                                item.tag3ConfirmRows > 0 ||
                                     item.tag3CommentCount > 0
                                 ? DunesColors.accent
                                 : DunesColors.text3,
@@ -483,49 +482,32 @@ class _NativeDailyReconciliationPageState
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
           child: Material(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     '${shucaiDisplayDate(_asOfDate)} · 日清月结',
                     style: DunesTypography.sans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
                       color: DunesColors.text,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
-                    tag3DailyDispatchBody(_asOfDate),
-                    style: DunesTypography.sans(
-                      fontSize: 13,
-                      color: DunesColors.text2,
-                      height: 1.35,
-                    ),
-                  ),
-                  if (snap != null) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      tag3DailySnapshotStatusLine(snap.rows),
-                      style: DunesTypography.sans(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: DunesColors.accent,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 6),
-                  Text(
-                    '业务和运营一起审、不排队。轮到你名下的行点确认即可，不用填内容。意见另填。本月累计只展示。',
+                    snap == null
+                        ? '右侧可直接确认，意见选填。'
+                        : tag3DailySnapshotStatusLine(snap.rows),
                     style: DunesTypography.sans(
                       fontSize: 12.5,
-                      color: DunesColors.text3,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.accent,
                     ),
                   ),
                 ],
@@ -567,12 +549,10 @@ class _NativeDailyReconciliationPageState
                         metricKey: 'receivableAmount',
                       ),
                     ),
-                    onConfirm: (row) => unawaited(
-                      _submitTag3DailyAction(row, confirm: true),
-                    ),
-                    onComment: (row) => unawaited(
-                      _submitTag3DailyAction(row, confirm: false),
-                    ),
+                    onConfirm: (row) =>
+                        unawaited(_submitTag3DailyAction(row, confirm: true)),
+                    onComment: (row) =>
+                        unawaited(_submitTag3DailyAction(row, confirm: false)),
                     onViewComments: (row) {
                       unawaited(
                         showTag3DailyCommentHistory(
@@ -591,10 +571,7 @@ class _NativeDailyReconciliationPageState
 }
 
 class _Tag3DailyDateStatusPill extends StatelessWidget {
-  const _Tag3DailyDateStatusPill({
-    required this.label,
-    required this.done,
-  });
+  const _Tag3DailyDateStatusPill({required this.label, required this.done});
 
   final String label;
   final bool done;

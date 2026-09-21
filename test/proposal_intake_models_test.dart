@@ -2503,6 +2503,36 @@ void main() {
     expect(bound.name, '能源积分');
   });
 
+  test('product settle money shows income cost and profit', () {
+    final sku = ProposalSkuDetailRow.fromJson({
+      'id': 'sku-1',
+      'productName': '中石油100元',
+      'faceValue': '100',
+      'settlements': [
+        {'id': 'st-in', 'kind': 'income', 'settleRatio': '0.9'},
+        {'id': 'st-cost', 'kind': 'cost', 'settleRatio': '0.8'},
+      ],
+    });
+    final money = proposalSkuSettleMoney(sku, form: {'salesScale': 100});
+    expect(money.hasBoth, isTrue);
+    expect(money.income, 90);
+    expect(money.cost, 80);
+    expect(money.profit, 10);
+    expect(proposalSkuSettleMoneyBits(money), [
+      '收入 90万',
+      '成本 80万',
+      '利润 10万',
+    ]);
+
+    final ratioOnly = proposalSkuSettleMoney(sku, form: {});
+    expect(ratioOnly.scale, 0);
+    expect(proposalSkuSettleMoneyBits(ratioOnly), [
+      '收入 90%',
+      '成本 80%',
+      '利润 10%',
+    ]);
+  });
+
   test('unit price revenue uses scale times unit price over face', () {
     final form = {
       'salesScale': 100,

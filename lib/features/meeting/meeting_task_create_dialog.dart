@@ -6,6 +6,7 @@ import '../tasks/task_api.dart';
 import '../tasks/task_create_confirm.dart';
 import '../tasks/task_first_use_guide.dart';
 import '../tasks/task_models.dart';
+import '../tasks/task_widgets.dart';
 
 class MeetingTaskCreateDraft {
   const MeetingTaskCreateDraft({
@@ -215,22 +216,12 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
   Future<void> _pick({required bool isStart}) async {
     final now = DateTime.now();
     final initial = isStart ? (_startAt ?? now) : (_dueAt ?? _startAt ?? now);
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showTaskDatePicker(
+      context,
       initialDate: initial,
       firstDate: DateTime(now.year - 1),
       lastDate: DateTime(now.year + 5),
       helpText: isStart ? '选择开始时间' : '选择结束时间',
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(
-              context,
-            ).colorScheme.copyWith(primary: DunesColors.brandPurple),
-          ),
-          child: child!,
-        );
-      },
     );
     if (picked == null || !mounted) return;
     setState(() {

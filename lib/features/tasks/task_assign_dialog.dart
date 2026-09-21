@@ -5,6 +5,7 @@ import '../auth/auth_session.dart';
 import 'task_api.dart';
 import 'task_avatar.dart';
 import 'task_models.dart';
+import 'task_widgets.dart';
 
 class TaskAssignDraft {
   const TaskAssignDraft({required this.ownerUserId, this.comment = ''});
@@ -157,6 +158,10 @@ class _TaskAssignDialogState extends State<_TaskAssignDialog> {
                           final selected = _picked?.id == a.id;
                           return ListTile(
                             selected: selected,
+                            selectedColor: kTaskPurple,
+                            selectedTileColor: kTaskPurple.withValues(
+                              alpha: 0.08,
+                            ),
                             leading: buildTaskUserAvatar(
                               session: widget.session,
                               name: a.displayName,

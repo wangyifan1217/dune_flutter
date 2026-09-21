@@ -1641,7 +1641,11 @@ class ConversationService {
     final usable = cached
         .where(
           (c) =>
-              c.id > 0 && (c.isPrivate || c.isGroup || c.isWorkgroupApproval),
+              c.id > 0 &&
+              (c.isPrivate ||
+                  c.isGroup ||
+                  c.isWorkgroupApproval ||
+                  c.isImAssistant),
         )
         .toList();
     final q = query.toLowerCase();
@@ -1659,7 +1663,10 @@ class ConversationService {
       final seen = {...matched, ...rest}.map((c) => c.id).toSet();
       for (final c in remote) {
         if (c.id <= 0 || !seen.add(c.id)) continue;
-        if (c.isPrivate || c.isGroup || c.isWorkgroupApproval) {
+        if (c.isPrivate ||
+            c.isGroup ||
+            c.isWorkgroupApproval ||
+            c.isImAssistant) {
           matched.add(c);
         }
       }
@@ -1698,7 +1705,9 @@ class ConversationService {
         if (!_messageMatchesKind(m.kind, kind)) continue;
         hits[m.id] = GlobalMessageHit(
           conversationId: conversation.id,
-          conversationTitle: conversation.displayTitle,
+          conversationTitle: conversation.isImAssistant
+              ? conversation.inboxDisplayTitle
+              : conversation.displayTitle,
           messageId: m.id,
           senderName: m.senderName,
           senderUserId: m.senderUserId,
@@ -1744,9 +1753,7 @@ class ConversationService {
 
   bool _conversationLooksRelated(NativeConversation c, String q) {
     if (q.isEmpty) return false;
-    return c.preview.toLowerCase().contains(q) ||
-        c.displayTitle.toLowerCase().contains(q) ||
-        c.title.toLowerCase().contains(q);
+    return c.preview.toLowerCase().contains(q) || c.matchesSearchQuery(q);
   }
 
   bool _looksLikeWebQuery(String query) {

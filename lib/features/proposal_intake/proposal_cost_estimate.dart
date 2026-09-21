@@ -234,6 +234,89 @@ double proposalIntakeSettleShare(
   return 0;
 }
 
+class ProposalSkuSettleMoney {
+  const ProposalSkuSettleMoney({
+    this.income = 0,
+    this.cost = 0,
+    this.incomeShare = 0,
+    this.costShare = 0,
+    this.scale = 0,
+    this.hasIncome = false,
+    this.hasCost = false,
+  });
+
+  final double income;
+  final double cost;
+  final double incomeShare;
+  final double costShare;
+  final double scale;
+  final bool hasIncome;
+  final bool hasCost;
+
+  bool get hasAny => hasIncome || hasCost;
+  bool get hasBoth => hasIncome && hasCost;
+  double get profit => proposalRoundWan(income - cost);
+  double get profitShare => incomeShare - costShare;
+}
+
+String proposalFormatSharePct(double share) {
+  final pct = proposalRoundWan(share * 100);
+  if ((pct - pct.roundToDouble()).abs() < 0.001) return '${pct.round()}%';
+  return '${proposalFormatWan(pct)}%';
+}
+
+/// 单个产品结算的收入、成本、利润。有年化规模时按万元，否则按比例。
+ProposalSkuSettleMoney proposalSkuSettleMoney(
+  ProposalSkuDetailRow sku, {
+  required Map<String, dynamic> form,
+}) {
+  final face = proposalIntakeSkuSettleFace(sku);
+  var incomeShare = 0.0;
+  var costShare = 0.0;
+  var hasIncome = false;
+  var hasCost = false;
+  for (final settle in proposalIntakeSkuSettlements(sku)) {
+    final share = proposalIntakeSettleShare(settle.terms, face: face);
+    if (share <= 0) continue;
+    if (settle.isCost) {
+      hasCost = true;
+      costShare += share;
+    } else {
+      hasIncome = true;
+      incomeShare += share;
+    }
+  }
+  final local = proposalIntakeSkuScaleTotal(sku);
+  final scale = local > 0 ? local : proposalEffectiveSalesScale(form);
+  return ProposalSkuSettleMoney(
+    income: proposalRoundWan(scale * incomeShare),
+    cost: proposalRoundWan(scale * costShare),
+    incomeShare: incomeShare,
+    costShare: costShare,
+    scale: scale,
+    hasIncome: hasIncome,
+    hasCost: hasCost,
+  );
+}
+
+List<String> proposalSkuSettleMoneyBits(ProposalSkuSettleMoney money) {
+  if (!money.hasAny) return const [];
+  String amount({required bool has, required double wan, required double share}) {
+    if (!has) return '';
+    if (money.scale > 0) return '${proposalFormatWan(wan)}万';
+    return proposalFormatSharePct(share);
+  }
+
+  return [
+    if (money.hasIncome)
+      '收入 ${amount(has: true, wan: money.income, share: money.incomeShare)}',
+    if (money.hasCost)
+      '成本 ${amount(has: true, wan: money.cost, share: money.costShare)}',
+    if (money.hasBoth)
+      '利润 ${money.scale > 0 ? '${proposalFormatWan(money.profit)}万' : proposalFormatSharePct(money.profitShare)}',
+  ];
+}
+
 ProposalProductScaleRollup? proposalProductScaleRollup(
   Map<String, dynamic> form,
 ) {

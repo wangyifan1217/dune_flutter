@@ -89,6 +89,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('开始时间'), findsOneWidget);
     expect(find.text('结束时间'), findsOneWidget);
+    expect(find.text('一级分类'), findsOneWidget);
+    expect(find.text('二级分类'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).first, '客户闭环');
     await tester.tap(find.text('保存'));

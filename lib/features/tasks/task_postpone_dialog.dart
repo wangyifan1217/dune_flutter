@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import 'task_models.dart';
+import 'task_widgets.dart';
 
 class TaskPostponeDraft {
   const TaskPostponeDraft({required this.dueAt, this.reason = ''});
@@ -69,22 +70,12 @@ class _TaskPostponeDialogState extends State<_TaskPostponeDialog> {
           ).add(const Duration(days: 1));
     var last = DateTime(now.year + 5);
     if (first.isAfter(last)) last = first;
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showTaskDatePicker(
+      context,
       initialDate: initial.isBefore(first) ? first : initial,
       firstDate: first,
       lastDate: last,
       helpText: '选择新的截止日',
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(
-              context,
-            ).colorScheme.copyWith(primary: DunesColors.brandPurple),
-          ),
-          child: child!,
-        );
-      },
     );
     if (picked == null || !mounted) return;
     setState(() {

@@ -136,22 +136,12 @@ class _TaskRecurringCreateDialogState extends State<_TaskRecurringCreateDialog> 
     var initialDate = initial;
     if (initialDate.isBefore(first)) initialDate = first;
     if (initialDate.isAfter(last)) initialDate = last;
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showTaskDatePicker(
+      context,
       initialDate: initialDate,
       firstDate: first,
       lastDate: last,
       helpText: isStart ? '选择开始日期' : '选择结束日期',
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(
-              context,
-            ).colorScheme.copyWith(primary: kTaskPurple),
-          ),
-          child: child!,
-        );
-      },
     );
     if (picked == null || !mounted) return;
     setState(() {
@@ -311,36 +301,23 @@ class _TaskRecurringCreateDialogState extends State<_TaskRecurringCreateDialog> 
     required List<(String, String)> items,
     required ValueChanged<String> onChanged,
   }) {
-    return DropdownButtonFormField<String>(
+    return TaskDropdownField<String>(
       key: key,
-      initialValue: value,
-      isExpanded: true,
-      icon: const Icon(
-        Icons.expand_more,
-        size: 20,
-        color: DunesColors.text3,
-      ),
-      dropdownColor: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      decoration: _fieldDecoration(),
-      items: [
-        for (final item in items)
-          DropdownMenuItem(value: item.$1, child: Text(item.$2)),
-      ],
-      onChanged: (v) {
-        if (v == null) return;
-        onChanged(v);
-      },
+      value: value,
+      items: items,
+      sheetTitle: '请选择',
+      onChanged: onChanged,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 0),
-      contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
-      actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+    return TaskTheme(
+      child: AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: const EdgeInsets.fromLTRB(24, 22, 24, 0),
+        contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
+        actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
       title: const Text(
         '新建周期任务',
         style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
@@ -491,6 +468,7 @@ class _TaskRecurringCreateDialogState extends State<_TaskRecurringCreateDialog> 
           child: const Text('创建'),
         ),
       ],
+    ),
     );
   }
 }

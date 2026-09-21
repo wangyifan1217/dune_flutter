@@ -94,6 +94,49 @@ class NativeConversation {
         normalized == 'RECON_BOT';
   }
 
+  /// IM 系统助手 / 机器人会话（对账、任务、审批等），不是真人私聊也不是群。
+  bool get isImAssistant =>
+      isApprovalAssistant ||
+      isTaskAssistant ||
+      isKpiAssistant ||
+      isReconciliationAssistant ||
+      isDriveAssistant ||
+      isXrxsAssistant ||
+      isWeeklySummary ||
+      isAdministrativeNotice ||
+      isAiAssistant ||
+      isRobot ||
+      isSelfMemo;
+
+  /// 与会话列表展示名对齐，供全局搜索按「对账助手」「任务助手」命中。
+  String get inboxDisplayTitle {
+    if (isAdministrativeNotice) return '行政通知';
+    if (isReconciliationAssistant) return '对账助手';
+    if (isAiAssistant) {
+      final t = title.trim();
+      return (t.isEmpty || t == '私聊' || t == '会话') ? '小饕' : t;
+    }
+    if (isApprovalAssistant) return '审批助手';
+    if (isTaskAssistant) return '任务助手';
+    if (isKpiAssistant) return '绩效助手';
+    if (isDriveAssistant) return '企业微盘';
+    if (isXrxsAssistant) return '薪人薪事';
+    if (isWeeklySummary) return '一周小结';
+    if (isSelfMemo) {
+      final t = title.trim();
+      return t.isEmpty ? '文件传输助手' : t;
+    }
+    return displayTitle;
+  }
+
+  bool matchesSearchQuery(String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return false;
+    return title.toLowerCase().contains(q) ||
+        displayTitle.toLowerCase().contains(q) ||
+        inboxDisplayTitle.toLowerCase().contains(q);
+  }
+
   /// kind=ROBOT 时 businessType 存 robotKey。
   String? get robotKey {
     if (!isRobot) return null;

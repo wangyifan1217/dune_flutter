@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/dunes_choice_panel.dart';
 import '../auth/auth_session.dart';
 import '../robots/robot_character.dart';
 import '../robots/robot_consult_store.dart';
@@ -34,6 +35,7 @@ class NativeQianjiHubPage extends StatefulWidget {
     this.onOpenCashFlow,
     this.onOpenMonthlyBill,
     this.onOpenTravel,
+    this.onOpenTravelImport,
     this.onOpenRobotHome,
     this.onOpenRobot,
     this.onOpenDigitalEmployee,
@@ -51,6 +53,7 @@ class NativeQianjiHubPage extends StatefulWidget {
   final VoidCallback? onOpenCashFlow;
   final VoidCallback? onOpenMonthlyBill;
   final VoidCallback? onOpenTravel;
+  final VoidCallback? onOpenTravelImport;
   final VoidCallback? onOpenRobotHome;
 
   /// 点击单个机器人名片：由 Host 按 canChat 决定进聊天或提示。
@@ -135,6 +138,60 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
       _loadRobots(),
       _loadDigitalEmployees(),
     ]);
+  }
+
+  VoidCallback? _mergedWorkSituationTap() {
+    final preview = widget.onOpenEfficiencyBossPreview;
+    final analysis = widget.onOpenEfficiencyAnalysis;
+    if (preview == null && analysis == null) return null;
+    if (preview != null && analysis == null) return preview;
+    if (preview == null && analysis != null) return analysis;
+    return () => _openHubChoices(
+          title: '选择查看入口',
+          items: [
+            (
+              title: '工作情况',
+              subtitle: widget.session?.workSituationViewAll == true
+                  ? '全部部门'
+                  : '本人及下级',
+              icon: Icons.groups_outlined,
+              onTap: preview!,
+            ),
+            (
+              title: 'AI效能分析',
+              subtitle: '个人与部门',
+              icon: Icons.insights_outlined,
+              onTap: analysis!,
+            ),
+          ],
+        );
+  }
+
+  void _openHubChoices({
+    required String title,
+    required List<
+        ({
+          String title,
+          String subtitle,
+          IconData icon,
+          VoidCallback onTap,
+        })> items,
+  }) {
+    unawaited(
+      showDunesChoicePanel(
+        context: context,
+        title: title,
+        items: [
+          for (final item in items)
+            DunesChoiceItem(
+              title: item.title,
+              subtitle: item.subtitle,
+              icon: item.icon,
+              onTap: item.onTap,
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadRobots() async {
@@ -274,17 +331,31 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           actionText: '行程地图',
           onTap: widget.onOpenTravel!,
         ),
+      if (widget.onOpenTravelImport != null)
+        _AlipayAssetRow(
+          icon: Icons.list_alt_rounded,
+          iconBgColor: const Color(0xFFE8EEF8),
+          iconColor: const Color(0xFF3D5A99),
+          title: '列表',
+          subtitle: '差旅订单 · 导入核对',
+          actionText: '订单列表',
+          onTap: widget.onOpenTravelImport!,
+        ),
     ];
 
-    final superviseItems = <_SuperviseItemData>[
+    final workSituationTap = _mergedWorkSituationTap();
+    final summaryItems = <_SuperviseItemData>[
       _SuperviseItemData(
         title: '工作情况',
-        subtitle: widget.session?.workSituationViewAll == true
-            ? '全部部门'
-            : '本人及下级',
+        subtitle: widget.onOpenEfficiencyAnalysis != null &&
+                widget.onOpenEfficiencyBossPreview != null
+            ? '态势 · 能效'
+            : (widget.session?.workSituationViewAll == true
+                ? '全部部门'
+                : '本人及下级'),
         icon: Icons.groups_outlined,
         gradientColors: const [Color(0xFF8B6BE8), Color(0xFF6743D3)],
-        onTap: widget.onOpenEfficiencyBossPreview,
+        onTap: workSituationTap,
       ),
       _SuperviseItemData(
         title: '使用热力',
@@ -295,14 +366,9 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
         gradientColors: const [Color(0xFF6B5CE8), Color(0xFF4A3BC7)],
         onTap: widget.onOpenAppUsage,
       ),
-      if (widget.onOpenEfficiencyAnalysis != null)
-        _SuperviseItemData(
-          title: 'AI效能分析',
-          subtitle: '个人与部门',
-          icon: Icons.insights_outlined,
-          gradientColors: const [Color(0xFF6272EA), Color(0xFF4856C7)],
-          onTap: widget.onOpenEfficiencyAnalysis,
-        ),
+    ];
+
+    final personalItems = <_SuperviseItemData>[
       _SuperviseItemData(
         title: '会议纪要',
         subtitle: '本人及下级',
@@ -397,11 +463,22 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                               SizedBox(height: isWide ? 18 : 14),
                             ],
 
-                            // 2. 督导管理区（PC 全宽铺在资金看板下方）
-                            if (superviseItems.isNotEmpty) ...[
+                            // 2. 督导管理区：组织汇总 / 业务查阅 拆分
+                            if (summaryItems.isNotEmpty) ...[
                               _buildSuperviseGridCard(
-                                superviseItems,
+                                summaryItems,
                                 isWide: isWide,
+                                title: '组织汇总',
+                                subtitle: '部门态势 · 用量与效能',
+                              ),
+                              SizedBox(height: isWide ? 18 : 14),
+                            ],
+                            if (personalItems.isNotEmpty) ...[
+                              _buildSuperviseGridCard(
+                                personalItems,
+                                isWide: isWide,
+                                title: '业务查阅',
+                                subtitle: '会议 · 会话 · 知识 · 账号',
                               ),
                               SizedBox(height: isWide ? 18 : 14),
                             ],
@@ -454,52 +531,93 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           ),
         ],
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final useTwoCol = isWide && constraints.maxWidth >= 720;
-          if (!useTwoCol) {
-            return Column(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+            child: Row(
               children: [
-                for (var i = 0; i < assetRows.length; i++) ...[
-                  assetRows[i],
-                  if (i < assetRows.length - 1)
-                    const Divider(
-                      height: 1,
-                      indent: 64,
-                      endIndent: 16,
-                      color: Color(0xFFF3F0F7),
-                    ),
-                ],
-              ],
-            );
-          }
-
-          const columns = 2;
-          final itemWidth = (constraints.maxWidth / columns).floorToDouble();
-          return Wrap(
-            children: [
-              for (var i = 0; i < assetRows.length; i++)
-                SizedBox(
-                  width: itemWidth,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      border: Border(
-                        right: i.isEven
-                            ? const BorderSide(color: Color(0xFFF3F0F7))
-                            : BorderSide.none,
-                        bottom: i <
-                                assetRows.length -
-                                    (assetRows.length.isOdd ? 1 : 2)
-                            ? const BorderSide(color: Color(0xFFF3F0F7))
-                            : BorderSide.none,
-                      ),
-                    ),
-                    child: assetRows[i],
+                Container(
+                  width: 4,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: _themePurple,
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-            ],
-          );
-        },
+                const SizedBox(width: 8),
+                const Text(
+                  '资金看板',
+                  style: TextStyle(
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w700,
+                    color: _deepPurple,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    '账户流向 · 月结 · 差旅',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: _subText,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final useTwoCol = isWide && constraints.maxWidth >= 720;
+              if (!useTwoCol) {
+                return Column(
+                  children: [
+                    for (var i = 0; i < assetRows.length; i++) ...[
+                      assetRows[i],
+                      if (i < assetRows.length - 1)
+                        const Divider(
+                          height: 1,
+                          indent: 64,
+                          endIndent: 16,
+                          color: Color(0xFFF3F0F7),
+                        ),
+                    ],
+                  ],
+                );
+              }
+
+              const columns = 2;
+              final itemWidth = (constraints.maxWidth / columns).floorToDouble();
+              return Wrap(
+                children: [
+                  for (var i = 0; i < assetRows.length; i++)
+                    SizedBox(
+                      width: itemWidth,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          border: Border(
+                            right: i.isEven
+                                ? const BorderSide(color: Color(0xFFF3F0F7))
+                                : BorderSide.none,
+                            bottom: i <
+                                    assetRows.length -
+                                        (assetRows.length.isOdd ? 1 : 2)
+                                ? const BorderSide(color: Color(0xFFF3F0F7))
+                                : BorderSide.none,
+                          ),
+                        ),
+                        child: assetRows[i],
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -508,6 +626,8 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
   Widget _buildSuperviseGridCard(
     List<_SuperviseItemData> items, {
     bool isWide = false,
+    String title = '',
+    String subtitle = '',
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -522,37 +642,81 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           ),
         ],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final columns = isWide
-              ? (constraints.maxWidth >= 960
-                  ? 6
-                  : (constraints.maxWidth >= 480 ? 4 : 3))
-              : 4;
-          const gap = 8.0;
-          final itemWidth =
-              ((constraints.maxWidth - (columns - 1) * gap) / columns)
-                  .floorToDouble();
-
-          return Wrap(
-            spacing: gap,
-            runSpacing: 14,
-            children: [
-              for (final item in items)
-                SizedBox(
-                  width: itemWidth,
-                  child: _AlipayGridItem(
-                    icon: item.icon,
-                    gradientColors: item.gradientColors,
-                    title: item.title,
-                    subtitle: item.subtitle,
-                    onTap: item.onTap,
+      padding: const EdgeInsets.fromLTRB(8, 14, 8, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (title.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 4,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: _themePurple,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                ),
-            ],
-          );
-        },
+                  const SizedBox(width: 8),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w700,
+                      color: _deepPurple,
+                    ),
+                  ),
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          color: _subText,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = isWide
+                  ? (constraints.maxWidth >= 960
+                      ? 6
+                      : (constraints.maxWidth >= 480 ? 4 : 3))
+                  : 4;
+              const gap = 8.0;
+              final itemWidth =
+                  ((constraints.maxWidth - (columns - 1) * gap) / columns)
+                      .floorToDouble();
+
+              return Wrap(
+                spacing: gap,
+                runSpacing: 14,
+                children: [
+                  for (final item in items)
+                    SizedBox(
+                      width: itemWidth,
+                      child: _AlipayGridItem(
+                        icon: item.icon,
+                        gradientColors: item.gradientColors,
+                        title: item.title,
+                        subtitle: item.subtitle,
+                        onTap: item.onTap,
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -630,8 +794,8 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                 ? (constraints.maxWidth >= 1050
                     ? 4
                     : (constraints.maxWidth >= 680 ? 3 : 2))
-                : (constraints.maxWidth >= 460 ? 2 : 1);
-            const gap = 12.0;
+                : (constraints.maxWidth >= 360 ? 2 : 1);
+            const gap = 8.0;
             final itemWidth =
                 ((constraints.maxWidth - (columns - 1) * gap) / columns)
                     .floorToDouble();
@@ -1071,20 +1235,20 @@ class _DigitalEmployeeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.fromLTRB(10, 9, 10, 8),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: _cardBorder),
             boxShadow: [
               BoxShadow(
                 color: const Color(0xFF331E54).withValues(alpha: 0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
@@ -1094,21 +1258,21 @@ class _DigitalEmployeeCard extends StatelessWidget {
               Row(
                 children: [
                   Container(
-                    width: 38,
-                    height: 38,
+                    width: 30,
+                    height: 30,
                     decoration: BoxDecoration(
                       color: const Color(0xFFF0EBF9),
-                      borderRadius: BorderRadius.circular(11),
+                      borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: const Color(0xFFE2D6F5)),
                     ),
                     alignment: Alignment.center,
                     child: Icon(
                       digitalEmployeeIcon(item.iconKey),
                       color: _themePurple,
-                      size: 20,
+                      size: 16,
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1118,7 +1282,7 @@ class _DigitalEmployeeCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 14.5,
+                            fontSize: 13,
                             fontWeight: FontWeight.w700,
                             color: _deepPurple,
                           ),
@@ -1126,8 +1290,8 @@ class _DigitalEmployeeCard extends StatelessWidget {
                         const SizedBox(height: 2),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 1.5,
+                            horizontal: 4,
+                            vertical: 1,
                           ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFEDE7F6),
@@ -1136,7 +1300,7 @@ class _DigitalEmployeeCard extends StatelessWidget {
                           child: const Text(
                             'AI 协同助理',
                             style: TextStyle(
-                              fontSize: 9.5,
+                              fontSize: 9,
                               fontWeight: FontWeight.w600,
                               color: _themePurple,
                             ),
@@ -1147,29 +1311,29 @@ class _DigitalEmployeeCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 6),
               Text(
                 item.subtitle,
-                maxLines: 2,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontSize: 11.5,
-                  height: 1.3,
+                  fontSize: 11,
+                  height: 1.25,
                   color: _subText,
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 6),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
+                      horizontal: 7,
+                      vertical: 3,
                     ),
                     decoration: BoxDecoration(
                       color: _themePurple.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
@@ -1177,7 +1341,7 @@ class _DigitalEmployeeCard extends StatelessWidget {
                         Text(
                           '开启对话',
                           style: TextStyle(
-                            fontSize: 11.5,
+                            fontSize: 10.5,
                             fontWeight: FontWeight.w600,
                             color: _themePurple,
                           ),
@@ -1185,7 +1349,7 @@ class _DigitalEmployeeCard extends StatelessWidget {
                         SizedBox(width: 2),
                         Icon(
                           Icons.arrow_forward_rounded,
-                          size: 13,
+                          size: 12,
                           color: _themePurple,
                         ),
                       ],

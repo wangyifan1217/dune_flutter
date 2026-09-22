@@ -63,9 +63,13 @@ TaskGuideSpec taskGuideSpec(TaskGuidePage page) {
         steps: [
           TaskGuideStepData(
             icon: Icons.view_agenda_outlined,
-            title: '先分清两个列表',
-            body: '这是任务入口页，不是详情，也不是日报。',
-            actions: ['「今日」：看今天要做、待确认的子目标', '「主目标」：只看完整目标，点进去才看到子目标'],
+            title: '先看待办',
+            body: '打开任务模块先看到需要你处理的事，不是主目标总览。',
+            actions: [
+              '「待办」：待接收、待审批、逾期和今日执行',
+              '「今日」：今天要做的子目标',
+              '「主目标」：完整目标，点进去才看到子目标',
+            ],
           ),
           TaskGuideStepData(
             icon: Icons.add_box_outlined,

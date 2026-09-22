@@ -185,6 +185,9 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
   bool _loadingAssignees = false;
   bool _saving = false;
   bool _guideAutoStarted = false;
+  bool _rulesLoaded = false;
+  bool _assignmentConfirmation = false;
+  bool _taskApproval = true;
   String? _titleError;
   String? _dateError;
 
@@ -197,6 +200,34 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
       _parentTask != null &&
       _parentTask!.creatorUserId == widget.session.userId;
 
+  Future<void> _loadRules() async {
+    try {
+      final rules = await _api.taskRules();
+      if (!mounted) return;
+      setState(() {
+        _assignmentConfirmation = rules.assignmentConfirmation;
+        _taskApproval = rules.taskApproval;
+        _rulesLoaded = true;
+      });
+    } catch (_) {}
+  }
+
+  String get _pathHint {
+    if (!_rulesLoaded) return '';
+    if (!_isSub) return '主目标由创建人负责，创建后即可使用。';
+    final self = _ownerId == null || _ownerId == widget.session.userId;
+    if (self) {
+      if (_taskApproval && !_parentSelfCreated) {
+        return '执行人是自己。这个主目标不是你创建的，提交后要等审批通过才生效。';
+      }
+      return '执行人是自己，创建后直接生效。';
+    }
+    if (_assignmentConfirmation) {
+      return '指派给他人后，对方接受才会开始执行。对方拒绝则不会生效。';
+    }
+    return '指派给他人后直接生效，对方可以开始执行。';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -204,6 +235,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
     _ownerName = widget.session.displayName?.trim().isNotEmpty == true
         ? widget.session.displayName!.trim()
         : '我';
+    unawaited(_loadRules());
     if (_isSub) {
       _applyParentDefaults(widget.parentTask);
       unawaited(_loadParentIfNeeded());
@@ -464,7 +496,9 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
           const SizedBox(height: 14),
           _pickerField(
             label: _isSub ? '执行人' : '负责人',
-            value: _ownerName.isEmpty ? '选择人员' : _ownerName,
+            value: _isSub
+                ? (_ownerName.isEmpty ? '选择人员' : _ownerName)
+                : '创建人即负责人${_ownerName.isEmpty ? '' : ' · $_ownerName'}',
             onTap: _isSub ? _pickAssignee : null,
           ),
         ] else
@@ -484,12 +518,25 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
               Expanded(
                 child: _pickerField(
                   label: _isSub ? '执行人' : '负责人',
-                  value: _ownerName.isEmpty ? '选择人员' : _ownerName,
+                  value: _isSub
+                      ? (_ownerName.isEmpty ? '选择人员' : _ownerName)
+                      : '创建人即负责人${_ownerName.isEmpty ? '' : ' · $_ownerName'}',
                   onTap: _isSub ? _pickAssignee : null,
                 ),
               ),
             ],
           ),
+        if (_pathHint.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            _pathHint,
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: DunesColors.text2,
+            ),
+          ),
+        ],
         const SizedBox(height: 14),
         if (narrow) ...[
           _dropdownField(
@@ -569,6 +616,18 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                 ),
               ),
             ],
+          ),
+        if (!_isSub)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              '当前分类是「$_category · $_subCategory」，提交前可以修改。主目标负责人就是创建人。',
+              style: const TextStyle(
+                fontSize: 12,
+                color: DunesColors.text3,
+                height: 1.35,
+              ),
+            ),
           ),
         const SizedBox(height: 14),
         if (narrow) ...[

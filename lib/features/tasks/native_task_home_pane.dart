@@ -10,9 +10,11 @@ import 'native_task_daily_report_page.dart';
 import 'native_task_detail_page.dart';
 import 'native_task_form.dart';
 import 'native_task_management_pane.dart';
+import 'native_task_quick_create.dart';
 import 'task_api.dart';
 import 'task_approval_confirm.dart';
 import 'task_first_use_guide.dart';
+import 'task_inbox.dart';
 import 'task_models.dart';
 import 'task_widgets.dart';
 
@@ -79,14 +81,19 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   String? _error;
   static const int _pageSize = 20;
 
-  /// actionable | goals；进入任务板块默认展示主目标列表。
-  String _scope = 'goals';
+  /// inbox | actionable | goals。进入任务板块默认展示待办行动中心。
+  String _scope = 'inbox';
+  TaskInboxSnapshot? _inbox;
+  TaskInboxBucket? _inboxFocus;
+  String? _inboxWarning;
+  static const int _inboxPreview = 3;
   String? _goalRole;
   String? _status;
   String? _priority;
   DateTime? _dateFrom;
   DateTime? _dateTo;
   bool _dailyPending = false;
+  String? _listFocus;
   bool _guideAutoStarted = false;
 
   @override
@@ -184,10 +191,15 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
               icon: const Icon(Icons.help_outline, color: DunesColors.text2),
             ),
             const SizedBox(width: 4),
-            FilledButton.icon(
+            TextButton(
               onPressed: () => _openCreate(),
+              child: const Text('完整创建'),
+            ),
+            const SizedBox(width: 4),
+            FilledButton.icon(
+              onPressed: _openQuickCreate,
               icon: const Icon(Icons.add, size: 18),
-              label: const Text('新建主目标'),
+              label: const Text('快速新建'),
               style: FilledButton.styleFrom(
                 backgroundColor: kTaskPurple,
                 visualDensity: VisualDensity.compact,
@@ -210,9 +222,14 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     setState(() {
       _loading = true;
       _error = null;
+      _inboxWarning = null;
       _hasMore = true;
       _listPage = 0;
     });
+    if (_scope == 'inbox') {
+      await _reloadInbox();
+      return;
+    }
     try {
       final list = await _api.listTasksPage(
         scope: _apiScope,
@@ -249,8 +266,69 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     }
   }
 
+  Future<void> _reloadInbox() async {
+    List<TaskItem> pending = const [];
+    List<TaskItem> today = const [];
+    String? warning;
+    Object? failure;
+    try {
+      pending = await _api.listTasks(
+        scope: 'pending_actions',
+        q: _search.text,
+        size: 100,
+        maxPages: 2,
+      );
+    } catch (e) {
+      failure = e;
+      warning = '待处理事项暂时加载失败';
+    }
+    try {
+      today = await _api.listTasks(
+        scope: 'actionable',
+        q: _search.text,
+        size: 50,
+        maxPages: 2,
+      );
+    } catch (e) {
+      failure ??= e;
+      warning = warning == null ? '今日任务暂时加载失败' : '待办暂时加载失败';
+    }
+    TaskDailyReportBundle? daily;
+    try {
+      daily = await _api.getDailyReport();
+    } catch (_) {}
+    if (!mounted) return;
+    final bothFailed = failure != null && warning == '待办暂时加载失败';
+    if (bothFailed) {
+      setState(() {
+        _error = '$failure';
+        _loading = false;
+        _loadingMore = false;
+        _inbox = null;
+      });
+      return;
+    }
+    final snapshot = TaskInboxSnapshot.build(
+      pending: pending,
+      actionable: today,
+    );
+    setState(() {
+      _inbox = snapshot;
+      _items = const [];
+      _hasMore = false;
+      _loading = false;
+      _loadingMore = false;
+      _inboxWarning = warning;
+      _dailyPending =
+          daily != null && daily.canSubmit && daily.report?.submitted != true;
+      if (_inboxFocus != null && snapshot.countOf(_inboxFocus!) == 0) {
+        _inboxFocus = null;
+      }
+    });
+  }
+
   Future<void> _loadMore() async {
-    if (_loading || _loadingMore || !_hasMore) return;
+    if (_scope == 'inbox' || _loading || _loadingMore || !_hasMore) return;
     setState(() => _loadingMore = true);
     try {
       final next = _listPage + 1;
@@ -351,7 +429,25 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     if (refresh) unawaited(_reload());
   }
 
-  Future<void> _openQuickCreate() => _openCreate();
+  Future<void> _openQuickCreate() async {
+    final created = await openTaskQuickCreate(
+      context,
+      session: widget.session,
+      asGroup: true,
+    );
+    if (created == null || !mounted) return;
+    await _reload();
+    if (!mounted) return;
+    showDunesActionToast(
+      context,
+      '已创建，可继续完善',
+      actionLabel: '查看详情',
+      icon: Icons.task_alt,
+      onTap: () {
+        if (mounted) _openDetail(created.id);
+      },
+    );
+  }
 
   void _openDaily() {
     setState(() {
@@ -399,14 +495,31 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
               : null),
     );
     if (created == null || !mounted) return;
-    showDunesCenterToast(context, parentId == null ? '已创建主目标' : '子目标已添加');
     await _reload();
-    if (parentId == null && mounted) {
-      _openDetail(created.id);
-    } else if (parentId != null && mounted) {
+    if (!mounted) return;
+    if (parentId == null) {
+      showDunesActionToast(
+        context,
+        '已创建，可继续完善',
+        actionLabel: '查看详情',
+        icon: Icons.task_alt,
+        onTap: () {
+          if (mounted) _openDetail(created.id);
+        },
+      );
+    } else {
+      showDunesCenterToast(context, _createdTaskHint(created));
       setState(() => _detailReloadTick++);
       _openDetail(parentId);
     }
+  }
+
+  String _createdTaskHint(TaskItem created) {
+    return switch (created.status) {
+      'pending_assignment' => '已提交，对方接受后才会开始执行',
+      'pending_approval' => '已提交，审批通过后才会生效',
+      _ => '子目标已生效，可以开始执行',
+    };
   }
 
   String get _dateRangeLabel {
@@ -630,6 +743,8 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                   children: [
                     Row(
                       children: [
+                        _tabChip('inbox', '待办'),
+                        const SizedBox(width: 8),
                         _tabChip('actionable', '今日'),
                         const SizedBox(width: 8),
                         _tabChip('goals', '主目标'),
@@ -637,9 +752,17 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _scope == 'goals'
-                          ? '默认展示本人负责或分派的主目标，进入详情查看子目标。'
-                          : '今天要执行的子目标、未拆解的主目标和待确认子目标。',
+                      switch (_scope) {
+                        'goals' => switch (_goalRole) {
+                          'reports' => '下级负责的主目标，含管理员导入的任务。进入详情后再看子目标。',
+                          'owned' => '本人负责的主目标。进入详情后再看子目标。',
+                          'assigned' => '本人分派的主目标。进入详情后再看子目标。',
+                          _ => '本人负责或分派的主目标。进入详情后再看子目标。',
+                        },
+                        'actionable' =>
+                          '今天要执行的子目标、未拆解的主目标和待确认子目标。',
+                        _ => '先处理待你决定的事，再看逾期、今天截止和今日执行。',
+                      },
                       style: const TextStyle(
                         fontSize: 13,
                         color: DunesColors.text3,
@@ -650,18 +773,23 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                     _dailyStatusChip(),
                     if (_scope == 'goals') ...[
                       const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          _roleChip(null, '全部'),
-                          const SizedBox(width: 8),
-                          _roleChip('owned', '我负责'),
-                          const SizedBox(width: 8),
-                          _roleChip('assigned', '我分派'),
-                        ],
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _roleChip(null, '全部'),
+                            const SizedBox(width: 8),
+                            _roleChip('owned', '我负责'),
+                            const SizedBox(width: 8),
+                            _roleChip('assigned', '我分派'),
+                            const SizedBox(width: 8),
+                            _roleChip('reports', '下级'),
+                          ],
+                        ),
                       ),
                     ],
                     const SizedBox(height: 12),
-                    _buildToolbar(),
+                    if (_scope == 'inbox') _buildInboxSearch() else _buildToolbar(),
                   ],
                 ),
               ),
@@ -769,7 +897,10 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
           borderRadius: BorderRadius.circular(10),
           onTap: () {
             if (_scope == value) return;
-            setState(() => _scope = value);
+            setState(() {
+              _scope = value;
+              _inboxFocus = null;
+            });
             unawaited(_reload());
           },
           child: Padding(
@@ -785,6 +916,29 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildInboxSearch() {
+    return TextField(
+      controller: _search,
+      decoration: InputDecoration(
+        hintText: '搜索标题',
+        hintStyle: const TextStyle(color: DunesColors.text3, fontSize: 13),
+        isDense: true,
+        filled: true,
+        fillColor: Colors.white,
+        prefixIcon: const Icon(Icons.search, size: 20, color: DunesColors.text3),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE8EAED)),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       ),
     );
   }
@@ -857,9 +1011,64 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
               ),
             ],
           ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _listFocusChip('overdue', '逾期'),
+              _listFocusChip('dueToday', '今天截止'),
+              _listFocusChip('high', '高优先级'),
+            ],
+          ),
         ],
       ),
     );
+  }
+
+  Widget _listFocusChip(String value, String label) {
+    final on = _listFocus == value;
+    return Material(
+      color: on ? kTaskPurple.withValues(alpha: 0.12) : const Color(0xFFF5F6F8),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => setState(() => _listFocus = on ? null : value),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: on ? kTaskPurple : DunesColors.text2,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<TaskItem> _focusItems(List<TaskItem> items) {
+    final now = DateTime.now();
+    var list = items;
+    if (_scope == 'actionable') {
+      list = list
+          .where((task) => !taskStartsAfterToday(task, now))
+          .toList(growable: false);
+    }
+    list = switch (_listFocus) {
+      'overdue' => list.where((task) => task.overdue).toList(growable: false),
+      'dueToday' =>
+        list.where((task) => taskDueOnDay(task, now)).toList(growable: false),
+      'high' => list
+          .where(
+            (task) => task.priority == 'high' || task.priority == 'urgent',
+          )
+          .toList(growable: false),
+      _ => list,
+    };
+    return list;
   }
 
   List<Widget> _buildBodySlivers() {
@@ -894,10 +1103,13 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       ];
     }
 
-    final items = _items;
+    if (_scope == 'inbox') return _buildInboxSlivers();
+
+    final items = _focusItems(_items);
     final hasFilters =
         (_status != null && _status!.isNotEmpty) ||
         (_priority != null && _priority!.isNotEmpty) ||
+        _listFocus != null ||
         _search.text.trim().isNotEmpty ||
         _dateFrom != null ||
         _dateTo != null;
@@ -975,7 +1187,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                   FilledButton.icon(
                     onPressed: () => _openQuickCreate(),
                     icon: const Icon(Icons.add, size: 18),
-                    label: const Text('新建主目标'),
+                    label: const Text('快速新建'),
                     style: FilledButton.styleFrom(
                       backgroundColor: kTaskPurple,
                       padding: const EdgeInsets.symmetric(
@@ -1042,6 +1254,8 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             task: t,
             onTap: () => _openDetail(t.id),
             onProgress: () => _openAction(t, TaskActionMode.progress),
+            onComplete: _canCompleteFromList(t) ? () => _completeFromList(t) : null,
+            completeHint: _completeHint(t),
           ),
         );
         out.add(const SizedBox(height: 10));
@@ -1074,6 +1288,406 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       }
     }
     return out;
+  }
+
+  List<Widget> _buildInboxSlivers() {
+    final snapshot = _inbox;
+    if (snapshot == null) {
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: Text('待办还没有加载出来')),
+        ),
+      ];
+    }
+    final searching = _search.text.trim().isNotEmpty;
+    final children = <Widget>[
+      if (_inboxWarning != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Text(
+            _inboxWarning!,
+            style: const TextStyle(fontSize: 12, color: Color(0xFFB45309)),
+          ),
+        ),
+      _inboxCountRow(snapshot),
+      const SizedBox(height: 12),
+    ];
+    if (snapshot.isEmpty && snapshot.plannedCount == 0) {
+      children.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 48),
+          child: Center(
+            child: Text(
+              searching ? '没有符合条件的结果' : '现在没有待你处理的事',
+              style: const TextStyle(fontSize: 14, color: DunesColors.text3),
+            ),
+          ),
+        ),
+      );
+      return [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          sliver: SliverList(delegate: SliverChildListDelegate(children)),
+        ),
+      ];
+    }
+
+    final focus = _inboxFocus;
+    if (focus != null) {
+      children.addAll(_inboxFocused(snapshot, focus));
+    } else {
+      children.addAll(_inboxOverview(snapshot));
+    }
+
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        sliver: SliverList(delegate: SliverChildListDelegate(children)),
+      ),
+    ];
+  }
+
+  Widget _inboxCountRow(TaskInboxSnapshot snapshot) {
+    final chips = <(TaskInboxBucket, bool)>[
+      (TaskInboxBucket.receive, true),
+      (TaskInboxBucket.assignApproval, true),
+      (TaskInboxBucket.changeApproval, true),
+      if (snapshot.countOf(TaskInboxBucket.confirm) > 0)
+        (TaskInboxBucket.confirm, true),
+      if (snapshot.countOf(TaskInboxBucket.overdue) > 0)
+        (TaskInboxBucket.overdue, false),
+      if (snapshot.countOf(TaskInboxBucket.dueToday) > 0)
+        (TaskInboxBucket.dueToday, false),
+      if (snapshot.countOf(TaskInboxBucket.returned) > 0)
+        (TaskInboxBucket.returned, false),
+      if (snapshot.countOf(TaskInboxBucket.readyToClose) > 0)
+        (TaskInboxBucket.readyToClose, false),
+      if (snapshot.today.isNotEmpty) (TaskInboxBucket.today, false),
+    ];
+    return SizedBox(
+      height: 40,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: chips.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final bucket = chips[index].$1;
+          final emphasis = chips[index].$2;
+          final selected = _inboxFocus == bucket;
+          final count = snapshot.countOf(bucket);
+          return Material(
+            color: selected
+                ? kTaskPurple
+                : emphasis
+                ? const Color(0xFFF3EEFA)
+                : Colors.white,
+            borderRadius: BorderRadius.circular(999),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(999),
+              onTap: () {
+                setState(() {
+                  _inboxFocus = selected ? null : bucket;
+                });
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Text(
+                  '${taskInboxBucketTitle(bucket)} $count',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: selected
+                        ? Colors.white
+                        : emphasis
+                        ? kTaskPurple
+                        : DunesColors.text2,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  List<Widget> _inboxFocused(TaskInboxSnapshot snapshot, TaskInboxBucket bucket) {
+    final items = snapshot.itemsOf(bucket);
+    return [
+      _inboxSectionTitle(
+        taskInboxBucketTitle(bucket),
+        trailing: '返回全部',
+        onTrailing: () => setState(() => _inboxFocus = null),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(
+          taskInboxCardHint(bucket),
+          style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+        ),
+      ),
+      for (final task in items) ...[
+        _inboxCard(task, bucket),
+        const SizedBox(height: 10),
+      ],
+    ];
+  }
+
+  List<Widget> _inboxOverview(TaskInboxSnapshot snapshot) {
+    final out = <Widget>[];
+    final decisionSections = snapshot.decisions
+        .where((section) => section.items.isNotEmpty)
+        .toList(growable: false);
+    if (decisionSections.isNotEmpty) {
+      out.add(_inboxGroupTitle('待我决策'));
+      for (final section in decisionSections) {
+        out.addAll(_inboxPreviewSection(section));
+      }
+    }
+    if (snapshot.attention.isNotEmpty) {
+      out.add(_inboxGroupTitle('需要关注'));
+      for (final section in snapshot.attention) {
+        out.addAll(_inboxPreviewSection(section));
+      }
+    }
+    if (snapshot.today.isNotEmpty) {
+      out.add(_inboxGroupTitle('今日执行'));
+      out.addAll(
+        _inboxPreviewSection(
+          TaskInboxSection(
+            bucket: TaskInboxBucket.today,
+            title: '今天正在进行',
+            items: snapshot.today,
+          ),
+        ),
+      );
+    }
+    if (snapshot.plannedCount > 0) {
+      out.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            '另有 ${snapshot.plannedCount} 项尚未到开始日，不在今日执行里。',
+            style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+          ),
+        ),
+      );
+    }
+    return out;
+  }
+
+  List<Widget> _inboxPreviewSection(TaskInboxSection section) {
+    final preview = section.items.take(_inboxPreview).toList(growable: false);
+    return [
+      _inboxSectionTitle(
+        '${section.title} ${section.items.length}',
+        trailing: section.items.length > _inboxPreview ? '查看全部' : null,
+        onTrailing: section.items.length > _inboxPreview
+            ? () => setState(() => _inboxFocus = section.bucket)
+            : null,
+      ),
+      for (final task in preview) ...[
+        _inboxCard(task, section.bucket),
+        const SizedBox(height: 10),
+      ],
+    ];
+  }
+
+  Widget _inboxGroupTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 8),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w800,
+          color: DunesColors.text,
+        ),
+      ),
+    );
+  }
+
+  Widget _inboxSectionTitle(
+    String title, {
+    String? trailing,
+    VoidCallback? onTrailing,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: DunesColors.text3,
+              ),
+            ),
+          ),
+          if (trailing != null)
+            InkWell(
+              onTap: onTrailing,
+              child: Text(
+                trailing,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: kTaskPurple,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _inboxCard(TaskItem task, TaskInboxBucket bucket) {
+    final decision = switch (bucket) {
+      TaskInboxBucket.receive ||
+      TaskInboxBucket.assignApproval ||
+      TaskInboxBucket.changeApproval ||
+      TaskInboxBucket.confirm => true,
+      _ => false,
+    };
+    final complete = bucket == TaskInboxBucket.readyToClose;
+    return TaskWorkbenchCard(
+      task: task,
+      statusHint: taskInboxCardHint(bucket),
+      approveLabel: switch (bucket) {
+        TaskInboxBucket.receive => '接受',
+        TaskInboxBucket.readyToClose => '标记完成',
+        _ => '通过',
+      },
+      rejectLabel: bucket == TaskInboxBucket.receive ? '拒绝' : '驳回',
+      onTap: () => _openDetail(task.id),
+      onApprove: decision || complete
+          ? () => _actOnInbox(task, bucket, pass: true)
+          : null,
+      onReject: decision ? () => _actOnInbox(task, bucket, pass: false) : null,
+      onProgress: decision || complete
+          ? null
+          : () => _openAction(task, TaskActionMode.progress),
+    );
+  }
+
+  Future<void> _actOnInbox(
+    TaskItem task,
+    TaskInboxBucket bucket, {
+    required bool pass,
+  }) async {
+    if (bucket == TaskInboxBucket.readyToClose) {
+      final ok = await confirmTaskComplete(context, title: task.title);
+      if (!ok || !mounted) return;
+      try {
+        await _api.patchTask(task.id, {
+          'status': 'completed',
+          'forceComplete': true,
+        });
+        if (!mounted) return;
+        showDunesCenterToast(context, '已办结');
+        await _reload();
+      } catch (e) {
+        if (mounted) showDunesCenterToast(context, '$e');
+      }
+      return;
+    }
+
+    final result = await confirmTaskApproval(
+      context,
+      pass: pass,
+      title: switch (bucket) {
+        TaskInboxBucket.receive => pass ? '接受任务' : '拒绝任务',
+        TaskInboxBucket.assignApproval => pass ? '通过指派' : '驳回指派',
+        TaskInboxBucket.changeApproval => pass ? '通过变更' : '驳回变更',
+        _ => pass ? '通过' : '驳回',
+      },
+      hint: pass ? '意见（选填）' : '原因（选填）',
+    );
+    if (!result.confirmed || !mounted) return;
+    try {
+      switch (bucket) {
+        case TaskInboxBucket.receive:
+          await _api.respondAssignment(
+            task.id,
+            accept: pass,
+            comment: result.comment,
+          );
+          if (!mounted) return;
+          showDunesCenterToast(
+            context,
+            pass ? '已接收，可以开始执行' : '已拒绝，发起人会收到结果',
+          );
+        case TaskInboxBucket.assignApproval:
+          if (pass) {
+            await _api.approveChange(task.id, comment: result.comment);
+          } else {
+            await _api.rejectChange(task.id, comment: result.comment);
+          }
+          if (!mounted) return;
+          showDunesCenterToast(
+            context,
+            pass ? '指派已通过，负责人已变更' : '指派已驳回，负责人未变更',
+          );
+        case TaskInboxBucket.changeApproval:
+          if (pass) {
+            await _api.approveChange(task.id, comment: result.comment);
+          } else {
+            await _api.rejectChange(task.id, comment: result.comment);
+          }
+          if (!mounted) return;
+          showDunesCenterToast(
+            context,
+            pass ? '变更已生效' : '变更已驳回，保留原内容',
+          );
+        case TaskInboxBucket.confirm:
+          if (pass) {
+            await _api.approve(task.id, comment: result.comment);
+          } else {
+            await _api.reject(task.id, comment: result.comment);
+          }
+          if (!mounted) return;
+          showDunesCenterToast(context, pass ? '已通过，任务进入执行' : '已驳回');
+        default:
+          return;
+      }
+      await _reload();
+    } catch (e) {
+      if (mounted) showDunesCenterToast(context, '$e');
+    }
+  }
+
+  bool _canCompleteFromList(TaskItem task) {
+    if (task.status == 'completed' || task.status == 'cancelled') return false;
+    return taskCompleteBlockReason(task) == null;
+  }
+
+  String? _completeHint(TaskItem task) {
+    if (task.status == 'completed' || task.status == 'cancelled') return null;
+    return taskCompleteBlockReason(task);
+  }
+
+  Future<void> _completeFromList(TaskItem task) async {
+    final blocked = taskCompleteBlockReason(task);
+    if (blocked != null) {
+      showDunesCenterToast(context, blocked);
+      return;
+    }
+    final ok = await confirmTaskComplete(context, title: task.title);
+    if (!ok || !mounted) return;
+    try {
+      await _api.patchTask(task.id, {
+        'status': 'completed',
+        'forceComplete': true,
+      });
+      if (!mounted) return;
+      showDunesCenterToast(context, '已办结');
+      await _reload();
+    } catch (e) {
+      if (mounted) showDunesCenterToast(context, '$e');
+    }
   }
 
   Future<void> _decide(TaskItem t, {required bool pass}) async {

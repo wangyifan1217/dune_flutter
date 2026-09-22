@@ -180,6 +180,110 @@ String formatFundSecondmentWan(double v) {
   return '${v.toStringAsFixed(2)}万';
 }
 
+const _fundNetEps = 0.02;
+
+/// 一个主体在未还清借调里的两边头寸。owed 是别人欠它，owes 是它欠别人。
+class FundSecondmentSubjectNet {
+  const FundSecondmentSubjectNet({
+    required this.subject,
+    required this.owedWan,
+    required this.owesWan,
+  });
+
+  final String subject;
+  final double owedWan;
+  final double owesWan;
+
+  double get netWan => owedWan - owesWan;
+
+  /// 同一主体既欠人又被人欠，账面上的余额有一部分是过桥。
+  bool get isBridge => owedWan > _fundNetEps && owesWan > _fundNetEps;
+}
+
+/// 按「谁欠谁」轧差后的结果。只在路线金额能对上待收回时才有意义。
+class FundSecondmentNetting {
+  const FundSecondmentNetting({
+    required this.grossWan,
+    required this.netWan,
+    required this.bridgeWan,
+    required this.subjects,
+  });
+
+  final double grossWan;
+  final double netWan;
+  final double bridgeWan;
+  final List<FundSecondmentSubjectNet> subjects;
+
+  bool get hasBridge => bridgeWan > _fundNetEps;
+
+  List<FundSecondmentSubjectNet> get netLenders {
+    final rows = subjects.where((s) => s.netWan > _fundNetEps).toList();
+    rows.sort((a, b) => b.netWan.compareTo(a.netWan));
+    return rows;
+  }
+
+  List<FundSecondmentSubjectNet> get bridgeSubjects {
+    final rows = subjects.where((s) => s.isBridge).toList();
+    rows.sort((a, b) => b.passThroughWan.compareTo(a.passThroughWan));
+    return rows;
+  }
+
+  String get bridgeNote {
+    final names = bridgeSubjects.map((s) => s.subject).join('、');
+    if (names.isEmpty) return '';
+    return '$names两边都有账，右边只保留去掉过桥后还垫在外面的钱。';
+  }
+}
+
+extension on FundSecondmentSubjectNet {
+  double get passThroughWan => owedWan < owesWan ? owedWan : owesWan;
+}
+
+/// 路线加总对不上待收回时返回 null，避免用残缺名单轧差。
+FundSecondmentNetting? fundSecondmentNetting(FundSecondmentSummary summary) {
+  final routes = summary.routes
+      .where(
+        (route) =>
+            route.remainingWan > _fundNetEps &&
+            route.borrowSubject.isNotEmpty &&
+            route.paySubject.isNotEmpty,
+      )
+      .toList(growable: false);
+  if (routes.isEmpty) return null;
+
+  var gross = 0.0;
+  final owed = <String, double>{};
+  final owes = <String, double>{};
+  for (final route in routes) {
+    gross += route.remainingWan;
+    owes[route.borrowSubject] =
+        (owes[route.borrowSubject] ?? 0) + route.remainingWan;
+    owed[route.paySubject] =
+        (owed[route.paySubject] ?? 0) + route.remainingWan;
+  }
+  if ((gross - summary.remainingTotalWan).abs() > _fundNetEps) return null;
+
+  final names = {...owed.keys, ...owes.keys};
+  final subjects = [
+    for (final name in names)
+      FundSecondmentSubjectNet(
+        subject: name,
+        owedWan: owed[name] ?? 0,
+        owesWan: owes[name] ?? 0,
+      ),
+  ];
+  var net = 0.0;
+  for (final subject in subjects) {
+    if (subject.netWan > _fundNetEps) net += subject.netWan;
+  }
+  return FundSecondmentNetting(
+    grossWan: gross,
+    netWan: net,
+    bridgeWan: gross - net,
+    subjects: subjects,
+  );
+}
+
 class FundSecondmentListPageResult {
   const FundSecondmentListPageResult({
     required this.items,

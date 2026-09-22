@@ -118,11 +118,7 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
     }
   }
 
-  String get _pathDisplay {
-    final path = _savePath.trim();
-    if (path.length <= 36) return path;
-    return '…${path.substring(path.length - 34)}';
-  }
+  String get _pathDisplay => _savePath.trim();
 
   @override
   Widget build(BuildContext context) {
@@ -153,162 +149,154 @@ class _NativeDesktopSettingsPageState extends State<NativeDesktopSettingsPage> {
           ),
           centerTitle: true,
         ),
-        body: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 680),
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              children: [
-                _buildCardGroup(
-                  title: '通用偏好',
-                  children: [
-                    if (widget.onOpenTextScale != null)
-                      _buildActionRow(
-                        icon: Icons.format_size_rounded,
-                        iconColor: const Color(0xFF7045B2),
-                        title: '字号调节',
-                        subtitle: '调整后作用于整个客户端应用',
-                        onTap: widget.onOpenTextScale!,
-                      ),
-                    _buildSettingsRow(
-                      icon: Icons.folder_outlined,
-                      iconColor: const Color(0xFF3B82F6),
-                      title: '文件保存位置',
-                      subtitle: _isCustom ? '自定义目录' : '默认：下载 / 沙丘文件',
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 240),
-                            child: Text(
-                              _pathDisplay,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.right,
-                              style: DunesTypography.sans(
-                                fontSize: 13,
-                                color: const Color(0xFF7A688F),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Icon(Icons.chevron_right_rounded, size: 18, color: Color(0xFFB5A9C4)),
-                        ],
-                      ),
-                      onTap: _busy ? null : _chooseSaveDir,
-                    ),
-                    if (_isCustom)
-                      _buildSettingsRow(
-                        icon: Icons.restart_alt_rounded,
-                        iconColor: const Color(0xFFF59E0B),
-                        title: '恢复默认保存位置',
-                        trailing: const Icon(Icons.chevron_right_rounded, size: 18, color: Color(0xFFB5A9C4)),
-                        onTap: _busy ? null : _resetSaveDir,
-                      ),
-                    _buildSettingsRow(
-                      icon: Icons.photo_outlined,
-                      iconColor: const Color(0xFF10B981),
-                      title: '独立窗口查看图片',
-                      subtitle: _imageExtraWindow
-                          ? '点击图片时弹出额外窗口独立展示'
-                          : '默认在当前会话内直接预览',
-                      trailing: Switch(
-                        value: _imageExtraWindow,
-                        activeThumbColor: const Color(0xFF7045B2),
-                        onChanged: (val) => _setImageExtraWindow(val),
-                      ),
-                      onTap: () => _setImageExtraWindow(!_imageExtraWindow),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-
-                if (widget.onCheckForUpdates != null ||
-                    widget.onOpenReleaseHistory != null ||
-                    widget.onScanWorkstation != null ||
-                    widget.onOpenWechatBot != null ||
-                    widget.onClearCache != null) ...[
-                  _buildCardGroup(
-                    title: '系统版本与维护',
-                    children: [
-                      if (widget.onOpenReleaseHistory != null)
-                        _buildActionRow(
-                          icon: Icons.history_rounded,
-                          iconColor: const Color(0xFF7045B2),
-                          title: '发版历史与更新日志',
-                          subtitle: '${AppUpdateService.platformDisplayName()} 版本记录与详细功能变更',
-                          onTap: widget.onOpenReleaseHistory!,
-                        ),
-                      if (widget.onCheckForUpdates != null)
-                        _buildActionRow(
-                          icon: Icons.system_update_alt_rounded,
-                          iconColor: const Color(0xFF3880FF),
-                          title: '检查客户端更新',
-                          subtitle: '检测是否有新版本发布',
-                          onTap: widget.onCheckForUpdates!,
-                        ),
-                      if (widget.onScanWorkstation != null)
-                        _buildActionRow(
-                          icon: Icons.qr_code_scanner_rounded,
-                          iconColor: const Color(0xFF0EA5E9),
-                          title: '扫码登录工作台',
-                          subtitle: '扫描沙丘工作台二维码快速授权登录',
-                          onTap: widget.onScanWorkstation!,
-                        ),
-                      if (widget.onOpenWechatBot != null)
-                        _buildActionRow(
-                          icon: Icons.chat_rounded,
-                          iconColor: const Color(0xFF10B981),
-                          title: '微信机器人设置',
-                          subtitle: '配置企业微信与群机器人联动',
-                          onTap: widget.onOpenWechatBot!,
-                        ),
-                      if (widget.onClearCache != null)
-                        _buildActionRow(
-                          icon: Icons.cleaning_services_outlined,
-                          iconColor: const Color(0xFF64748B),
-                          title: '清除本地缓存',
-                          subtitle: '清理工作画像、草稿与本地临时存储',
-                          onTap: widget.onClearCache!,
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                ],
-
-                if (widget.onLogout != null) ...[
-                  _buildCardGroup(
-                    title: '账号安全',
-                    children: [
-                      _buildActionRow(
-                        icon: Icons.logout_rounded,
-                        iconColor: DunesColors.coral,
-                        title: '退出当前登录',
-                        subtitle: '退出当前账号并返回登录界面',
-                        accentIcon: true,
-                        onTap: widget.onLogout!,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                ],
-
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                  child: Text(
-                    '聊天附件按会话分文件夹保存在上述指定目录中，同一会话的文件直接保存在对应子文件夹下。系统设置将实时自动保存并生效。',
-                    style: DunesTypography.sans(
-                      fontSize: 12,
-                      height: 1.5,
-                      color: const Color(0xFF9E8EAF),
-                    ),
-                  ),
-                ),
-              ],
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          children: [
+            _buildFlatGroups(),
+            const SizedBox(height: 14),
+            Text(
+              '聊天附件按会话分文件夹保存在上述指定目录中，同一会话的文件直接保存在对应子文件夹下。系统设置将实时自动保存并生效。',
+              style: DunesTypography.sans(
+                fontSize: 12,
+                height: 1.5,
+                color: const Color(0xFF9E8EAF),
+              ),
             ),
-          ),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildFlatGroups() {
+    final groups = <Widget>[
+      _buildCardGroup(
+        title: '通用偏好',
+        children: [
+          if (widget.onOpenTextScale != null)
+            _buildActionRow(
+              icon: Icons.format_size_rounded,
+              iconColor: const Color(0xFF7045B2),
+              title: '字号调节',
+              subtitle: '调整后作用于整个客户端应用',
+              onTap: widget.onOpenTextScale!,
+            ),
+          _buildSettingsRow(
+            icon: Icons.folder_outlined,
+            iconColor: const Color(0xFF3B82F6),
+            title: '文件保存位置',
+            subtitle:
+                '${_isCustom ? '自定义目录' : '默认：下载 / 沙丘文件'} · $_pathDisplay',
+            trailing: const Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: Color(0xFFB5A9C4),
+            ),
+            onTap: _busy ? null : _chooseSaveDir,
+          ),
+          if (_isCustom)
+            _buildSettingsRow(
+              icon: Icons.restart_alt_rounded,
+              iconColor: const Color(0xFFF59E0B),
+              title: '恢复默认保存位置',
+              trailing: const Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: Color(0xFFB5A9C4),
+              ),
+              onTap: _busy ? null : _resetSaveDir,
+            ),
+          _buildSettingsRow(
+            icon: Icons.photo_outlined,
+            iconColor: const Color(0xFF10B981),
+            title: '独立窗口查看图片',
+            subtitle: _imageExtraWindow
+                ? '点击图片时弹出额外窗口独立展示'
+                : '默认在当前会话内直接预览',
+            trailing: Switch(
+              value: _imageExtraWindow,
+              activeThumbColor: const Color(0xFF7045B2),
+              onChanged: (val) => _setImageExtraWindow(val),
+            ),
+            onTap: () => _setImageExtraWindow(!_imageExtraWindow),
+          ),
+        ],
+      ),
+      if (widget.onCheckForUpdates != null ||
+          widget.onOpenReleaseHistory != null ||
+          widget.onScanWorkstation != null ||
+          widget.onOpenWechatBot != null ||
+          widget.onClearCache != null)
+        _buildCardGroup(
+          title: '系统版本与维护',
+          children: [
+            if (widget.onOpenReleaseHistory != null)
+              _buildActionRow(
+                icon: Icons.history_rounded,
+                iconColor: const Color(0xFF7045B2),
+                title: '发版历史与更新日志',
+                subtitle:
+                    '${AppUpdateService.platformDisplayName()} 版本记录与详细功能变更',
+                onTap: widget.onOpenReleaseHistory!,
+              ),
+            if (widget.onCheckForUpdates != null)
+              _buildActionRow(
+                icon: Icons.system_update_alt_rounded,
+                iconColor: const Color(0xFF3880FF),
+                title: '检查客户端更新',
+                subtitle: '检测是否有新版本发布',
+                onTap: widget.onCheckForUpdates!,
+              ),
+            if (widget.onScanWorkstation != null)
+              _buildActionRow(
+                icon: Icons.qr_code_scanner_rounded,
+                iconColor: const Color(0xFF0EA5E9),
+                title: '扫码登录工作台',
+                subtitle: '扫描沙丘工作台二维码快速授权登录',
+                onTap: widget.onScanWorkstation!,
+              ),
+            if (widget.onOpenWechatBot != null)
+              _buildActionRow(
+                icon: Icons.chat_rounded,
+                iconColor: const Color(0xFF10B981),
+                title: '微信机器人设置',
+                subtitle: '配置企业微信与群机器人联动',
+                onTap: widget.onOpenWechatBot!,
+              ),
+            if (widget.onClearCache != null)
+              _buildActionRow(
+                icon: Icons.cleaning_services_outlined,
+                iconColor: const Color(0xFF64748B),
+                title: '清除本地缓存',
+                subtitle: '清理工作画像、草稿与本地临时存储',
+                onTap: widget.onClearCache!,
+              ),
+          ],
+        ),
+      if (widget.onLogout != null)
+        _buildCardGroup(
+          title: '账号安全',
+          children: [
+            _buildActionRow(
+              icon: Icons.logout_rounded,
+              iconColor: DunesColors.coral,
+              title: '退出当前登录',
+              subtitle: '退出当前账号并返回登录界面',
+              accentIcon: true,
+              onTap: widget.onLogout!,
+            ),
+          ],
+        ),
+    ];
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < groups.length; i++) ...[
+          if (i > 0) const SizedBox(width: 16),
+          Expanded(child: groups[i]),
+        ],
+      ],
     );
   }
 

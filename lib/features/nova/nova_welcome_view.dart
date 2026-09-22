@@ -10,11 +10,13 @@ class NovaAiPartnerWelcomeView extends StatefulWidget {
   const NovaAiPartnerWelcomeView({
     super.key,
     required this.onSelectPrompt,
+    this.onSubmitFeedback,
     this.name = '小饕',
     this.subtitle = '你在沙丘上的AI全能伙伴',
   });
 
   final ValueChanged<String> onSelectPrompt;
+  final Future<void> Function(String kind, String content)? onSubmitFeedback;
   final String name;
   final String subtitle;
 
@@ -96,7 +98,13 @@ class _NovaAiPartnerWelcomeViewState extends State<NovaAiPartnerWelcomeView>
   }
 
   void _showFeedbackDialog() {
-    NovaFeedbackDialog.show(context);
+    final submit = widget.onSubmitFeedback;
+    NovaFeedbackDialog.show(
+      context,
+      onSubmit: submit == null
+          ? null
+          : (kind, content) => submit(kind.name, content),
+    );
   }
 
   @override

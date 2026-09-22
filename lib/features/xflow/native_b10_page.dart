@@ -329,7 +329,14 @@ class _NativeB10PageState extends State<NativeB10Page> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('撤回审批'),
-        content: const Text('确认撤回此审批？撤回后将保存为草稿，可修改后重新提交。'),
+        content: Text(
+          _bundle?.trail?.steps.any(
+                (step) => step.decision.trim().isNotEmpty,
+              ) ??
+              false
+              ? '确认撤回此审批？已产生的审批意见会作废，待办会关闭。撤回后将保存为草稿，可修改后重新提交。'
+              : '确认撤回此审批？撤回后将保存为草稿，可修改后重新提交。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),

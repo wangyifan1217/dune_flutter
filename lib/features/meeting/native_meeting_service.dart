@@ -775,6 +775,27 @@ class NativeMeetingService {
     );
   }
 
+  Future<MeetingTitleUpdate> patchMeetingTitle(
+    int meetingId,
+    String title,
+  ) async {
+    final trimmed = title.trim();
+    if (trimmed.isEmpty) {
+      throw Exception('会议名称不能为空');
+    }
+    final resp = await _requestMeeting(
+      'PATCH',
+      '/$meetingId',
+      body: jsonEncode({'title': trimmed}),
+    );
+    _ensureSuccess(resp);
+    final data = _unwrapData(resp.body);
+    return MeetingTitleUpdate(
+      detail: NativeMeetingDetail.fromJson(_normalizeMeetingPayload(data)),
+      kbTitleSynced: data['kbTitleSynced'] == true,
+    );
+  }
+
   Future<NativeMeetingDetail> fetchDetail(int meetingId) async {
     final resp = await _requestMeeting('GET', '/$meetingId');
     _ensureSuccess(resp);
@@ -791,11 +812,14 @@ class NativeMeetingService {
     _ensureSuccess(resp);
   }
 
-  Future<NativeMeetingKbUpload> uploadToKb(int meetingId) async {
+  Future<NativeMeetingKbUpload> uploadToKb(
+    int meetingId, {
+    bool skipTaskBind = false,
+  }) async {
     final resp = await _requestMeeting(
       'POST',
       '/$meetingId/upload-to-kb',
-      body: '{}',
+      body: jsonEncode({'skipTaskBind': skipTaskBind}),
     );
     _ensureSuccess(resp);
     final data = _unwrapData(resp.body);
@@ -1055,6 +1079,16 @@ class NativeMeetingService {
   }
 }
 
+class MeetingTitleUpdate {
+  const MeetingTitleUpdate({
+    required this.detail,
+    required this.kbTitleSynced,
+  });
+
+  final NativeMeetingDetail detail;
+  final bool kbTitleSynced;
+}
+
 class NativeMeetingListPageResult {
   const NativeMeetingListPageResult({
     required this.items,
@@ -1102,6 +1136,8 @@ Map<String, dynamic> _normalizeMeetingPayload(Map<String, dynamic> json) {
       'createdAt',
       'updatedAt',
       'kbUpload',
+      'organizerUserId',
+      'kbTitleSynced',
     ]) {
       if (!merged.containsKey(key) && json.containsKey(key)) {
         merged[key] = json[key];

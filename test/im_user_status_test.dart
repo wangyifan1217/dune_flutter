@@ -34,6 +34,10 @@ void main() {
     expect(ImUserStatusCatalog.clampText('客户现场勿扰中了吧'), '客户现场勿扰中了');
     expect(ImUserStatusCatalog.clampText('  出差  '), '出差');
     expect(ImUserStatusCatalog.normalizeIcon('laptop'), 'laptop');
+    expect(ImUserStatusCatalog.normalizeIcon('heartbreak'), 'heartbreak');
+    expect(ImUserStatusCatalog.normalizeIcon('sad'), 'sad');
+    expect(ImUserStatusCatalog.normalizeIcon('cry'), 'cry');
+    expect(ImUserStatusCatalog.normalizeIcon('coma'), 'coma');
     expect(ImUserStatusCatalog.normalizeIcon('nope'), '');
 
     final custom = ImUserStatusCatalog.parse(

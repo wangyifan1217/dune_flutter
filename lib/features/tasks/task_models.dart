@@ -681,6 +681,8 @@ String taskChangeStatusLabel(String status) {
       return '已通过';
     case 'rejected':
       return '已驳回';
+    case 'withdrawn':
+      return '已撤回';
     default:
       return '待审批';
   }

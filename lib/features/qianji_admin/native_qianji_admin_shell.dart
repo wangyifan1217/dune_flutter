@@ -1031,10 +1031,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           ),
     ];
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1140),
-        child: ListView(
+    return ListView(
           padding: EdgeInsets.fromLTRB(
             isDesktopCommOnly ? 24 : 16,
             10,
@@ -1084,9 +1081,7 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
               ),
             ],
           ],
-        ),
-      ),
-    );
+        );
   }
 
   /// 行政级数智协同工作台看板 (Executive Digital Hub)

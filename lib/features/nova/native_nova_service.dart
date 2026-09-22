@@ -790,6 +790,20 @@ class NativeNovaService {
     ).toString();
   }
 
+  Future<void> submitFeedback({
+    required String kind,
+    required String content,
+  }) async {
+    final resp = await _client.post(
+      _dunesUri('/ai/feedback'),
+      headers: _dunesHeaders,
+      body: jsonEncode(<String, String>{'kind': kind, 'content': content}),
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception(_parseApiError(resp, fallback: '反馈提交失败'));
+    }
+  }
+
   Map<String, String> get _dunesHeaders => <String, String>{
     'Authorization': 'Bearer ${session.token}',
     'Content-Type': 'application/json',

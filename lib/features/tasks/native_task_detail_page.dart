@@ -7,6 +7,7 @@ import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'task_ai_analysis.dart';
 import 'task_api.dart';
+import 'task_inbox.dart';
 import 'native_task_action_page.dart';
 import 'task_approval_confirm.dart';
 import 'task_assign_dialog.dart';
@@ -169,8 +170,14 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
     return t.ownerUserId == uid || t.coOwnerUserIds.contains(uid);
   }
 
+  bool get _pendingChangeLocked {
+    final d = _detail;
+    if (d == null) return false;
+    return d.task.hasPendingChange || d.pendingChangeRequest != null;
+  }
+
   bool get _canDelete {
-    if (_viewOnly) return false;
+    if (_viewOnly || _pendingChangeLocked) return false;
     final t = _detail?.task;
     if (t == null) return false;
     final uid = widget.session.userId;
@@ -178,9 +185,10 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
   }
 
   bool get _canAddSubtask {
-    if (_viewOnly) return false;
+    if (_viewOnly || _pendingChangeLocked) return false;
     final t = _detail?.task;
     if (t == null || !t.isMain) return false;
+    if (t.status == 'completed' || t.status == 'cancelled') return false;
     final uid = widget.session.userId;
     return t.ownerUserId == uid ||
         t.creatorUserId == uid ||
@@ -198,12 +206,11 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
   }
 
   bool get _canEvaluate {
-    if (_viewOnly) return false;
+    if (_viewOnly || _pendingChangeLocked) return false;
     final t = _detail?.task;
     if (t == null) return false;
-    if (t.isPending || t.status == 'cancelled' || t.status == 'rejected') {
-      return false;
-    }
+    if (t.status != 'completed' && !t.hasEval) return false;
+    if (t.status == 'cancelled' || t.status == 'rejected') return false;
     final uid = widget.session.userId;
     return t.creatorUserId == uid || t.approverUserId == uid;
   }
@@ -268,9 +275,77 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
     }
   }
 
+  Future<bool> _confirmWithdraw(String title, String body) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: _themePurple),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('撤回'),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  Future<void> _withdrawAssignment() async {
+    final task = _detail?.task;
+    if (task == null) return;
+    final ok = await _confirmWithdraw(
+      '撤回指派',
+      '撤回后对方不用再接收，这条子目标会取消。',
+    );
+    if (!ok || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await _api.withdrawAssignment(task.id);
+      if (mounted) showDunesCenterToast(context, '已撤回指派');
+      widget.onBack();
+    } catch (e) {
+      if (mounted) showDunesCenterToast(context, '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _withdrawChange() async {
+    final task = _detail?.task;
+    if (task == null) return;
+    final ok = await _confirmWithdraw(
+      '撤回变更',
+      '撤回后审批人不用再处理，任务保持原来的内容。',
+    );
+    if (!ok || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await _api.withdrawChange(task.id);
+      await _reload();
+      if (mounted) showDunesCenterToast(context, '已撤回，任务保持原样');
+    } catch (e) {
+      if (mounted) showDunesCenterToast(context, '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _markComplete() async {
     final task = _detail?.task;
     if (task == null) return;
+    final blocked = taskCompleteBlockReason(task);
+    if (blocked != null) {
+      showDunesCenterToast(context, blocked);
+      return;
+    }
     final ok = await confirmTaskComplete(context, title: task.title);
     if (!ok || !mounted) return;
     setState(() => _busy = true);
@@ -327,7 +402,9 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
   }
 
   bool get _canPostpone {
-    if (_viewOnly || widget.viewerHint != null) return false;
+    if (_viewOnly || widget.viewerHint != null || _pendingChangeLocked) {
+      return false;
+    }
     final t = _detail?.task;
     if (t == null) return false;
     if (t.isPending ||
@@ -736,6 +813,8 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                             ? const Color(0xFF1F9D76)
                             : req.status == 'rejected'
                             ? const Color(0xFFE35D6A)
+                            : req.status == 'withdrawn'
+                            ? DunesColors.text3
                             : const Color(0xFFB45309),
                       ),
                       if (req.overdueAtSubmit) ...[
@@ -788,6 +867,29 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
 
   Widget _buildActionPanel(TaskDetail d) {
     final actions = <Widget>[];
+    if (d.task.status == 'pending_assignment' &&
+        d.task.creatorUserId == widget.session.userId &&
+        d.task.ownerUserId != widget.session.userId) {
+      actions.add(
+        OutlinedButton.icon(
+          onPressed: _busy ? null : _withdrawAssignment,
+          icon: const Icon(Icons.undo, size: 17),
+          label: const Text('撤回指派'),
+        ),
+      );
+    }
+    final pendingChange = d.pendingChangeRequest;
+    if (pendingChange != null &&
+        pendingChange.isPending &&
+        pendingChange.requesterUserId == widget.session.userId) {
+      actions.add(
+        OutlinedButton.icon(
+          onPressed: _busy ? null : _withdrawChange,
+          icon: const Icon(Icons.undo, size: 17),
+          label: const Text('撤回变更'),
+        ),
+      );
+    }
     if (d.task.status == 'pending_assignment' &&
         d.task.ownerUserId == widget.session.userId) {
       actions.add(
@@ -845,8 +947,10 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
         );
       }
       if (_canEditProgress &&
+          !_pendingChangeLocked &&
           !(d.task.isMain && d.subtasks.isNotEmpty) &&
-          d.task.status != 'completed') {
+          d.task.status != 'completed' &&
+          !taskStartsAfterToday(d.task, DateTime.now())) {
         actions.add(
           OutlinedButton.icon(
             onPressed: _busy ? null : _openProgress,
@@ -855,17 +959,29 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
           ),
         );
       }
+      final completeBlock = taskCompleteBlockReason(d.task);
       if (d.task.status != 'completed' &&
           d.task.status != 'cancelled' &&
           _canEditProgress) {
         actions.add(
           FilledButton.icon(
             style: FilledButton.styleFrom(backgroundColor: _themePurple),
-            onPressed: _busy ? null : _markComplete,
+            onPressed: _busy || completeBlock != null ? null : _markComplete,
             icon: const Icon(Icons.check_circle_outline, size: 17),
             label: Text(d.task.itemsReadyToClose ? '确认办结主目标' : '标记完成'),
           ),
         );
+        if (completeBlock != null) {
+          actions.add(
+            SizedBox(
+              width: 220,
+              child: Text(
+                completeBlock,
+                style: const TextStyle(fontSize: 12, color: Color(0xFFB45309)),
+              ),
+            ),
+          );
+        }
       }
       if (_canPostpone) {
         actions.add(
@@ -1194,6 +1310,30 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                               ),
                             ],
                           ),
+                          if (_pendingChangeLocked) ...[
+                            const SizedBox(height: 8),
+                            const Text(
+                              '有待审批的变更。通过或驳回之前，不能编辑、完成或删除。',
+                              style: TextStyle(
+                                fontSize: 12,
+                                height: 1.4,
+                                color: Color(0xFFB45309),
+                              ),
+                            ),
+                          ],
+                          if (d.task.isMain &&
+                              d.task.status == 'completed' &&
+                              !_viewOnly) ...[
+                            const SizedBox(height: 8),
+                            const Text(
+                              '主目标已完成，不能直接添加子目标。需要继续时，请先重新打开。',
+                              style: TextStyle(
+                                fontSize: 12,
+                                height: 1.4,
+                                color: DunesColors.text2,
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 12),
                           _metaLine(
                             '负责人',

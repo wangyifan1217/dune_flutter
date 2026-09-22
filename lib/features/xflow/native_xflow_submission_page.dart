@@ -224,7 +224,12 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
     final detail = _detail;
     return detail != null &&
         detail.status.toUpperCase() == 'PENDING' &&
-        !(_trail?.steps.any((step) => step.decision.trim().isNotEmpty) ?? true);
+        _trail != null;
+  }
+
+  bool get _withdrawHasReview {
+    return _trail?.steps.any((step) => step.decision.trim().isNotEmpty) ??
+        false;
   }
 
   /// 已作废：创建人可删除（与草稿一致）。
@@ -335,7 +340,11 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('撤回审批'),
-        content: const Text('确认撤回？已填写的表单会保留为草稿，可修改后重新提交。'),
+        content: Text(
+          _withdrawHasReview
+              ? '确认撤回？已产生的审批意见会作废，待办会关闭。表单会保留为草稿，可修改后重新提交。'
+              : '确认撤回？已填写的表单会保留为草稿，可修改后重新提交。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -650,6 +659,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                         XfDetTaskCompletionCard(
                           form: detail?.formData ?? const <String, dynamic>{},
                           service: _service,
+                          fields: _template?.fields ?? const [],
                         ),
                         XfDetCommentsSection(
                           service: _service,

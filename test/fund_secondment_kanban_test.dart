@@ -39,6 +39,45 @@ void main() {
     expect(formatFundSecondmentWan(239), '239万');
   });
 
+  test('routes that do not add up to remaining are not netted', () {
+    final summary = FundSecondmentSummary(
+      remainingTotalWan: 239,
+      routes: const [
+        FundSecondmentRouteBucket(
+          borrowSubject: '积分',
+          paySubject: '中石油',
+          remainingWan: 35,
+        ),
+      ],
+    );
+    expect(fundSecondmentNetting(summary), isNull);
+  });
+
+  test('bridge subjects net down to who is still advancing money', () {
+    final netting = fundSecondmentNetting(_bridgeBoard());
+    expect(netting, isNotNull);
+    expect(netting!.grossWan, 1205);
+    expect(netting.netWan, 708);
+    expect(netting.bridgeWan, 497);
+    expect(
+      netting.netLenders.map((item) => (item.subject, item.netWan)).toList(),
+      [
+        ('其他（厦油借款）', 300),
+        ('中石化', 150),
+        ('运营商和出行', 144),
+        ('积分', 114),
+      ],
+    );
+    expect(netting.netLenders.map((item) => item.subject), isNot(contains('中石油')));
+    expect(netting.bridgeSubjects.map((item) => item.subject).toList(), [
+      '中石油',
+      '中石化',
+    ]);
+    final sinopec = netting.netLenders.firstWhere((item) => item.subject == '中石化');
+    expect(sinopec.isBridge, isTrue);
+    expect(sinopec.owedWan, 350);
+  });
+
   test('missing board fields stay empty so old APIs still parse', () {
     final summary = FundSecondmentSummary.fromJson({
       'count': 2,
@@ -172,4 +211,64 @@ void main() {
     expect(find.text('120万'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('bridge board keeps document total and nets the pad column', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: FundSecondmentKanban(summary: _bridgeBoard()),
+        ),
+      ),
+    );
+
+    expect(find.text('待收回'), findsOneWidget);
+    expect(find.text('1205万'), findsOneWidget);
+    expect(find.textContaining('还要归还 708万'), findsOneWidget);
+    expect(find.textContaining('497万'), findsOneWidget);
+    expect(find.text('去掉过桥后还垫在外面'), findsOneWidget);
+    expect(find.text('150万'), findsOneWidget);
+    expect(find.text('过桥'), findsOneWidget);
+    expect(find.text('297万'), findsNothing);
+    expect(find.textContaining('中石油、中石化两边都有账'), findsOneWidget);
+    expect(find.text('其他（兴业贷款）  欠  中石化'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+FundSecondmentSummary _bridgeBoard() {
+  FundSecondmentRouteBucket route(String from, String to, double wan) {
+    return FundSecondmentRouteBucket(
+      borrowSubject: from,
+      paySubject: to,
+      remainingWan: wan,
+    );
+  }
+
+  return FundSecondmentSummary(
+    count: 27,
+    settledCount: 19,
+    unsettledCount: 8,
+    borrowTotalWan: 2306,
+    repaidTotalWan: 1106,
+    remainingTotalWan: 1205,
+    routes: [
+      route('其他（兴业贷款）', '中石化', 350),
+      route('中石油', '其他（厦油借款）', 300),
+      route('其他（兴业贷款）', '中石油', 197),
+      route('中石化', '中石油', 100),
+      route('中石化', '运营商和出行', 100),
+      route('中石油', '积分', 100),
+      route('中石油', '运营商和出行', 44),
+      route('其他（退股东款）', '积分', 14),
+    ],
+    lenders: const [
+      FundSecondmentSubjectBucket(subject: '中石化', remainingWan: 350),
+      FundSecondmentSubjectBucket(subject: '其他（厦油借款）', remainingWan: 300),
+      FundSecondmentSubjectBucket(subject: '中石油', remainingWan: 297),
+      FundSecondmentSubjectBucket(subject: '运营商和出行', remainingWan: 144),
+      FundSecondmentSubjectBucket(subject: '积分', remainingWan: 114),
+    ],
+  );
 }

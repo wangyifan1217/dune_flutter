@@ -249,6 +249,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
     });
     _syncBackInterceptor();
     unawaited(_refreshDailyStatus());
+    unawaited(_markReadIfViewing());
   }
 
   Future<void> _loadMessages({bool silent = false}) async {
@@ -305,6 +306,11 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
 
   Future<void> _markReadIfViewing() async {
     if (!widget.autoMarkRead || windowsTrayIsWindowInactive()) return;
+    if (_showTasks || _showDailyReport || _detailTaskId != null) return;
+    if (_scroll.hasClients &&
+        assistantIsAwayFromLatest(_scroll.position, reverse: true)) {
+      return;
+    }
     final id = _resolvedConvId > 0 ? _resolvedConvId : _convId;
     if (id <= 0) return;
     await _service.markConversationRead(id);
@@ -637,6 +643,7 @@ class _NativeTaskAssistantPageState extends State<NativeTaskAssistantPage> {
       _loading = false;
     });
     _syncBackInterceptor();
+    unawaited(_markReadIfViewing());
   }
 
   @override

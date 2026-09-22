@@ -207,7 +207,9 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
             ),
             const SizedBox(height: 4),
             Text(
-              widget.asGroup ? '给主目标起个名，进去后再添加子目标。' : '给自己记一条要做的子目标。',
+              widget.asGroup
+                  ? '只需名称和周期。负责人就是创建人，分类默认「业务 · 销售」，保存后可以再完善。'
+                  : '给自己记一条要做的子目标。',
               style: const TextStyle(fontSize: 12, color: DunesColors.text3),
             ),
             const SizedBox(height: 12),

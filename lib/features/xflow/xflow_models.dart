@@ -362,6 +362,11 @@ class XflowField {
 
   bool visibleIn(Map<String, dynamic> values) {
     if (raw['hiddenOnCreate'] == true) return false;
+    return matchesVisibleWhen(values);
+  }
+
+  /// 详情只看 visibleWhen。hiddenOnCreate 只影响填写，不把已提交的值藏掉。
+  bool matchesVisibleWhen(Map<String, dynamic> values) {
     final cond = (raw['visibleWhen'] ?? '').toString().trim();
     if (cond.isEmpty) return true;
     return xflowParseFormCond(cond, values);
@@ -837,7 +842,7 @@ class XflowDetailBundle {
   /// 创建人本人的草稿(DRAFT)可删除。
   final bool canDeleteDraft;
 
-  /// 创建人的待审批提案，在尚未产生任何审批意见前可撤回。
+  /// 创建人的审批中提案可撤回。已通过或进入办理后不可撤回。
   final bool canWithdraw;
 }
 

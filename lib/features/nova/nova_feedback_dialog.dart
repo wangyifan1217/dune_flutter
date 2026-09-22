@@ -13,13 +13,18 @@ extension NovaFeedbackKindLabel on NovaFeedbackKind {
 
 /// 填写反馈/投诉，提交前二次确认。
 class NovaFeedbackDialog extends StatefulWidget {
-  const NovaFeedbackDialog({super.key});
+  const NovaFeedbackDialog({super.key, this.onSubmit});
 
-  static Future<void> show(BuildContext context) {
+  final Future<void> Function(NovaFeedbackKind kind, String content)? onSubmit;
+
+  static Future<void> show(
+    BuildContext context, {
+    Future<void> Function(NovaFeedbackKind kind, String content)? onSubmit,
+  }) {
     return showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const NovaFeedbackDialog(),
+      builder: (ctx) => NovaFeedbackDialog(onSubmit: onSubmit),
     );
   }
 
@@ -83,6 +88,16 @@ class _NovaFeedbackDialogState extends State<NovaFeedbackDialog> {
     );
     if (confirmed != true || !mounted) return;
     setState(() => _submitting = true);
+    try {
+      if (widget.onSubmit != null) {
+        await widget.onSubmit!(_kind, text);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      showDunesToast(context, '提交失败，请稍后再试');
+      return;
+    }
     if (!mounted) return;
     Navigator.of(context).pop();
     showDunesToast(context, '已提交，我们会尽快处理');

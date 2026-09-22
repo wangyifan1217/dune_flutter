@@ -47,6 +47,24 @@ class NativeMeetingSummary {
     return '';
   }
 
+  NativeMeetingSummary withTitle(String title) {
+    return NativeMeetingSummary(
+      meetingId: meetingId,
+      title: title,
+      meetingDate: meetingDate,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      status: status,
+      asrProgress: asrProgress,
+      summary: summary,
+      organizerUserId: organizerUserId,
+      organizerDisplayName: organizerDisplayName,
+      organizerUsername: organizerUsername,
+      folderId: folderId,
+      kbDocumentId: kbDocumentId,
+    );
+  }
+
   factory NativeMeetingSummary.fromJson(Map<String, dynamic> json) {
     final organizerRaw = json['organizerUserId'] ?? json['organizer_user_id'];
     int? organizerId;
@@ -204,6 +222,7 @@ class NativeMeetingDetail {
     required this.actionItems,
     required this.transcriptSegments,
     this.kbUpload,
+    this.organizerUserId,
   });
 
   final int meetingId;
@@ -220,6 +239,7 @@ class NativeMeetingDetail {
   final List<String> actionItems;
   final List<NativeTranscriptSegment> transcriptSegments;
   final NativeMeetingKbUpload? kbUpload;
+  final int? organizerUserId;
 
   bool get kbUploaded => kbUpload?.uploaded == true;
 
@@ -251,6 +271,9 @@ class NativeMeetingDetail {
         json['kbUpload'] is Map
             ? Map<String, dynamic>.from(json['kbUpload'] as Map)
             : null,
+      ),
+      organizerUserId: _readOptionalInt(
+        json['organizerUserId'] ?? json['organizer_user_id'],
       ),
     );
   }

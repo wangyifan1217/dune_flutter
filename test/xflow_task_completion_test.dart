@@ -51,6 +51,52 @@ void main() {
     expect(taskTodoCompletionFileGroups({'paymentVoucher': 'PZ-2026-001'}), isEmpty);
   });
 
+  test('application upload keys use Chinese labels', () {
+    final groups = taskTodoCompletionFileGroups({
+      'contractAttachment': [
+        {
+          'fileName': '协议.pdf',
+          'objectKey': 'xflow-proposals/a.pdf',
+        },
+      ],
+      'invoiceOrReceipt': [
+        {
+          'fileName': '收据.png',
+          'objectKey': 'xflow-proposals/b.png',
+        },
+      ],
+    });
+    expect(groups.map((group) => group.$1).toList(), ['合同附件', '发票或收据']);
+  });
+
+  test('form field label overrides the fallback Chinese name', () {
+    const fields = [
+      XflowField(
+        key: 'contractAttachment',
+        type: 'upload',
+        label: '协议附件',
+        placeholder: '',
+        required: false,
+        readonly: false,
+        options: [],
+        children: [],
+        raw: {},
+      ),
+    ];
+    final groups = taskTodoCompletionFileGroups(
+      {
+        'contractAttachment': [
+          {
+            'fileName': '协议.pdf',
+            'objectKey': 'xflow-proposals/a.pdf',
+          },
+        ],
+      },
+      defs: todoDefsFromFormFields(fields),
+    );
+    expect(groups.single.$1, '协议附件');
+  });
+
   test('requiredFieldDefs mark payment voucher as upload', () {
     const defs = [
       XflowTodoFieldDef(key: 'paymentVoucher', label: '支付凭证', type: 'upload'),

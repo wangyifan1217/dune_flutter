@@ -7,6 +7,7 @@ import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'task_api.dart';
 import 'task_first_use_guide.dart';
+import 'task_inbox.dart';
 import 'task_models.dart';
 import 'task_widgets.dart';
 
@@ -79,6 +80,13 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
   bool _showCalendar = false;
   bool _teamCalendar = false;
   bool _guideAutoStarted = false;
+  bool _showQuiet = false;
+  int? _viewUserId;
+  String _viewUserName = '';
+  final _comment = TextEditingController();
+  bool _commenting = false;
+  Map<int, String> _previousNext = const {};
+  final _lineListeners = <TextEditingController, VoidCallback>{};
   String? _error;
 
   @override
@@ -106,11 +114,67 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
     _blockers.dispose();
     _otherWork.dispose();
     _nextPlan.dispose();
-    for (final line in _lines) {
+    _comment.dispose();
+    _disposeLines(_lines);
+    super.dispose();
+  }
+
+  void _disposeLines(List<_DraftLine> lines) {
+    for (final line in lines) {
+      final workListener = _lineListeners.remove(line.work);
+      if (workListener != null) line.work.removeListener(workListener);
+      final nextListener = _lineListeners.remove(line.next);
+      if (nextListener != null) line.next.removeListener(nextListener);
       line.work.dispose();
       line.next.dispose();
     }
-    super.dispose();
+  }
+
+  void _watchLine(_DraftLine line) {
+    void listen(TextEditingController controller) {
+      void listener() {
+        if (mounted) setState(() {});
+      }
+
+      _lineListeners[controller] = listener;
+      controller.addListener(listener);
+    }
+
+    listen(line.work);
+    listen(line.next);
+  }
+
+  bool _lineNeedsAttention(_DraftLine line) {
+    if (line.work.text.trim().isNotEmpty || line.next.text.trim().isNotEmpty) {
+      return true;
+    }
+    if (line.progress.round() != line.task.progressPct) return true;
+    if (line.task.overdue || taskDueOnDay(line.task, _date)) return true;
+    return false;
+  }
+
+  void _markNoProgress() {
+    for (final line in _lines) {
+      if (line.work.text.trim().isEmpty) line.work.text = '无进展';
+    }
+    setState(() => _showQuiet = false);
+  }
+
+  void _reusePreviousNext() {
+    var copied = 0;
+    for (final line in _lines) {
+      final previous = _previousNext[line.task.id];
+      if (previous == null || previous.isEmpty || line.next.text.trim().isNotEmpty) {
+        continue;
+      }
+      line.next.text = previous;
+      copied++;
+    }
+    if (copied == 0) {
+      showDunesCenterToast(context, '没有可沿用的下一步');
+      return;
+    }
+    showDunesCenterToast(context, '已沿用 $copied 条下一步');
   }
 
   Future<void> _reload() async {
@@ -119,12 +183,14 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
       _error = null;
     });
     try {
-      final bundle = await _api.getDailyReport(date: _date);
+      final viewingOther =
+          _viewUserId != null && _viewUserId != widget.session.userId;
+      final bundle = await _api.getDailyReport(
+        date: _date,
+        userId: viewingOther ? _viewUserId : null,
+      );
       if (!mounted) return;
-      for (final line in _lines) {
-        line.work.dispose();
-        line.next.dispose();
-      }
+      _disposeLines(_lines);
       final submitted = bundle.report;
       final lines = <_DraftLine>[];
       if (submitted != null && submitted.items.isNotEmpty) {
@@ -144,11 +210,14 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
           line.progress = item.progressPct.toDouble();
           line.work.text = item.workDone;
           line.next.text = item.nextAction;
+          _watchLine(line);
           lines.add(line);
         }
       } else {
         for (final task in bundle.candidates) {
-          lines.add(_DraftLine(task));
+          final line = _DraftLine(task);
+          _watchLine(line);
+          lines.add(line);
         }
       }
       _blockers.text = submitted?.blockers ?? '';
@@ -157,8 +226,10 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
       setState(() {
         _bundle = bundle;
         _lines = lines;
+        _showQuiet = false;
         _loading = false;
       });
+      if (!viewingOther) unawaited(_loadPreviousNext());
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -166,6 +237,37 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
         _loading = false;
       });
     }
+  }
+
+  Future<void> _loadPreviousNext() async {
+    try {
+      final history = await _api.listDailyReportHistory(size: 20);
+      final day = DateTime(_date.year, _date.month, _date.day);
+      TaskDailyReport? previous;
+      for (final report in history) {
+        final parsed = DateTime.tryParse(report.reportDate);
+        if (parsed == null) continue;
+        final reportDay = DateTime(parsed.year, parsed.month, parsed.day);
+        if (reportDay.isBefore(day)) {
+          previous = report;
+          break;
+        }
+      }
+      if (previous == null || !mounted) return;
+      var items = previous.items;
+      if (items.isEmpty) {
+        final bundle = await _api.getDailyReport(
+          date: DateTime.parse(previous.reportDate),
+        );
+        items = bundle.report?.items ?? const [];
+      }
+      final nextByTask = <int, String>{};
+      for (final item in items) {
+        final next = item.nextAction.trim();
+        if (next.isNotEmpty) nextByTask[item.taskId] = next;
+      }
+      if (mounted) setState(() => _previousNext = nextByTask);
+    } catch (_) {}
   }
 
   Future<void> _loadHistory() async {
@@ -405,9 +507,16 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
         const SizedBox(height: 8),
         _calendarSummary(calendar.summary),
         const SizedBox(height: 14),
-        if (_teamCalendar)
-          _teamCalendarTable(calendar)
-        else
+        if (_teamCalendar) ...[
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text(
+              '点某一天查看该成员的日报',
+              style: TextStyle(fontSize: 12, color: DunesColors.text3),
+            ),
+          ),
+          _teamCalendarTable(calendar),
+        ] else
           _personalCalendarGrid(calendar),
         const SizedBox(height: 12),
         const Wrap(
@@ -521,12 +630,32 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
               cells: [
                 DataCell(SizedBox(width: 72, child: Text(user.userName.isEmpty ? '员工${user.userId}' : user.userName, overflow: TextOverflow.ellipsis))),
                 for (var i = 0; i < limit; i++)
-                  DataCell(_statusDot(i < user.days.length ? user.days[i].status : 'rest')),
+                  DataCell(
+                  _statusDot(i < user.days.length ? user.days[i].status : 'rest'),
+                  onTap: () => _openMemberReport(
+                    user.userId,
+                    user.userName,
+                    calendar.days[i],
+                  ),
+                ),
               ],
             ),
         ],
       ),
     );
+  }
+
+  void _openMemberReport(int userId, String name, String day) {
+    final parsed = DateTime.tryParse(day);
+    if (userId <= 0 || parsed == null) return;
+    setState(() {
+      _viewUserId = userId == widget.session.userId ? null : userId;
+      _viewUserName = userId == widget.session.userId ? '' : name;
+      _date = parsed;
+      _showCalendar = false;
+      _comment.clear();
+    });
+    unawaited(_reload());
   }
 
   Widget _statusDot(String status) {
@@ -589,10 +718,44 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
     }
     final bundle = _bundle;
     final submitted = bundle?.report?.submitted == true;
-    final readOnly = submitted || bundle?.canSubmit != true;
+    final viewingOther =
+        _viewUserId != null && _viewUserId != widget.session.userId;
+    final readOnly = viewingOther || submitted || bundle?.canSubmit != true;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
       children: [
+        if (viewingOther)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Material(
+              color: const Color(0xFFF3EEFF),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '正在查看 ${_viewUserName.isEmpty ? '下级' : _viewUserName} 的日报',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _viewUserId = null;
+                          _viewUserName = '';
+                          _comment.clear();
+                        });
+                        unawaited(_reload());
+                      },
+                      child: const Text('返回我的日报'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         InkWell(
           onTap: _pickDate,
           child: Container(
@@ -667,10 +830,24 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
               style: TextStyle(color: DunesColors.text3),
             ),
           ),
-        for (final line in _lines) ...[
-          _lineCard(line, readOnly: readOnly),
-          const SizedBox(height: 10),
-        ],
+        if (!readOnly && _lines.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Wrap(
+              spacing: 8,
+              children: [
+                OutlinedButton(
+                  onPressed: _markNoProgress,
+                  child: const Text('批量无进展'),
+                ),
+                OutlinedButton(
+                  onPressed: _reusePreviousNext,
+                  child: const Text('沿用上次下一步'),
+                ),
+              ],
+            ),
+          ),
+        ..._reportLineCards(readOnly: readOnly),
         if (!submitted &&
             bundle?.canSubmit != true &&
             bundle?.leaveExempt != true)
@@ -714,6 +891,10 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
             decoration: _inputDecoration('明天准备继续推进什么（选填）'),
           ),
         ),
+        if (submitted && bundle?.report != null) ...[
+          const SizedBox(height: 10),
+          _commentBox(bundle!.report!),
+        ],
         if (!submitted && bundle?.canSubmit == true) ...[
           const SizedBox(height: 16),
           FilledButton(
@@ -727,6 +908,58 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
         ],
       ],
     );
+  }
+
+  List<Widget> _reportLineCards({required bool readOnly}) {
+    final visible = readOnly
+        ? _lines
+        : _lines.where(_lineNeedsAttention).toList(growable: false);
+    final quiet = readOnly
+        ? const <_DraftLine>[]
+        : _lines.where((line) => !_lineNeedsAttention(line)).toList(growable: false);
+    return [
+      for (final line in visible) ...[
+        _lineCard(line, readOnly: readOnly),
+        const SizedBox(height: 10),
+      ],
+      if (quiet.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => setState(() => _showQuiet = !_showQuiet),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '无变化 ${quiet.length} 项',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    Text(
+                      _showQuiet ? '收起' : '展开',
+                      style: const TextStyle(
+                        color: kTaskPurple,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      if (_showQuiet)
+        for (final line in quiet) ...[
+          _lineCard(line, readOnly: readOnly),
+          const SizedBox(height: 10),
+        ],
+    ];
   }
 
   Widget _lineCard(_DraftLine line, {required bool readOnly}) {
@@ -876,9 +1109,96 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
             maxLines: 3,
             decoration: _inputDecoration('下一步准备做什么（选填）', accent: accent),
           ),
+          if (!readOnly)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Wrap(
+                spacing: 8,
+                children: [
+                  if (line.work.text.trim().isEmpty)
+                    TextButton(
+                      onPressed: () => setState(() => line.work.text = '无进展'),
+                      child: const Text('无进展'),
+                    ),
+                  if ((_previousNext[line.task.id] ?? '').isNotEmpty &&
+                      line.next.text.trim().isEmpty)
+                    TextButton(
+                      onPressed: () => setState(
+                        () => line.next.text = _previousNext[line.task.id]!,
+                      ),
+                      child: const Text('沿用上次'),
+                    ),
+                ],
+              ),
+            ),
         ],
       ),
     );
+  }
+
+  Widget _commentBox(TaskDailyReport report) {
+    final comments = report.comments;
+    return _box(
+      '评论',
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (comments.isEmpty)
+            const Text('还没有评论', style: TextStyle(color: DunesColors.text3))
+          else
+            for (final comment in comments)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      comment.userName.isEmpty ? '用户${comment.userId}' : comment.userName,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(comment.body, style: const TextStyle(height: 1.4)),
+                  ],
+                ),
+              ),
+          TextField(
+            controller: _comment,
+            maxLines: 2,
+            decoration: _inputDecoration('写一条评论'),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              onPressed: _commenting ? null : () => _submitComment(report.id),
+              style: FilledButton.styleFrom(backgroundColor: kTaskPurple),
+              child: Text(_commenting ? '发送中…' : '发送评论'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submitComment(int reportId) async {
+    final text = _comment.text.trim();
+    if (reportId <= 0 || text.isEmpty) {
+      showDunesCenterToast(context, '请先写评论');
+      return;
+    }
+    setState(() => _commenting = true);
+    try {
+      await _api.commentDailyReport(reportId, text);
+      if (!mounted) return;
+      _comment.clear();
+      showDunesCenterToast(context, '已发送');
+      await _reload();
+    } catch (e) {
+      if (!mounted) return;
+      showDunesCenterToast(context, '$e');
+    } finally {
+      if (mounted) setState(() => _commenting = false);
+    }
   }
 
   Widget _box(String label, Widget child) {

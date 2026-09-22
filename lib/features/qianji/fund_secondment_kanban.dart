@@ -42,10 +42,11 @@ class FundSecondmentKanban extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final wide = constraints.maxWidth >= 560;
+            final netting = fundSecondmentNetting(summary);
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildHero(),
+                _buildHero(netting),
                 const SizedBox(height: 10),
                 _RepayProgressBar(ratio: summary.repaidRatio),
                 const SizedBox(height: 10),
@@ -70,7 +71,7 @@ class FundSecondmentKanban extends StatelessWidget {
                 if (summary.remainingTotalWan > 0 &&
                     (summary.routes.isNotEmpty || summary.lenders.isNotEmpty)) ...[
                   const SizedBox(height: 12),
-                  _buildBreakdown(wide),
+                  _buildBreakdown(wide, netting),
                 ],
               ],
             );
@@ -80,7 +81,7 @@ class FundSecondmentKanban extends StatelessWidget {
     );
   }
 
-  Widget _buildHero() {
+  Widget _buildHero(FundSecondmentNetting? netting) {
     final remaining = summary.remainingTotalWan;
     final allClear = summary.count > 0 && remaining <= 0;
     final title = allClear ? '目前没有未收回的钱' : '待收回';
@@ -118,6 +119,18 @@ class FundSecondmentKanban extends StatelessWidget {
                   color: DunesColors.text3,
                 ),
               ),
+              if (netting != null && netting.hasBridge) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '去掉过桥重复的 ${formatFundSecondmentWan(netting.bridgeWan)}后，还要归还 ${formatFundSecondmentWan(netting.netWan)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.text2,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -162,7 +175,8 @@ class FundSecondmentKanban extends StatelessWidget {
     );
   }
 
-  Widget _buildBreakdown(bool wide) {
+  Widget _buildBreakdown(bool wide, FundSecondmentNetting? netting) {
+    final useNet = netting != null && netting.hasBridge;
     final routes = _BreakdownColumn(
       title: '谁欠谁',
       hint: '借款主体还欠付款主体',
@@ -177,35 +191,61 @@ class FundSecondmentKanban extends StatelessWidget {
           )
           .toList(growable: false),
     );
-    if (summary.lenders.isEmpty) return routes;
+    final lenderRows = useNet
+        ? netting!.netLenders
+            .map(
+              (item) => _BreakdownRow(
+                label: item.subject,
+                tag: item.isBridge ? '过桥' : null,
+                value: formatFundSecondmentWan(item.netWan),
+              ),
+            )
+            .toList(growable: false)
+        : summary.lenders
+            .map(
+              (item) => _BreakdownRow(
+                label: item.subject,
+                value: formatFundSecondmentWan(item.remainingWan),
+              ),
+            )
+            .toList(growable: false);
+    if (lenderRows.isEmpty) return routes;
     final lenders = _BreakdownColumn(
       title: '谁还在垫钱',
-      hint: '付款主体未收回余额',
-      children: summary.lenders
-          .map(
-            (item) => _BreakdownRow(
-              label: item.subject,
-              value: formatFundSecondmentWan(item.remainingWan),
-            ),
-          )
-          .toList(growable: false),
+      hint: useNet ? '去掉过桥后还垫在外面' : '付款主体未收回余额',
+      children: lenderRows,
     );
-    if (!wide) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          routes,
-          const SizedBox(height: 12),
-          lenders,
-        ],
-      );
-    }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final columns = wide
+        ? Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 3, child: routes),
+              const SizedBox(width: 16),
+              Expanded(flex: 2, child: lenders),
+            ],
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              routes,
+              const SizedBox(height: 12),
+              lenders,
+            ],
+          );
+    if (!useNet || netting!.bridgeNote.isEmpty) return columns;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(flex: 3, child: routes),
-        const SizedBox(width: 16),
-        Expanded(flex: 2, child: lenders),
+        columns,
+        const SizedBox(height: 8),
+        Text(
+          netting!.bridgeNote,
+          style: const TextStyle(
+            fontSize: 11,
+            height: 1.4,
+            color: DunesColors.text3,
+          ),
+        ),
       ],
     );
   }
@@ -365,6 +405,7 @@ class _BreakdownRow extends StatelessWidget {
     this.from,
     this.relation,
     this.to,
+    this.tag,
     required this.value,
   });
 
@@ -372,6 +413,7 @@ class _BreakdownRow extends StatelessWidget {
   final String? from;
   final String? relation;
   final String? to;
+  final String? tag;
   final String value;
 
   static const _nameStyle = TextStyle(
@@ -408,11 +450,23 @@ class _BreakdownRow extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: _nameStyle,
           );
+    final mark = tag;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         children: [
           Expanded(child: left),
+          if (mark != null && mark.isNotEmpty) ...[
+            const SizedBox(width: 6),
+            Text(
+              mark,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: DunesColors.amber,
+              ),
+            ),
+          ],
           const SizedBox(width: 8),
           Text(
             value,

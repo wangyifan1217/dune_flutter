@@ -765,17 +765,27 @@ class TaskWorkbenchCard extends StatelessWidget {
     required this.task,
     required this.onTap,
     this.onProgress,
+    this.onComplete,
+    this.completeHint,
     this.onApprove,
     this.onReject,
     this.groupMode = false,
+    this.statusHint,
+    this.approveLabel = '通过',
+    this.rejectLabel = '驳回',
   });
 
   final TaskItem task;
   final VoidCallback onTap;
   final VoidCallback? onProgress;
+  final VoidCallback? onComplete;
+  final String? completeHint;
   final VoidCallback? onApprove;
   final VoidCallback? onReject;
   final bool groupMode;
+  final String? statusHint;
+  final String approveLabel;
+  final String rejectLabel;
 
   String? get _period {
     String fmt(DateTime value) => formatTaskYmd(value.toLocal());
@@ -860,6 +870,18 @@ class TaskWorkbenchCard extends StatelessWidget {
                             style: const TextStyle(
                               fontSize: 12,
                               color: DunesColors.text3,
+                            ),
+                          ),
+                        if (statusHint != null && statusHint!.trim().isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              statusHint!,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                height: 1.35,
+                                color: DunesColors.text2,
+                              ),
                             ),
                           ),
                       ],
@@ -965,26 +987,29 @@ class TaskWorkbenchCard extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 12),
-              if (pending)
+              if (pending || onApprove != null || onReject != null)
                 Row(
                   children: [
-                    FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: kTaskPurple,
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                    if (pending || onApprove != null)
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: kTaskPurple,
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                        ),
+                        onPressed: onApprove,
+                        child: Text(approveLabel),
                       ),
-                      onPressed: onApprove,
-                      child: const Text('通过'),
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
+                    if (pending || onReject != null) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: onReject,
+                        child: Text(rejectLabel),
                       ),
-                      onPressed: onReject,
-                      child: const Text('驳回'),
-                    ),
+                    ],
                   ],
                 )
               else if (groupMode)
@@ -1000,19 +1025,50 @@ class TaskWorkbenchCard extends StatelessWidget {
                     label: const Text('查看详情与拆解'),
                   ),
                 )
-              else if (onProgress != null)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: kTaskPurple,
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
+              else if (onProgress != null || onComplete != null || completeHint != null)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (completeHint != null && completeHint!.trim().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          completeHint!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            height: 1.35,
+                            color: Color(0xFFB45309),
+                          ),
+                        ),
+                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (onProgress != null)
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            onPressed: onProgress,
+                            icon: const Icon(Icons.tune, size: 16),
+                            label: const Text('更新进度'),
+                          ),
+                        if (onComplete != null) ...[
+                          const SizedBox(width: 8),
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: kTaskPurple,
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                            ),
+                            onPressed: onComplete,
+                            icon: const Icon(Icons.check_circle_outline, size: 16),
+                            label: const Text('标记完成'),
+                          ),
+                        ],
+                      ],
                     ),
-                    onPressed: onProgress,
-                    icon: const Icon(Icons.tune, size: 16),
-                    label: const Text('更新进度'),
-                  ),
+                  ],
                 ),
             ],
           ),

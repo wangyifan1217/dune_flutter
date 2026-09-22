@@ -147,6 +147,34 @@ class MeetingListCache {
     );
   }
 
+  void renameMeeting(int meetingId, String title) {
+    if (meetingId <= 0) return;
+    final nextTitle = title.trim();
+    if (nextTitle.isEmpty) return;
+    final snap = _snapshot;
+    if (snap == null) return;
+    var changed = false;
+    final next = snap.rows
+        .map((row) {
+          if (row.meetingId != meetingId || row.title == nextTitle) return row;
+          changed = true;
+          return row.withTitle(nextTitle);
+        })
+        .toList(growable: false);
+    if (!changed) return;
+    _stale = false;
+    _snapshot = MeetingListSnapshot(
+      rows: List<NativeMeetingSummary>.unmodifiable(next),
+      page: snap.page,
+      hasMore: snap.hasMore,
+      totalCount: snap.totalCount,
+      keyword: snap.keyword,
+      folderKind: snap.folderKind,
+      folderId: snap.folderId,
+      folders: snap.folders,
+    );
+  }
+
   void clear() {
     _userId = null;
     _snapshot = null;

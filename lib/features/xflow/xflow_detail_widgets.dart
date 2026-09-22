@@ -450,15 +450,18 @@ class XfDetTaskCompletionCard extends StatelessWidget {
     super.key,
     required this.form,
     required this.service,
+    this.fields = const [],
   });
 
   final Map<String, dynamic> form;
   final XflowService service;
+  final List<XflowField> fields;
 
   @override
   Widget build(BuildContext context) {
-    final texts = taskTodoCompletionTexts(form);
-    final groups = taskTodoCompletionFileGroups(form);
+    final defs = todoDefsFromFormFields(fields);
+    final texts = taskTodoCompletionTexts(form, defs: defs);
+    final groups = taskTodoCompletionFileGroups(form, defs: defs);
     if (texts.isEmpty && groups.isEmpty) return const SizedBox.shrink();
     return XfDetCard(
       title: '待办办理信息',

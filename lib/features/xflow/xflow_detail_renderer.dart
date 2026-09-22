@@ -95,6 +95,7 @@ class XflowDetailRenderer extends StatelessWidget {
         XfDetTaskCompletionCard(
           form: bundle.detail.formValues,
           service: service,
+          fields: bundle.fields,
         ),
         XfDetCommentsSection(
           service: service,

@@ -4089,6 +4089,10 @@ class _NativeNovaPageState extends State<NativeNovaPage>
           name: '小饕',
           subtitle: '你在沙丘上的AI全能伙伴',
           onSelectPrompt: _handlePromptCardTapped,
+          onSubmitFeedback: (kind, content) => _service.submitFeedback(
+            kind: kind,
+            content: content,
+          ),
         ),
       ],
     );

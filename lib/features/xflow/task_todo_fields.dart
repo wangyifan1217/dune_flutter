@@ -20,6 +20,15 @@ const kTaskTodoCompletionLabels = <String, String>{
   'signedAt': '签收时间',
   'invoiceFiles': '发票文件',
   'paymentVoucherFiles': '支付凭证',
+  'files': '附件',
+  'attachments': '附件',
+  'planFiles': '方案附件',
+  'productFiles': '产品文件',
+  'contractFiles': '商务合同附件',
+  'contractAttachment': '合同附件',
+  'invoiceAttachment': '发票附件',
+  'invoiceOrReceipt': '发票或收据',
+  'paymentScreenshot': '付款截图',
 };
 
 bool taskTodoValueLooksLikeUpload(Object? value) {
@@ -58,9 +67,28 @@ String taskTodoFieldLabel(
   List<XflowTodoFieldDef> defs = const [],
 }) {
   for (final def in defs) {
-    if (def.key == key && def.label.trim().isNotEmpty) return def.label.trim();
+    final label = def.label.trim();
+    if (def.key == key && label.isNotEmpty && label != key) return label;
   }
   return kTaskTodoCompletionLabels[key] ?? key;
+}
+
+/// 表单字段（含分组列）上的中文名，优先于字段 key。
+List<XflowTodoFieldDef> todoDefsFromFormFields(List<XflowField> fields) {
+  final out = <XflowTodoFieldDef>[];
+  void addField(XflowField field) {
+    final key = field.key.trim();
+    if (key.isEmpty) return;
+    out.add(XflowTodoFieldDef(key: key, label: field.label, type: field.type));
+    for (final col in field.columnsAsFields) {
+      addField(col);
+    }
+  }
+
+  for (final field in fields) {
+    addField(field);
+  }
+  return out;
 }
 
 List<(String, String)> taskTodoCompletionTexts(

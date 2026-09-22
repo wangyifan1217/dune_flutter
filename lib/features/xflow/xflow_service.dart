@@ -1087,8 +1087,7 @@ class XflowService {
         st == 'pending' &&
         uid > 0 &&
         (detail.createdById == uid || initiator == uid) &&
-        trail != null &&
-        !trail.steps.any((step) => step.decision.trim().isNotEmpty);
+        trail != null;
     return XflowDetailBundle(
       detail: detail,
       trail: trail,

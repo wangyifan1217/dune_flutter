@@ -110,6 +110,30 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
     super.dispose();
   }
 
+  Future<bool?> _askMarkCompleteAfterFullProgress() {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('进度已到 100%'),
+        content: const Text(
+          '可以标记完成，或仅表示工作已做完、继续等待验收。选择等待验收时，任务仍是进行中。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('等待验收'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: _accent),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('标记完成'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _submit() async {
     if (_saving) return;
     if (_isComplete) {
@@ -160,13 +184,29 @@ class _NativeTaskActionViewState extends State<NativeTaskActionView> {
     setState(() => _saving = true);
     try {
       if (_isProgress) {
+        final nextPct = _pct.round().clamp(0, 100);
         await _api.patchTask(widget.task.id, {
-          'progressPct': _pct.round().clamp(0, 100),
+          'progressPct': nextPct,
           'progressNote': _noteCtrl.text.trim(),
           if (_attachments.isNotEmpty)
             'attachments': _attachments.map((e) => e.toCreateJson()).toList(),
         });
-        if (mounted) showDunesCenterToast(context, '进度已更新');
+        if (!mounted) return;
+        if (nextPct >= 100 && widget.task.status != 'completed') {
+          final mark = await _askMarkCompleteAfterFullProgress();
+          if (!mounted) return;
+          if (mark == true) {
+            await _api.patchTask(widget.task.id, {
+              'status': 'completed',
+              'forceComplete': true,
+            });
+            if (mounted) showDunesCenterToast(context, '已办结');
+          } else {
+            showDunesCenterToast(context, '进度已更新，任务仍在进行中');
+          }
+        } else {
+          showDunesCenterToast(context, '进度已更新');
+        }
       } else {
         await _api.evaluate(
           widget.task.id,

@@ -103,12 +103,35 @@ class _TaskAssignDialogState extends State<_TaskAssignDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              '指派后由你的直属上级审批，通过后负责人变更为被指派人，原负责人转为协作人。',
-              style: const TextStyle(
-                fontSize: 13,
-                color: DunesColors.text2,
-                height: 1.4,
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF7F6FC),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '提交后的路径',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: kTaskPurple,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    '当前是运行中转派：提交后待直属上级审批，负责人暂时不变。\n'
+                    '上级通过后，负责人变为被指派人，原负责人转为协作人。驳回则维持原负责人。\n'
+                    '新建子目标若开启了接收确认，则会先待对方接受，而不是直接生效。',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: DunesColors.text2,
+                      height: 1.45,
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 10),

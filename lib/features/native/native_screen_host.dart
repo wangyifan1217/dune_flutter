@@ -34,6 +34,7 @@ import '../chat/desktop_composer_focus.dart';
 import '../chat/native_chat_search_page.dart';
 import '../search/global_search_models.dart';
 import '../search/native_global_search_page.dart';
+import '../tasks/native_task_daily_report_page.dart';
 import '../tasks/native_task_detail_page.dart';
 import '../chat/native_favorites_page.dart';
 import '../chat/native_group_chat_page.dart';
@@ -195,6 +196,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   NativeConversation? _selectedWeeklySummary;
   NativeConversation? _selectedReconciliation;
   bool _openDailyReconPending = false;
+  bool _dailyReportPane = false;
   int _dailyReconOpenToken = 0;
   String _dailyReconAsOfDate = '';
   String _dailyReconCardType = '';
@@ -2132,7 +2134,32 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       _profileReturnScreen == 'C6';
 
   /// 双栏右侧叠在会话上的子页（群资料/名片/搜索/媒体/智能总结）；有叠层时底层会话保持挂载不销毁。
+  void _openDailyReportPane() {
+    if (!isWideChatLayout(context)) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (routeContext) => Scaffold(
+            body: SafeArea(
+              child: NativeTaskDailyReportPage(
+                session: widget.session,
+                onBack: () => Navigator.of(routeContext).pop(),
+              ),
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+    setState(() => _dailyReportPane = true);
+  }
+
+  void _closeDailyReportPane() {
+    if (!_dailyReportPane) return;
+    setState(() => _dailyReportPane = false);
+  }
+
   String? get _dualPaneOverlayScreen {
+    if (_dailyReportPane) return 'TDR';
     final screen = widget.navigation.currentScreen;
     if (screen == 'C6') return 'C6';
     if (screen == 'C12' || screen == 'C13') return screen;
@@ -2507,6 +2534,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       onOpenAiSummary: widget.session.isExternalUser
           ? () {}
           : () => widget.navigation.go('AS1'),
+      onOpenDailyReport: widget.session.isExternalUser
+          ? null
+          : _openDailyReportPane,
       onOpenFavorites: () => widget.navigation.go('CF'),
       onOpenApprovalAssistant: _openApprovalAssistant,
       onOpenTaskAssistant: _openTaskAssistant,
@@ -3532,6 +3562,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'C12' => _buildDualPaneSearchPage(),
       'C13' => _buildDualPaneMediaPage(),
       'C9' => _buildDualPaneContactProfilePage(),
+      'TDR' => NativeTaskDailyReportPage(
+        session: widget.session,
+        onBack: _closeDailyReportPane,
+      ),
       'AS1' => _buildAiSummaryHubPage(),
       'AS2' => _buildAiSummaryCreatePage(),
       'AS3' => _buildAiSummaryDetailPage(),

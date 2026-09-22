@@ -27,6 +27,81 @@ import 'meeting_upload_storage.dart';
 import 'native_meeting_models.dart';
 import 'native_meeting_service.dart';
 
+enum _MeetingBarAction { openExternal, forward, saveDrive, rename, refresh, delete }
+
+class _RenameTitleDialog extends StatefulWidget {
+  const _RenameTitleDialog({required this.current, required this.syncKb});
+
+  final String current;
+  final bool syncKb;
+
+  @override
+  State<_RenameTitleDialog> createState() => _RenameTitleDialogState();
+}
+
+class _RenameTitleDialogState extends State<_RenameTitleDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.current,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final next = _controller.text.trim();
+    if (next.isEmpty || next == widget.current) return;
+    Navigator.pop(context, next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = _controller.text.trim();
+    final canSave = value.isNotEmpty && value != widget.current;
+    return AlertDialog(
+      title: const Text('修改名称'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            maxLength: 256,
+            textInputAction: TextInputAction.done,
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) => _submit(),
+            decoration: const InputDecoration(hintText: '会议名称'),
+          ),
+          if (widget.syncKb) ...[
+            const SizedBox(height: 8),
+            Text(
+              '保存后，知识库里的同一份纪要会换成这个名称。',
+              style: DunesTypography.sans(
+                fontSize: 13,
+                height: 1.45,
+                color: DunesColors.text3,
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: canSave ? _submit : null,
+          child: const Text('保存'),
+        ),
+      ],
+    );
+  }
+}
+
 /// PC 上以对话框打开；移动端全屏推页。
 Future<void> showNativeMeetingDetail({
   required BuildContext context,
@@ -123,6 +198,7 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
   bool _savingToDrive = false;
   bool _driveSaved = false;
   bool _uploadingSummaryToKb = false;
+  bool _renaming = false;
   bool _kbMarkedStale = false;
   String? _kbSyncedMeetingUpdatedAt;
   double _downloadProgress = 0;
@@ -970,6 +1046,61 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
     return '重新生成纪要';
   }
 
+  Future<void> _renameMeeting() async {
+    final detail = _detail;
+    if (detail == null || !_canRenameTitle(detail) || _renaming) return;
+    final current = detail.title.trim();
+    final hadKb = detail.kbUploaded;
+    final next = await _promptMeetingTitle(current, syncKb: hadKb);
+    if (next == null || !mounted || next == current) return;
+
+    setState(() => _renaming = true);
+    try {
+      final result = await _service.patchMeetingTitle(detail.meetingId, next);
+      MeetingListCache.instance.renameMeeting(detail.meetingId, next);
+      var kbSynced = !hadKb || result.kbTitleSynced;
+      Object? kbError;
+      if (hadKb && !result.kbTitleSynced) {
+        try {
+          await _service.uploadToKb(detail.meetingId, skipTaskBind: true);
+          kbSynced = true;
+        } catch (e) {
+          kbError = e;
+        }
+      }
+      if (!mounted) return;
+      await _load();
+      if (kbSynced && hadKb) {
+        KbDocumentCoordinator.instance.notifyChanged();
+      }
+      if (!mounted) return;
+      final message = kbError != null
+          ? '名称已更新。知识库未能同步：${friendlyErrorText(kbError, fallback: '请稍后点更新知识库')}'
+          : hadKb
+          ? '名称已更新，知识库里的同一份纪要已换成新名称，正在重新解析'
+          : '名称已更新';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } catch (e) {
+      if (!mounted) return;
+      final message = friendlyErrorText(e, fallback: '修改名称失败，请稍后重试');
+      if (message.contains('会议名称已保存')) {
+        MeetingListCache.instance.renameMeeting(detail.meetingId, next);
+        await _load();
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) setState(() => _renaming = false);
+    }
+  }
+
+  Future<String?> _promptMeetingTitle(String current, {required bool syncKb}) {
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => _RenameTitleDialog(current: current, syncKb: syncKb),
+    );
+  }
+
   Future<void> _delete() async {
     final title = _detail?.title.isNotEmpty == true ? _detail!.title : '未命名会议';
     final confirmed = await showDialog<bool>(
@@ -1219,44 +1350,62 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
         leading: BackButton(onPressed: widget.onBack),
         title: Text(summaryOnly ? '会议摘要' : '会议纪要'),
         actions: [
-          if (!summaryOnly && d != null && MeetingMinutesExport.canExport(d)) ...[
-            IconButton(
-              onPressed: (_forwarding || _savingToDrive)
-                  ? null
-                  : _saveMeetingToDrive,
-              icon: _savingToDrive
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(
-                      _driveSaved
-                          ? Icons.folder_copy_outlined
-                          : Icons.folder_shared_outlined,
-                    ),
-              tooltip: _driveSaved ? '再次存入微盘' : '存入微盘',
-            ),
-            IconButton(
-              onPressed: (_forwarding || _savingToDrive)
-                  ? null
-                  : _forwardMeetingMinutes,
-              icon: _forwarding
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.forward_outlined),
-              tooltip: '转发',
-            ),
+          if (!summaryOnly && !isDesktopCommOnly)
+            _buildAppDetailMenu(d, readOnly)
+          else if (!summaryOnly) ...[
+            if (d != null && MeetingMinutesExport.canExport(d)) ...[
+              IconButton(
+                onPressed: (_forwarding || _savingToDrive)
+                    ? null
+                    : _saveMeetingToDrive,
+                icon: _savingToDrive
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        _driveSaved
+                            ? Icons.folder_copy_outlined
+                            : Icons.folder_shared_outlined,
+                      ),
+                tooltip: _driveSaved ? '再次存入微盘' : '存入微盘',
+              ),
+              IconButton(
+                onPressed: (_forwarding || _savingToDrive)
+                    ? null
+                    : _forwardMeetingMinutes,
+                icon: _forwarding
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.forward_outlined),
+                tooltip: '转发',
+              ),
+            ],
+            if (_canRenameTitle(d))
+              IconButton(
+                onPressed: _detailActionsBusy
+                    ? null
+                    : () => unawaited(_renameMeeting()),
+                icon: _renaming
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.drive_file_rename_outline),
+                tooltip: '修改名称',
+              ),
+            if (!readOnly)
+              IconButton(
+                onPressed: _delete,
+                icon: const Icon(Icons.delete_outline_rounded),
+                tooltip: '删除',
+              ),
           ],
-          if (!summaryOnly && !readOnly)
-            IconButton(
-              onPressed: _delete,
-              icon: const Icon(Icons.delete_outline_rounded),
-              tooltip: '删除',
-            ),
           if (summaryOnly && d != null && MeetingMinutesExport.canExport(d)) ...[
             IconButton(
               onPressed: (_savingToDrive || _uploadingSummaryToKb)
@@ -1320,7 +1469,8 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
               ],
             ),
           ],
-          IconButton(onPressed: _load, icon: const Icon(Icons.refresh_rounded)),
+          if (summaryOnly || isDesktopCommOnly)
+            IconButton(onPressed: _load, icon: const Icon(Icons.refresh_rounded)),
         ],
       ),
       body: Stack(
@@ -1328,6 +1478,117 @@ class _NativeMeetingDetailPageState extends State<NativeMeetingDetailPage> {
           _buildBody(d),
           if (_downloadingAudio || _forwarding || _savingToDrive)
             _buildDownloadOverlay(),
+        ],
+      ),
+    );
+  }
+
+  bool get _detailActionsBusy =>
+      _forwarding ||
+      _savingToDrive ||
+      _downloadingAudio ||
+      _uploadingSummaryToKb ||
+      _renaming;
+
+  bool _canRenameTitle(NativeMeetingDetail? detail) {
+    if (widget.summaryOnly || widget.readOnly || detail == null) return false;
+    final ownerId = detail.organizerUserId;
+    return ownerId != null &&
+        ownerId > 0 &&
+        ownerId == widget.session.userId;
+  }
+
+  Widget _buildAppDetailMenu(NativeMeetingDetail? d, bool readOnly) {
+    final canExport = d != null && MeetingMinutesExport.canExport(d);
+    final busy = _detailActionsBusy;
+    return PopupMenuButton<_MeetingBarAction>(
+      tooltip: '更多',
+      icon: const Icon(Icons.more_vert),
+      onSelected: (action) {
+        switch (action) {
+          case _MeetingBarAction.openExternal:
+            unawaited(_openSummaryWithOtherApp());
+          case _MeetingBarAction.forward:
+            unawaited(_forwardMeetingMinutes());
+          case _MeetingBarAction.saveDrive:
+            unawaited(_saveMeetingToDrive());
+          case _MeetingBarAction.rename:
+            unawaited(_renameMeeting());
+          case _MeetingBarAction.refresh:
+            unawaited(_load());
+          case _MeetingBarAction.delete:
+            unawaited(_delete());
+        }
+      },
+      itemBuilder: (context) => [
+        if (canExport) ...[
+          _detailMenuItem(
+            value: _MeetingBarAction.openExternal,
+            icon: Icons.open_in_new_rounded,
+            label: '用其他应用打开',
+            enabled: !busy,
+          ),
+          _detailMenuItem(
+            value: _MeetingBarAction.forward,
+            icon: Icons.forward_outlined,
+            label: '转发',
+            enabled: !busy,
+          ),
+          _detailMenuItem(
+            value: _MeetingBarAction.saveDrive,
+            icon: _driveSaved
+                ? Icons.folder_copy_outlined
+                : Icons.folder_shared_outlined,
+            label: _driveSaved ? '再次存入微盘' : '存入微盘',
+            enabled: !busy,
+          ),
+        ],
+        if (_canRenameTitle(d))
+          _detailMenuItem(
+            value: _MeetingBarAction.rename,
+            icon: Icons.drive_file_rename_outline,
+            label: '修改名称',
+            enabled: !busy,
+          ),
+        _detailMenuItem(
+          value: _MeetingBarAction.refresh,
+          icon: Icons.refresh_rounded,
+          label: '刷新',
+        ),
+        if (!readOnly) ...[
+          const PopupMenuDivider(),
+          _detailMenuItem(
+            value: _MeetingBarAction.delete,
+            icon: Icons.delete_outline_rounded,
+            label: '删除',
+            enabled: !busy,
+            danger: true,
+          ),
+        ],
+      ],
+    );
+  }
+
+  PopupMenuItem<_MeetingBarAction> _detailMenuItem({
+    required _MeetingBarAction value,
+    required IconData icon,
+    required String label,
+    bool enabled = true,
+    bool danger = false,
+  }) {
+    final color = !enabled
+        ? DunesColors.text3
+        : danger
+        ? DunesColors.coral
+        : DunesColors.text;
+    return PopupMenuItem<_MeetingBarAction>(
+      value: value,
+      enabled: enabled,
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 12),
+          Text(label, style: TextStyle(color: color)),
         ],
       ),
     );

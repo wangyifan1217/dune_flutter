@@ -20,6 +20,7 @@ class ChatInboxHeader extends StatelessWidget {
     this.onNewChat,
     this.onOpenNova,
     this.onOpenAiSummary,
+    this.onOpenDailyReport,
     this.onOpenFavorites,
     this.onSelectImStatus,
     this.selfImStatus = ImUserStatusValue.online,
@@ -38,6 +39,7 @@ class ChatInboxHeader extends StatelessWidget {
   /// 外部用户不开放 Nova，传 null 时左上角入口不展示。
   final VoidCallback? onOpenNova;
   final VoidCallback? onOpenAiSummary;
+  final VoidCallback? onOpenDailyReport;
   final VoidCallback? onOpenFavorites;
   final ValueChanged<ImUserStatusValue>? onSelectImStatus;
   final ImUserStatusValue selfImStatus;
@@ -102,6 +104,7 @@ class ChatInboxHeader extends StatelessWidget {
                 onOpenContacts: onOpenContacts,
                 onNewChat: onNewChat,
                 onOpenAiSummary: onOpenAiSummary,
+                onOpenDailyReport: onOpenDailyReport,
                 onOpenFavorites: onOpenFavorites,
                 onSelectImStatus: onSelectImStatus,
                 selfImStatus: selfImStatus,
@@ -206,6 +209,7 @@ class _InboxHeaderActions extends StatefulWidget {
     required this.onOpenContacts,
     this.onNewChat,
     this.onOpenAiSummary,
+    this.onOpenDailyReport,
     this.onOpenFavorites,
     this.onSelectImStatus,
     this.selfImStatus = ImUserStatusValue.online,
@@ -214,6 +218,7 @@ class _InboxHeaderActions extends StatefulWidget {
   final VoidCallback onOpenContacts;
   final VoidCallback? onNewChat;
   final VoidCallback? onOpenAiSummary;
+  final VoidCallback? onOpenDailyReport;
   final VoidCallback? onOpenFavorites;
   final ValueChanged<ImUserStatusValue>? onSelectImStatus;
   final ImUserStatusValue selfImStatus;
@@ -280,6 +285,7 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
               offset: const Offset(0, 6),
               child: _InboxActionsDropdown(
                 showAiSummary: widget.onOpenAiSummary != null,
+                showDailyReport: widget.onOpenDailyReport != null,
                 showNewChat: widget.onNewChat != null,
                 showFavorites: widget.onOpenFavorites != null,
                 showSetStatus: widget.onSelectImStatus != null,
@@ -287,6 +293,9 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
                 onAiSummary: widget.onOpenAiSummary == null
                     ? null
                     : () => _runAndClose(widget.onOpenAiSummary!),
+                onDailyReport: widget.onOpenDailyReport == null
+                    ? null
+                    : () => _runAndClose(widget.onOpenDailyReport!),
                 onContacts: () => _runAndClose(widget.onOpenContacts),
                 onNewChat: widget.onNewChat == null
                     ? null
@@ -381,23 +390,27 @@ class _InboxHeaderActionsState extends State<_InboxHeaderActions> {
 class _InboxActionsDropdown extends StatelessWidget {
   const _InboxActionsDropdown({
     required this.showAiSummary,
+    required this.showDailyReport,
     required this.showNewChat,
     required this.showFavorites,
     required this.onContacts,
     this.showSetStatus = false,
     this.selfImStatus = ImUserStatusValue.online,
     this.onAiSummary,
+    this.onDailyReport,
     this.onNewChat,
     this.onFavorites,
     this.onSetStatus,
   });
 
   final bool showAiSummary;
+  final bool showDailyReport;
   final bool showNewChat;
   final bool showFavorites;
   final bool showSetStatus;
   final ImUserStatusValue selfImStatus;
   final VoidCallback? onAiSummary;
+  final VoidCallback? onDailyReport;
   final VoidCallback onContacts;
   final VoidCallback? onNewChat;
   final VoidCallback? onFavorites;
@@ -445,6 +458,16 @@ class _InboxActionsDropdown extends StatelessWidget {
             label: '通讯录',
             onTap: onContacts,
           ),
+          if (showDailyReport && onDailyReport != null)
+            _DropdownItem(
+              leading: const Icon(
+                Icons.edit_note_outlined,
+                size: 20,
+                color: Color(0xFF4B5563),
+              ),
+              label: '填写日报',
+              onTap: onDailyReport!,
+            ),
           if (showAiSummary && onAiSummary != null)
             _DropdownItem(
               leading: const SizedBox(

@@ -119,6 +119,10 @@ abstract final class ImUserStatusCatalog {
     'meal',
     'gym',
     'game',
+    'heartbreak',
+    'sad',
+    'cry',
+    'coma',
   ];
 
   static const Map<String, IconData> iconData = <String, IconData>{
@@ -143,6 +147,10 @@ abstract final class ImUserStatusCatalog {
     'meal': Icons.restaurant_outlined,
     'gym': Icons.fitness_center_outlined,
     'game': Icons.sports_esports_outlined,
+    'heartbreak': Icons.heart_broken_outlined,
+    'sad': Icons.sentiment_dissatisfied_outlined,
+    'cry': Icons.sentiment_very_dissatisfied_outlined,
+    'coma': Icons.sick_outlined,
   };
 
   static const List<String> customColors = <String>[

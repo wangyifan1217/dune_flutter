@@ -307,6 +307,36 @@ class TaskApi {
     return TaskItem.fromJson(Map<String, dynamic>.from(data as Map));
   }
 
+  Future<({bool assignmentConfirmation, bool taskApproval})> taskRules() async {
+    final resp = await http.get(_uri('rules'), headers: _headers);
+    final data = _unwrap(resp);
+    final map = data is Map ? data : const <String, dynamic>{};
+    return (
+      assignmentConfirmation: map['assignmentConfirmationEnabled'] == true,
+      taskApproval: map['taskApprovalEnabled'] != false,
+    );
+  }
+
+  Future<TaskItem> withdrawAssignment(int id) async {
+    final resp = await http.post(
+      _uri('$id/withdraw-assignment'),
+      headers: _headers,
+      body: '{}',
+    );
+    final data = _unwrap(resp);
+    return TaskItem.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<TaskItem> withdrawChange(int id) async {
+    final resp = await http.post(
+      _uri('$id/withdraw-change'),
+      headers: _headers,
+      body: '{}',
+    );
+    final data = _unwrap(resp);
+    return TaskItem.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
   Future<TaskItem> respondAssignment(
     int id, {
     required bool accept,
@@ -414,9 +444,10 @@ class TaskApi {
     return resp.bodyBytes;
   }
 
-  Future<List<TaskAssignee>> listAssignees({String? q}) async {
+  Future<List<TaskAssignee>> listAssignees({String? q, String? scope}) async {
     final query = <String, String>{};
     if (q != null && q.trim().isNotEmpty) query['q'] = q.trim();
+    if (scope != null && scope.trim().isNotEmpty) query['scope'] = scope.trim();
     final resp = await http.get(
       _uri('assignees', query.isEmpty ? null : query),
       headers: _headers,
@@ -502,10 +533,14 @@ class TaskApi {
     return Uri.parse(full).replace(queryParameters: query);
   }
 
-  Future<TaskDailyReportBundle> getDailyReport({DateTime? date}) async {
+  Future<TaskDailyReportBundle> getDailyReport({
+    DateTime? date,
+    int? userId,
+  }) async {
     final query = <String, String>{};
     final d = _dateQuery(date);
     if (d != null) query['date'] = d;
+    if (userId != null && userId > 0) query['userId'] = '$userId';
     final resp = await http.get(_dailyUri('', query), headers: _headers);
     final data = _unwrap(resp);
     return TaskDailyReportBundle.fromJson(

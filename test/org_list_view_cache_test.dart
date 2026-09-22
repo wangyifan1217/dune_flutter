@@ -41,6 +41,29 @@ void main() {
     expect(snap.folders.single.name, '提案相关');
   });
 
+  test('rename updates the cached meeting title', () {
+    MeetingListCache.instance.put(
+      userId: 7,
+      rows: const [
+        NativeMeetingSummary(
+          meetingId: 11,
+          title: '旧名称',
+          meetingDate: '2026-09-11',
+          createdAt: '2026-09-11T10:00:00',
+          updatedAt: '2026-09-11T10:00:00',
+          status: 'DONE',
+          asrProgress: 100,
+        ),
+      ],
+      page: 0,
+      hasMore: false,
+    );
+    MeetingListCache.instance.renameMeeting(11, '新名称');
+    final snap = MeetingListCache.instance.peek(7);
+    expect(snap!.rows.single.title, '新名称');
+    expect(MeetingListCache.instance.isStale, isFalse);
+  });
+
   test('meeting invalidate keeps folder filter for reload', () {
     MeetingListCache.instance.put(
       userId: 7,

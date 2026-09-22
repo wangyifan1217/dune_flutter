@@ -56,6 +56,7 @@ class NativeConversationPage extends StatefulWidget {
     required this.onOpenNotifications,
     required this.onOpenNewChat,
     required this.onOpenAiSummary,
+    this.onOpenDailyReport,
     this.onOpenFavorites,
     this.onOpenRobot,
     this.onOpenApprovalAssistant,
@@ -90,6 +91,7 @@ class NativeConversationPage extends StatefulWidget {
   final ValueChanged<String> onOpenNotifications;
   final VoidCallback onOpenNewChat;
   final VoidCallback onOpenAiSummary;
+  final VoidCallback? onOpenDailyReport;
   final VoidCallback? onOpenFavorites;
 
   /// 消息页左上角「快速开会」。
@@ -1984,6 +1986,9 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                     ? null
                     : _openNovaConversation,
                 onOpenFavorites: widget.onOpenFavorites,
+                onOpenDailyReport: widget.session.isExternalUser
+                    ? null
+                    : widget.onOpenDailyReport,
                 onOpenAiSummary: widget.session.isExternalUser
                     ? null
                     : () => unawaited(_openAiSummaryHub()),

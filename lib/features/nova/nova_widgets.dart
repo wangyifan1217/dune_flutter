@@ -108,36 +108,7 @@ class NovaPageHeader extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Center(
-              child: TabBar(
-                controller: tabController,
-                isScrollable: true,
-                tabAlignment: TabAlignment.center,
-                splashFactory: NoSplash.splashFactory,
-                overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-                dividerColor: Colors.transparent,
-                indicatorSize: TabBarIndicatorSize.label,
-                indicator: const _SlidingTabIndicator(),
-                labelPadding: const EdgeInsets.symmetric(horizontal: 16),
-                labelColor: const Color(0xFF6B3FE2),
-                unselectedLabelColor: const Color(0xFF5E6573),
-                labelStyle: DunesTypography.sans(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-                unselectedLabelStyle: DunesTypography.sans(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                ),
-                tabs: [
-                  for (final label in tabLabels)
-                    Tab(
-                      height: 36,
-                      child: Text(label),
-                    ),
-                ],
-              ),
-            ),
+            child: Center(child: _NovaSegmentedTabs(controller: tabController)),
           ),
           _HeaderCircleButton(
             icon: Icons.close_rounded,
@@ -151,30 +122,86 @@ class NovaPageHeader extends StatelessWidget {
   }
 }
 
-class _SlidingTabIndicator extends Decoration {
-  const _SlidingTabIndicator();
+class _NovaSegmentedTabs extends StatelessWidget {
+  const _NovaSegmentedTabs({required this.controller});
+
+  final TabController controller;
 
   @override
-  BoxPainter createBoxPainter([VoidCallback? onChanged]) {
-    return _SlidingTabIndicatorPainter();
-  }
-}
-
-class _SlidingTabIndicatorPainter extends BoxPainter {
-  @override
-  void paint(Canvas canvas, Offset offset, ImageConfiguration configuration) {
-    final size = configuration.size;
-    if (size == null) return;
-    const barWidth = 18.0;
-    const barHeight = 3.0;
-    final x = offset.dx + (size.width - barWidth) / 2;
-    final y = offset.dy + size.height - barHeight - 2;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(x, y, barWidth, barHeight),
-        const Radius.circular(2),
-      ),
-      Paint()..color = const Color(0xFF6B3FE2),
+  Widget build(BuildContext context) {
+    final animation = controller.animation ?? controller;
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, _) {
+        final t = (controller.animation?.value ?? controller.index.toDouble())
+            .clamp(0.0, 1.0);
+        return Container(
+          width: 156,
+          height: 32,
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF2F3F7),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final segmentWidth = constraints.maxWidth / 2;
+              return Stack(
+                children: [
+                  Positioned(
+                    left: t * segmentWidth,
+                    top: 0,
+                    bottom: 0,
+                    width: segmentWidth,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(13),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x14000000),
+                            blurRadius: 4,
+                            offset: Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      for (var i = 0; i < NovaPageHeader.tabLabels.length; i++)
+                        Expanded(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              if (controller.index != i) {
+                                controller.animateTo(i);
+                              }
+                            },
+                            child: Center(
+                              child: Text(
+                                NovaPageHeader.tabLabels[i],
+                                style: DunesTypography.sans(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color.lerp(
+                                    const Color(0xFF8B919E),
+                                    const Color(0xFF6B3FE2),
+                                    i == 0 ? (1 - t) : t,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }

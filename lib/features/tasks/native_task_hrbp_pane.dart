@@ -162,7 +162,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
         dateFrom: _dateFrom,
         dateTo: _dateTo,
       );
-      final users = await _api.listAssignees();
+      final users = await _api.listAssignees(scope: 'reports');
       if (!mounted) return;
       var filter = _deptFilter;
       if (filter != null && !depts.any((d) => d.departmentId == filter)) {

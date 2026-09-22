@@ -126,6 +126,66 @@ void main() {
     expect(confirmed[1].done, isFalse);
   });
 
+  test('confirm follows 账期, not the push date', () {
+    const yesterday = Tag3DailyComment(
+      id: 1,
+      rowKey: '多渠道|亿科景信',
+      period: 'DAY',
+      statDate: '2026-09-21',
+      periodLabel: '2026-09-21',
+      projectName: '亿科景信',
+      userId: 12,
+      userName: '张三',
+      kind: 'CONFIRM',
+      body: '',
+      createdAt: '2026-09-21T10:00:00Z',
+    );
+    const todayRow = Tag3DailyRow(
+      rowKey: '多渠道|亿科景信',
+      channelCategoryL1Name: '多渠道',
+      projectName: '亿科景信',
+      period: 'DAY',
+      periodLabel: '2026-09-21',
+      statDate: '2026-09-21',
+      paymentTerm: '',
+      salesAmount: 1,
+      writeOffAmount: 0,
+      profitAmount: 0,
+      cashFlowAmount: 0,
+      cashReceivableAmount: 0,
+      cashPaidAmount: 0,
+      cashReceivableDiff: 0,
+      subsidyReceivableAmount: 0,
+      confirmationStatus: 'WAIT_BUSINESS',
+      confirmationStatusLabel: '待业务确认',
+      canConfirm: true,
+      canConfirmStage: 'BUSINESS',
+    );
+    const nextDayRow = Tag3DailyRow(
+      rowKey: '多渠道|亿科景信',
+      channelCategoryL1Name: '多渠道',
+      projectName: '亿科景信',
+      period: 'DAY',
+      periodLabel: '2026-09-22',
+      statDate: '2026-09-22',
+      paymentTerm: '',
+      salesAmount: 1,
+      writeOffAmount: 0,
+      profitAmount: 0,
+      cashFlowAmount: 0,
+      cashReceivableAmount: 0,
+      cashPaidAmount: 0,
+      cashReceivableDiff: 0,
+      subsidyReceivableAmount: 0,
+      confirmationStatus: 'WAIT_BUSINESS',
+      confirmationStatusLabel: '待业务确认',
+      canConfirm: true,
+      canConfirmStage: 'BUSINESS',
+    );
+    expect(yesterday.matchesRow(todayRow), isTrue);
+    expect(yesterday.matchesRow(nextDayRow), isFalse);
+  });
+
   test('today preview injects TAG3_DAILY card with 日清 and 月结 rows', () {
     final asOf = tag3DailyPreviewAsOfDate(DateTime(2026, 9, 17));
     expect(asOf, '2026-09-17');

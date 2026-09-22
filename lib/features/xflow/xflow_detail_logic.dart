@@ -391,6 +391,7 @@ List<DetailSection> buildFieldSections(
 
   for (final field in fields) {
     if (field.key.isEmpty) continue;
+    if (!field.matchesVisibleWhen(fv)) continue;
     if (field.type == 'section') {
       flush();
       currentTitle = field.label.isEmpty ? '板块' : field.label;

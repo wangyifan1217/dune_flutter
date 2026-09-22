@@ -116,6 +116,7 @@ flutter:
     - assets/prototype/dunes_app_ui.js
     - assets/prototype/workbench_live.js
     - assets/prototype/xflow_detail.js
+    - assets/lighthouse/structure_ordinal_model.json
   fonts:
     - family: Geist
       fonts:

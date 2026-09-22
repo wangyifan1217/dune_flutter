@@ -658,8 +658,25 @@ void main() {
       '8.26',
       '8.27',
     ], 7);
-    expect(all.$1, ['8.21', '8.22', '8.23', '8.24', '8.25', '8.26', '8.27']);
+    expect(all.$1, ['.21', '.22', '.23', '.24', '.25', '.26', '.27']);
     expect(all.$2, [0, 1, 2, 3, 4, 5, 6]);
+    expect(
+      lighthouseTrendXAxisLabels([
+        '09.16',
+        '09.17',
+        '09.18',
+        '09.19',
+        '09.20',
+        '09.21',
+        '09.22',
+      ], 7).$1,
+      ['.16', '.17', '.18', '.19', '.20', '.21', '.22'],
+    );
+    expect(lighthouseTrendXAxisLabels(['08.31', '09.01', '09.02'], 3).$1, [
+      '8.31',
+      '9.01',
+      '.02',
+    ]);
     expect(lighthouseTrendXAxisLabels(['2026.02', '2026.08'], 2).$1, [
       '02月',
       '08月',
@@ -872,6 +889,22 @@ void main() {
       'grossMargin',
       'rate',
     });
+    expect(
+      lighthouseLedgerTrendEmphasisColor('profit'),
+      const Color(lighthouseLedgerResultBlockAccentValue),
+    );
+    expect(
+      lighthouseLedgerTrendEmphasisColor('prepaid'),
+      const Color(lighthouseLedgerResultBlockAccentValue),
+    );
+    expect(
+      lighthouseLedgerTrendEmphasisColor('sales'),
+      const Color(lighthouseScaleAccentValue),
+    );
+    expect(
+      lighthouseLedgerTrendEmphasisColor('costTotal'),
+      const Color(lighthouseScaleAccentValue),
+    );
     expect(lighthouseLedgerMetricOpensSoloTrend('sales'), isTrue);
     expect(lighthouseLedgerMetricOpensSoloTrend('costTotal'), isTrue);
     expect(lighthouseLedgerMetricOpensSoloTrend('revenue'), isTrue);
@@ -1826,6 +1859,29 @@ void main() {
 
   test('channel root removes the province category row', () {
     expect(lighthouseChannelRootIncludesProvinceFilter, isFalse);
+  });
+
+  test('ledger trend emphasis follows the tile above', () {
+    expect(
+      lighthouseLedgerTrendEmphasisColor('profit'),
+      const Color(lighthouseLedgerResultBlockAccentValue),
+    );
+    expect(
+      lighthouseLedgerTrendEmphasisColor('prepaid'),
+      const Color(lighthouseLedgerResultBlockAccentValue),
+    );
+    expect(
+      lighthouseLedgerTrendEmphasisColor('sales'),
+      const Color(lighthouseScaleAccentValue),
+    );
+    expect(
+      lighthouseLedgerTrendEmphasisColor(null),
+      const Color(lighthouseScaleAccentValue),
+    );
+    final ink = lighthouseTrendEmphasisInk(
+      const Color(lighthouseScaleAccentValue),
+    );
+    expect(ink.computeLuminance(), lessThan(0.25));
   });
 
   test('ledger navigation uses three distinct professional control levels', () {

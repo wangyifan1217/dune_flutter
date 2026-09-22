@@ -24,6 +24,10 @@ import 'lighthouse_discount_metric.dart';
 import 'lighthouse_equity_link.dart';
 import 'lighthouse_equity_popover.dart';
 import 'lighthouse_forecast.dart';
+import 'lighthouse_forecast_model.dart';
+import 'lighthouse_forecast_report.dart';
+import 'lighthouse_product_ordinal.dart';
+import 'lighthouse_product_ordinal_view.dart';
 import 'lighthouse_hero_metric.dart';
 import 'lighthouse_period_bar.dart';
 import 'lighthouse_product_l3.dart';
@@ -1254,6 +1258,7 @@ class _TrendBounds {
 _TrendBounds _computeBounds(
   _TrendSeries s, {
   double? scaleForecast,
+  double? profitForecast,
   bool shareScaleRange = true,
 }) {
   _SeriesRange computeOne(List<double> v) {
@@ -1265,7 +1270,19 @@ _TrendBounds _computeBounds(
   //   也就不该参与值域 —— 否则 1.7 亿的半月值会把轴底拉下去，整条线被压扁。
   List<double> complete(List<double> v) =>
       scaleForecast != null && v.length >= 2 ? v.sublist(0, v.length - 1) : v;
-  final scaleFull = complete(s.scale);
+  // v18 · 当月那一列（已发生实柱 + 预测虚框）也要落在轴里：只看历史的话，
+  //   当月比历史都高 / 都低时两个点会被夹到图顶 / 图底，实柱和虚框挤成一根。
+  //   预测值 ≈ 整月量级，总是纳入；已发生只在走过 4 成天数后纳入
+  //   （月初的已发生只有一小截，纳入会把历史压扁 —— 那是 v16 修掉的问题）。
+  List<double> withPace(List<double> done, List<double> raw, double? fc) {
+    if (fc == null || !fc.isFinite || raw.isEmpty) return done;
+    final a = raw.last;
+    final out = <double>[...done, fc];
+    if (a.isFinite && fc.abs() > 1e-9 && a / fc >= 0.4) out.add(a);
+    return out;
+  }
+
+  final scaleFull = withPace(complete(s.scale), s.scale, scaleForecast);
   final scaleAltFull = complete(s.scaleAlt);
   var scaleRange = shareScaleRange
       ? computeOne(
@@ -1290,7 +1307,16 @@ _TrendBounds _computeBounds(
   return _TrendBounds(
     computeOne(s.revenue),
     computeOne(s.cost),
-    computeOne(s.profit),
+    // 毛利当月没走完（有月末外推）时同规模：半个月的值不进值域。
+    computeOne(
+      profitForecast != null && s.profit.length >= 2
+          ? withPace(
+              s.profit.sublist(0, s.profit.length - 1),
+              s.profit,
+              profitForecast,
+            )
+          : s.profit,
+    ),
     scaleRange,
     shareScaleRange ? scaleRange : scaleAltRange,
     computeOne(s.costAlt),
@@ -2049,7 +2075,11 @@ bool _trendIsPartial({
   required List<bool> flags,
   required int heroIndex,
   required List<double> heroPts,
-}) => forecast != null && heroIndex == 3 && flags[3] && heroPts.length >= 2;
+}) =>
+    forecast != null &&
+    (heroIndex == 3 || heroIndex == lighthouseTrendProfitIndex) &&
+    flags[heroIndex] &&
+    heroPts.length >= 2;
 
 /// 核销 ↔ 销售共用真轴时才画差额带和第二条规模线。
 bool _trendAltDrawable({
@@ -2135,14 +2165,30 @@ class _TrendLinesPainter extends CustomPainter {
     this.available = const [true, true, true, false, false, false],
     this.scaleForecast,
     this.heroIndexOverride,
+    this.keepPaletteColor = false,
     this.extremeLo,
     this.extremeHi,
     this.showEndpoint = true,
+    this.profitPartial = false,
+    this.profitPace,
+    this.forecastLo,
+    this.forecastHi,
   });
+
+  /// 月末预测的 80% 区间（v2 模型）；非空时当月那一列画须线。
+  final double? forecastLo;
+  final double? forecastHi;
   final _TrendSeries series;
   final _TrendBounds bounds;
   final List<Color> colors;
   final double padH;
+
+  /// 毛利主线时：最后一根柱是不是还没走完的当期（本月 / 本周截至今天）。
+  final bool profitPartial;
+
+  /// 毛利当期外推倍数 = 当月天数 ÷ 已过天数（与规模月化预测同一公式）。
+  /// 非空且 [profitPartial] 时，最后一根柱外面套一个虚框 = 按日均补到月底。
+  final double? profitPace;
 
   /// 极值小圈只在 [extremeLo, extremeHi] 里找（视窗模式下切片两端各多一个画布外的点）。
   final int? extremeLo;
@@ -2160,6 +2206,10 @@ class _TrendLinesPainter extends CustomPainter {
   /// solo 时强调线跟着被点的那条走，而不是按固定优先级挑。
   /// null = 沿用 [lighthouseTrendHeroIndex] 的优先级。
   final int? heroIndexOverride;
+
+  /// 为 true 时主线保持 [colors] 里的强调色，毛利不再改涂成赚红亏绿。
+  /// 账本展开图要用上面格子的蓝 / 紫，红绿只留在环比上。
+  final bool keepPaletteColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -2191,10 +2241,10 @@ class _TrendLinesPainter extends CustomPainter {
     final heroPts = heroSpec.pts;
     final heroBounds = heroSpec.range;
     final profitHero = heroIndex == lighthouseTrendProfitIndex;
+    // v18 · 只要主线是毛利，就一律赚红亏绿 —— 账本展开图也不再锁家族色。
+    //   其余指标（规模 / 收入 / 成本）不分红绿，保持强调紫。
     final heroColor = profitHero && heroPts.isNotEmpty
-        ? (lighthouseTrendValueEarns(heroPts.last)
-              ? LhColors.neg
-              : LhColors.pos)
+        ? (lighthouseTrendValueEarns(heroPts.last) ? LhColors.neg : LhColors.pos)
         : heroSpec.color;
     final fc = scaleForecast;
     final partial = _trendIsPartial(
@@ -2217,11 +2267,12 @@ class _TrendLinesPainter extends CustomPainter {
     //   毛利为正整条红、为负整条绿；跨过零轴时再按零轴裁成红绿两段。
     //   这一段在 painter 里做，所以 Hero、二级页、行展开那几张图天然同一套，
     //   区别只剩「能不能往前拖」。
+    // v18 · 毛利跟其他走势同一种画法，只是颜色：正红负绿，跨零按零轴裁成两段。
     final signSplit = lighthouseTrendSignSplit(
-      heroIndex: heroIndex,
-      min: heroBounds.min,
-      max: heroBounds.max,
-    );
+          heroIndex: heroIndex,
+          min: heroBounds.min,
+          max: heroBounds.max,
+        );
     final zeroAxisY = signSplit ? yOf(0, heroBounds) : 0.0;
     final earnColor = LhColors.neg; // 赚 = 红
     final loseColor = LhColors.pos; // 亏 = 绿
@@ -2525,15 +2576,79 @@ class _TrendLinesPainter extends CustomPainter {
       canvas.drawCircle(o, 2.5, Paint()..color = deepen(endColor));
     }
 
-    // ── 6. 当月进度胶囊 ──────────────────────────────────────────────────
-    //   会议要求「已发生实线、月末预测虚线、当月这一列像柱状图」。
-    //   旧版把线连到半个月的实际值再往上画虚线 —— 线先掉下去，看起来像崩盘。
-    //   现在：虚线从上一个完整期直接连到预测点；这一列是一根胶囊，
-    //   胶囊顶 = 月末预测，实心 = 已发生 / 预测 —— 一眼看出走了几成。
+    // ── 6. 当月：已发生实柱 + 月末预测虚框（v18）────────────────────────
+    //   v16 的胶囊是「从画布底到预测点，按 已发生/预测 填充」—— 可是
+    //   已发生/预测 = 已过天数/当月天数，永远只是日历进度（22/30 就是 73%），
+    //   跟生意好坏无关；实心顶也不落在纵轴的真实刻度上，所以看不懂。
+    //   现在两段都贴真轴：实柱顶 = 已发生的真实位置，虚框顶 = 月末预测的
+    //   真实位置，中间那截 = 按日均补到月底还要做的量。虚线从上个完整月
+    //   连到预测点：往上 = 预计超上月，往下 = 预计不如上月。
     if (partial) {
       final lastI = heroPts.length - 1;
       final lastX = xOf(lastI);
-      final fcY = yOf(fc!, heroBounds).clamp(plotTop, plotBottom).toDouble();
+      final rawFcY = yOf(fc!, heroBounds);
+      final fcClipped = rawFcY < plotTop;
+      final fcY = rawFcY.clamp(plotTop, plotBottom).toDouble();
+      final actY = math.max(
+        fcY,
+        yOf(heroPts[lastI], heroBounds).clamp(plotTop, plotBottom).toDouble(),
+      );
+      const colW = 8.0;
+      const r = Radius.circular(2.0);
+      // ① 虚框：预测整根
+      canvas.drawRRect(
+        RRect.fromLTRBR(lastX - colW / 2, fcY, lastX + colW / 2, plotBottom, r),
+        Paint()..color = heroColor.withAlpha(18),
+      );
+      final dash = Paint()
+        ..color = heroColor.withAlpha(150)
+        ..strokeWidth = 0.8;
+      _trendDashedLine(
+        canvas,
+        Offset(lastX - colW / 2, fcY),
+        Offset(lastX + colW / 2, fcY),
+        dash,
+        dash: 2,
+        gap: 1.6,
+      );
+      _trendDashedLine(
+        canvas,
+        Offset(lastX - colW / 2, fcY),
+        Offset(lastX - colW / 2, actY),
+        dash,
+        dash: 2,
+        gap: 2,
+      );
+      _trendDashedLine(
+        canvas,
+        Offset(lastX + colW / 2, fcY),
+        Offset(lastX + colW / 2, actY),
+        dash,
+        dash: 2,
+        gap: 2,
+      );
+      // ② 实柱：已发生
+      if (plotBottom - actY > 0.5) {
+        canvas.drawRRect(
+          RRect.fromLTRBAndCorners(
+            lastX - colW / 2,
+            actY,
+            lastX + colW / 2,
+            plotBottom,
+            topLeft: r,
+            topRight: r,
+          ),
+          Paint()
+            ..shader = LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [heroColor.withAlpha(215), heroColor.withAlpha(120)],
+            ).createShader(
+              Rect.fromLTRB(lastX - colW / 2, actY, lastX + colW / 2, plotBottom),
+            ),
+        );
+      }
+      // ③ 上个完整月 → 月末预测
       if (solidN >= 1) {
         final prev = Offset(
           xOf(solidN - 1),
@@ -2549,42 +2664,22 @@ class _TrendLinesPainter extends CustomPainter {
             ..strokeCap = StrokeCap.round,
         );
       }
-      const capW = 8.0;
-      final capRect = RRect.fromLTRBR(
-        lastX - capW / 2,
-        fcY,
-        lastX + capW / 2,
-        plotBottom,
-        const Radius.circular(capW / 2),
-      );
-      canvas.drawRRect(capRect, Paint()..color = heroColor.withAlpha(22));
-      canvas.drawRRect(
-        capRect,
-        Paint()
-          ..color = heroColor.withAlpha(90)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 0.8,
-      );
-      final fillTop = _trendPaceFillTop(
-        actual: heroPts[lastI],
-        forecast: fc,
-        forecastY: fcY,
-        plotBottom: plotBottom,
-      );
-      if (plotBottom - fillTop > 0.5) {
-        canvas.save();
-        canvas.clipRRect(capRect);
-        canvas.drawRect(
-          Rect.fromLTRB(
-            lastX - capW / 2,
-            fillTop,
-            lastX + capW / 2,
-            plotBottom,
-          ),
-          Paint()..color = heroColor.withAlpha(200),
-        );
-        canvas.restore();
+      // ③′ 80% 区间须线：模型回测误差给出的上下沿。
+      final bLo = forecastLo;
+      final bHi = forecastHi;
+      if (bLo != null && bHi != null && bHi > bLo) {
+        final yHi = yOf(bHi, heroBounds).clamp(plotTop, plotBottom).toDouble();
+        final yLo = yOf(bLo, heroBounds).clamp(plotTop, plotBottom).toDouble();
+        final wx = lastX + colW / 2 + 4;
+        final wp = Paint()
+          ..color = heroColor.withAlpha(150)
+          ..strokeWidth = 1.0
+          ..strokeCap = StrokeCap.round;
+        canvas.drawLine(Offset(wx, yHi), Offset(wx, yLo), wp);
+        canvas.drawLine(Offset(wx - 2.5, yHi), Offset(wx + 2.5, yHi), wp);
+        canvas.drawLine(Offset(wx - 2.5, yLo), Offset(wx + 2.5, yLo), wp);
       }
+      // ④ 预测点：空心圈；超出图顶时顶端加一个小三角，表示「还在上面」。
       canvas.drawCircle(Offset(lastX, fcY), 3.2, Paint()..color = Colors.white);
       canvas.drawCircle(
         Offset(lastX, fcY),
@@ -2593,6 +2688,34 @@ class _TrendLinesPainter extends CustomPainter {
           ..color = heroColor
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.3,
+      );
+      if (fcClipped) {
+        final tri = Path()
+          ..moveTo(lastX, fcY - 8.5)
+          ..lineTo(lastX - 3, fcY - 4.8)
+          ..lineTo(lastX + 3, fcY - 4.8)
+          ..close();
+        canvas.drawPath(tri, Paint()..color = heroColor);
+      }
+      // ⑤ 就地标注「预测」，不用回头去图例找这个圈是什么。
+      final tp = TextPainter(
+        text: TextSpan(
+          text: '预测',
+          style: LhTypography.mono(
+            size: 7.5,
+            color: heroColor,
+            weight: FontWeight.w700,
+            letterSpacing: 0.3,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(
+        canvas,
+        Offset(
+          lastX - colW / 2 - 3 - tp.width,
+          (fcY - tp.height / 2).clamp(0.0, size.height - tp.height).toDouble(),
+        ),
       );
     }
 
@@ -2631,7 +2754,12 @@ class _TrendLinesPainter extends CustomPainter {
           final t = math.min(y, zeroY);
           final b = math.max(math.max(y, zeroY), t + 1.0);
           final unfinished = partial && i == laneN - 1;
-          final base = v < 0 ? LhColors.pos : spec.color;
+          // 毛利小柱同样赚红亏绿；其余序列只有负值才走绿。
+          final base = v < 0
+              ? LhColors.pos
+              : (laneIndex == lighthouseTrendProfitIndex
+                    ? LhColors.neg
+                    : spec.color);
           canvas.drawRRect(
             RRect.fromLTRBR(
               x - barW / 2,
@@ -2654,9 +2782,14 @@ class _TrendLinesPainter extends CustomPainter {
       old.padH != padH ||
       old.scaleForecast != scaleForecast ||
       old.heroIndexOverride != heroIndexOverride ||
+      old.keepPaletteColor != keepPaletteColor ||
       old.extremeLo != extremeLo ||
       old.extremeHi != extremeHi ||
       old.showEndpoint != showEndpoint ||
+      old.profitPartial != profitPartial ||
+      old.profitPace != profitPace ||
+      old.forecastLo != forecastLo ||
+      old.forecastHi != forecastHi ||
       !identical(old.colors, colors) ||
       !listEquals(old.available, available);
 }
@@ -2672,12 +2805,20 @@ class _TrendOverlayPainter extends CustomPainter {
     this.available = const [true, true, true, false, false, false],
     this.heroIndexOverride,
     this.scaleForecast,
+    this.paceForecastPicked = false,
+    this.profitForecastValue,
   });
   final _TrendSeries series;
   final _TrendBounds bounds;
   final List<Color> colors;
   final double padH;
   final int? selectedIndex;
+
+  /// 当月那一列点中的是「月末预测」那个点：游标大点挪到预测点上。
+  final bool paceForecastPicked;
+
+  /// 毛利主线的月末外推值（虚框顶）；点中预测时游标落在这里。
+  final double? profitForecastValue;
   final List<bool> available;
 
   /// 与 lines painter 同一个口径：solo 时游标的实心大点跟着 solo 那条走。
@@ -2799,7 +2940,10 @@ class _TrendOverlayPainter extends CustomPainter {
           Paint()
             ..color = lp[si] < 0
                 ? LhColors.pos
-                : _LhPlum.deep.withAlpha(onUnfinished ? 120 : 220),
+                : (laneIndex == lighthouseTrendProfitIndex
+                          ? LhColors.neg
+                          : _LhPlum.deep)
+                      .withAlpha(onUnfinished ? 120 : 220),
         );
       }
     }
@@ -2827,12 +2971,16 @@ class _TrendOverlayPainter extends CustomPainter {
           fc!,
           heroSpec.range,
         ).clamp(plotTop, plotBottom).toDouble();
+        // v18 · 游标落在「已发生」实柱顶 —— 真实刻度，不再是日历进度。
         heroMarker(
-          _trendPaceFillTop(
-            actual: heroPts[si],
-            forecast: fc,
-            forecastY: fcY,
-            plotBottom: plotBottom,
+          paceForecastPicked
+              ? fcY
+              : math.max(
+            fcY,
+            yOf(
+              heroPts[si],
+              heroSpec.range,
+            ).clamp(plotTop, plotBottom).toDouble(),
           ),
           heroSpec.color,
         );
@@ -2842,7 +2990,19 @@ class _TrendOverlayPainter extends CustomPainter {
                   ? LhColors.neg
                   : LhColors.pos)
             : heroSpec.color;
-        heroMarker(yOf(heroPts[si], heroSpec.range), markerColor);
+        final pfv = profitForecastValue;
+        final onProfitForecast =
+            paceForecastPicked &&
+            pfv != null &&
+            heroIndex == lighthouseTrendProfitIndex &&
+            si == heroPts.length - 1;
+        heroMarker(
+          yOf(
+            onProfitForecast ? pfv : heroPts[si],
+            heroSpec.range,
+          ).clamp(plotTop, plotBottom).toDouble(),
+          markerColor,
+        );
       }
     }
   }
@@ -2850,6 +3010,8 @@ class _TrendOverlayPainter extends CustomPainter {
   @override
   bool shouldRepaint(_TrendOverlayPainter old) =>
       old.selectedIndex != selectedIndex ||
+      old.paceForecastPicked != paceForecastPicked ||
+      old.profitForecastValue != profitForecastValue ||
       old.heroIndexOverride != heroIndexOverride ||
       old.scaleForecast != scaleForecast ||
       !identical(old.series, series) ||
@@ -6929,9 +7091,13 @@ class _TrendChart extends StatefulWidget {
     this.periodScaleAltDeltaPct,
     this.periodCostAltDeltaPct,
     this.scaleForecast,
+    this.profitForecast,
+    this.onOpenForecastReport,
+    this.paceDays,
     this.partialPeriod = false,
     this.showHeader = true,
     this.showLegend = true,
+    this.showExtremeLabels = false,
     this.showScrubHint = true,
     this.fitHeight = false,
     this.chartHeight = 112,
@@ -6964,6 +7130,8 @@ class _TrendChart extends StatefulWidget {
     this.valueIsRate = false,
     this.soloKey,
     this.onSoloChanged,
+    this.emphasisColor,
+    this.showClearSolo = true,
     this.formulaExpression,
     this.viewportCount = 0,
     this.historyCount = 0,
@@ -6993,6 +7161,9 @@ class _TrendChart extends StatefulWidget {
   final String title;
   final bool showHeader;
   final bool showLegend;
+
+  /// Hero 与下方指标共用同一套干净画布；极值由点选读数承担，不常驻贴纸。
+  final bool showExtremeLabels;
 
   /// 图下「拖动查看每点」。Hero 卡高度紧，关掉以免把图例和下方面板挤出卡片。
   final bool showScrubHint;
@@ -7031,6 +7202,12 @@ class _TrendChart extends StatefulWidget {
   /// 图例点选时回传 slot；Hero 用来同步 KPI 选中态。
   final ValueChanged<String?>? onSoloChanged;
 
+  /// 主线颜色。不传时用灯塔紫；账本展开图传上面那格的家族色。
+  final Color? emphasisColor;
+
+  /// solo 时是否露出「看全部」。账本展开图不放这颗字。
+  final bool showClearSolo;
+
   /// 点开某一条时，口径式写在图例下面（≡ 科研论文式）。
   final String? formulaExpression;
 
@@ -7068,6 +7245,17 @@ class _TrendChart extends StatefulWidget {
   /// 月化预测（仅「点月 + 当前月 + 规模类」给）。
   /// 非空时画月末预测虚线 + legend 下方的预测条。
   final LighthousePaceForecast? scaleForecast;
+
+  /// 当月「已过天数 / 当月天数」（仅点月 + 当前月）。毛利主线用它按同一公式
+  /// 外推月末（规模有 [scaleForecast]；毛利可能为负，不能借规模那条的非空判断）。
+  /// 缺省时回退到 [scaleForecast] 里的天数。
+  final ({int elapsed, int total})? paceDays;
+
+  /// 毛利的月末预测（v2 数学模型给）。缺省时毛利按 [paceDays] 线性外推。
+  final LighthousePaceForecast? profitForecast;
+
+  /// 点预测条「报告 ›」/ 连点两下预测点：打开量化报告。参数 = 是不是毛利那条。
+  final ValueChanged<bool>? onOpenForecastReport;
 
   /// 本期是不是「还没走完」（当前月/周/日看到一半）。
   ///
@@ -7154,6 +7342,8 @@ class _TrendChartState extends State<_TrendChart>
     _ => seriesIndex,
   };
 
+  Color get _emphasisColor => widget.emphasisColor ?? _kAccent;
+
   /// 强调线的颜色 —— 全页统一走灯塔紫，不跟着序列的语义色跑。
   ///
   /// v15 · 之前强调线用「这条线自己的语义色」：点毛利整张图变橙、点收入变
@@ -7163,7 +7353,7 @@ class _TrendChartState extends State<_TrendChart>
   /// 银行余额是唯一例外 —— 存量线，「现金 = 绿」是通识，保留它自己的色。
   static const Color _kAccent = Color(lighthouseScaleAccentValue);
 
-  Color _accentForSlot(int slot) => slot == 5 ? _kColors[5] : _kAccent;
+  Color _accentForSlot(int slot) => slot == 5 ? _kColors[5] : _emphasisColor;
 
   /// 绘图用色：强调的那条走紫，其余一律走中性阶。
   ///
@@ -7199,14 +7389,88 @@ class _TrendChartState extends State<_TrendChart>
     final heroIdx = _heroIndexFor(_visibleFlags);
     final emphasis = _colorSlotFor(heroIdx);
     if (slot == emphasis) {
-      // 亏绿赚红：利润线被裁成红绿两段时，图例色块跟本期那一点走 ——
-      // 本期在亏就是绿。否则图例还挂着紫，跟图上说的不是一回事。
+      // 亏绿赚红：利润线被裁成红绿两段时，图例色块跟本期那一点走。
+      // 账本展开图锁了家族色时，图例跟线一样，不改涂红绿。
+      // v18 · 毛利一律赚红亏绿，账本展开图也跟线一起变。
       final sign = _signSplitEndColor(heroIdx);
       if (sign != null) return sign;
       return _accentForSlot(slot);
     }
     if (slot == 5) return _kColors[5];
     return _kContextColors[slot];
+  }
+
+  /// 当月外推倍数 = 当月天数 ÷ 已过天数；非点月 / 非当前月为 null。
+  ({int elapsed, int total})? get _paceDaysResolved {
+    final d = widget.paceDays;
+    if (d != null) return d;
+    final f = widget.scaleForecast;
+    if (f == null) return null;
+    return (elapsed: f.elapsedDays, total: f.totalDays);
+  }
+
+  double? get _paceMultiplier {
+    final d = _paceDaysResolved;
+    if (d == null || d.elapsed <= 0 || d.elapsed >= d.total) return null;
+    return d.total / d.elapsed;
+  }
+
+  /// 图例下方预测条要讲哪一条：主线是规模 → 规模预测；主线是毛利 →
+  /// 同一公式外推毛利。其余指标（收入 / 成本 / 比率）不出预测条。
+  ({LighthousePaceForecast f, bool profit, double? prev, String? prevLabel})?
+  get _stripForecast {
+    final vis = _visibleFlags;
+    final hero = _heroIndexFor(vis);
+    String? labelAt(int i) =>
+        i >= 0 && i < _pointLabels.length ? _pointLabels[i] : null;
+    final base = widget.scaleForecast;
+    if (base != null && hero == 3 && vis[3] && _hasScale) {
+      final sc = _series.scale;
+      return (
+        f: base,
+        profit: false,
+        prev: sc.length >= 2 ? sc[sc.length - 2] : null,
+        prevLabel: labelAt(sc.length - 2),
+      );
+    }
+    final pf = widget.profitForecast;
+    if (pf != null &&
+        widget.partialPeriod &&
+        hero == lighthouseTrendProfitIndex &&
+        vis[2] &&
+        _hasProf) {
+      final p = _series.profit;
+      return (
+        f: pf,
+        profit: true,
+        prev: p.length >= 2 ? p[p.length - 2] : null,
+        prevLabel: labelAt(p.length - 2),
+      );
+    }
+    final d = _paceDaysResolved;
+    if (d != null &&
+        widget.partialPeriod &&
+        hero == lighthouseTrendProfitIndex &&
+        vis[2] &&
+        _hasProf &&
+        d.elapsed > 0 &&
+        d.elapsed < d.total) {
+      final p = _series.profit;
+      if (p.isEmpty || !p.last.isFinite) return null;
+      final a = p.last;
+      return (
+        f: LighthousePaceForecast(
+          actual: a,
+          forecast: a / d.elapsed * d.total,
+          elapsedDays: d.elapsed,
+          totalDays: d.total,
+        ),
+        profit: true,
+        prev: p.length >= 2 ? p[p.length - 2] : null,
+        prevLabel: labelAt(p.length - 2),
+      );
+    }
+    return null;
   }
 
   /// 毛利图例跟随本期盈亏；全赚、全亏、跨零都用同一语义色。
@@ -7230,6 +7494,9 @@ class _TrendChartState extends State<_TrendChart>
   }
 
   int? _selectedIndex;
+
+  /// 当月那一列的两个点被点中哪个：'actual' = 已发生，'forecast' = 月末预测。
+  String? _paceTap;
 
   /// 非空时只画这一条（`lighthouseTrendSeriesKeys`）。再点同一项或「全部」恢复。
   String? _soloKey;
@@ -7377,6 +7644,12 @@ class _TrendChartState extends State<_TrendChart>
   }
 
   @override
+  @override
+  void reassemble() {
+    super.reassemble();
+    _recompute();
+  }
+
   void didUpdateWidget(_TrendChart old) {
     super.didUpdateWidget(old);
     final prepended = widget.historyCount - old.historyCount;
@@ -7536,6 +7809,7 @@ class _TrendChartState extends State<_TrendChart>
   }
 
   void _setSelectionFromX(double localX, double widthPx) {
+    if (_paceTap != null) setState(() => _paceTap = null);
     final n = _n;
     final usable = widthPx - _kChartPadH * 2;
     if (usable <= 0 || n <= 0) return;
@@ -7561,6 +7835,7 @@ class _TrendChartState extends State<_TrendChart>
   }
 
   void _clearSelection() {
+    if (_paceTap != null) setState(() => _paceTap = null);
     if (_selectedIndex != null) {
       setState(() => _selectedIndex = null);
       widget.onSelectedIndexChanged?.call(null);
@@ -7569,6 +7844,108 @@ class _TrendChartState extends State<_TrendChart>
 
   void _notifyInteraction(bool active) {
     widget.onInteractionChanged?.call(active);
+  }
+
+  /// v18 · 当月那一列被点中时的读数牌：贴在被点的点左边。
+  Widget _paceTag({
+    required ({double x, double actY, double fcY, double actual, double fc})
+    hit,
+    required bool forecast,
+    required double width,
+    required double height,
+  }) {
+    final d = _paceDaysResolved;
+    final v = forecast ? hit.fc : hit.actual;
+    final y = forecast ? hit.fcY : hit.actY;
+    String money(double x) =>
+        '${x < 0 ? '−' : ''}${_fmtMoney(x.abs())}${_unitMoney(x.abs())}';
+    final profitHero =
+        _heroIndexFor(_visibleFlags) == lighthouseTrendProfitIndex;
+    final c = profitHero
+        ? (v >= 0 ? LhColors.neg : LhColors.pos)
+        : lighthouseTrendEmphasisInk(_emphasisColor);
+    final title = forecast ? (profitHero ? '月末预测毛利' : '月末预测') : '已发生';
+    final String sub;
+    if (d == null) {
+      sub = '';
+    } else if (forecast) {
+      final band = _stripForecast?.f;
+      sub = band?.lo != null && band?.hi != null
+          ? '80%区间 ${money(band!.lo!)}–${money(band!.hi!)}'
+                '${widget.onOpenForecastReport != null ? ' · 再点看报告' : ''}'
+          : '按日均外推 · ${money(hit.fc - hit.actual)} 待完成';
+    } else {
+      sub =
+          '截至 ${d.elapsed}/${d.total} 天 · 日均 '
+          '${money(d.elapsed <= 0 ? 0 : hit.actual / d.elapsed)}';
+    }
+    const tagW = 124.0;
+    const tagH = 34.0;
+    final left = (hit.x - tagW - 10).clamp(0.0, math.max(0.0, width - tagW));
+    final top = (y - tagH / 2).clamp(0.0, math.max(0.0, height - tagH));
+    return Positioned(
+      left: left.toDouble(),
+      top: top.toDouble(),
+      width: tagW,
+      child: IgnorePointer(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(7, 4, 7, 4),
+          decoration: BoxDecoration(
+            color: Colors.white.withAlpha(248),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: c.withAlpha(60), width: 0.6),
+            boxShadow: [
+              BoxShadow(
+                color: _LhPlum.deep.withAlpha(30),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    title,
+                    style: LhTypography.mono(
+                      size: 7.5,
+                      color: LhColors.mute2,
+                      weight: FontWeight.w700,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    money(v),
+                    style: LhTypography.sans(
+                      size: 11,
+                      color: c,
+                      weight: FontWeight.w800,
+                      letterSpacing: -0.1,
+                    ),
+                  ),
+                ],
+              ),
+              if (sub.isNotEmpty)
+                Text(
+                  sub,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: LhTypography.mono(
+                    size: 7,
+                    color: LhColors.mute2,
+                    weight: FontWeight.w500,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// v16 · 极值读数 pill：白底发丝边，压在线上也读得清。
@@ -7778,6 +8155,20 @@ class _TrendChartState extends State<_TrendChart>
             : widget.chartHeight;
         final vis = _visibleFlags;
         final heroIndex = _heroIndexFor(vis);
+        // 毛利主线在当月没走完时，同规模一样画「已发生实柱 + 月末预测虚框」。
+        final paceMult = _paceMultiplier;
+        final double? profitFc =
+            heroIndex == lighthouseTrendProfitIndex &&
+                vis[heroIndex] &&
+                _hasProf &&
+                widget.partialPeriod &&
+                _series.profit.length >= 2
+            ? (widget.profitForecast?.forecast ??
+                  (paceMult != null && paceMult > 1
+                      ? _series.profit.last * paceMult
+                      : null))
+            : null;
+        final profitPaceOn = profitFc != null;
         final laneIndex = lighthouseTrendLaneIndex(vis, heroIndex);
         final geo = lighthouseTrendCanvasGeometry(
           chartH,
@@ -7799,6 +8190,17 @@ class _TrendChartState extends State<_TrendChart>
         var step = n <= 1 ? 0.0 : (w - _kChartPadH * 2) / (n - 1);
         var series = _series;
         var bounds = _bounds;
+        if (profitPaceOn && !windowed) {
+          bounds = _computeBounds(
+            series,
+            scaleForecast: _hasScale ? widget.scaleForecast?.forecast : null,
+            profitForecast: profitFc,
+            shareScaleRange: lighthouseTrendShareScaleRange(
+              scaleLabel: widget.scaleLabel,
+              scaleAltLabel: widget.scaleAltLabel,
+            ),
+          );
+        }
         final viewStart = _viewStart;
         if (windowed) {
           step = _stepFor(w);
@@ -7810,6 +8212,7 @@ class _TrendChartState extends State<_TrendChart>
             scaleForecast: hi == n - 1 && _hasScale
                 ? widget.scaleForecast?.forecast
                 : null,
+            profitForecast: hi == n - 1 ? profitFc : null,
             shareScaleRange: lighthouseTrendShareScaleRange(
               scaleLabel: widget.scaleLabel,
               scaleAltLabel: widget.scaleAltLabel,
@@ -7819,9 +8222,17 @@ class _TrendChartState extends State<_TrendChart>
           paintW = _kChartPadH * 2 + (hi - lo) * step;
         }
         final includesLatest = hi == n - 1;
-        final forecast = vis[3] && includesLatest
-            ? widget.scaleForecast?.forecast
-            : null;
+        final forecast = !includesLatest
+            ? null
+            : (vis[3]
+                  ? widget.scaleForecast?.forecast
+                  : profitFc);
+        // v2 模型的 80% 区间：图上当月那一列画一根须线。
+        final band = !includesLatest
+            ? null
+            : (vis[3]
+                  ? widget.scaleForecast
+                  : (profitPaceOn ? widget.profitForecast : null));
         final extremeSpec = _trendPaintSpec(
           series: series,
           bounds: bounds,
@@ -7870,11 +8281,45 @@ class _TrendChartState extends State<_TrendChart>
         }
 
         final showExtremes =
+            widget.showExtremeLabels &&
             (!widget.fitHeight || lighthouseCompactHeroShowsExtremeLabels) &&
             hasProfit &&
             extremePts.length >= 3 &&
             (actualMaxP - actualMinP).abs() > 1e-6 &&
             (minY - maxY) > 26;
+        // ── 当月那一列的两个点（已发生 / 月末预测）：命中区 + 读数 ─────────
+        //   规模主线：实柱顶 = 已发生，虚框顶 = 月末预测；
+        //   毛利主线：同一画法，已发生实柱 + 按同一公式外推的月末虚框。
+        ({double x, double actY, double fcY, double actual, double fc})?
+        paceHit;
+        if (includesLatest && extremeSpec.pts.length >= 2) {
+          final hp = extremeSpec.pts;
+          final lastV = hp.last;
+          final mult = _paceMultiplier;
+          double? fcv;
+          if (partial) {
+            fcv = forecast;
+          } else if (heroIndex == lighthouseTrendProfitIndex &&
+              vis[heroIndex] &&
+              widget.partialPeriod &&
+              mult != null &&
+              mult > 1) {
+            fcv = lastV * mult;
+          }
+          if (fcv != null && lastV.isFinite && fcv.isFinite) {
+            double cy(double v) =>
+                yOf(v).clamp(padTop, geo.plotBottom).toDouble();
+            paceHit = (
+              x: paintLeft + _kChartPadH + (hp.length - 1) * step,
+              actY: cy(lastV),
+              fcY: cy(fcv),
+              actual: lastV,
+              fc: fcv,
+            );
+          }
+        }
+        final paceTagOn =
+            paceHit != null && _paceTap != null && _selectedIndex == n - 1;
         final sel = _selectedIndex;
         final sliceSelected = sel == null || sel < lo || sel > hi
             ? null
@@ -7895,7 +8340,27 @@ class _TrendChartState extends State<_TrendChart>
             if (!viewport) _setSelectionFromX(d.localPosition.dx, w);
           },
           onTapUp: (d) {
+            final prevTap = _paceTap;
             _setSelectionFromX(d.localPosition.dx, w);
+            // 点在当月那一列附近：离哪个点近就选哪个（已发生 / 月末预测）。
+            final ph = paceHit;
+            if (ph != null && (d.localPosition.dx - ph.x).abs() <= 22) {
+              final dy = d.localPosition.dy;
+              final pick = (dy - ph.fcY).abs() <= (dy - ph.actY).abs()
+                  ? 'forecast'
+                  : 'actual';
+              if (_selectedIndex != n - 1) {
+                _selectedIndex = n - 1;
+                widget.onSelectedIndexChanged?.call(n - 1);
+              }
+              HapticFeedback.selectionClick();
+              setState(() => _paceTap = pick);
+              // 已经选中预测点时再点一下：打开量化报告。
+              final open = widget.onOpenForecastReport;
+              if (prevTap == 'forecast' && pick == 'forecast' && open != null) {
+                open(heroIndex == lighthouseTrendProfitIndex);
+              }
+            }
             _notifyInteraction(false);
           },
           onTapCancel: () => _notifyInteraction(false),
@@ -7956,10 +8421,18 @@ class _TrendChartState extends State<_TrendChart>
                                 padH: _kChartPadH,
                                 available: vis,
                                 heroIndexOverride: heroIndex,
+                                keepPaletteColor: widget.emphasisColor != null,
                                 scaleForecast: forecast,
                                 extremeLo: eLo,
                                 extremeHi: eHi,
                                 showEndpoint: includesLatest,
+                                forecastLo: band?.lo,
+                                forecastHi: band?.hi,
+                                profitPartial:
+                                    widget.partialPeriod && includesLatest,
+                                profitPace: includesLatest
+                                    ? _paceMultiplier
+                                    : null,
                               ),
                             ),
                           ),
@@ -7979,6 +8452,12 @@ class _TrendChartState extends State<_TrendChart>
                               available: vis,
                               heroIndexOverride: heroIndex,
                               scaleForecast: forecast,
+                              paceForecastPicked:
+                                  paceTagOn && _paceTap == 'forecast',
+                              profitForecastValue:
+                                  heroIndex == lighthouseTrendProfitIndex
+                                  ? paceHit?.fc
+                                  : null,
                             ),
                           ),
                         ),
@@ -7986,6 +8465,13 @@ class _TrendChartState extends State<_TrendChart>
                     ),
                   ),
                 ),
+                if (paceTagOn)
+                  _paceTag(
+                    hit: paceHit!,
+                    forecast: _paceTap == 'forecast',
+                    width: w,
+                    height: chartH,
+                  ),
                 // 选中某一点时极值 pill 让位给游标，免得两套读数叠在一起。
                 if (showExtremes && _selectedIndex == null)
                   Positioned(
@@ -8123,47 +8609,154 @@ class _TrendChartState extends State<_TrendChart>
   /// 月化预测条 —— 只在「点月 + 当前月」出现。
   /// 会议用途：省一级在月中就能看出这个月能不能达标 —— 达标就监测，
   /// 差几十万就提前加电加量，不用等月底复盘。
-  Widget _forecastStrip(LighthousePaceForecast f) {
-    final v = f.forecast.abs();
-    final gap = f.remaining.abs();
-    return Row(
-      children: [
-        Container(width: 14, height: 1.2, color: _cScale.withAlpha(150)),
-        const SizedBox(width: 6),
-        Text(
-          '月末预测',
+  ///
+  /// v18 · 三行讲清楚「怎么算的、能不能超上月」：
+  ///   ① 结论：月末预测 3.55亿 ｜ 较08月 ↑22.4%（涨红跌绿）
+  ///   ② 进度尺：实 = 已发生，浅 = 按日均补到月底，竖刻度 = 上月全月
+  ///      —— 浅段越过刻度 = 这个节奏能超上月；停在刻度左边 = 要加量。
+  ///   ③ 算式：已发生 ÷ 已过天数 × 当月天数 · 日均 · 剩几天
+  ///   算法仍是会上定的唯一一个（线性日均外推），这里只是把它摊开。
+  Widget _forecastStrip(
+    LighthousePaceForecast f, {
+    double? prev,
+    String? prevLabel,
+    bool profit = false,
+  }) {
+    final fcV = f.forecast;
+    final accent = profit
+        ? (fcV >= 0 ? LhColors.neg : LhColors.pos)
+        : _emphasisColor;
+    final ink = profit ? accent : lighthouseTrendEmphasisInk(_emphasisColor);
+    String money(double v) =>
+        '${v < 0 ? '−' : ''}${_fmtMoney(v.abs())}${_unitMoney(v.abs())}';
+    final hasPrev = prev != null && prev.isFinite && prev.abs() > 1e-9;
+    final vsPct = hasPrev ? (fcV - prev!) / prev!.abs() * 100 : null;
+    // 「2026.08」→「8月」，胶囊里放得下。
+    final rawPrev = (prevLabel ?? '').trim();
+    final ym = RegExp(r'^\d{4}[.\-/](\d{1,2})$').firstMatch(rawPrev);
+    final prevName = rawPrev.isEmpty
+        ? '上月'
+        : (ym != null ? '${int.parse(ym.group(1)!)}月' : rawPrev);
+    final caption = LhTypography.mono(
+      size: 7.5,
+      color: LhColors.mute2,
+      weight: FontWeight.w600,
+      letterSpacing: 0.2,
+    );
+
+    Widget verdict() {
+      final pct = vsPct!;
+      final up = pct >= 0;
+      final c = up ? LhColors.neg : LhColors.pos;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+        decoration: BoxDecoration(
+          color: c.withAlpha(20),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          '较$prevName ${up ? '↑' : '↓'}${pct.abs().toStringAsFixed(1)}%',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: LhTypography.mono(
             size: 7.5,
-            color: LhColors.mute2,
-            weight: FontWeight.w700,
-            letterSpacing: 0.5,
+            color: c,
+            weight: FontWeight.w800,
+            letterSpacing: 0.2,
           ),
         ),
-        const SizedBox(width: 4),
-        Text(
-          '${_fmtMoney(v)}${_unitMoney(v)}',
-          style: LhTypography.sans(
-            size: 10.5,
-            color: _cScale,
-            weight: FontWeight.w700,
-            letterSpacing: -0.1,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: LhScrollText(
-            '已过 ${f.elapsedDays}/${f.totalDays} 天 · 还差 '
-            '${_fmtMoney(gap)}${_unitMoney(gap)}',
-            overflow: TextOverflow.ellipsis,
-            style: LhTypography.mono(
-              size: 7.5,
-              color: LhColors.mute2,
-              weight: FontWeight.w500,
-              letterSpacing: 0.2,
+      );
+    }
+
+    final open = widget.onOpenForecastReport;
+    final strip = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            // 虚线色块 = 图上那条虚线
+            SizedBox(
+              width: 14,
+              height: 2,
+              child: Row(
+                children: [
+                  for (var i = 0; i < 3; i++) ...[
+                    Container(width: 3.4, height: 1.4, color: accent),
+                    if (i < 2) const SizedBox(width: 1.9),
+                  ],
+                ],
+              ),
             ),
-          ),
+            const SizedBox(width: 6),
+            Text(
+              profit ? '月末预测毛利' : '月末预测',
+              style: LhTypography.mono(
+                size: 7.5,
+                color: LhColors.mute2,
+                weight: FontWeight.w700,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              money(fcV),
+              style: LhTypography.sans(
+                size: 11,
+                color: ink,
+                weight: FontWeight.w800,
+                letterSpacing: -0.1,
+              ),
+            ),
+            const SizedBox(width: 6),
+            if (vsPct != null) Flexible(child: verdict()) else const Spacer(),
+            if (vsPct != null) const Spacer(),
+            Text('${f.elapsedDays}/${f.totalDays} 天', style: caption),
+            if (widget.onOpenForecastReport != null) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: accent.withAlpha(90), width: 0.6),
+                ),
+                child: Text(
+                  '报告 ›',
+                  style: LhTypography.mono(
+                    size: 7.5,
+                    color: accent,
+                    weight: FontWeight.w800,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
+        if (f.lo != null && f.hi != null) ...[
+          const SizedBox(height: 3),
+          LhScrollText(
+            [
+              '80%区间 ${money(f.lo!)}–${money(f.hi!)}',
+              if (f.beatPrevProb != null)
+                '超$prevName概率 ${(f.beatPrevProb! * 100).round()}%',
+              if (f.modelMape != null && f.modelMape!.isFinite)
+                f.byModel
+                    ? '模型回测误差 ${(f.modelMape! * 100).toStringAsFixed(1)}%'
+                          '${f.linearMape != null && f.linearMape!.isFinite ? '（原算法 ${(f.linearMape! * 100).toStringAsFixed(1)}%）' : ''}'
+                    : '模型未跑赢原算法，暂用原算法',
+            ].join(' · '),
+            overflow: TextOverflow.ellipsis,
+            style: caption,
+          ),
+        ],
       ],
+    );
+    if (open == null) return strip;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => open(profit),
+      child: strip,
     );
   }
 
@@ -8287,7 +8880,9 @@ class _TrendChartState extends State<_TrendChart>
                   size: 9.5,
                   color: negative
                       ? LhColors.pos
-                      : (drawn ? _LhPlum.deep : LhColors.ink2),
+                      : (drawn
+                            ? lighthouseTrendEmphasisInk(_emphasisColor)
+                            : LhColors.ink2),
                   weight: FontWeight.w700,
                   height: 1.0,
                 ).copyWith(fontFeatures: tabular),
@@ -8329,8 +8924,8 @@ class _TrendChartState extends State<_TrendChart>
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            // 只有 solo 选中的那格挂底色；平时整块图例没有任何框。
-            color: active ? _LhPlum.mist : Colors.transparent,
+            // 只有 solo 选中的那格挂一层和主线同色的薄底。
+            color: active ? _emphasisColor.withAlpha(22) : Colors.transparent,
             borderRadius: BorderRadius.circular(4),
           ),
           child: cell,
@@ -8407,7 +9002,9 @@ class _TrendChartState extends State<_TrendChart>
             ),
             const Spacer(),
             // 「看全部」只在 solo 了某一条时出现 —— 平时它是一个点不动的词。
-            if (_soloKey != null && pnlLegendKeys.length > 1)
+            if (widget.showClearSolo &&
+                _soloKey != null &&
+                pnlLegendKeys.length > 1)
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: _clearSolo,
@@ -8628,9 +9225,14 @@ class _TrendChartState extends State<_TrendChart>
           const SizedBox(height: 6),
           _trendFormulaInline(widget.formulaExpression!),
         ],
-        if (widget.scaleForecast != null && _visibleFlags[3]) ...[
+        if (_stripForecast case final sf?) ...[
           const SizedBox(height: 7),
-          _forecastStrip(widget.scaleForecast!),
+          _forecastStrip(
+            sf.f,
+            prev: sf.prev,
+            prevLabel: sf.prevLabel,
+            profit: sf.profit,
+          ),
         ],
         const SizedBox(height: 10),
         if (widget.fitHeight)
@@ -8770,6 +9372,7 @@ class _HeroMetricTrendChart extends StatefulWidget {
     this.warnTint,
     this.compareData,
     this.forecast,
+    this.paceDays,
     this.periodDeltaPct,
     this.partialPeriod = false,
     this.chartHeight = 168,
@@ -8790,6 +9393,9 @@ class _HeroMetricTrendChart extends StatefulWidget {
 
   /// 月化预测（仅点月 + 当前月 + 规模/金额类）。非空时画月末预测虚线。
   final LighthousePaceForecast? forecast;
+
+  /// 当月已过天数 / 当月天数 —— 毛利盈亏柱外推月末用。
+  final ({int elapsed, int total})? paceDays;
 
   /// 本期环比（%，比率类为 pp），带符号，由后端按同期对齐窗口算出。
   ///
@@ -8994,10 +9600,13 @@ class _HeroMetricTrendChartState extends State<_HeroMetricTrendChart> {
           periodProfitDeltaPct: isProfitMetric ? widget.periodDeltaPct : null,
           periodScaleDeltaPct: isProfitMetric ? null : widget.periodDeltaPct,
           scaleForecast: isProfitMetric ? null : widget.forecast,
+          paceDays: widget.paceDays,
           rangeLabel: '',
           title: widget.metricLabel,
           showHeader: false,
-          showLegend: false,
+          // 指标详情和主 Hero 用同一张图例：名称、数值、环比的读法不变。
+          showLegend: true,
+          showExtremeLabels: false,
           showScrubHint: false,
           chartHeight: widget.chartHeight,
           valueIsRate: widget.isRate,
@@ -12400,6 +13009,396 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// [actual] 传「图上实线末端那个值」而不是别的口径值 —— 虚线是从那个点
   /// 往上画的，两者必须同源，否则虚线方向会跟直觉相反。
   /// 不满足口径（非当前月 / 比率指标 / 无发生额）时返回 null，调用方不画虚线。
+  // ── 月末预测 v2 · 数学模型（试行）───────────────────────────────────
+  //   只给主 Hero：点月 + 当前月时拉近 ~8 个月的日数据（hero-history 日粒度，
+  //   每页 90 天，拉 3 页），交给 lighthouse_forecast_model.dart 的纯函数。
+  //   数据没到 / 拉失败时一律回退到线性外推，不影响原有展示。
+  Map<String, Map<DateTime, double>>? _paceDaily;
+  String? _paceDailyKey;
+  String? _paceDailyLoadingKey;
+  final Map<String, LighthousePaceForecast?> _paceModelCache = {};
+
+  String get _paceDailyReqKey {
+    final t = _nowCST();
+    return '$_tab|$_groupFilter|${t.year}-${t.month}-${t.day}';
+  }
+
+  static const _kPaceDailyMetrics = <String>[
+    'verifiedSales',
+    'sales',
+    'revenue',
+    'totalCost',
+    'profit',
+  ];
+
+  void _ensurePaceDaily() {
+    if (!_isCurrentMonthView) return;
+    final key = _paceDailyReqKey;
+    if (_paceDailyKey == key || _paceDailyLoadingKey == key) return;
+    _paceDailyLoadingKey = key;
+    Future.microtask(() => _loadPaceDaily(key));
+  }
+
+  Future<void> _loadPaceDaily(String key) async {
+    final t = _nowCST();
+    String two(int v) => v.toString().padLeft(2, '0');
+    var before = '${t.year}-${two(t.month)}-${two(t.day)}';
+    final out = <String, Map<DateTime, double>>{
+      for (final k in _kPaceDailyMetrics) k: <DateTime, double>{},
+    };
+    try {
+      for (var page = 0; page < 3; page++) {
+        final data = await _service.fetchHeroHistory(
+          before: before,
+          period: 'day',
+          tab: _tab,
+          group: _groupFilter,
+          count: 90,
+        );
+        final keys = (data['keys'] as List?)?.map((e) => '$e').toList() ??
+            const <String>[];
+        if (keys.isEmpty) break;
+        final series = data['series'] is Map
+            ? Map<String, dynamic>.from(data['series'] as Map)
+            : const <String, dynamic>{};
+        final days = [for (final k in keys) DateTime.tryParse(k)];
+        for (final m in _kPaceDailyMetrics) {
+          final raw = series['${m}Series'];
+          if (raw is! List) continue;
+          for (var i = 0; i < days.length && i < raw.length; i++) {
+            final day = days[i];
+            final v = raw[i];
+            if (day == null || v is! num) continue;
+            out[m]![DateTime(day.year, day.month, day.day)] = v.toDouble();
+          }
+        }
+        if (data['hasMore'] != true) break;
+        before = keys.first;
+      }
+    } catch (_) {
+      // 拉不到就保持线性外推。
+    }
+    if (!mounted || _paceDailyReqKey != key) {
+      if (_paceDailyLoadingKey == key) _paceDailyLoadingKey = null;
+      return;
+    }
+    setState(() {
+      _paceDaily = {
+        for (final e in out.entries)
+          if (e.value.isNotEmpty) e.key: e.value,
+      };
+      _paceDailyKey = key;
+      _paceDailyLoadingKey = null;
+      _paceModelCache.clear();
+    });
+  }
+
+  /// 月末结构预测（多层有序 logit）：给某个维度（product / supply / channel）
+  /// 拉 5 段区间的列表（本月 1 日至昨天 / 上月同期 / 上月全月 / 近 7 天 /
+  /// 前 7 天），按「名称::分组」拼特征后逐个实体打分。
+  Future<LighthouseOrdinalBundle?> _loadOrdinal(String tab) async {
+    final model = await LighthouseProductOrdinalModel.load();
+    if (model == null) return null;
+    final t = _nowCST();
+    final y1 = DateTime(t.year, t.month, t.day - 1); // T+1：截至昨天
+    if (y1.month != t.month) return null; // 1 号还没有本月数据
+    final day = y1.day;
+    final dim = DateTime(t.year, t.month + 1, 0).day;
+    final pmStart = DateTime(t.year, t.month - 1, 1);
+    final pmEnd = DateTime(t.year, t.month, 0);
+    final cp = math.max(1, (day * pmEnd.day / dim).round());
+    final ranges = <String, (DateTime, DateTime)>{
+      'cur': (DateTime(t.year, t.month, 1), y1),
+      'prevSameDay': (pmStart, DateTime(pmStart.year, pmStart.month, cp)),
+      'prevTotal': (pmStart, pmEnd),
+      'last7': (DateTime(y1.year, y1.month, y1.day - 6), y1),
+      'prev7': (
+        DateTime(y1.year, y1.month, y1.day - 13),
+        DateTime(y1.year, y1.month, y1.day - 7),
+      ),
+    };
+    try {
+      final keys = ranges.keys.toList();
+      final pages = await Future.wait([
+        for (final k in keys)
+          _service.fetchDimension(
+            tab: tab,
+            startDate: ranges[k]!.$1,
+            endDate: ranges[k]!.$2,
+          ),
+      ]);
+      final rows = <String, Map<String, Map<String, dynamic>>>{};
+      for (var i = 0; i < keys.length; i++) {
+        final byKey = <String, Map<String, dynamic>>{};
+        for (final r in (pages[i]['rows'] as List? ?? const [])) {
+          if (r is! Map) continue;
+          final m = Map<String, dynamic>.from(r);
+          var name = '${m['name'] ?? ''}'.trim();
+          final cut = name.indexOf('::');
+          if (cut >= 0) name = name.substring(0, cut);
+          if (name.isEmpty) continue;
+          final group = '${m['group'] ?? ''}'.trim();
+          final key = '$name::${group.isEmpty ? '(未分类)' : group}';
+          // 同名同组的多行（极少）合并相加。
+          final prev = byKey[key];
+          if (prev == null) {
+            byKey[key] = m;
+          } else {
+            for (final f in lighthouseOrdinalRowField.values) {
+              final a = prev[f];
+              final b = m[f];
+              prev[f] = (a is num ? a : 0) + (b is num ? b : 0);
+            }
+          }
+        }
+        rows[keys[i]] = byKey;
+      }
+      return lighthouseScoreEntities(
+        model: model,
+        dim: tab,
+        rows: rows,
+        day: day,
+        daysInMonth: dim,
+        month: DateTime(t.year, t.month, 1),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 同一天内每个维度只拉一次（BI 里来回切视角不重复打 5 次接口）。
+  final Map<String, Future<LighthouseOrdinalBundle?>> _ordinalCache = {};
+
+  Future<LighthouseOrdinalBundle?> _loadOrdinalCached(String tab) {
+    final t = _nowCST();
+    final key = '$tab|${t.year}-${t.month}-${t.day}';
+    return _ordinalCache.putIfAbsent(key, () {
+      final f = _loadOrdinal(tab);
+      // 失败的不缓存，下次再试。
+      unawaited(
+        f.then((v) {
+          if (v == null) _ordinalCache.remove(key);
+        }),
+      );
+      return f;
+    });
+  }
+
+  /// BI 面板里的「月末预测 · 量化报告」卡：本月规模月末预测 + 当前视角的
+  /// 月末结构预测（多层有序 logit），右上角进完整报告。
+  Widget? _biForecastCard(String dim) {
+    if (dim != 'product' && dim != 'supply' && dim != 'channel') return null;
+    final preferVerified = _anchor == _LhAnchor.verified;
+    final scaleKey = preferVerified ? 'verifiedSales' : 'sales';
+    final scaleName = preferVerified ? '核销规模' : '销售规模';
+    final series = _seriesForMetric(scaleKey);
+    final pace = series.isEmpty ? null : _heroPaceForecast(scaleKey, series.last);
+    final canOpen = pace != null && _paceDaily != null;
+    String money(double v) =>
+        '${v < 0 ? '−' : ''}${_fmtMoney(v.abs())}${_unitMoney(v.abs())}';
+    final dimName = switch (dim) {
+      'product' => '产品',
+      'supply' => '供给',
+      _ => '渠道',
+    };
+    return Container(
+      decoration: BoxDecoration(
+        color: LhColors.paper,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: LhColors.line2, width: 0.7),
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: LhBiPlum.lavender,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  '量化报告',
+                  style: LhTypography.mono(
+                    size: 9,
+                    color: LhBiPlum.primary,
+                    weight: FontWeight.w800,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '本月月末预测 · $dimName',
+                  style: LhTypography.sans(size: 13, weight: FontWeight.w700),
+                ),
+              ),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: canOpen
+                    ? () => _openForecastReport(scaleKey, scaleName)
+                    : null,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: canOpen ? LhBiPlum.primary : LhColors.mist,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '完整报告 ›',
+                    style: LhTypography.mono(
+                      size: 9,
+                      color: canOpen ? Colors.white : LhColors.mute2,
+                      weight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (pace != null)
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.end,
+              spacing: 10,
+              runSpacing: 4,
+              children: [
+                Text(
+                  '$scaleName ${money(pace.forecast)}',
+                  style: LhTypography.number(size: 20, color: LhBiPlum.heroNum),
+                ),
+                if (pace.lo != null && pace.hi != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Text(
+                      '80% 区间 ${money(pace.lo!)} – ${money(pace.hi!)}',
+                      style: LhTypography.mono(size: 9, color: LhColors.ink2),
+                    ),
+                  ),
+                if (pace.beatPrevProb != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Text(
+                      '超上月概率 ${(pace.beatPrevProb! * 100).round()}%',
+                      style: LhTypography.mono(
+                        size: 9,
+                        color: pace.beatPrevProb! >= 0.5
+                            ? LhColors.neg
+                            : LhColors.pos,
+                        weight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+              ],
+            )
+          else
+            Text(
+              _isCurrentMonthView
+                  ? '整体月末预测还在计算（日数据加载中）。'
+                  : '整体月末预测只在「月 · 本月」下计算；下面的$dimName结构预测始终按本月截至昨天。',
+              style: LhTypography.mono(size: 9, color: LhColors.mute2, height: 1.5),
+            ),
+          const SizedBox(height: 10),
+          const ColoredBox(color: LhColors.line2, child: SizedBox(height: 0.5)),
+          const SizedBox(height: 10),
+          LighthouseProductOrdinalSection(
+            loader: _loadOrdinalCached,
+            fixedDim: dim,
+            initialMetric: preferVerified ? 'verify' : 'sales',
+            accent: LhBiPlum.primary,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 打开「月末预测 · 量化报告」底部弹层。
+  void _openForecastReport(String metricKey, String label) {
+    final daily = _paceDailyKey == _paceDailyReqKey
+        ? (_paceDaily?[metricKey])
+        : null;
+    final report = daily == null
+        ? null
+        : lighthouseForecastReport(daily: daily, today: _nowCST());
+    if (report == null) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text(
+            daily == null ? '日数据还在加载，稍后再试' : '历史不足 2 个整月，暂时出不了量化报告',
+          ),
+        ),
+      );
+      return;
+    }
+    HapticFeedback.selectionClick();
+    final h = MediaQuery.sizeOf(context).height;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: LhColors.paper,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      builder: (ctx) => SizedBox(
+        height: h * 0.92,
+        child: LighthouseForecastReportSheet(
+          report: report,
+          metricLabel: label,
+          profit: metricKey == 'profit',
+          ordinalLoader: _loadOrdinalCached,
+          productMetric: switch (metricKey) {
+            'verifiedSales' => 'verify',
+            'sales' => 'sales',
+            'revenue' => 'revenue',
+            _ => 'profit',
+          },
+        ),
+      ),
+    );
+  }
+
+  /// 主 Hero 的月末预测：有日数据就走 v2 数学模型，否则退回线性外推。
+  /// [linearFallback] 为 false 时（毛利）没有模型结果就返回 null，
+  /// 由图自己按天数线性外推（毛利可能为负，线性函数会拒绝负值）。
+  LighthousePaceForecast? _heroPaceForecast(
+    String metricKey,
+    double shownActual, {
+    bool linearFallback = true,
+  }) {
+    final linear = linearFallback
+        ? _monthPaceForecast(metricKey, shownActual)
+        : null;
+    if (!_isCurrentMonthView || !lighthouseMetricSupportsPace(metricKey)) {
+      return linear;
+    }
+    _ensurePaceDaily();
+    final daily = _paceDaily?[metricKey];
+    if (daily == null || _paceDailyKey != _paceDailyReqKey) return linear;
+    final cacheKey = '$metricKey|$shownActual';
+    if (_paceModelCache.containsKey(cacheKey)) {
+      return _paceModelCache[cacheKey] ?? linear;
+    }
+    final mf = lighthouseModelForecast(daily: daily, today: _nowCST());
+    final res = mf == null
+        ? null
+        : lighthousePaceFromModel(mf, shownActual: shownActual);
+    _paceModelCache[cacheKey] = res;
+    return res ?? linear;
+  }
+
+  /// 当月「已过天数 / 当月天数」—— 与 [_monthPaceForecast] 同一口径，
+  /// 给毛利盈亏柱外推月末用（毛利可能为负，不能靠规模预测是否非空来判断）。
+  ({int elapsed, int total})? get _monthPaceDays {
+    if (!_isCurrentMonthView) return null;
+    final now = _nowCST();
+    final total = lighthouseDaysInMonth(now.year, now.month);
+    if (now.day <= 0 || now.day >= total) return null;
+    return (elapsed: now.day, total: total);
+  }
+
   LighthousePaceForecast? _monthPaceForecast(String metricKey, double actual) {
     if (!_isCurrentMonthView) return null;
     if (!lighthouseMetricSupportsPace(metricKey)) return null;
@@ -13543,116 +14542,126 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           resizeToAvoidBottomInset: false,
           body: SafeArea(
             bottom: false,
-            child: _wrapWithUiZoom(
-              Column(
-                children: [
-                  // L2/L3 详情自带 sticky header（返回·灯塔·缩放/更新），
-                  // 若再挂一级 AppBar 会叠出双份标题与右侧按钮。
-                  if (_detailKey == null && !_biViewOpen) _buildAppBar(),
-                  Expanded(
-                    child: !_hasAccess
-                        ? _buildNoAccessView()
-                        : Stack(
-                            children: [
-                              // 撑满整块区域 —— 别删。
-                              //
-                              //   Stack 默认 StackFit.loose：自身尺寸取「非
-                              //   Positioned 子节点里最大的那个」。这里 Expanded
-                              //   只给了紧高度，宽度是松的（Column 默认 center，
-                              //   不 stretch）。
-                              //   BI 打开时，唯一的非 Positioned 子节点是那个
-                              //   offstage 的主列表，而 offstage 的 RenderBox 尺寸
-                              //   是 0 —— Stack 宽度于是塌成 0，Positioned.fill
-                              //   跟着填了个 0 宽的框，BI 整页存在但没有一个像素。
-                              //   表现正是「点了没反应 / 白屏」。
-                              //   进 L2 不出问题，只是因为详情那层是有尺寸的非
-                              //   Positioned 子节点，替 Stack 把宽度撑住了。
-                              const SizedBox.expand(),
-                              // 一级主列表始终保活（Offstage），进 L2 不销毁，
-                              // 右滑/返回可回到原先滚动浏览位置。
-                              Offstage(
-                                offstage: _detailKey != null || _biViewOpen,
-                                child: TickerMode(
-                                  enabled: _detailKey == null && !_biViewOpen,
-                                  child: KeyedSubtree(
-                                    key: const ValueKey('main'),
-                                    child: _buildMainView(),
-                                  ),
-                                ),
-                              ),
-                              if (_detailKey != null)
-                                AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 220),
-                                  switchInCurve: Curves.easeOut,
-                                  switchOutCurve: Curves.easeIn,
-                                  transitionBuilder: (child, animation) {
-                                    final slide = Tween<Offset>(
-                                      begin: const Offset(0.035, 0),
-                                      end: Offset.zero,
-                                    ).animate(animation);
-                                    return FadeTransition(
-                                      opacity: animation,
-                                      child: SlideTransition(
-                                        position: slide,
-                                        child: child,
-                                      ),
-                                    );
-                                  },
-                                  child: KeyedSubtree(
-                                    key: ValueKey(_detailRouteKey()),
-                                    child: _buildDetailView(),
-                                  ),
-                                ),
-                              if (_showPageBusyOverlay) _buildLoadingOverlay(),
-                              if (_biViewOpen)
-                                Positioned.fill(
-                                  child: Material(
-                                    color: LhColors.mist,
-                                    child: LhBiViewPage(
-                                      initialDim: _biInitialDim(),
-                                      dims: _biDims(),
-                                      initialMetric: _sortField,
-                                      rangeLabel: _selectedRangeLabel,
-                                      periodLabel: _periodLabelFor(_period),
-                                      rowsFor: (d) =>
-                                          _bundle?.rowsOf(d) ??
-                                          const <Map<String, dynamic>>[],
-                                      metricsFor: _biMetricsFor,
-                                      metricValue: _rowMetricValue,
-                                      dimLabel: _biDimLabel,
-                                      categoriesFor: _biCategoriesFor,
-                                      metricDelta: _deltaFromEntityRow,
-                                      breakdownFor: _biBreakdownFor,
-                                      requestBreakdown: _biRequestBreakdown,
-                                      seriesFor: _biSeriesFor,
-                                      loading: _biDimLoading,
-                                      windowRowsFor: _biWindowRowsFor,
-                                      reportFor: _biReportFor,
-                                      reportBusy: _biReportBusyFor,
-                                      requestReport: _biRequestReport,
-                                      onDimChanged: (d) {
-                                        if (!_kBiDims.contains(d)) return;
-                                        _biDim = d;
-                                        unawaited(_loadTab(d));
-                                        unawaited(_loadBiWindowRows(d));
-                                      },
-                                      onClose: _closeBiView,
-                                      topChrome: _buildBiTopChrome(),
-                                      periodBar: _buildPeriodBar(),
+            // 根页的主 Tab 是悬浮在内容上的。只给 ListView 末尾塞空白，滚动过程
+            // 中的行仍会从 Tab 下穿过去；手机上看起来像最后一张卡被遮住。
+            // 这里直接把灯塔可视区收到 Tab 上沿，一级、二级和 BI 都不会被盖住。
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: dunesAppBottomNavOverlayExtent(context),
+              ),
+              child: _wrapWithUiZoom(
+                Column(
+                  children: [
+                    // L2/L3 详情自带 sticky header（返回·灯塔·缩放/更新），
+                    // 若再挂一级 AppBar 会叠出双份标题与右侧按钮。
+                    if (_detailKey == null && !_biViewOpen) _buildAppBar(),
+                    Expanded(
+                      child: !_hasAccess
+                          ? _buildNoAccessView()
+                          : Stack(
+                              children: [
+                                // 撑满整块区域 —— 别删。
+                                //
+                                //   Stack 默认 StackFit.loose：自身尺寸取「非
+                                //   Positioned 子节点里最大的那个」。这里 Expanded
+                                //   只给了紧高度，宽度是松的（Column 默认 center，
+                                //   不 stretch）。
+                                //   BI 打开时，唯一的非 Positioned 子节点是那个
+                                //   offstage 的主列表，而 offstage 的 RenderBox 尺寸
+                                //   是 0 —— Stack 宽度于是塌成 0，Positioned.fill
+                                //   跟着填了个 0 宽的框，BI 整页存在但没有一个像素。
+                                //   表现正是「点了没反应 / 白屏」。
+                                //   进 L2 不出问题，只是因为详情那层是有尺寸的非
+                                //   Positioned 子节点，替 Stack 把宽度撑住了。
+                                const SizedBox.expand(),
+                                // 一级主列表始终保活（Offstage），进 L2 不销毁，
+                                // 右滑/返回可回到原先滚动浏览位置。
+                                Offstage(
+                                  offstage: _detailKey != null || _biViewOpen,
+                                  child: TickerMode(
+                                    enabled: _detailKey == null && !_biViewOpen,
+                                    child: KeyedSubtree(
+                                      key: const ValueKey('main'),
+                                      child: _buildMainView(),
                                     ),
                                   ),
                                 ),
-                              if (_biViewOpen && _biError != null)
-                                Positioned(
-                                  left: 0,
-                                  right: 0,
-                                  top: 0,
-                                  child: _buildBiErrorBanner(),
-                                ),
-                            ],
-                          ),
-                  ),
-                ],
+                                if (_detailKey != null)
+                                  AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 220),
+                                    switchInCurve: Curves.easeOut,
+                                    switchOutCurve: Curves.easeIn,
+                                    transitionBuilder: (child, animation) {
+                                      final slide = Tween<Offset>(
+                                        begin: const Offset(0.035, 0),
+                                        end: Offset.zero,
+                                      ).animate(animation);
+                                      return FadeTransition(
+                                        opacity: animation,
+                                        child: SlideTransition(
+                                          position: slide,
+                                          child: child,
+                                        ),
+                                      );
+                                    },
+                                    child: KeyedSubtree(
+                                      key: ValueKey(_detailRouteKey()),
+                                      child: _buildDetailView(),
+                                    ),
+                                  ),
+                                if (_showPageBusyOverlay)
+                                  _buildLoadingOverlay(),
+                                if (_biViewOpen)
+                                  Positioned.fill(
+                                    child: Material(
+                                      color: LhColors.mist,
+                                      child: LhBiViewPage(
+                                        initialDim: _biInitialDim(),
+                                        dims: _biDims(),
+                                        initialMetric: _sortField,
+                                        rangeLabel: _selectedRangeLabel,
+                                        periodLabel: _periodLabelFor(_period),
+                                        rowsFor: (d) =>
+                                            _bundle?.rowsOf(d) ??
+                                            const <Map<String, dynamic>>[],
+                                        metricsFor: _biMetricsFor,
+                                        metricValue: _rowMetricValue,
+                                        dimLabel: _biDimLabel,
+                                        categoriesFor: _biCategoriesFor,
+                                        metricDelta: _deltaFromEntityRow,
+                                        breakdownFor: _biBreakdownFor,
+                                        requestBreakdown: _biRequestBreakdown,
+                                        seriesFor: _biSeriesFor,
+                                        loading: _biDimLoading,
+                                        windowRowsFor: _biWindowRowsFor,
+                                        reportFor: _biReportFor,
+                                        reportBusy: _biReportBusyFor,
+                                        requestReport: _biRequestReport,
+                                        forecastFor: _biForecastCard,
+                                        onDimChanged: (d) {
+                                          if (!_kBiDims.contains(d)) return;
+                                          _biDim = d;
+                                          unawaited(_loadTab(d));
+                                          unawaited(_loadBiWindowRows(d));
+                                        },
+                                        onClose: _closeBiView,
+                                        topChrome: _buildBiTopChrome(),
+                                        periodBar: _buildPeriodBar(),
+                                      ),
+                                    ),
+                                  ),
+                                if (_biViewOpen && _biError != null)
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    top: 0,
+                                    child: _buildBiErrorBanner(),
+                                  ),
+                              ],
+                            ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -13778,9 +14787,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       },
       child: ListView(
         controller: _mainListScrollCtrl,
-        padding: EdgeInsets.only(
-          bottom: dunesAppBottomNavContentPadding(context, fallback: 16),
-        ),
+        // 可视区已在 build() 处避开悬浮 Tab；这里只留常规收尾间距。
+        padding: const EdgeInsets.only(bottom: 16),
         children: [
           _buildPanel(),
           if (_tab == 'analysis') _buildAnalysisView(),
@@ -16210,7 +17218,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         final reserved =
             76.0 +
             18.0 +
-            (_isCurrentMonthView && scale.isNotEmpty ? 24.0 : 0.0);
+            (_isCurrentMonthView && scale.isNotEmpty ? 36.0 : 0.0);
         final chartMax =
             chartMaxHeight ?? lighthouseCompactHeroChartMaxHeightWide;
         final chartH = (maxH - reserved).clamp(48.0, chartMax);
@@ -16253,7 +17261,21 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               : _deltaForMetric(altKey)?.pct,
           scaleForecast: scale.isEmpty
               ? null
-              : _monthPaceForecast(scaleKey, scale.last),
+              : _heroPaceForecast(scaleKey, scale.last),
+          profitForecast: profitSeries.isEmpty
+              ? null
+              : _heroPaceForecast(
+                  'profit',
+                  profitSeries.last,
+                  linearFallback: false,
+                ),
+          onOpenForecastReport: _paceDaily == null
+              ? null
+              : (profit) => _openForecastReport(
+                  profit ? 'profit' : scaleKey,
+                  profit ? '毛利' : scaleNameOf(scaleKey),
+                ),
+          paceDays: _monthPaceDays,
           partialPeriod: _periodInProgress,
           rangeLabel: _heroTrendRangeLabel(labels),
           title: _heroTrendTitle(),
@@ -21025,6 +22047,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       periodProfitDeltaPct: slot == 'profit' ? delta : null,
       periodScaleDeltaPct: slot == 'scale' ? delta : null,
       scaleForecast: slot == 'scale' ? paceForecast : null,
+      paceDays: isRate ? null : _monthPaceDays,
       valueIsRate: isRate,
       partialPeriod: _periodInProgress,
       rangeLabel: _heroTrendRangeLabel(labels),
@@ -22042,6 +23065,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           isRate: isRateLike,
                           periodValue: periodValue,
                           forecast: paceForecast,
+                          paceDays: isRateLike ? null : _monthPaceDays,
                           periodDeltaPct: apiDeltaPct,
                           partialPeriod: _periodInProgress,
                           chartHeight: 168,
@@ -33040,6 +34064,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     bool showHeader = true,
     String? soloMetricKey,
     ValueChanged<String?>? onSoloOverlayChanged,
+    bool showClearSolo = false,
   }) {
     final t = _resolvedRowTrend(r);
     if (t == null) return null;
@@ -33136,16 +34161,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       periodCostDeltaPct: _ledgerDelta(r, 'totalCost'),
       periodScaleAltDeltaPct: altKey.isEmpty ? null : _ledgerDelta(r, altKey),
       scaleForecast: scaleForecast,
+      paceDays: _monthPaceDays,
       partialPeriod: _periodInProgress,
       rangeLabel: t['rangeLabel']?.toString() ?? '',
       title: _kPeriodTitle[_period] ?? '趋势',
       showHeader: showHeader,
+      showScrubHint: false,
+      showClearSolo: showClearSolo,
+      emphasisColor: lighthouseLedgerTrendEmphasisColor(soloMetricKey),
       periodRevenue: periodRevenue,
       periodCost: periodCost,
       periodProfit: periodProfit,
       periodProfitDeltaPct: periodProfitDeltaPct,
       soloKey: overlaySlot,
-      formulaExpression: overlaySlot == null || soloMetricKey == null
+      formulaExpression:
+          !lighthouseHeroShowsFormulaBar ||
+              overlaySlot == null ||
+              soloMetricKey == null
           ? null
           : _heroFormula(soloMetricKey)?.expression,
       onSoloChanged: onSoloOverlayChanged == null
@@ -33216,13 +34248,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       scaleForecast: slot != 'scale' || series.isEmpty
           ? null
           : _monthPaceForecast(metricKey, series.last),
+      paceDays: _monthPaceDays,
       partialPeriod: _periodInProgress,
       rangeLabel: t['rangeLabel']?.toString() ?? '',
       title: _kPeriodTitle[_period] ?? '趋势',
       showHeader: showHeader,
-      showScrubHint: true,
+      showScrubHint: false,
+      showClearSolo: false,
+      emphasisColor: lighthouseLedgerTrendEmphasisColor(metricKey),
       valueIsRate: lighthouseHeroTrendChartIsRate(metricKey),
-      formulaExpression: _heroFormula(metricKey)?.expression,
+      formulaExpression: lighthouseHeroShowsFormulaBar
+          ? _heroFormula(metricKey)?.expression
+          : null,
     );
   }
 
@@ -34534,27 +35571,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     if (_tab == 'netTa' && soloMetricKey == null) {
       return _buildNetTAExpanded(r);
     }
+    final focus =
+        soloMetricKey != null &&
+            lighthouseLedgerMetricOpensSoloTrend(soloMetricKey)
+        ? soloMetricKey
+        : null;
+    // 线色跟着上面那格：规模紫、结果蓝。不另起「近7日走势」标题。
     final trendChart = _trendChartFor(
       r,
       showHeader: false,
-      soloMetricKey:
-          soloMetricKey != null &&
-              lighthouseLedgerMetricOpensSoloTrend(soloMetricKey)
-          ? soloMetricKey
-          : null,
+      soloMetricKey: focus,
       onSoloOverlayChanged: (next) => _setLedgerRowTrendFocus(trendKey, next),
     );
     final trendTab = _trendLookupTabForListRow();
     final trendFailed = trendTab != null && _trendErrors.containsKey(trendTab);
-    final headerTitle = _kPeriodTitle[_period] ?? '趋势';
-    final headerRange =
-        (_resolvedRowTrend(r) ?? (r['trend'] as Map?))?['rangeLabel']
-            ?.toString() ??
-        '';
-    final trendMeta = [
-      headerTitle,
-      if (headerRange.isNotEmpty) headerRange,
-    ].where((e) => e.isNotEmpty).join('  ·  ');
 
     // v14.2 · section 头统一成一个形态：2px 色条 + mono 10 UPPER + hairline
     //   + 右端元数据。和 hero stat rail 的 group() 逐参数一致 ——
@@ -34620,92 +35650,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         ? soloMetricKey
         : null;
     final railOpen = soloKey == null || _ledgerSoloRailOpen.contains(trendKey);
-
-    Widget soloHeader(String key) {
-      final label = _ledgerSummaryMetricLabel(key);
-      final isResult =
-          lighthouseLedgerUsesResultBlock &&
-          lighthouseLedgerIsResultMetric(key);
-      final accent = isResult
-          ? const Color(lighthouseLedgerResultBlockAccentValue)
-          : _LhPlum.primary;
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            width: 3,
-            height: 14,
-            decoration: BoxDecoration(
-              color: accent,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: 7),
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: LhTypography.sans(
-                size: 13,
-                color: LhColors.ink,
-                weight: FontWeight.w700,
-                height: 1.2,
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            headerTitle,
-            style: LhTypography.sans(
-              size: 10.5,
-              color: LhColors.mute,
-              weight: FontWeight.w500,
-              height: 1.2,
-            ),
-          ),
-          const Spacer(),
-          if (headerRange.isNotEmpty)
-            Text(
-              headerRange,
-              style: _tabular(
-                LhTypography.mono(
-                  size: 9.5,
-                  color: LhColors.mute2,
-                  weight: FontWeight.w600,
-                  height: 1.0,
-                ),
-              ),
-            ),
-          const SizedBox(width: 6),
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              HapticFeedback.selectionClick();
-              setState(() {
-                _expandedLedgerSolo.remove(trendKey);
-                _expandedTrends.remove(trendKey);
-                _ledgerSoloRailOpen.remove(trendKey);
-              });
-            },
-            child: Container(
-              width: 22,
-              height: 22,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                color: Color(lighthouseLedgerSummaryNeutralPanelValue),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.close_rounded,
-                size: 13,
-                color: LhColors.mute,
-              ),
-            ),
-          ),
-        ],
-      );
-    }
 
     Widget railToggle() {
       return GestureDetector(
@@ -34792,18 +35736,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     const SizedBox(height: 18),
                   ],
 
-                  // ── § 走势 —— 展开后第一眼看到的东西 ────────────────
-                  //   用户点开这一行的动机是「它最近怎么样」，不是「再看
-                  //   一遍数字」。数字上方账本行里已经有了，折线是这里唯一
-                  //   的新信息，所以排第一。
-                  //   v14.2 · 删掉右上角「收起 ⌃」—— 行首 chevron 已经能
-                  //   收起，同一个动作两个入口，而且那个入口是紫色的，
-                  //   在一个以看折线为目的的面板里抢注意力。
-                  if (soloKey != null)
-                    soloHeader(soloKey)
-                  else
-                    sec('走势', _LhPlum.primary, trailing: trendMeta),
-                  SizedBox(height: soloKey != null ? 10 : 12),
                   if (trendChart != null)
                     trendChart
                   else

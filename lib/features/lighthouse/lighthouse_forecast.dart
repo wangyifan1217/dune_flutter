@@ -30,7 +30,27 @@ class LighthousePaceForecast {
     required this.forecast,
     required this.elapsedDays,
     required this.totalDays,
+    this.lo,
+    this.hi,
+    this.beatPrevProb,
+    this.modelMape,
+    this.linearMape,
+    this.byModel = false,
   });
+
+  /// v2 模型给的 80% 区间（线性外推没有区间，为 null）。
+  final double? lo;
+  final double? hi;
+
+  /// 本月超过上月全月的概率 0~1。
+  final double? beatPrevProb;
+
+  /// 回测平均误差率：当前所用算法 / 线性外推（0.021 = 2.1%）。
+  final double? modelMape;
+  final double? linearMape;
+
+  /// true = 数学模型（lighthouse_forecast_model.dart）；false = 线性日均外推。
+  final bool byModel;
 
   /// 本月已发生规模（实线末端的值）。
   final double actual;

@@ -455,7 +455,11 @@ class LhBiViewPage extends StatefulWidget {
     this.reportFor,
     this.reportBusy,
     this.requestReport,
+    this.forecastFor,
   });
+
+  /// 月末预测 · 量化报告卡（宿主构建）。只对产品 / 供给 / 渠道返回非空。
+  final Widget? Function(String dim)? forecastFor;
 
   /// 打开时停在哪个维度。
   final String initialDim;
@@ -800,6 +804,10 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                 _heroCard(items),
                 const SizedBox(height: lighthouseHeroCardGap),
                 _statRow(items),
+                if (widget.forecastFor?.call(_dim) case final fc?) ...[
+                  const SizedBox(height: lighthouseHeroCardGap),
+                  fc,
+                ],
                 const SizedBox(height: lighthouseHeroCardGap),
                 _compositionCard(items),
                 if (_showTable) ...[

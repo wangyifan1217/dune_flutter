@@ -896,6 +896,8 @@ String lighthouseCostBillChartLabel(Map<String, String> item) {
 }
 
 /// 趋势图 X 轴：每个数据点都标日期，不做稀疏采样（避免 8.22 / 8.25 等中间日期空白）。
+///
+/// 日序列和主 Hero 同一套短标签：整段都在同一个月时只写 `.16`，换月那一格才写 `9.01`。
 (List<String>, List<int>) lighthouseTrendXAxisLabels(
   List<String> labels,
   int pointCount,
@@ -905,9 +907,50 @@ String lighthouseCostBillChartLabel(Map<String, String> item) {
     return (const <String>[], const <int>[]);
   }
   return (
-    [for (final label in labels) lighthouseHeroCompactPeriodLabel(label)],
+    lighthouseTrendDayAxisLabels([
+      for (final label in labels) lighthouseHeroCompactPeriodLabel(label),
+    ]),
     List<int>.generate(count, (i) => i),
   );
+}
+
+final RegExp _lighthouseTrendDayLabel = RegExp(r'^(\d{1,2})\.(\d{1,2})$');
+
+/// 日轴短标签。不是 `M.dd` 的标签（`02月`、周/季）原样返回。
+List<String> lighthouseTrendDayAxisLabels(List<String> labels) {
+  if (labels.isEmpty) return labels;
+  final parsed = <({int month, int day})>[];
+  for (final raw in labels) {
+    final match = _lighthouseTrendDayLabel.firstMatch(raw.trim());
+    if (match == null) return labels;
+    final month = int.tryParse(match.group(1)!);
+    final day = int.tryParse(match.group(2)!);
+    if (month == null ||
+        day == null ||
+        month < 1 ||
+        month > 12 ||
+        day < 1 ||
+        day > 31) {
+      return labels;
+    }
+    parsed.add((month: month, day: day));
+  }
+  String dayOnly(int day) => '.${day.toString().padLeft(2, '0')}';
+  final months = {for (final item in parsed) item.month};
+  if (months.length == 1) {
+    return [for (final item in parsed) dayOnly(item.day)];
+  }
+  final out = <String>[];
+  int? prev;
+  for (final item in parsed) {
+    if (prev == null || item.month != prev) {
+      out.add('${item.month}.${item.day.toString().padLeft(2, '0')}');
+    } else {
+      out.add(dayOnly(item.day));
+    }
+    prev = item.month;
+  }
+  return out;
 }
 
 /// 供给卡片资金池展开：右侧独立全高点击条（不缩放，保证手机好点）。
@@ -4316,6 +4359,19 @@ String lighthouseLedgerSummaryMetricTone(String key) => switch (key) {
 /// 「结果」指标 —— 经营性净现金流 / 净TA / 毛利润。
 bool lighthouseLedgerIsResultMetric(String key) =>
     lighthouseLedgerSummaryMetricTone(key) != 'neutral';
+
+/// 账本走势的强调色，跟上面那格同一套：
+/// 右列结果格（现金流 / 毛利）用结果蓝，左列规模和成本用主 Hero 的紫。
+Color lighthouseLedgerTrendEmphasisColor(String? metricKey) {
+  if (metricKey != null && lighthouseLedgerIsResultMetric(metricKey)) {
+    return const Color(lighthouseLedgerResultBlockAccentValue);
+  }
+  return const Color(lighthouseScaleAccentValue);
+}
+
+/// 强调色写在数字上时收一点墨，避免淡蓝、淡紫在白底上发飘。
+Color lighthouseTrendEmphasisInk(Color accent) =>
+    Color.lerp(accent, const Color(0xFF1C1917), 0.32)!;
 
 /// v19 · 结果区分块。
 ///

@@ -2741,6 +2741,7 @@ class ConversationService {
           raw['isDissolved'] == true ||
           raw['status']?.toString() == 'DISSOLVED' ||
           raw['frozen'] == true,
+      replySla: raw['replySla'] == true,
       membershipStatus: (raw['membershipStatus'] ?? raw['memberStatus'])
           ?.toString(),
       assistantGenerating: raw['assistantGenerating'] == true,

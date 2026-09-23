@@ -20,6 +20,7 @@ class NativeConversation {
     this.peerAvatarUrl,
     this.avatarMembers = const <ConversationAvatarMember>[],
     this.dissolved = false,
+    this.replySla = false,
     this.membershipStatus,
     this.assistantGenerating = false,
     this.assistantGeneratingStatus = '',
@@ -53,6 +54,9 @@ class NativeConversation {
   final String? peerAvatarUrl;
   final List<ConversationAvatarMember> avatarMembers;
   final bool dissolved;
+
+  /// 上线后新建、建群时选了「工作群」的会话（服务端 reply_sla）。
+  final bool replySla;
   final String? membershipStatus;
   final bool assistantGenerating;
   final String assistantGeneratingStatus;
@@ -75,6 +79,9 @@ class NativeConversation {
   bool get isBroadcast => kind == 'BROADCAST';
   bool get isWorkgroupApproval => kind == 'WORKGROUP_APPROVAL';
   bool get isGroup => kind == 'WORKGROUP' || kind == 'GROUP';
+
+  /// 已读不回工作群：列表/顶栏/群资料显示「工作群」标识。旧 WORKGROUP、审批群不算。
+  bool get isReplySlaWorkgroup => kind == 'WORKGROUP' && replySla;
   bool get isRobot => kind == 'ROBOT';
   bool get isApprovalAssistant => kind == 'APPROVAL_ASSISTANT';
   bool get isTaskAssistant => kind == 'TASK_ASSISTANT';

@@ -359,6 +359,7 @@ abstract final class ConversationInboxRealtime {
       peerAvatarUrl: c.peerAvatarUrl,
       avatarMembers: c.avatarMembers,
       dissolved: c.dissolved,
+      replySla: c.replySla,
       membershipStatus: c.membershipStatus,
       assistantGenerating: c.assistantGenerating,
       assistantGeneratingStatus: c.assistantGeneratingStatus,

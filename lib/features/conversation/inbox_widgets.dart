@@ -1146,6 +1146,7 @@ class ChatInboxRow extends StatelessWidget {
     this.showDivider = true,
     this.previewGenerating = false,
     this.selected = false,
+    this.workgroupTag = false,
     this.robotAvatar,
     this.mentionLabel,
     this.imStatus,
@@ -1177,6 +1178,9 @@ class ChatInboxRow extends StatelessWidget {
   final bool showDivider;
   final bool previewGenerating;
   final bool selected;
+
+  /// 已读不回工作群（reply_sla）：标题旁「工作群」文字标签。
+  final bool workgroupTag;
   final Widget? robotAvatar;
 
   /// 群聊未读 @ 提示，如 `[@了你]`，不受后续消息预览覆盖。
@@ -1287,6 +1291,10 @@ class ChatInboxRow extends StatelessWidget {
                                       ),
                                     ),
                                   ),
+                                  if (workgroupTag) ...[
+                                    const SizedBox(width: 6),
+                                    const WorkgroupTag(),
+                                  ],
                                   if (ImUserStatusCatalog.showsBadge(
                                     imStatus,
                                   )) ...[
@@ -2040,6 +2048,34 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
           ),
         ),
       ],
+    );
+  }
+}
+
+
+/// 已读不回工作群的文字标识（列表 / 顶栏共用）。只给 reply_sla 新工作群用。
+class WorkgroupTag extends StatelessWidget {
+  const WorkgroupTag({super.key, this.fontSize = 9.5});
+
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: DunesColors.accent.withValues(alpha: 0.5)),
+        color: DunesColors.accentSoft,
+      ),
+      child: Text(
+        '工作群',
+        style: DunesTypography.sans(
+          fontSize: fontSize,
+          fontWeight: FontWeight.w600,
+          color: DunesColors.accent,
+        ),
+      ),
     );
   }
 }

@@ -3401,6 +3401,7 @@ class _NativeChatViewState extends State<NativeChatView>
       peerAvatarPreset: contact.avatarPreset ?? conv.peerAvatarPreset,
       peerAvatarObjectKey: contact.avatarObjectKey ?? conv.peerAvatarObjectKey,
       dissolved: conv.dissolved,
+      replySla: conv.replySla,
       membershipStatus: conv.membershipStatus,
       assistantGenerating: conv.assistantGenerating,
       assistantGeneratingStatus: conv.assistantGeneratingStatus,
@@ -9198,6 +9199,13 @@ class _NativeChatViewState extends State<NativeChatView>
     final memberLabel = conv.memberCount > 0 ? '${conv.memberCount} 人' : '';
     final subtitle = _isPrivate
         ? _privateHeaderSubtitle(conv)
+        : conv.isReplySlaWorkgroup
+        // 已读不回工作群：顶栏明示「工作群」。
+        ? (conv.dissolved
+              ? '已解散 · 工作群'
+              : memberLabel.isEmpty
+              ? '工作群'
+              : '工作群 · $memberLabel')
         : memberLabel.isEmpty
         ? '群聊'
         : memberLabel;

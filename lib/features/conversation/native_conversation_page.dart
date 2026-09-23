@@ -1636,6 +1636,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
             )
           : null,
       sysTag: c.businessType,
+      workgroupTag: c.isReplySlaWorkgroup,
       mentionLabel: selected ? null : c.unreadMentionLabel,
       imStatus: c.isPrivate && !c.isSelfMemo ? c.peerImStatus : null,
       imStatusText: c.isPrivate && !c.isSelfMemo ? c.peerImStatusText : null,

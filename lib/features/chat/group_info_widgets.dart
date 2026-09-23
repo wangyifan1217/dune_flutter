@@ -474,6 +474,8 @@ List<NativeGroupMember> sortGroupMembers(List<NativeGroupMember> members) {
 String groupInfoHeroSubtitle(NativeGroupInfo info) {
   final bits = <String>[];
   if (info.dissolved) bits.add('已解散');
+  // 已读不回工作群（reply_sla）才标；旧 WORKGROUP / 普通群 / 审批群外观不变。
+  if (info.replySla && info.kind.toUpperCase() == 'WORKGROUP') bits.add('工作群');
   bits.add('${info.members.length} 名成员');
   return bits.join(' · ');
 }

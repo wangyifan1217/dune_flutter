@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>工作群已读不回 · 全部状态</title>
+  <style>
+    :root {
+      --bg-page: #F4F1EA;
+      --bg-app: #FBFAF6;
+      --bg-soft: #F2EFE7;
+      --border: #DAD5C7;
+      --border-soft: #E5E1D3;
+      --text: #1F2421;
+      --text2: #5A5C56;
+      --text3: #94938A;
+      --accent: #2F5D62;
+      --accent-soft: #E4ECEB;
+      --purple: #7B5CD8;
+      --purple-soft: #F3EEFA;
+      --purple-line: #C2AEE7;
+      --read: #2E7544;
+      --pending: #D4380D;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg-page);
+      color: var(--text);
+      font-family: "PingFang SC", "Noto Sans SC", "Geist", sans-serif;
+    }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 20px 64px; }
+    h1 { font-size: 22px; font-weight: 650; margin: 0 0 6px; }
+    .lead { color: var(--text2); font-size: 13.5px; line-height: 1.55; margin: 0 0 22px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--bg-app);
+      border: 1px solid var(--border-soft);
+      border-radius: 14px;
+      padding: 16px 16px 14px;
+    }
+    .card h2 {
+      margin: 0 0 4px;
+      font-size: 14px;
+      font-weight: 650;
+    }
+    .hint { color: var(--text3); font-size: 12px; margin: 0 0 12px; line-height: 1.45; }
+    .thread {
+      background: var(--bg-soft);
+      border-radius: 12px;
+      padding: 14px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .row { display: flex; gap: 8px; align-items: flex-start; }
+    .row.mine { flex-direction: row-reverse; }
+    .avatar {
+      width: 32px; height: 32px; border-radius: 10px;
+      background: #c9d6d4; color: var(--accent);
+      font-size: 12px; font-weight: 650;
+      display: flex; align-items: center; justify-content: center;
+      flex: 0 0 32px;
+    }
+    .avatar.me { background: var(--accent-soft); }
+    .col { max-width: 78%; }
+    .row.mine .col { display: flex; flex-direction: column; align-items: flex-end; }
+    .name { font-size: 11px; color: var(--text3); margin: 0 0 4px 2px; }
+    .bubble {
+      border: 1px solid var(--border-soft);
+      background: var(--bg-app);
+      border-radius: 4px 12px 12px 12px;
+      padding: 9px 13px;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .row.mine .bubble {
+      background: var(--accent-soft);
+      border-radius: 12px 4px 12px 12px;
+    }
+    .at { color: var(--accent); font-weight: 600; }
+    .meta {
+      margin-top: 6px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .row.mine .meta { justify-content: flex-end; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 3px;
+      padding: 3px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(47,93,98,.35);
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 11px; font-weight: 650;
+      font-family: "Geist Mono", ui-monospace, monospace;
+    }
+    .st {
+      font-size: 10.5px; font-weight: 500;
+      font-family: "Geist Mono", ui-monospace, monospace;
+    }
+    .unread, .void { color: var(--text3); }
+    .pending { color: var(--pending); }
+    .replied { color: var(--read); }
+    .tag {
+      display: inline-block;
+      font-size: 11px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: var(--bg-soft);
+      color: var(--text2);
+      margin-left: 6px;
+      font-weight: 500;
+    }
+    .wide { grid-column: 1 / -1; }
+    .dialog {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      background: #fff;
+      max-width: 420px;
+    }
+    .dialog h3 { margin: 0 0 8px; font-size: 16px; }
+    .opt {
+      border: 1px solid var(--border-soft);
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-top: 8px;
+      display: flex; gap: 8px;
+    }
+    .opt.on {
+      border-color: var(--purple);
+      background: var(--purple-soft);
+    }
+    .opt b { display: block; font-size: 15px; }
+    .opt span { color: var(--text2); font-size: 12.5px; line-height: 1.35; }
+    .dot {
+      width: 16px; height: 16px; border-radius: 50%;
+      border: 2px solid #B0B4BD; margin-top: 3px; flex: 0 0 16px;
+    }
+    .opt.on .dot { border-color: var(--purple); background: var(--purple); box-shadow: inset 0 0 0 3px var(--purple-soft); }
+    .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+    .ghost { border: 0; background: none; color: var(--text2); padding: 6px 10px; }
+    .fill {
+      border: 0; background: var(--purple); color: #fff;
+      padding: 6px 14px; border-radius: 8px; font-weight: 600;
+    }
+    .legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 8px; }
+    .legend i { font-style: normal; font-family: ui-monospace, monospace; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+    th { color: var(--text3); font-weight: 550; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>工作群已读不回 · 全部状态</h1>
+    <p class="lead">
+      只出现在上线后新建、勾选「工作群」的群。普通群 / 旧群 / 审批群没有这些标记。
+      按钮只给被 @ 的人；时长给被 @ 的人和原发送人。点「回复此条」本身不算回复，发出引用才算。
+    </p>
+
+    <div class="grid">
+      <section class="card">
+        <h2>被 @ 的人看到的<span class="tag">receiver</span></h2>
+        <p class="hint">消息旁出「回复此条」；未读 / 已读未回都可以点。回了或失效后按钮消失。</p>
+        <div class="thread">
+          <div class="row">
+            <div class="avatar">上</div>
+            <div class="col">
+              <div class="name">直属上级</div>
+              <div class="bubble"><span class="at">@我</span> 这份对账今天下班前给一下</div>
+              <div class="meta">
+                <span class="btn">↩ 回复此条</span>
+                <span class="st unread">未读</span>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="avatar">上</div>
+            <div class="col">
+              <div class="name">直属上级</div>
+              <div class="bubble"><span class="at">@我</span> 已读但还没回 · 刚过 40 秒</div>
+              <div class="meta">
+                <span class="btn">↩ 回复此条</span>
+                <span class="st pending">已读 · 未回复 不足1分钟</span>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="avatar">隔</div>
+            <div class="col">
+              <div class="name">隔级上级</div>
+              <div class="bubble"><span class="at">@我</span> 已读未回 1 小时 20 分</div>
+              <div class="meta">
+                <span class="btn">↩ 回复此条</span>
+                <span class="st pending">已读 · 未回复 1h20m</span>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="avatar">总</div>
+            <div class="col">
+              <div class="name">总裁办</div>
+              <div class="bubble"><span class="at">@我</span> 已用引用回复关掉义务</div>
+              <div class="meta">
+                <span class="st replied">已回复 · 用时 8m</span>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="avatar">上</div>
+            <div class="col">
+              <div class="name">直属上级</div>
+              <div class="bubble"><span class="at">@我</span> 原消息撤回 / 离群 / 解散</div>
+              <div class="meta">
+                <span class="st void">已失效 · 未回复 2h</span>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="avatar">上</div>
+            <div class="col">
+              <div class="name">直属上级</div>
+              <div class="bubble"><span class="at">@我</span> 未读时群已解散，按钮不再出</div>
+              <div class="meta">
+                <span class="st void">已失效</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>发送人看到的<span class="tag">sender</span></h2>
+        <p class="hint">自己发的 @，底下只出「@姓名 + 状态」，没有「回复此条」。一条 @ 多人会多行。</p>
+        <div class="thread">
+          <div class="row mine">
+            <div class="avatar me">我</div>
+            <div class="col">
+              <div class="bubble"><span class="at">@王奕凡</span> 对方还没打开会话</div>
+              <div class="meta"><span class="st unread">@王奕凡 未读</span></div>
+            </div>
+          </div>
+          <div class="row mine">
+            <div class="avatar me">我</div>
+            <div class="col">
+              <div class="bubble"><span class="at">@王奕凡</span> 对方已读，还没引用回复</div>
+              <div class="meta"><span class="st pending">@王奕凡 已读 · 未回复 25m</span></div>
+            </div>
+          </div>
+          <div class="row mine">
+            <div class="avatar me">我</div>
+            <div class="col">
+              <div class="bubble"><span class="at">@王奕凡</span> 对方已引用回复</div>
+              <div class="meta"><span class="st replied">@王奕凡 已回复 · 用时 12m</span></div>
+            </div>
+          </div>
+          <div class="row mine">
+            <div class="avatar me">我</div>
+            <div class="col">
+              <div class="bubble"><span class="at">@王奕凡 @林先敏</span> 只对有上下级关系的人生效</div>
+              <div class="meta" style="flex-direction:column;align-items:flex-end;gap:4px">
+                <span class="st pending">@王奕凡 已读 · 未回复 1h20m</span>
+                <span class="st unread" style="opacity:.7">林先敏是同事，不产生义务，没有这一行</span>
+              </div>
+            </div>
+          </div>
+          <div class="row mine">
+            <div class="avatar me">我</div>
+            <div class="col">
+              <div class="bubble"><span class="at">@王奕凡</span> 群已解散 / 对方离群 / 我撤回</div>
+              <div class="meta"><span class="st void">@王奕凡 已失效 · 未回复 36m</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>建群选择<span class="tag">创建后不可改</span></h2>
+        <p class="hint">默认普通群。工作群才会打 reply_sla。取消则不建群。</p>
+        <div class="dialog">
+          <h3>确认创建群聊</h3>
+          <div style="font-size:13.5px;color:var(--text2)">将与 王奕凡、林先敏共 2 人创建群聊，是否继续？</div>
+          <div style="margin:12px 0 0;font-size:13px;color:var(--text2)">群类型（创建后不可修改）</div>
+          <div class="opt on">
+            <div class="dot"></div>
+            <div>
+              <b>普通群</b>
+              <span>日常沟通，与现在的群聊一样。不记已读不回。</span>
+            </div>
+          </div>
+          <div class="opt">
+            <div class="dot"></div>
+            <div>
+              <b>工作群</b>
+              <span>直属上级、隔级上级或总裁办 @ 你时，需要点「回复此条」引用回复，系统会记录已读未回复时长。</span>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="ghost">取消</button>
+            <button class="fill">创建</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>不算、不出现</h2>
+        <p class="hint">这些情况和现在一样，气泡下没有按钮、没有时长。</p>
+        <div class="thread">
+          <div class="row">
+            <div class="avatar">同</div>
+            <div class="col">
+              <div class="name">同事</div>
+              <div class="bubble"><span class="at">@我</span> 同事互 @ · 不产生义务</div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="avatar">上</div>
+            <div class="col">
+              <div class="name">上级</div>
+              <div class="bubble"><span class="at">@所有人</span> 正文含「@所有人」整条跳过</div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="avatar">上</div>
+            <div class="col">
+              <div class="name">上级 · 普通群</div>
+              <div class="bubble"><span class="at">@我</span> 普通群 / 旧工作群 / 审批群</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card wide">
+        <h2>状态与时长口径</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>状态</th>
+              <th>何时</th>
+              <th>文案</th>
+              <th>颜色</th>
+              <th>「回复此条」</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>UNREAD</td>
+              <td>义务已建，游标还没越过这条</td>
+              <td class="st unread">未读</td>
+              <td>灰 text3</td>
+              <td>有（群未解散）</td>
+            </tr>
+            <tr>
+              <td>PENDING</td>
+              <td>已读，还没发出引用回复</td>
+              <td class="st pending">已读 · 未回复 1h20m</td>
+              <td>红 #D4380D</td>
+              <td>有</td>
+            </tr>
+            <tr>
+              <td>REPLIED</td>
+              <td>发出带 quote.messageId 的回复</td>
+              <td class="st replied">已回复 · 用时 8m</td>
+              <td>绿已读色</td>
+              <td>无</td>
+            </tr>
+            <tr>
+              <td>VOID</td>
+              <td>撤回原消息 / 解散 / 被 @ 人离群</td>
+              <td class="st void">已失效 或 已失效 · 未回复 2h</td>
+              <td>灰 text3</td>
+              <td>无</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="legend">
+          <span>时长：<i>不足1分钟</i> / <i>25m</i> / <i>1h20m</i> / <i>2天3h</i></span>
+          <span>PENDING 会按本地时间往上加；其余冻结在 unrepliedSeconds</span>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

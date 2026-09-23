@@ -43,16 +43,12 @@ class LighthouseForecastReportSheet extends StatelessWidget {
     this.productMetric = 'verify',
   });
 
-  /// 月末结构预测：按维度（product / supply / channel）异步拉数并打分。
-  final Future<LighthouseOrdinalBundle?> Function(String dim)? ordinalLoader;
-
-  /// 分产品一节默认显示的指标：verify / sales / revenue / profit。
-  final String productMetric;
-
   final LighthouseForecastReport report;
   final String metricLabel;
   final bool profit;
   final Color accent;
+  final Future<LighthouseOrdinalBundle?> Function(String dim)? ordinalLoader;
+  final String productMetric;
 
   Color get _ink {
     if (!profit) return accent;

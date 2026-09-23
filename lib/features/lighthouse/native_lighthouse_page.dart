@@ -2244,7 +2244,9 @@ class _TrendLinesPainter extends CustomPainter {
     // v18 · 只要主线是毛利，就一律赚红亏绿 —— 账本展开图也不再锁家族色。
     //   其余指标（规模 / 收入 / 成本）不分红绿，保持强调紫。
     final heroColor = profitHero && heroPts.isNotEmpty
-        ? (lighthouseTrendValueEarns(heroPts.last) ? LhColors.neg : LhColors.pos)
+        ? (lighthouseTrendValueEarns(heroPts.last)
+              ? LhColors.neg
+              : LhColors.pos)
         : heroSpec.color;
     final fc = scaleForecast;
     final partial = _trendIsPartial(
@@ -2269,10 +2271,10 @@ class _TrendLinesPainter extends CustomPainter {
     //   区别只剩「能不能往前拖」。
     // v18 · 毛利跟其他走势同一种画法，只是颜色：正红负绿，跨零按零轴裁成两段。
     final signSplit = lighthouseTrendSignSplit(
-          heroIndex: heroIndex,
-          min: heroBounds.min,
-          max: heroBounds.max,
-        );
+      heroIndex: heroIndex,
+      min: heroBounds.min,
+      max: heroBounds.max,
+    );
     final zeroAxisY = signSplit ? yOf(0, heroBounds) : 0.0;
     final earnColor = LhColors.neg; // 赚 = 红
     final loseColor = LhColors.pos; // 亏 = 绿
@@ -2639,13 +2641,19 @@ class _TrendLinesPainter extends CustomPainter {
             topRight: r,
           ),
           Paint()
-            ..shader = LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [heroColor.withAlpha(215), heroColor.withAlpha(120)],
-            ).createShader(
-              Rect.fromLTRB(lastX - colW / 2, actY, lastX + colW / 2, plotBottom),
-            ),
+            ..shader =
+                LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [heroColor.withAlpha(215), heroColor.withAlpha(120)],
+                ).createShader(
+                  Rect.fromLTRB(
+                    lastX - colW / 2,
+                    actY,
+                    lastX + colW / 2,
+                    plotBottom,
+                  ),
+                ),
         );
       }
       // ③ 上个完整月 → 月末预测
@@ -2976,12 +2984,12 @@ class _TrendOverlayPainter extends CustomPainter {
           paceForecastPicked
               ? fcY
               : math.max(
-            fcY,
-            yOf(
-              heroPts[si],
-              heroSpec.range,
-            ).clamp(plotTop, plotBottom).toDouble(),
-          ),
+                  fcY,
+                  yOf(
+                    heroPts[si],
+                    heroSpec.range,
+                  ).clamp(plotTop, plotBottom).toDouble(),
+                ),
           heroSpec.color,
         );
       } else {
@@ -8224,9 +8232,7 @@ class _TrendChartState extends State<_TrendChart>
         final includesLatest = hi == n - 1;
         final forecast = !includesLatest
             ? null
-            : (vis[3]
-                  ? widget.scaleForecast?.forecast
-                  : profitFc);
+            : (vis[3] ? widget.scaleForecast?.forecast : profitFc);
         // v2 模型的 80% 区间：图上当月那一列画一根须线。
         final band = !includesLatest
             ? null
@@ -8715,7 +8721,10 @@ class _TrendChartState extends State<_TrendChart>
             if (widget.onOpenForecastReport != null) ...[
               const SizedBox(width: 6),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 5,
+                  vertical: 1.5,
+                ),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(color: accent.withAlpha(90), width: 0.6),
@@ -10743,7 +10752,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 默认展开分类：Row2；供给/渠道下再跟 HUN 方框。再点当前维可收起。
   bool _tabBarShowsGroups = true;
   String _hunFilter = '全部'; // '全部' | 'U' | 'N' | 'H' | '混合' — 仅 supply/channel
-  String _tradeTypeFilter = '全部'; // 全部 | 普通交易 | 权益交易 — 仅 supply
+  String _tradeTypeFilter = '全部'; // 全部 | 普通交易 | 权益交易 | 权益收入 — 仅 supply
   String _anomalyFilter = '全部'; // 亏损 / ROI低于目标 / 成本异常 / 利差倒挂
   final Set<String> _expandedTrends = {}; // 列表行折线默认收起；点「走势」加入此集后展开
   /// 账本行点指标格时，只展开那一条走势。key 同 [_expandedTrends]。
@@ -13055,7 +13064,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           group: _groupFilter,
           count: 90,
         );
-        final keys = (data['keys'] as List?)?.map((e) => '$e').toList() ??
+        final keys =
+            (data['keys'] as List?)?.map((e) => '$e').toList() ??
             const <String>[];
         if (keys.isEmpty) break;
         final series = data['series'] is Map
@@ -13192,7 +13202,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final scaleKey = preferVerified ? 'verifiedSales' : 'sales';
     final scaleName = preferVerified ? '核销规模' : '销售规模';
     final series = _seriesForMetric(scaleKey);
-    final pace = series.isEmpty ? null : _heroPaceForecast(scaleKey, series.last);
+    final pace = series.isEmpty
+        ? null
+        : _heroPaceForecast(scaleKey, series.last);
     final canOpen = pace != null && _paceDaily != null;
     String money(double v) =>
         '${v < 0 ? '−' : ''}${_fmtMoney(v.abs())}${_unitMoney(v.abs())}';
@@ -13242,7 +13254,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     ? () => _openForecastReport(scaleKey, scaleName)
                     : null,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: canOpen ? LhBiPlum.primary : LhColors.mist,
                     borderRadius: BorderRadius.circular(6),
@@ -13299,7 +13314,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               _isCurrentMonthView
                   ? '整体月末预测还在计算（日数据加载中）。'
                   : '整体月末预测只在「月 · 本月」下计算；下面的$dimName结构预测始终按本月截至昨天。',
-              style: LhTypography.mono(size: 9, color: LhColors.mute2, height: 1.5),
+              style: LhTypography.mono(
+                size: 9,
+                color: LhColors.mute2,
+                height: 1.5,
+              ),
             ),
           const SizedBox(height: 10),
           const ColoredBox(color: LhColors.line2, child: SizedBox(height: 0.5)),
@@ -13555,8 +13574,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       rows = rows.where((r) => _hunOf(r).primary == match).toList();
     }
     if (_tab == 'supply' && _tradeTypeFilter != '全部') {
-      final groups = lighthouseFallbackGroupSupplyRows(rows);
-      rows = _tradeTypeFilter == '权益交易' ? groups.equity : groups.normal;
+      rows = rows
+          .where((row) => lighthouseProductTradeFlagOf(row) == _tradeTypeFilter)
+          .toList();
     }
     return List<Map<String, dynamic>>.from(rows);
   }
@@ -25067,7 +25087,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             filterRow(
               kicker: '类型',
               divider: true,
-              cells: const ['全部', '普通交易', '权益交易']
+              cells: const ['全部', '普通交易', '权益交易', '权益收入']
                   .map(
                     (value) => _filterPill(
                       label: value,

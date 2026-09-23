@@ -17,6 +17,7 @@ import 'conversation_mention_utils.dart';
 import 'conversation_models.dart';
 import 'im_user_status.dart';
 import 'message_preview_text.dart';
+import 'reply_sla_models.dart';
 
 /// 上传分块大小：把文件切成小块逐块写入，配合 socket 背压才能得到真实的
 /// 上传进度（直接用 fromBytes 会一次性吐出全部字节导致进度瞬间到 100%）。
@@ -358,6 +359,8 @@ class ConversationService {
     required String kind,
     required List<int> memberUserIds,
     String? title,
+    // 建群选「工作群」时为 true：服务端打 reply_sla 标记，启用已读不回计时。
+    bool replySla = false,
   }) async {
     final ids = memberUserIds
         .where((id) => id > 0 && id != _session.userId)
@@ -373,6 +376,7 @@ class ConversationService {
             ? (kind == 'PRIVATE' ? '私聊' : '群聊')
             : title!.trim(),
         'memberUserIds': ids,
+        if (replySla) 'replySla': true,
       }),
     );
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
@@ -2010,6 +2014,27 @@ class ConversationService {
     final body = _decode(resp.body);
     final data = body['data'];
     return _statusRowsFromPayload(data);
+  }
+
+  /// 工作群已读不回：与我相关的回复义务。未启用或失败返回 [ReplySlaSnapshot.empty]。
+  Future<ReplySlaSnapshot> fetchReplySla(int conversationId) async {
+    try {
+      final resp = await _client.get(
+        _uri('/conversations/$conversationId/reply-sla'),
+        headers: _headers,
+      );
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        return ReplySlaSnapshot.empty;
+      }
+      final body = _decode(resp.body);
+      final data = body['data'];
+      if (body['success'] == false || data is! Map<String, dynamic>) {
+        return ReplySlaSnapshot.empty;
+      }
+      return ReplySlaSnapshot.fromJson(data);
+    } catch (_) {
+      return ReplySlaSnapshot.empty;
+    }
   }
 
   Future<NativeGroupInfo> fetchGroupInfo(int conversationId) async {

@@ -15,6 +15,7 @@ import 'features/chat/chat_image_preview_window_stub.dart'
 import 'features/desktop/desktop_esc_minimize.dart';
 import 'features/desktop/windows_desktop_tray.dart';
 import 'features/push/push_service.dart';
+import 'features/conversation/reply_sla_gallery_page.dart';
 import 'features/shell/splash_screen.dart';
 import 'features/xflow/xflow_service.dart';
 import 'features/drive/native_drive_share_page.dart';
@@ -81,6 +82,9 @@ Widget _initialHome() {
         segments[1] == 'drive') {
       final token = segments[2].trim();
       if (token.isNotEmpty) return NativeDriveSharePage(token: token);
+    }
+    if (Uri.base.queryParameters['gallery'] == 'reply-sla') {
+      return const ReplySlaGalleryPage();
     }
   }
   return const AppBootGate();

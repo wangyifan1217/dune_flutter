@@ -12,6 +12,7 @@ import '../conversation/conversation_realtime_hub.dart';
 import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
 import '../shell/dunes_toast.dart';
+import 'group_type_picker.dart';
 import 'user_avatar_widget.dart';
 
 class NativeNewChatPage extends StatefulWidget {
@@ -242,31 +243,18 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
       return;
     }
     final creatingGroup = _mode != _NewChatMode.private && ids.length >= 2;
+    NewGroupType? groupType;
     if (creatingGroup) {
       final previewNames = ids
           .take(3)
           .map((id) => _contactById(id)?.displayName ?? '成员')
           .join('、');
       final more = ids.length > 3 ? ' 等' : '';
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('确认创建群聊'),
-          content: Text('将与 $previewNames$more共 ${ids.length} 人创建群聊，是否继续？'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF7B5CD8)),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('创建'),
-            ),
-          ],
-        ),
+      groupType = await showCreateGroupTypeDialog(
+        context,
+        membersText: '将与 $previewNames$more共 ${ids.length} 人创建群聊，是否继续？',
       );
-      if (ok != true || !mounted) return;
+      if (groupType == null || !mounted) return;
     }
     setState(() => _creating = true);
     try {
@@ -279,9 +267,10 @@ class _NativeNewChatPageState extends State<NativeNewChatPage> {
       }
       final title = ids.take(3).map((id) => _contactById(id)?.displayName ?? '成员').join('、');
       final conversation = await _conversationService.createConversation(
-        kind: 'WORKGROUP',
+        kind: (groupType ?? NewGroupType.normal).kind,
         memberUserIds: ids,
         title: title.isEmpty ? '群聊' : title,
+        replySla: (groupType ?? NewGroupType.normal).replySla,
       );
       if (!mounted) return;
       if (conversation == null) throw Exception('创建群聊失败');

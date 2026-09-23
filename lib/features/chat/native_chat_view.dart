@@ -70,6 +70,7 @@ import 'chat_media_widgets.dart';
 import 'chat_desktop_file_drag_stub.dart'
     if (dart.library.io) 'chat_desktop_file_drag.dart';
 import 'chat_quote.dart';
+import '../conversation/reply_sla_models.dart';
 import 'chat_video_utils.dart';
 import 'chat_video_widgets.dart';
 import 'chat_voice_player.dart';
@@ -463,6 +464,12 @@ class _NativeChatViewState extends State<NativeChatView>
   Map<int, int> _groupReadMap = const <int, int>{};
   final Map<String, Future<String>> _mediaUrlCache = <String, Future<String>>{};
   ChatMessageQuote? _quoteDraft;
+
+  // 工作群已读不回：与我相关的回复义务（仅 reply_sla 工作群有数据）。
+  ReplySlaSnapshot _replySla = ReplySlaSnapshot.empty;
+  Timer? _replySlaReloadDebounce;
+  Timer? _replySlaTicker;
+  int _replySlaLoadSeq = 0;
   bool _messageMultiSelectMode = false;
   bool _messageActionsMenuOpen = false;
   final Set<int> _multiSelectedMessageIds = <int>{};
@@ -1004,6 +1011,8 @@ class _NativeChatViewState extends State<NativeChatView>
   @override
   void dispose() {
     _loadGeneration++;
+    _replySlaReloadDebounce?.cancel();
+    _replySlaTicker?.cancel();
     if (isDesktopCommOnly) {
       clearDesktopScreenshotHotkey(_onWindowsHotkeyPressed);
     }
@@ -1320,6 +1329,10 @@ class _NativeChatViewState extends State<NativeChatView>
     final convId = _conversation?.id ?? 0;
     if (convId <= 0) return;
     if (event.conversationId != null && event.conversationId != convId) return;
+    if (event.type == 'reply_sla_changed') {
+      _scheduleReplySlaReload();
+      return;
+    }
 
     final isNew = _realtimeDedup.consume(event);
     var handled = false;
@@ -2263,6 +2276,7 @@ class _NativeChatViewState extends State<NativeChatView>
         unawaited(_refreshGroupReadMap(conv.id));
         unawaited(_hydrateGroupMembers(conv.id, gen));
       }
+      unawaited(_loadReplySla(conv.id));
       unawaited(_realtime.ensureConversationSubscription(conv.id));
       if (_isPrivate) {
         _realtime.setPresenceContext(
@@ -5377,6 +5391,163 @@ class _NativeChatViewState extends State<NativeChatView>
       _emojiOpen = false;
     });
     _inputFocusNode.requestFocus();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 工作群「已读不回」：回复此条 + 已读未回复时长
+  // 只在服务端 reply_sla=true 的工作群生效；「回复此条」复用 _startQuote 引用草稿，
+  // 发出带 quote 的消息后由服务端关闭义务并推 reply_sla_changed。
+  // ---------------------------------------------------------------------------
+
+  Future<void> _loadReplySla(int convId) async {
+    final conv = _conversation;
+    if (conv == null || conv.id != convId || conv.kind != 'WORKGROUP') {
+      if (_replySla.enabled && mounted) {
+        setState(() => _replySla = ReplySlaSnapshot.empty);
+      }
+      _syncReplySlaTicker();
+      return;
+    }
+    final seq = ++_replySlaLoadSeq;
+    final snap = await _service.fetchReplySla(convId);
+    if (!mounted || seq != _replySlaLoadSeq) return;
+    if ((_conversation?.id ?? 0) != convId) return;
+    setState(() => _replySla = snap);
+    _syncReplySlaTicker();
+  }
+
+  void _scheduleReplySlaReload() {
+    final convId = _conversation?.id ?? 0;
+    if (convId <= 0) return;
+    _replySlaReloadDebounce?.cancel();
+    _replySlaReloadDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      unawaited(_loadReplySla(convId));
+    });
+  }
+
+  /// 有「已读未回复」时每 30 秒刷新一次时长显示。
+  void _syncReplySlaTicker() {
+    if (!mounted || !_replySla.hasPending) {
+      _replySlaTicker?.cancel();
+      _replySlaTicker = null;
+      return;
+    }
+    _replySlaTicker ??= Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted || !_replySla.hasPending) {
+        _replySlaTicker?.cancel();
+        _replySlaTicker = null;
+        return;
+      }
+      setState(() {});
+    });
+  }
+
+  String _replySlaStatusText(ReplySlaItem item, DateTime now) {
+    final dur = formatReplySlaDuration(item.liveUnreplied(now));
+    switch (item.status) {
+      case ReplySlaStatus.unread:
+        return '未读';
+      case ReplySlaStatus.pending:
+        return '已读 · 未回复 $dur';
+      case ReplySlaStatus.replied:
+        return '已回复 · 用时 $dur';
+      case ReplySlaStatus.voided:
+        return item.unrepliedSeconds > 0 ? '已失效 · 未回复 $dur' : '已失效';
+    }
+  }
+
+  Color _replySlaStatusColor(ReplySlaItem item) {
+    switch (item.status) {
+      case ReplySlaStatus.pending:
+        return const Color(0xFFD4380D);
+      case ReplySlaStatus.replied:
+        return DunesColors.readReceipt;
+      case ReplySlaStatus.unread:
+      case ReplySlaStatus.voided:
+        return DunesColors.text3;
+    }
+  }
+
+  /// 在气泡下方追加「回复此条」与时长。只有被 @ 人与原发送人能看到。
+  Widget _withReplySla(NativeChatMessage m, bool mine, Widget content) {
+    if (!_replySla.enabled) return content;
+    final items = _replySla.byMessage[m.id];
+    if (items == null || items.isEmpty) return content;
+    final me = widget.session.userId;
+    final now = DateTime.now();
+    final lines = <Widget>[];
+    TextStyle style(Color c) =>
+        DunesTypography.mono(fontSize: 10.5, fontWeight: FontWeight.w500, color: c);
+
+    ReplySlaItem? myItem;
+    for (final i in items) {
+      if (i.isReceiver && i.receiverUserId == me) {
+        myItem = i;
+        break;
+      }
+    }
+    if (myItem != null) {
+      final item = myItem;
+      final canReply = item.isOpen && _conversation?.dissolved != true;
+      lines.add(
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            if (canReply)
+              InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => _startQuote(m),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: DunesColors.accentSoft,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: DunesColors.accent.withValues(alpha: 0.35)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.reply_rounded, size: 13, color: DunesColors.accent),
+                      const SizedBox(width: 3),
+                      Text(
+                        '回复此条',
+                        style: DunesTypography.mono(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: DunesColors.accent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            Text(_replySlaStatusText(item, now), style: style(_replySlaStatusColor(item))),
+          ],
+        ),
+      );
+    }
+    if (m.senderUserId == me) {
+      for (final i in items) {
+        if (i.isReceiver) continue;
+        final name = i.receiverName.trim().isEmpty ? '成员' : i.receiverName.trim();
+        lines.add(
+          Text('@$name ${_replySlaStatusText(i, now)}', style: style(_replySlaStatusColor(i))),
+        );
+      }
+    }
+    if (lines.isEmpty) return content;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        content,
+        for (final line in lines)
+          Padding(padding: const EdgeInsets.only(top: 4), child: line),
+      ],
+    );
   }
 
   void _closeEmojiPicker() {
@@ -9301,9 +9472,13 @@ class _NativeChatViewState extends State<NativeChatView>
                                                   trailingAvatar: mine
                                                       ? rowAvatar
                                                       : null,
-                                                  content: _buildMessageWidget(
+                                                  content: _withReplySla(
                                                     m,
                                                     mine,
+                                                    _buildMessageWidget(
+                                                      m,
+                                                      mine,
+                                                    ),
                                                   ),
                                                 );
                                               }

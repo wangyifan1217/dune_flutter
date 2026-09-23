@@ -13,6 +13,7 @@ import '../conversation/conversation_realtime_hub.dart';
 import '../conversation/conversation_realtime_service.dart';
 import '../conversation/conversation_service.dart';
 import '../conversation/im_user_status.dart';
+import '../chat/group_type_picker.dart';
 import 'contact_models.dart';
 import 'contact_service.dart';
 import 'contacts_widgets.dart';
@@ -571,27 +572,11 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
         .map((id) => _contactById(id)?.displayName ?? '成员')
         .join('、');
     final more = ids.length > 3 ? ' 等' : '';
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('确认创建群聊'),
-        content: Text('将与 $previewNames$more共 ${ids.length} 人创建群聊，是否继续？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF7B5CD8),
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('创建'),
-          ),
-        ],
-      ),
+    final groupType = await showCreateGroupTypeDialog(
+      context,
+      membersText: '将与 $previewNames$more共 ${ids.length} 人创建群聊，是否继续？',
     );
-    if (ok != true || !mounted) return;
+    if (groupType == null || !mounted) return;
     setState(() => _creating = true);
     try {
       final title = ids
@@ -599,9 +584,10 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
           .map((id) => _contactById(id)?.displayName ?? '成员')
           .join('、');
       final conversation = await _convService.createConversation(
-        kind: 'WORKGROUP',
+        kind: groupType.kind,
         memberUserIds: ids,
         title: title.isEmpty ? '群聊' : title,
+        replySla: groupType.replySla,
       );
       if (!mounted) return;
       if (conversation == null) throw Exception('创建群聊失败');

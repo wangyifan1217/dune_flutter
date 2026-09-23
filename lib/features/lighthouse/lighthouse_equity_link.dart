@@ -123,28 +123,13 @@ bool lighthouseShowsEquityPopover({
   required bool hasEquityLinks,
 }) => tab == 'supply' && isTopLevel && hasEquityLinks;
 
-/// 标签二交易类型分组。当前没有资管正式交易性质字段，因此只按是否存在有效
-/// `equityLinks` 暂分；返回原 Map 引用并保持各组内原有排序。
-class LhSupplyTradeGroups {
-  const LhSupplyTradeGroups({required this.normal, required this.equity});
+const lighthouseProductTradeFlags = <String>['普通交易', '权益交易', '权益收入'];
 
-  final List<Map<String, dynamic>> normal;
-  final List<Map<String, dynamic>> equity;
-}
-
-LhSupplyTradeGroups lighthouseFallbackGroupSupplyRows(
-  Iterable<Map<String, dynamic>> rows,
-) {
-  final normal = <Map<String, dynamic>>[];
-  final equity = <Map<String, dynamic>>[];
-  for (final row in rows) {
-    if (lighthouseEquityLinksOf(row).isNotEmpty) {
-      equity.add(row);
-    } else {
-      normal.add(row);
-    }
-  }
-  return LhSupplyTradeGroups(normal: normal, equity: equity);
+/// 资管 `product_trade_flag` 是供给交易类型的唯一口径。
+/// 缺失或未知值保持空，筛选时不猜测它属于哪一类。
+String lighthouseProductTradeFlagOf(Map<String, dynamic> row) {
+  final value = row['productTradeFlag']?.toString().trim() ?? '';
+  return lighthouseProductTradeFlags.contains(value) ? value : '';
 }
 
 /// 多个省份行的历史走势汇总结果。

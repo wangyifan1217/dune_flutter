@@ -129,35 +129,24 @@ void main() {
     );
   });
 
-  test('兜底分组按有效权益关联拆分，保持原顺序且不丢行', () {
+  test('交易类型严格读取资管 productTradeFlag，不再按权益关联猜测', () {
     final rows = <Map<String, dynamic>>[
-      {
-        'name': '福建省',
-        'equityLinks': [
-          {'key': '会员套餐订阅::运营商', 'row': '福建移动'},
-        ],
-      },
-      {'name': '浙江省'},
-      {
-        'name': '广东省',
-        'equityLinks': [
-          {'key': '会员套餐订阅::运营商', 'row': '广东移动'},
-          {'key': '', 'row': '无效关联'},
-        ],
-      },
+      {'name': '福建省', 'productTradeFlag': '权益收入'},
+      {'name': '浙江省', 'productTradeFlag': '普通交易'},
+      {'name': '广东省', 'productTradeFlag': '权益交易'},
       {
         'name': '河南省',
         'equityLinks': [
-          {'key': '', 'row': '只有坏数据'},
+          {'key': '会员套餐订阅::运营商', 'row': '河南移动'},
         ],
       },
     ];
 
-    final groups = lighthouseFallbackGroupSupplyRows(rows);
-
-    expect(groups.equity.map((row) => row['name']), ['福建省', '广东省']);
-    expect(groups.normal.map((row) => row['name']), ['浙江省', '河南省']);
-    expect(groups.equity.length + groups.normal.length, rows.length);
+    expect(lighthouseProductTradeFlagOf(rows[0]), '权益收入');
+    expect(lighthouseProductTradeFlagOf(rows[1]), '普通交易');
+    expect(lighthouseProductTradeFlagOf(rows[2]), '权益交易');
+    // 即使关联到了权益项目，缺少资管标识也不再被猜成任何交易类型。
+    expect(lighthouseProductTradeFlagOf(rows[3]), isEmpty);
   });
 
   test('筛选后的 Hero 环比按行加总本期和上期，不平均各省百分比', () {
@@ -184,7 +173,10 @@ void main() {
     );
     expect(
       lighthouseAggregateRowsDeltaPct(rows, key: 'sales'),
-      closeTo((200 - (120 / 1.5 + 80 / 1.6)) / (120 / 1.5 + 80 / 1.6) * 100, 0.001),
+      closeTo(
+        (200 - (120 / 1.5 + 80 / 1.6)) / (120 / 1.5 + 80 / 1.6) * 100,
+        0.001,
+      ),
     );
     expect(lighthouseAggregateRowsDeltaPct(const [], key: 'profit'), isNull);
   });
@@ -237,7 +229,10 @@ void main() {
         'deltas': {'totalCost': 0.0, 'verifiedSales': 0.0},
       },
     ];
-    expect(lighthouseAggregateRowsDeltaPct(rows, key: 'rate'), closeTo(15, 0.001));
+    expect(
+      lighthouseAggregateRowsDeltaPct(rows, key: 'rate'),
+      closeTo(15, 0.001),
+    );
     expect(
       lighthouseAggregateRowsDeltaPct(rows, key: 'grossMargin'),
       closeTo(7.5, 0.001),

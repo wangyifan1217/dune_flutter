@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -6,6 +6,7 @@ import '../../core/analytics/usage_module_map.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
+import 'app_usage_daily_chart.dart';
 import 'app_usage_models.dart';
 import 'app_usage_service.dart';
 
@@ -251,39 +252,8 @@ class _NativeQianjiAppUsageDetailPageState
               padding: const EdgeInsets.only(bottom: 10),
               child: _PageBar(page: page, maxDuration: maxPage),
             ),
-        const SizedBox(height: 12),
-        const Text(
-          '每日使用',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF261D38),
-          ),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          '不含后台挂机时间',
-          style: TextStyle(fontSize: 12, color: DunesColors.text3),
-        ),
-        const SizedBox(height: 12),
-        if (days.isEmpty)
-          const Text('暂无每日数据', style: TextStyle(color: DunesColors.text3))
-        else
-          SizedBox(
-            height: 120,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                for (final day in days)
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 3),
-                      child: _DayCol(day: day, maxDuration: maxDay),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+        const SizedBox(height: 16),
+        AppUsageDailyChart(days: days, maxDay: maxDay),
       ],
     );
   }
@@ -373,48 +343,6 @@ class _PageBar extends StatelessWidget {
             backgroundColor: const Color(0xFFF1EBF9),
             color: _themePurple,
           ),
-        ),
-      ],
-    );
-  }
-}
-
-class _DayCol extends StatelessWidget {
-  const _DayCol({required this.day, required this.maxDuration});
-
-  final AppUsageDayStay day;
-  final int maxDuration;
-
-  @override
-  Widget build(BuildContext context) {
-    final ratio = maxDuration <= 0 ? 0.0 : day.durationMs / maxDuration;
-    final label = day.date.length >= 10 ? day.date.substring(5) : day.date;
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        Expanded(
-          child: Align(
-            alignment: Alignment.bottomCenter,
-            child: FractionallySizedBox(
-              heightFactor: ratio.clamp(0.08, 1),
-              widthFactor: 1,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Color.lerp(
-                    const Color(0xFFE8DDF8),
-                    _themePurple,
-                    ratio.clamp(0.15, 1),
-                  ),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 10, color: DunesColors.text3),
         ),
       ],
     );

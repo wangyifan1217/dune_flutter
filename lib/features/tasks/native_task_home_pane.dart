@@ -808,10 +808,10 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                     Text(
                       switch (_scope) {
                         'goals' => switch (_goalRole) {
-                          'reports' => '下级负责的主目标，含管理员导入的任务。进入详情后再看子目标。',
+                          'reports' => '直属下级和事业部下级负责的主目标。进入详情后再看子目标。',
                           'owned' => '本人负责的主目标。进入详情后再看子目标。',
                           'assigned' => '本人分派的主目标。进入详情后再看子目标。',
-                          _ => '本人负责或分派的主目标。进入详情后再看子目标。',
+                          _ => '本人负责、分派，以及下级负责的主目标。进入详情后再看子目标。',
                         },
                         'actionable' =>
                           '今天要执行的子目标、未拆解的主目标和待确认子目标。',
@@ -978,7 +978,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     return TextField(
       controller: _search,
       decoration: InputDecoration(
-        hintText: '搜索标题',
+        hintText: '搜索标题或负责人',
         hintStyle: const TextStyle(color: DunesColors.text3, fontSize: 13),
         isDense: true,
         filled: true,
@@ -1010,7 +1010,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
           TextField(
             controller: _search,
             decoration: InputDecoration(
-              hintText: '搜索标题',
+              hintText: '搜索标题或负责人',
               hintStyle: const TextStyle(
                 color: DunesColors.text3,
                 fontSize: 13,

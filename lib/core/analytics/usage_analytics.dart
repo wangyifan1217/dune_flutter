@@ -35,6 +35,9 @@ class UsageAnalytics {
   String? _primedScreenId;
   String _primedScreenName = '';
   String _primedModuleKey = '';
+  bool _externalHandoff = false;
+  bool _suspended = false;
+  DateTime Function() _clock = DateTime.now;
   http.Client? _client;
 
   bool get isBound => _session != null && _session!.userId > 0;
@@ -113,11 +116,13 @@ class UsageAnalytics {
         : usageModuleKeyForScreen(reportId);
     if (_currentScreen == reportId && _pageEnterAt != null) return;
     _closeCurrentPage();
+    _externalHandoff = false;
     _currentScreen = reportId;
     _currentScreenName = reportName;
     _currentModuleKey = reportModule;
     if (!_foreground) return;
-    _pageEnterAt = DateTime.now();
+    _suspended = false;
+    _pageEnterAt = _now();
     _enqueue(
       UsageEvent(
         eventType: 'page_enter',
@@ -129,36 +134,71 @@ class UsageAnalytics {
     );
   }
 
-  void onLifecycle({required bool foreground}) {
+  /// 企业应用已经在系统浏览器打开。切到后台先不结算，回到沙丘再记整段。
+  void beginExternalHandoff() {
+    if (!isBound || !_isEnterpriseStay) return;
+    _externalHandoff = true;
+  }
+
+  bool get _isEnterpriseStay {
+    final key = _moduleFor(_currentScreen ?? '').trim().toLowerCase();
+    if (key == 'h5' || key.startsWith('h5:')) return true;
+    final id = (_currentScreen ?? '').trim().toUpperCase();
+    return id == 'CT1' || id == 'XR1' || id == 'AM1' || id.startsWith('AM:');
+  }
+
+  /// [suspended] 为 true 表示应用已不可见（paused / hidden）。
+  /// inactive 只是焦点闪动，企业应用交给浏览器时忽略，避免把计时掐断。
+  void onLifecycle({required bool foreground, bool suspended = false}) {
     if (!isBound) return;
-    if (!foreground) {
+    if (foreground) {
+      final wasSuspended = _suspended;
+      _suspended = false;
+      if (_foreground) return;
+      _foreground = true;
+      _enqueue(UsageEvent(eventType: 'app_fg', occurredAt: _now()));
+      if (_externalHandoff && wasSuspended) {
+        _externalHandoff = false;
+        _closeCurrentPage();
+        unawaited(flush());
+      }
+      _resumePage();
+      return;
+    }
+    if (!suspended && _externalHandoff) return;
+    if (suspended && _externalHandoff) {
+      _suspended = true;
       if (!_foreground) return;
-      _closeCurrentPage();
       _foreground = false;
-      _enqueue(UsageEvent(eventType: 'app_bg', occurredAt: DateTime.now()));
+      _enqueue(UsageEvent(eventType: 'app_bg', occurredAt: _now()));
       unawaited(flush());
       return;
     }
-    if (_foreground) return;
-    _foreground = true;
-    _enqueue(UsageEvent(eventType: 'app_fg', occurredAt: DateTime.now()));
+    if (!_foreground) return;
+    _closeCurrentPage();
+    _foreground = false;
+    _suspended = suspended;
+    _enqueue(UsageEvent(eventType: 'app_bg', occurredAt: _now()));
+    unawaited(flush());
+  }
+
+  void _resumePage() {
     final screen = _currentScreen;
-    if (screen != null && screen.isNotEmpty) {
-      _pageEnterAt = DateTime.now();
-      _enqueue(
-        UsageEvent(
-          eventType: 'page_enter',
-          occurredAt: _pageEnterAt!,
-          screenId: screen,
-          screenName: _labelFor(screen),
-          moduleKey: _moduleFor(screen),
-        ),
-      );
-    }
+    if (screen == null || screen.isEmpty || _pageEnterAt != null) return;
+    _pageEnterAt = _now();
+    _enqueue(
+      UsageEvent(
+        eventType: 'page_enter',
+        occurredAt: _pageEnterAt!,
+        screenId: screen,
+        screenName: _labelFor(screen),
+        moduleKey: _moduleFor(screen),
+      ),
+    );
   }
 
   Future<void> flush() async {
-    if (_flushing || _queue.isEmpty) return;
+    if (debugSuppressFlush || _flushing || _queue.isEmpty) return;
     final session = _session;
     if (session == null || session.token.isEmpty) return;
     _flushing = true;
@@ -198,13 +238,13 @@ class UsageAnalytics {
     final entered = _pageEnterAt;
     _pageEnterAt = null;
     if (screen == null || screen.isEmpty || entered == null) return;
-    var ms = DateTime.now().difference(entered).inMilliseconds;
+    var ms = _now().difference(entered).inMilliseconds;
     if (ms < 0) ms = 0;
     if (ms > _maxPageMs) ms = _maxPageMs;
     _enqueue(
       UsageEvent(
         eventType: 'page_leave',
-        occurredAt: DateTime.now(),
+        occurredAt: _now(),
         screenId: screen,
         screenName: _labelFor(screen),
         moduleKey: _moduleFor(screen),
@@ -256,9 +296,41 @@ class UsageAnalytics {
     _primedScreenId = null;
     _primedScreenName = '';
     _primedModuleKey = '';
+    _externalHandoff = false;
+    _suspended = false;
     _pageEnterAt = null;
     _foreground = true;
+    debugSuppressFlush = false;
+    _clock = DateTime.now;
   }
+
+  DateTime _now() => _clock();
+
+  @visibleForTesting
+  bool debugSuppressFlush = false;
+
+  @visibleForTesting
+  void debugSetClock(DateTime Function() clock) {
+    _clock = clock;
+  }
+
+  @visibleForTesting
+  void debugBind() {
+    debugReset();
+    _session = const AuthSession(
+      phone: '0',
+      userId: 1,
+      token: 'test',
+      apiBase: 'http://127.0.0.1:9',
+      roles: <String>[],
+    );
+    _sessionId = 'test';
+    _foreground = true;
+    debugSuppressFlush = true;
+  }
+
+  @visibleForTesting
+  List<UsageEvent> get debugEvents => List<UsageEvent>.unmodifiable(_queue);
 
   @visibleForTesting
   int get debugQueueLength => _queue.length;

@@ -254,7 +254,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('把事办掉'), findsOneWidget);
     expect(find.text('好好开会'), findsOneWidget);
-    expect(find.text('用好知识库'), findsOneWidget);
     expect(find.text('沟通跟得上事'), findsOneWidget);
     expect(find.text('3个部门'), findsNothing);
     expect(find.text('陈可'), findsOneWidget);
@@ -269,7 +268,8 @@ void main() {
 
     await tester.tap(find.text('7月'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('知识用上了'), findsWidgets);
+    expect(find.text('工作实不实'), findsOneWidget);
+    expect(find.textContaining('知识'), findsNothing);
   });
 
   testWidgets('search person and open efficiency details', (tester) async {
@@ -322,7 +322,7 @@ void main() {
     expect(find.text('任务没办完'), findsWidgets);
     expect(find.textContaining('来自任务助手'), findsOneWidget);
     expect(find.textContaining('来自会议纪要'), findsOneWidget);
-    expect(find.textContaining('来自知识库'), findsOneWidget);
+    expect(find.text('知识没用上'), findsNothing);
     expect(find.textContaining('每天抽当天会话给 AI'), findsOneWidget);
     expect(find.text('再看一遍指引'), findsOneWidget);
   });

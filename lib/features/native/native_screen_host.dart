@@ -760,6 +760,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     print('[Badge] lifecycle=$state activelyInChat=$_userActivelyInChat');
     UsageAnalytics.instance.onLifecycle(
       foreground: state == AppLifecycleState.resumed,
+      suspended: state == AppLifecycleState.paused ||
+          state == AppLifecycleState.hidden ||
+          state == AppLifecycleState.detached,
     );
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||

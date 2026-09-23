@@ -8,7 +8,6 @@ import '../../../core/widgets/spotlight_tour.dart';
 import '../../auth/auth_session.dart';
 import '../../chat/user_avatar_widget.dart';
 import '../../conversation/conversation_service.dart';
-import '../../kb/native_kb_doc_page.dart';
 import '../../meeting/native_meeting_detail_page.dart';
 import '../../tasks/native_task_action_page.dart';
 import '../../tasks/native_task_detail_page.dart';
@@ -139,8 +138,6 @@ List<_Item> _itemsOf(WorkSituationPerson person) {
             ? '相关会还没有纪要'
             : '纪要或行动项还没变成任务',
       ),
-    if (person.kbUnused > 0)
-      _Item(kind: _Kind.kb, title: '知识待使用', hint: '${person.kbUnused} 篇上传后没人用'),
     if (person.taskCompleted > 0)
       _Item(
         kind: _Kind.done,
@@ -217,26 +214,6 @@ void _openWorkSituationMeeting(
       context: context,
       session: session,
       meetingId: meetingId,
-    ),
-  );
-}
-
-void _openWorkSituationKb(
-  BuildContext context,
-  AuthSession session,
-  int documentId,
-) {
-  if (documentId <= 0) return;
-  Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (ctx) => Material(
-        color: DunesColors.bgApp,
-        child: NativeKbDocPage(
-          session: session,
-          docId: '$documentId',
-          onBack: () => Navigator.of(ctx).pop(),
-        ),
-      ),
     ),
   );
 }
@@ -547,7 +524,6 @@ String _talkDetailText(WorkSituationPerson person) {
 bool _hasWeak(WorkSituationPerson person) =>
     _taskSig(person).isWeak ||
     _meetSig(person).isWeak ||
-    _kbSig(person).isWeak ||
     _talkSig(person).isWeak;
 
 class _EffRoll {
@@ -613,8 +589,6 @@ String _glanceSummary(List<WorkSituationPerson> people) {
   if (e.taskWeak > 0) parts.add('${e.taskWeak}人超期或空转');
   parts.add('开会 ${e.meet}人有闭环');
   if (e.meetWeak > 0) parts.add('${e.meetWeak}人没落地');
-  parts.add('知识 ${e.kb}人用上了');
-  if (e.kbWeak > 0) parts.add('${e.kbWeak}人没人用');
   if (e.talk > 0) parts.add('沟通 ${e.talk}人在跟事');
   return parts.join(' · ');
 }
@@ -622,11 +596,9 @@ String _glanceSummary(List<WorkSituationPerson> people) {
 String _deptSay(_Dept dept) {
   final weakTask = dept.people.where((p) => _taskSig(p).isWeak).length;
   final weakMeet = dept.people.where((p) => _meetSig(p).isWeak).length;
-  final weakKb = dept.people.where((p) => _kbSig(p).isWeak).length;
   final weakTalk = dept.people.where((p) => _talkSig(p).isWeak).length;
   if (weakTask > 0) return '$weakTask人事没办完';
   if (weakMeet > 0) return '$weakMeet人开会没落地';
-  if (weakKb > 0) return '$weakKb人知识没人用';
   if (weakTalk > 0) return '$weakTalk人沟通偏浅';
   return '比较扎实';
 }
@@ -706,7 +678,8 @@ class _NativeQianjiEfficiencyBossPreviewState
     if (_day.isAfter(DateTime(now.year, now.month, now.day))) {
       _day = DateTime(now.year, now.month, now.day);
     }
-    _filter = widget.initialFilter.isEmpty ? 'all' : widget.initialFilter;
+    final initial = widget.initialFilter.trim();
+    _filter = initial.isEmpty || initial == 'kb' ? 'all' : initial;
     _service =
         widget.service ??
         (widget.session == null
@@ -800,7 +773,6 @@ class _NativeQianjiEfficiencyBossPreviewState
   bool _passFilter(WorkSituationPerson person) {
     if (_filter == 'task') return _taskSig(person).isWeak;
     if (_filter == 'meet') return _meetSig(person).isWeak;
-    if (_filter == 'kb') return _kbSig(person).isWeak;
     if (_filter == 'talk') return _talkSig(person).isWeak;
     return true;
   }
@@ -1027,9 +999,9 @@ class _NativeQianjiEfficiencyBossPreviewState
     ),
     SpotlightTourStep(
       targetKey: _filterBarKey,
-      title: '四个问题标签',
+      title: '三个问题标签',
       body:
-          '任务没办完、开会没落地、知识没用上、沟通偏浅。每天由 AI 根据当天事实包判断；月视图汇总各日统计单。点标签只看对应的人。',
+          '任务没办完、开会没落地、沟通偏浅。每天由 AI 根据当天事实包判断；月视图汇总各日统计单。点标签只看对应的人。',
     ),
     SpotlightTourStep(
       targetKey: _helpKey,
@@ -1076,7 +1048,7 @@ class _NativeQianjiEfficiencyBossPreviewState
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    '每天由 AI 算当天任务、会议、知识和会话统计并落库。月视图只汇总这些每日统计单，存量（超期、未使用）取月末那天的快照。沟通由 AI 判断是否在推进事情，不打分。界面不展示聊天原文。',
+                    '每天由 AI 算当天任务、会议和会话统计并落库。月视图只汇总这些每日统计单，超期取月末那天的快照。沟通由 AI 判断是否在推进事情，不打分。界面不展示聊天原文。知识库暂不纳入。',
                     style: TextStyle(
                       fontSize: 12,
                       color: DunesColors.text3,
@@ -1093,11 +1065,6 @@ class _NativeQianjiEfficiencyBossPreviewState
                     title: '开会没落地',
                     body:
                         '来自会议纪要，含组织者和行动项负责人。当天开会或出纪要计入流量；行动超期取日终快照。AI 抽看当天标题和纪要截断。点开事项可进会议详情。不听录音、不读转写全文。',
-                  ),
-                  const _GuideItem(
-                    title: '知识没用上',
-                    body:
-                        '来自知识库，按上传人看当天传上去的文档。别人打开、对话引用或绑到任务才算用上，自己打开不算。未使用取日终快照，月视图用月末那天。点开事项可进知识详情，不展示正文摘录。',
                   ),
                   const _GuideItem(
                     title: '沟通偏浅',
@@ -1589,7 +1556,7 @@ class _Board extends StatelessWidget {
               const SizedBox(height: 10),
             ],
           const Text(
-            '按任务、会议、知识和会话的每日统计看；月是这些天的汇总。沟通由 AI 判断，不打分。',
+            '按任务、会议和会话的每日统计看；月是这些天的汇总。沟通由 AI 判断，不打分。',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 11, color: DunesColors.text3),
           ),
@@ -1901,7 +1868,6 @@ class _FilterBar extends StatelessWidget {
         chip('all', '全部'),
         chip('task', '任务没办完'),
         chip('meet', '开会没落地'),
-        chip('kb', '知识没用上'),
         chip('talk', '沟通偏浅'),
       ],
     );
@@ -2055,7 +2021,7 @@ class _GlanceCardState extends State<_GlanceCard> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Text(
-                    '看任务办没办完、开会有没有下文、知识有没有人用、会话里是不是在跟具体事。沟通抽会话给 AI 看，不打分。',
+                    '看任务办没办完、开会有没有下文、会话里是不是在跟具体事。沟通抽会话给 AI 看，不打分。',
                     style: TextStyle(
                       fontSize: 12,
                       color: DunesColors.text3,
@@ -2065,7 +2031,6 @@ class _GlanceCardState extends State<_GlanceCard> {
                   const SizedBox(height: 12),
                   row('把事办掉', e.task, '在推进', weak: e.taskWeak),
                   row('好好开会', e.meet, '有闭环', weak: e.meetWeak),
-                  row('用好知识库', e.kb, '用上了', weak: e.kbWeak),
                   row('沟通跟得上事', e.talk, '在跟事'),
                 ],
               ),
@@ -2135,7 +2100,7 @@ class _DeptGlanceList extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Text(
-                              '任务 ${e.task}/${e.n} · 开会 ${e.meet}/${e.n} · 知识 ${e.kb}/${e.n} · 沟通 ${e.talk}/${e.n}',
+                              '任务 ${e.task}/${e.n} · 开会 ${e.meet}/${e.n} · 沟通 ${e.talk}/${e.n}',
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: DunesColors.text3,
@@ -2301,7 +2266,6 @@ class _SigPills extends StatelessWidget {
     final items = [
       (_taskSig(person), '任务'),
       (_meetSig(person), '开会'),
-      (_kbSig(person), '知识'),
       (_talkSig(person), '沟通'),
     ];
     return Wrap(
@@ -2349,7 +2313,6 @@ class _WhyLines extends StatelessWidget {
     final rows = [
       ('任务', _taskSig(person)),
       ('开会', _meetSig(person)),
-      ('知识', _kbSig(person)),
       ('沟通', _talkSig(person)),
     ];
     return Column(
@@ -2487,7 +2450,6 @@ class _PersonDetail extends StatelessWidget {
         )
         .toList();
     final meetItems = items.where((i) => i.kind == _Kind.meeting).toList();
-    final kbItems = items.where((i) => i.kind == _Kind.kb).toList();
     final talkItems = items.where((i) => i.kind == _Kind.talk).toList();
     return ListView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -2583,16 +2545,6 @@ class _PersonDetail extends StatelessWidget {
             onOpenMeeting: session == null
                 ? null
                 : (id) => _openWorkSituationMeeting(context, session!, id),
-          ),
-        ],
-        if (kbItems.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          _DetailSection(
-            title: '知识怎么看',
-            items: kbItems,
-            onOpenKb: session == null
-                ? null
-                : (id) => _openWorkSituationKb(context, session!, id),
           ),
         ],
         const SizedBox(height: 10),

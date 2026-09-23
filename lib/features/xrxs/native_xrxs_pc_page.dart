@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/analytics/usage_analytics.dart';
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
@@ -112,6 +113,7 @@ class _NativeXrxsPCPageState extends State<NativeXrxsPCPage> {
         _loading = false;
         _opened = true;
       });
+      UsageAnalytics.instance.beginExternalHandoff();
     } catch (error) {
       if (!mounted) return;
       setState(() {

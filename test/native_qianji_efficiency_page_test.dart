@@ -53,6 +53,12 @@ class _FakeEfficiencyService extends EfficiencyService {
           value: 3,
           unit: '',
         ),
+        EfficiencyMetric(
+          key: 'knowledgeReuseRate',
+          label: '知识用上了率',
+          value: 40,
+          unit: '%',
+        ),
       ],
       stages: const [
         EfficiencyStage(
@@ -63,7 +69,15 @@ class _FakeEfficiencyService extends EfficiencyService {
           rate: 80,
         ),
       ],
-      bottlenecks: const [],
+      bottlenecks: const [
+        EfficiencyEvidence(
+          kind: 'task',
+          label: '超期未完成任务',
+          count: 1,
+          severity: 'high',
+          ref: 'tasks:overdue',
+        ),
+      ],
       quality: const [
         EfficiencyEvidence(
           kind: 'kb',
@@ -105,7 +119,9 @@ void main() {
     expect(find.text('部门汇总'), findsOneWidget);
     expect(find.text('任务完成率'), findsOneWidget);
     expect(find.text('80%'), findsOneWidget);
-    expect(find.textContaining('上传后没人用'), findsOneWidget);
+    expect(find.text('知识用上了率'), findsNothing);
+    expect(find.textContaining('上传后没人用'), findsNothing);
+    expect(find.textContaining('超期未完成任务'), findsOneWidget);
     expect(find.text('质量抽样'), findsNothing);
 
     await tester.tap(find.byKey(const Key('efficiency-help')));
@@ -169,8 +185,9 @@ void main() {
           ref: 'kb:unused',
         ),
       ),
-      'kb',
+      isNull,
     );
+    expect(efficiencyOmitsKnowledge(key: 'knowledgeReuseRate'), isTrue);
     expect(
       workSituationFilterForEvidence(
         const EfficiencyEvidence(
@@ -203,8 +220,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.textContaining('上传后没人用'));
-    expect(openedFilter, 'kb');
+    await tester.tap(find.textContaining('超期未完成任务'));
+    expect(openedFilter, 'task');
     expect(openedMonth, DateTime(2026, 9));
   });
 

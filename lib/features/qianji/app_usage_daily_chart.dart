@@ -330,7 +330,7 @@ class _SelectedDayBanner extends StatelessWidget {
           if (day.pv > 0) ...[
             const SizedBox(width: 8),
             Text(
-              '打开 ${day.pv}次',
+              '浏览 ${day.pv}次',
               style: const TextStyle(fontSize: 11.5, color: DunesColors.text2),
             ),
           ],

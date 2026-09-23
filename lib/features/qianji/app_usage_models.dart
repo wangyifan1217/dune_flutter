@@ -145,6 +145,28 @@ class AppUsageDept {
   }
 }
 
+class AppUsageTopModule {
+  const AppUsageTopModule({
+    required this.moduleKey,
+    required this.moduleName,
+    this.durationMs = 0,
+  });
+
+  final String moduleKey;
+  final String moduleName;
+  final int durationMs;
+
+  factory AppUsageTopModule.fromJson(Map<String, dynamic> json) {
+    return AppUsageTopModule(
+      moduleKey: '${json['moduleKey'] ?? ''}',
+      moduleName: '${json['moduleName'] ?? json['moduleKey'] ?? ''}',
+      durationMs: (json['durationMs'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  String get label => usageModuleLabel(moduleKey, moduleName);
+}
+
 class AppUsageUserRow {
   const AppUsageUserRow({
     required this.userId,
@@ -154,9 +176,12 @@ class AppUsageUserRow {
     required this.durationMs,
     required this.pv,
     required this.sessionCount,
+    this.activeDays = 0,
     this.lastSeenAt,
     this.topModule = '',
     this.topModuleName = '',
+    this.topModuleDurationMs = 0,
+    this.topModules = const [],
   });
 
   final int userId;
@@ -166,9 +191,12 @@ class AppUsageUserRow {
   final int durationMs;
   final int pv;
   final int sessionCount;
+  final int activeDays;
   final String? lastSeenAt;
   final String topModule;
   final String topModuleName;
+  final int topModuleDurationMs;
+  final List<AppUsageTopModule> topModules;
 
   factory AppUsageUserRow.fromJson(Map<String, dynamic> json) {
     return AppUsageUserRow(
@@ -179,9 +207,12 @@ class AppUsageUserRow {
       durationMs: (json['durationMs'] as num?)?.toInt() ?? 0,
       pv: (json['pv'] as num?)?.toInt() ?? 0,
       sessionCount: (json['sessionCount'] as num?)?.toInt() ?? 0,
+      activeDays: (json['activeDays'] as num?)?.toInt() ?? 0,
       lastSeenAt: json['lastSeenAt']?.toString(),
       topModule: '${json['topModule'] ?? ''}',
       topModuleName: '${json['topModuleName'] ?? ''}',
+      topModuleDurationMs: (json['topModuleDurationMs'] as num?)?.toInt() ?? 0,
+      topModules: _list(json['topModules'], AppUsageTopModule.fromJson),
     );
   }
 }
@@ -373,6 +404,50 @@ String formatUsageStay(int durationMs) {
   final rem = minutes % 60;
   if (rem == 0) return '$hours小时';
   return '$hours小时$rem分';
+}
+
+String? formatUsageLastSeen(String? raw) {
+  final text = raw?.trim() ?? '';
+  if (text.isEmpty) return null;
+  final parsed = DateTime.tryParse(text);
+  if (parsed == null) return null;
+  final local = parsed.toLocal();
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(local.year, local.month, local.day);
+  final hm =
+      '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+  if (day == today) return '今天 $hm';
+  if (day == today.subtract(const Duration(days: 1))) return '昨天 $hm';
+  if (local.year == now.year) return '${local.month}月${local.day}日 $hm';
+  return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
+}
+
+int usageAvgStayMs(int durationMs, int sessions) {
+  if (sessions <= 0 || durationMs <= 0) return 0;
+  return durationMs ~/ sessions;
+}
+
+List<AppUsageTopModule> usageRowTopModules(
+  AppUsageUserRow row, {
+  int limit = 3,
+}) {
+  final ranked = [
+    for (final item in row.topModules)
+      if (item.label.isNotEmpty) item,
+  ];
+  if (ranked.isNotEmpty) {
+    return ranked.take(limit).toList(growable: false);
+  }
+  final fallback = usageModuleLabel(row.topModule, row.topModuleName);
+  if (fallback.isEmpty) return const [];
+  return [
+    AppUsageTopModule(
+      moduleKey: row.topModule,
+      moduleName: row.topModuleName,
+      durationMs: row.topModuleDurationMs,
+    ),
+  ];
 }
 
 double usageAvgMinutes(int durationMs, int users) {

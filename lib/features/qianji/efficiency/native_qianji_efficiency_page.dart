@@ -31,15 +31,48 @@ const _primaryMetricKeys = <String>{
   'minutesReadyRate',
   'minutesSubstanceRate',
   'meetingClosedLoopRate',
-  'knowledgeReuseRate',
-  'knowledgeIndexRate',
 };
 
 const _metricGroups = <(String, List<String>)>[
   ('任务', ['taskCompletionRate', 'onTimeRate', 'reworkRate']),
   ('会议', ['minutesReadyRate', 'minutesSubstanceRate', 'meetingClosedLoopRate']),
-  ('知识', ['knowledgeReuseRate', 'knowledgeIndexRate']),
 ];
+
+bool _copyMentionsKnowledge(String text) => text.contains('知识');
+
+EfficiencyAiResult? _withoutKnowledgeResult(EfficiencyAiResult? result) {
+  if (result == null) return null;
+  bool keep(String text) => !_copyMentionsKnowledge(text);
+  return EfficiencyAiResult(
+    summary: keep(result.summary) ? result.summary : '',
+    wins: [for (final item in result.wins) if (keep(item)) item],
+    risks: [for (final item in result.risks) if (keep(item)) item],
+    actions: [
+      for (final item in result.actions)
+        if (keep(item.title) && keep(item.expectedImpact)) item,
+    ],
+    confidence: result.confidence,
+  );
+}
+
+bool efficiencyOmitsKnowledge({
+  String key = '',
+  String label = '',
+  String kind = '',
+  String ref = '',
+  String brokenAt = '',
+}) {
+  if (kind == 'kb' ||
+      key == 'kb' ||
+      key == 'knowledge' ||
+      brokenAt == 'kb' ||
+      key.startsWith('knowledge') ||
+      ref.startsWith('kb:') ||
+      ref == 'meetings:no-kb') {
+    return true;
+  }
+  return label.contains('知识');
+}
 
 bool _metricWorseWhenHigher(String key) {
   switch (key) {
@@ -78,8 +111,6 @@ String? workSituationFilterForEvidence(EfficiencyEvidence item) {
       return 'task';
     case 'meeting':
       return 'meet';
-    case 'kb':
-      return 'kb';
     case 'im':
       return 'talk';
     default:
@@ -92,6 +123,13 @@ List<EfficiencyEvidence> _hardFacts(EfficiencySnapshot snapshot) {
   final out = <EfficiencyEvidence>[];
   for (final item in [...snapshot.quality, ...snapshot.bottlenecks]) {
     if (item.count <= 0) continue;
+    if (efficiencyOmitsKnowledge(
+      kind: item.kind,
+      label: item.label,
+      ref: item.ref,
+    )) {
+      continue;
+    }
     final key = item.ref.isNotEmpty ? item.ref : '${item.kind}:${item.label}';
     if (!seen.add(key)) continue;
     out.add(item);
@@ -358,7 +396,7 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    '按所选自然月或某一天，用任务、审批、提案、会议纪要、知识库和群里的业务卡片汇总。AI 只做解读，不参与打分；不看聊天正文。按日看当天窗口，按月看整月。',
+                    '按所选自然月或某一天，用任务、审批、提案、会议纪要和群里的业务卡片汇总。AI 只做解读，不参与打分；不看聊天正文，也不看知识库。按日看当天窗口，按月看整月。',
                     style: TextStyle(
                       fontSize: 12,
                       color: DunesColors.text3,
@@ -380,20 +418,15 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
                   ),
                   const _GuideItem(
                     title: '会议闭环率',
-                    body: '转到任务就算有下文。一场空会不否决整月。纪要有没有入库仍可在会议闭环链上查看。',
+                    body: '转到任务就算有下文。一场空会不否决整月。',
                   ),
                   const _GuideItem(
                     title: '返工率',
                     body: '任务驳回 + 审批拒绝 + 提案退回，占当月任务/审批/提案总数。越低越好。',
                   ),
                   const _GuideItem(
-                    title: '知识用上了率',
-                    body: '别人打开、对话引用或绑到任务才算用上，自己打开不算。解析成功率只说明文档有没有解析成功。',
-                  ),
-                  const _GuideItem(
                     title: '个人和部门有何不同',
-                    body:
-                        '个人分析会抽样阅读本人知识正文和会议纪要。部门汇总看闭环和质量，不读下属文档和聊天；少于 5 人隐藏个人下钻。',
+                    body: '个人分析会抽样阅读本人会议纪要。部门汇总看闭环和质量，不读下属文档和聊天；少于 5 人隐藏个人下钻。',
                   ),
                 ],
               ),
@@ -500,6 +533,38 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
       return const Center(child: CircularProgressIndicator());
     }
     final facts = _hardFacts(snapshot);
+    final metrics = [
+      for (final metric in snapshot.metrics)
+        if (!efficiencyOmitsKnowledge(key: metric.key, label: metric.label))
+          metric,
+    ];
+    final stages = [
+      for (final stage in snapshot.stages)
+        if (!efficiencyOmitsKnowledge(key: stage.key, label: stage.label))
+          stage,
+    ];
+    final chains = [
+      for (final chain in snapshot.chains)
+        if (!efficiencyOmitsKnowledge(
+          brokenAt: chain.brokenAt,
+          label: chain.brokenLabel,
+        ))
+          chain,
+    ];
+    final timeline = [
+      for (final item in snapshot.timeline)
+        if (!efficiencyOmitsKnowledge(
+          kind: item.kind,
+          label: item.title,
+          ref: item.evidenceRef,
+        ))
+          item,
+    ];
+    final sources = [
+      for (final source in snapshot.sources)
+        if (!efficiencyOmitsKnowledge(key: source.key, label: source.label))
+          source,
+    ];
     return RefreshIndicator(
       onRefresh: () => _load(scope, force: true),
       child: ListView(
@@ -531,25 +596,25 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
           ),
           const SizedBox(height: 12),
           _RateBoard(
-            metrics: snapshot.metrics,
+            metrics: metrics,
             restMetricsStorageKey: PageStorageKey<String>(
               'efficiency-$scope-rest-metrics',
             ),
           ),
-          if (snapshot.stages.isNotEmpty) ...[
+          if (stages.isNotEmpty) ...[
             const SizedBox(height: 12),
             _SectionCard(
               title: '工作闭环',
-              subtitle: '完成率由业务状态计算；会议和知识按是否实质可用',
-              child: _StageList(stages: snapshot.stages),
+              subtitle: '完成率由业务状态计算；会议按纪要是否实质可用',
+              child: _StageList(stages: stages),
             ),
           ],
-          if (snapshot.chains.isNotEmpty) ...[
+          if (chains.isNotEmpty) ...[
             const SizedBox(height: 12),
             _SectionCard(
               title: '会议闭环',
-              subtitle: '转到任务就算有下文；链上仍可看纪要或入库断在哪',
-              child: _ChainList(items: snapshot.chains),
+              subtitle: '转到任务就算有下文',
+              child: _ChainList(items: chains),
             ),
           ],
           if (snapshot.trends.isNotEmpty) ...[
@@ -560,19 +625,19 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
               child: _TrendList(points: snapshot.trends),
             ),
           ],
-          if (snapshot.timeline.isNotEmpty && !snapshot.privacyProtected) ...[
+          if (timeline.isNotEmpty && !snapshot.privacyProtected) ...[
             const SizedBox(height: 12),
             _SectionCard(
               title: '事项时间线',
-              subtitle: '优先使用业务ID关联，不含聊天正文',
-              child: _TimelineList(items: snapshot.timeline),
+              subtitle: '优先使用业务ID关联，不含聊天正文和知识库',
+              child: _TimelineList(items: timeline),
             ),
           ],
           if (_showQualitySamples && snapshot.insights.isNotEmpty) ...[
             const SizedBox(height: 12),
             _SectionCard(
               title: '质量抽样',
-              subtitle: '本人纪要摘要，以及知识库正文片段。不读下属文档。',
+              subtitle: '本人纪要摘要。不读下属文档，也不读知识库正文。',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -585,9 +650,9 @@ class _NativeQianjiEfficiencyPageState extends State<NativeQianjiEfficiencyPage>
               ),
             ),
           ],
-          if (snapshot.sources.isNotEmpty) ...[
+          if (sources.isNotEmpty) ...[
             const SizedBox(height: 12),
-            _SourceCard(sources: snapshot.sources),
+            _SourceCard(sources: sources),
           ],
         ],
       ),
@@ -773,7 +838,11 @@ class _RateBoard extends StatelessWidget {
     if (metrics.isEmpty) return const SizedBox.shrink();
     final byKey = {for (final metric in metrics) metric.key: metric};
     final rest = metrics
-        .where((metric) => !_primaryMetricKeys.contains(metric.key))
+        .where(
+          (metric) =>
+              !_primaryMetricKeys.contains(metric.key) &&
+              !efficiencyOmitsKnowledge(key: metric.key, label: metric.label),
+        )
         .toList(growable: false);
     return _SectionCard(
       title: '关键比率',
@@ -1174,6 +1243,7 @@ class _AiCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final shown = _withoutKnowledgeResult(result);
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1263,16 +1333,18 @@ class _AiCard extends StatelessWidget {
                           style: const TextStyle(color: DunesColors.coral),
                         ),
                       ),
-                    if (result != null) ...[
+                    if (shown != null) ...[
+                      if (shown.summary.trim().isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Text(
-                        result!.summary,
+                        shown.summary,
                         style: const TextStyle(
                           height: 1.55,
                           color: DunesColors.text,
                         ),
                       ),
-                      if (result!.wins.isNotEmpty) ...[
+                      ],
+                      if (shown.wins.isNotEmpty) ...[
                         const SizedBox(height: 12),
                         const Text(
                           '站得住的点',
@@ -1281,7 +1353,7 @@ class _AiCard extends StatelessWidget {
                             fontSize: 13,
                           ),
                         ),
-                        for (final win in result!.wins)
+                        for (final win in shown.wins)
                           Padding(
                             padding: const EdgeInsets.only(top: 5),
                             child: Text(
@@ -1293,7 +1365,7 @@ class _AiCard extends StatelessWidget {
                             ),
                           ),
                       ],
-                      if (result!.risks.isNotEmpty) ...[
+                      if (shown.risks.isNotEmpty) ...[
                         const SizedBox(height: 12),
                         const Text(
                           '硬事实风险',
@@ -1302,7 +1374,7 @@ class _AiCard extends StatelessWidget {
                             fontSize: 13,
                           ),
                         ),
-                        for (final risk in result!.risks)
+                        for (final risk in shown.risks)
                           Padding(
                             padding: const EdgeInsets.only(top: 5),
                             child: Text(
@@ -1311,7 +1383,7 @@ class _AiCard extends StatelessWidget {
                             ),
                           ),
                       ],
-                      if (result!.actions.isNotEmpty) ...[
+                      if (shown.actions.isNotEmpty) ...[
                         const SizedBox(height: 12),
                         const Text(
                           '建议动作',
@@ -1320,7 +1392,7 @@ class _AiCard extends StatelessWidget {
                             fontSize: 13,
                           ),
                         ),
-                        for (final action in result!.actions)
+                        for (final action in shown.actions)
                           Padding(
                             padding: const EdgeInsets.only(top: 6),
                             child: Text(
@@ -1333,7 +1405,7 @@ class _AiCard extends StatelessWidget {
                         (error == null || error!.isEmpty)) ...[
                       const SizedBox(height: 6),
                       const Text(
-                        '按超期、没纪要、没人用等硬事实解读，不把会话数和自己打开知识当成绩。',
+                        '按超期、没纪要等硬事实解读，不把会话数当成绩，也不看知识库。',
                         style: TextStyle(height: 1.5, color: DunesColors.text2),
                       ),
                     ],

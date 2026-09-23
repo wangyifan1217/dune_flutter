@@ -202,8 +202,13 @@ class _NativeQianjiAppUsageDetailPageState
       0,
       (m, e) => e.durationMs > m ? e.durationMs : m,
     );
-    final topModule = pages.isNotEmpty
-        ? pages.first.screenName
+    final topModules = pages
+        .take(3)
+        .map((e) => e.screenName.trim())
+        .where((e) => e.isNotEmpty)
+        .toList(growable: false);
+    final topModule = topModules.isNotEmpty
+        ? topModules.join(' · ')
         : usageModuleLabel(detail.topModule, detail.topModuleName);
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -221,7 +226,7 @@ class _NativeQianjiAppUsageDetailPageState
           children: [
             _Stat(label: '会话', value: '${detail.sessionCount}次'),
             const SizedBox(width: 8),
-            _Stat(label: '打开', value: '${detail.pv}次'),
+            _Stat(label: '浏览', value: '${detail.pv}次'),
             const SizedBox(width: 8),
             _Stat(
               label: '最常用',
@@ -285,7 +290,7 @@ class _Stat extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               value,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontSize: 15,

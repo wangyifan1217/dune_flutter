@@ -1025,6 +1025,15 @@ class _UserCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ratio = maxDuration <= 0 ? 0.0 : row.durationMs / maxDuration;
     final initial = row.displayName.isNotEmpty ? row.displayName[0] : '用';
+    final lastSeen = formatUsageLastSeen(row.lastSeenAt);
+    final modules = usageRowTopModules(row);
+    final avgStay = usageAvgStayMs(row.durationMs, row.sessionCount);
+    final stats = <(String, String)>[
+      if (row.sessionCount > 0) ('会话', '${row.sessionCount}次'),
+      if (avgStay > 0) ('次均', formatUsageStay(avgStay)),
+      if (row.activeDays > 0) ('活跃', '${row.activeDays}天'),
+      if (row.pv > 0) ('浏览', '${row.pv}次'),
+    ];
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(12),
@@ -1034,45 +1043,104 @@ class _UserCard extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ImUserAvatar(
-                initial: initial,
-                seed: row.userId,
-                size: 36,
-                avatarPreset: avatar?.preset,
-                avatarObjectKey: avatar?.objectKey,
-                avatarUrl: avatar?.url,
-                avatarService: avatarService,
-                fallbackBackground: const Color(0xFFF1EBF9),
-                fallbackForeground: _themePurple,
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: ImUserAvatar(
+                  initial: initial,
+                  seed: row.userId,
+                  size: 40,
+                  avatarPreset: avatar?.preset,
+                  avatarObjectKey: avatar?.objectKey,
+                  avatarUrl: avatar?.url,
+                  avatarService: avatarService,
+                  fallbackBackground: const Color(0xFFF1EBF9),
+                  fallbackForeground: _themePurple,
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      row.displayName,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF261D38),
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            row.displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF261D38),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          formatUsageStay(row.durationMs),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _themePurple,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      [
-                        if (row.departmentName.isNotEmpty) row.departmentName,
-                        if (row.topModule.isNotEmpty ||
-                            row.topModuleName.isNotEmpty)
-                          '常用${usageModuleLabel(row.topModule, row.topModuleName)}',
-                      ].join(' · '),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: DunesColors.text3,
+                    if (row.departmentName.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        row.departmentName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: DunesColors.text3,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
+                    ],
+                    if (modules.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (var i = 0; i < modules.length; i++)
+                            _UserFactChip(
+                              label: '${i + 1}',
+                              value: [
+                                modules[i].label,
+                                if (modules[i].durationMs > 0)
+                                  formatUsageStay(modules[i].durationMs),
+                              ].join(' '),
+                            ),
+                        ],
+                      ),
+                    ],
+                    if (stats.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final stat in stats)
+                            _UserFactChip(label: stat.$1, value: stat.$2),
+                        ],
+                      ),
+                    ],
+                    if (lastSeen != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        '最近 $lastSeen',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: DunesColors.text3,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(99),
                       child: LinearProgressIndicator(
@@ -1085,17 +1153,48 @@ class _UserCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 10),
-              Text(
-                formatUsageStay(row.durationMs),
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: _themePurple,
-                ),
-              ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _UserFactChip extends StatelessWidget {
+  const _UserFactChip({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6F3FB),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: '$label ',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: DunesColors.text3,
+              ),
+            ),
+            TextSpan(
+              text: value,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF5B4A7A),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -1200,9 +1200,9 @@ void main() {
         'taxCostItems': ['增值税及附加（能源）', '印花税'],
       });
       expect(form['salesScale'], 300);
-      expect(form['revenue'], 547.8);
-      expect(form['profit'], 462.8);
-      expect(form['margin'], 154.27);
+      expect(form['revenue'], 272.6);
+      expect(form['profit'], 187.6);
+      expect(form['margin'], 62.53);
       expect(form['taxCostItemAmounts']['印花税'], 0.18);
       expect(form['taxCostItemAmounts']['增值税及附加（能源）'], 12.61);
 
@@ -2513,11 +2513,14 @@ void main() {
         {'id': 'st-cost', 'kind': 'cost', 'settleRatio': '0.8'},
       ],
     });
-    final money = proposalSkuSettleMoney(sku, form: {'salesScale': 100});
+    final money = proposalSkuSettleMoney(sku, form: {
+      'salesScale': 100,
+      'skuDetails': [sku.toJson()],
+    });
     expect(money.hasBoth, isTrue);
+    expect(money.scale, 100);
     expect(money.income, 90);
     expect(money.cost, 80);
-    expect(money.profit, 10);
     expect(proposalSkuSettleMoneyBits(money), [
       '收入 90万',
       '成本 80万',
@@ -2572,6 +2575,125 @@ void main() {
       ],
     };
     expect(proposalProductScaleRollup(form)?.revenue, 6);
+  });
+
+  test('one total scale is multiplied by the settlement ratio only once', () {
+    final form = {
+      'salesScale': 6000,
+      'skuDetails': [
+        for (final face in ['100', '200', '300', '400'])
+          {
+            'id': 'sku-$face',
+            'faceValue': face,
+            'settlements': [
+              {'id': 'st-$face', 'settleRatio': '0.2315'},
+            ],
+          },
+      ],
+    };
+    expect(proposalProductScaleRollup(form)?.revenue, 1389);
+    final rows = proposalIntakeSkuDetails(form);
+    final small = proposalSkuSettleMoney(rows.first, form: form);
+    final large = proposalSkuSettleMoney(rows[3], form: form);
+    expect(small.income, 138.9);
+    expect(large.income, 555.6);
+    expect(small.income + large.income, isNot(small.income * 2));
+  });
+
+  test('equal product scales keep the summed revenue when faces differ', () {
+    final form = {
+      'skuDetails': [
+        {
+          'id': 'sku-200',
+          'productName': '河南中石油200元电子券（亿力-产险新车道）',
+          'settlements': [
+            {'id': 'st-200', 'scale': '900', 'settleRatio': '0.926'},
+          ],
+        },
+        {
+          'id': 'sku-300',
+          'productName': '河南中石油300元电子券（亿力-产险新车道）',
+          'settlements': [
+            {'id': 'st-300', 'scale': '900', 'settleRatio': '0.926'},
+          ],
+        },
+      ],
+    };
+    final rows = proposalIntakeSkuDetails(form);
+    final small = proposalSkuSettleMoney(rows.first, form: form);
+    final large = proposalSkuSettleMoney(rows.last, form: form);
+    expect(small.income, 833.4);
+    expect(large.income, 833.4);
+    expect(proposalProductScaleRollup(form)?.revenue, closeTo(1666.8, 0.1));
+  });
+
+  test('face in the product name splits only when products have no scale', () {
+    final form = {
+      'salesScale': 6000,
+      'skuDetails': [
+        {
+          'id': 'sku-200',
+          'productName': '河南中石油200元电子券（亿力-产险新车道）',
+          'settlements': [
+            {'id': 'st-200', 'settleRatio': '0.926'},
+          ],
+        },
+        {
+          'id': 'sku-300',
+          'productName': '河南中石油300元电子券（亿力-产险新车道）',
+          'settlements': [
+            {'id': 'st-300', 'settleRatio': '0.926'},
+          ],
+        },
+      ],
+    };
+    final rows = proposalIntakeSkuDetails(form);
+    final small = proposalSkuSettleMoney(rows.first, form: form);
+    final large = proposalSkuSettleMoney(rows.last, form: form);
+    expect(large.income / small.income, closeTo(1.5, 0.01));
+    expect(proposalProductScaleRollup(form)?.revenue, closeTo(5556, 0.1));
+  });
+
+  test('product scales are applied per product instead of the total scale', () {
+    final form = {
+      'skuDetails': [
+        {
+          'id': 'sku-1',
+          'settlements': [
+            {'id': 'st-1', 'scale': '100', 'settleRatio': '0.926'},
+          ],
+        },
+        {
+          'id': 'sku-2',
+          'settlements': [
+            {'id': 'st-2', 'scale': '200', 'settleRatio': '0.9'},
+          ],
+        },
+      ],
+    };
+    expect(proposalProductScaleRollup(form)?.salesScale, 300);
+    expect(proposalProductScaleRollup(form)?.revenue, 272.6);
+  });
+
+  test('different ratios without product scales are not summed on the total', () {
+    final form = {
+      'salesScale': 6000,
+      'skuDetails': [
+        {
+          'id': 'sku-1',
+          'settlements': [
+            {'id': 'st-1', 'settleRatio': '0.9'},
+          ],
+        },
+        {
+          'id': 'sku-2',
+          'settlements': [
+            {'id': 'st-2', 'settleRatio': '0.8'},
+          ],
+        },
+      ],
+    };
+    expect(proposalProductScaleRollup(form)?.revenue, 0);
   });
 
   test('project cost matches 成本类型 without payable bill path', () {

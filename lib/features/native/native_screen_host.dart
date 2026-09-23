@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/analytics/usage_analytics.dart';
+import '../../core/analytics/usage_module_map.dart';
 import '../../core/http/session_http.dart';
 import '../../core/layout/chat_layout.dart';
 import '../../core/navigation/navigation_controller.dart';
@@ -3653,10 +3654,16 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           }
         },
         onOpenSsoApp: (app) {
+          final title = app.title.isEmpty ? app.appKey : app.title;
           setState(() {
             _ssoAppKey = app.appKey;
-            _ssoAppTitle = app.title.isEmpty ? app.appKey : app.title;
+            _ssoAppTitle = title;
           });
+          UsageAnalytics.instance.primeScreen(
+            screenId: enterpriseUsageScreenId(app.appKey),
+            screenName: title,
+            moduleKey: enterpriseUsageModuleKey(app.appKey),
+          );
           widget.navigation.go('AM1');
         },
       ),

@@ -4154,15 +4154,15 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.descendant(of: _fieldOf('收入（万元）'), matching: find.text('547.80')),
+        find.descendant(of: _fieldOf('收入（万元）'), matching: find.text('272.60')),
         findsOneWidget,
       );
       expect(
-        find.descendant(of: _fieldOf('利润（万元）'), matching: find.text('462.80')),
+        find.descendant(of: _fieldOf('利润（万元）'), matching: find.text('187.60')),
         findsOneWidget,
       );
       expect(
-        find.descendant(of: _fieldOf('毛利率（%）'), matching: find.text('154.27')),
+        find.descendant(of: _fieldOf('毛利率（%）'), matching: find.text('62.53')),
         findsOneWidget,
       );
     },

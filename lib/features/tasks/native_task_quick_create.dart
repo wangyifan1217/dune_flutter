@@ -11,6 +11,35 @@ import 'task_first_use_guide.dart';
 import 'task_models.dart';
 import 'task_widgets.dart';
 
+/// 快速创建界面只收名称和周期。当前创建接口仍校验验收标准，
+/// 缺了会在服务端变成 internal error。这里用文案里约定的默认值补齐。
+Map<String, dynamic> buildTaskQuickCreateBody({
+  required String title,
+  required String description,
+  required DateTime startAt,
+  required DateTime dueAt,
+  required int ownerUserId,
+  required bool asMain,
+  int? groupId,
+}) {
+  final name = title.trim();
+  final desc = description.trim();
+  final standard = desc.isNotEmpty ? desc : name;
+  return <String, dynamic>{
+    'title': name,
+    if (desc.isNotEmpty)
+      'description': desc
+    else if (asMain || groupId == null)
+      'description': name,
+    'acceptanceCriteria': standard,
+    'priority': 'medium',
+    'category': '业务 · 销售',
+    'ownerUserId': ownerUserId,
+    'startAt': startAt.toUtc().toIso8601String(),
+    'dueAt': dueAt.toUtc().toIso8601String(),
+  };
+}
+
 /// 工作台轻量新建：一个主目标或一个子目标，不走完整目标表单。
 Future<TaskItem?> openTaskQuickCreate(
   BuildContext context, {
@@ -139,16 +168,15 @@ class _QuickCreateSheetState extends State<_QuickCreateSheet> {
     if (!ok || !mounted) return;
     setState(() => _saving = true);
     try {
-      final desc = _desc.text.trim();
-      final body = <String, dynamic>{
-        'title': title,
-        if (desc.isNotEmpty)
-          'description': desc
-        else if (widget.asGroup || _groupId == null)
-          'description': title,
-        'startAt': _startAt!.toUtc().toIso8601String(),
-        'dueAt': _dueAt!.toUtc().toIso8601String(),
-      };
+      final body = buildTaskQuickCreateBody(
+        title: title,
+        description: _desc.text,
+        startAt: _startAt!,
+        dueAt: _dueAt!,
+        ownerUserId: widget.session.userId,
+        asMain: widget.asGroup,
+        groupId: _groupId,
+      );
       final TaskItem created;
       if (widget.asGroup || _groupId == null) {
         created = await _api.createMain(body);

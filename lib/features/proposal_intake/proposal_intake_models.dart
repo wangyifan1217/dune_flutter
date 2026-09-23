@@ -116,7 +116,16 @@ double proposalIntakeSkuSettleFace(ProposalSkuDetailRow sku) {
     final off = proposalIntakeParseFaceNumber(split.$2);
     if (off > 0) return off;
   }
-  return proposalIntakeParseFaceNumber(face);
+  final parsed = proposalIntakeParseFaceNumber(face);
+  if (parsed > 0) return parsed;
+  return proposalIntakeFaceInProductName(sku.productName);
+}
+
+/// 面值字段为空时，从产品名里取「200元」这种面值。
+double proposalIntakeFaceInProductName(String name) {
+  final match = RegExp(r'(\d+(?:\.\d+)?)\s*元').firstMatch(name);
+  if (match == null) return 0;
+  return double.tryParse(match.group(1) ?? '') ?? 0;
 }
 
 const kProposalSkuSettleKindIncome = 'income';

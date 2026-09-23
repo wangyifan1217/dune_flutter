@@ -320,7 +320,15 @@ List<AppUsagePageStay> groupedUsagePages(List<AppUsagePageStay> pages) {
   return merged;
 }
 
-/// 人员明细按通讯 / 审批 / 会议等功能汇总，不展示到具体页面。
+String _usageModuleStayLabel(String moduleKey, String screenName) {
+  if (moduleKey.trim().toLowerCase().startsWith('h5:') &&
+      screenName.trim().isNotEmpty) {
+    return usageModuleLabel(moduleKey, screenName);
+  }
+  return usageModuleLabel(moduleKey);
+}
+
+/// 人员明细按功能汇总。企业应用按各自名称分开，不并进「网页应用」。
 List<AppUsagePageStay> groupedUsageModules(List<AppUsagePageStay> pages) {
   if (pages.isEmpty) return const [];
   final grouped = <String, AppUsagePageStay>{};
@@ -335,7 +343,7 @@ List<AppUsagePageStay> groupedUsageModules(List<AppUsagePageStay> pages) {
     if (existing == null) {
       grouped[key] = AppUsagePageStay(
         screenId: key,
-        screenName: usageModuleLabel(key),
+        screenName: _usageModuleStayLabel(key, page.screenName),
         moduleKey: key,
         uv: page.uv,
         pv: page.pv,

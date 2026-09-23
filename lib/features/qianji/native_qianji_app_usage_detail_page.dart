@@ -239,7 +239,7 @@ class _NativeQianjiAppUsageDetailPageState
         ),
         const SizedBox(height: 4),
         const Text(
-          '按通讯、审批、会议等汇总，不展示到具体页面',
+          '携程、薪人薪事和各免登应用分开统计，其它按功能汇总',
           style: TextStyle(fontSize: 12, color: DunesColors.text3),
         ),
         const SizedBox(height: 10),

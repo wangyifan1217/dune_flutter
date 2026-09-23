@@ -20,7 +20,8 @@ const kProposalVatOperatorName = '增值税及附加（运营商+公共出行）
 const kProposalStampTaxName = '印花税';
 
 const kProposalRevenueFormulaTitle = '收入';
-const kProposalRevenueFormula = '市场部规模 × 主产品收入（结算比例，或结算单价÷面值）加总';
+const kProposalRevenueFormula =
+    '各产品有规模时按规模×比例加总；只有总规模时按面值分摊后再乘比例，合计只乘一次';
 const kProposalSalesScaleFormula = '市场部基础信息填写的年化规模';
 const kProposalProcurementFormula = '各供给规则：关联产品年化规模 × 该条比例，加总';
 const kProposalProfitFormula = '收入 − 采购 − 项目';
@@ -286,8 +287,7 @@ ProposalSkuSettleMoney proposalSkuSettleMoney(
       incomeShare += share;
     }
   }
-  final local = proposalIntakeSkuScaleTotal(sku);
-  final scale = local > 0 ? local : proposalEffectiveSalesScale(form);
+  final scale = proposalSkuFaceShareScale(sku, form: form);
   return ProposalSkuSettleMoney(
     income: proposalRoundWan(scale * incomeShare),
     cost: proposalRoundWan(scale * costShare),
@@ -317,22 +317,121 @@ List<String> proposalSkuSettleMoneyBits(ProposalSkuSettleMoney money) {
   ];
 }
 
+double proposalSkuIncomeShare(ProposalSkuDetailRow sku) {
+  final face = proposalIntakeSkuSettleFace(sku);
+  var share = 0.0;
+  for (final settle in proposalIntakeSkuSettlements(sku)) {
+    if (settle.isCost) continue;
+    final part = proposalIntakeSettleShare(settle.terms, face: face);
+    if (part > 0) share += part;
+  }
+  return share;
+}
+
+bool _sameIncomeShare(double a, double b) => (a - b).abs() < 1e-9;
+
+List<ProposalSkuDetailRow> _proposalSkuScalePeers(
+  Map<String, dynamic> form,
+  ProposalSkuDetailRow sku,
+) {
+  final mains = proposalIntakeSkuDetails(form);
+  if (mains.any((item) => item.id == sku.id)) return mains;
+  final children = proposalIntakeChildProducts(form);
+  if (children.any((item) => item.id == sku.id)) return children;
+  return [sku];
+}
+
+/// 没有本产品规模时，把总规模按面值分给各产品。已有规模的产品不参与分摊。
+double proposalSkuFaceShareScale(
+  ProposalSkuDetailRow sku, {
+  required Map<String, dynamic> form,
+}) {
+  final local = proposalIntakeSkuScaleTotal(sku);
+  if (local > 0) return local;
+  final face = proposalIntakeSkuSettleFace(sku);
+  if (face <= 0) return 0;
+  final peers = _proposalSkuScalePeers(form, sku);
+  var weight = 0.0;
+  var owned = 0.0;
+  for (final peer in peers) {
+    final peerScale = proposalIntakeSkuScaleTotal(peer);
+    if (peerScale > 0) {
+      owned += peerScale;
+      continue;
+    }
+    final peerFace = proposalIntakeSkuSettleFace(peer);
+    if (peerFace <= 0) continue;
+    weight += peerFace;
+  }
+  if (weight <= 0) return 0;
+  final total = proposalEffectiveSalesScale(form);
+  final pool = owned <= 0
+      ? total
+      : (total - owned) > 0.001
+      ? total - owned
+      : 0.0;
+  if (pool <= 0) return 0;
+  return pool * face / weight;
+}
+
+double? _faceWeightedIncomeShare(Map<String, dynamic> form) {
+  var weight = 0.0;
+  var weighted = 0.0;
+  for (final sku in proposalIntakeSkuDetails(form)) {
+    if (proposalIntakeSkuScaleTotal(sku) > 0) continue;
+    final share = proposalSkuIncomeShare(sku);
+    final face = proposalIntakeSkuSettleFace(sku);
+    if (share <= 0 || face <= 0) continue;
+    weight += face;
+    weighted += face * share;
+  }
+  if (weight <= 0) return null;
+  return weighted / weight;
+}
+
 ProposalProductScaleRollup? proposalProductScaleRollup(
   Map<String, dynamic> form,
 ) {
+  final explicitTotal = proposalIntakeFormHasText(
+    form,
+    kProposalSalesScaleKey,
+  );
+  final legacyScale = proposalIntakeLegacyProductScaleTotal(form);
   final hydrated = proposalIntakeHydrateMarketSalesScale(form);
   final scale = proposalFinanceAmount(hydrated, kProposalSalesScaleKey);
   if (scale <= 0) return null;
-  var revenue = 0.0;
+  var ownedRevenue = 0.0;
+  var anyOwned = false;
   var anyShare = false;
+  final shares = <double>[];
   for (final sku in proposalIntakeSkuDetails(hydrated)) {
-    final face = proposalIntakeSkuSettleFace(sku);
-    for (final settle in proposalIntakeSkuSettlements(sku)) {
-      if (settle.isCost) continue;
-      final share = proposalIntakeSettleShare(settle.terms, face: face);
-      if (share <= 0) continue;
-      anyShare = true;
-      revenue += scale * share;
+    final share = proposalSkuIncomeShare(sku);
+    if (share <= 0) continue;
+    anyShare = true;
+    shares.add(share);
+    final local = proposalIntakeSkuScaleTotal(sku);
+    if (local > 0) {
+      anyOwned = true;
+      ownedRevenue += local * share;
+    }
+  }
+  // 总规模等于各产品规模之和时，按各产品自己的规模算。面值不改这份合计。
+  // 市场部另填了一个总规模、产品又没有各自规模时，这个总规模只乘一次。
+  final scaleIsProductSum =
+      !explicitTotal ||
+      (legacyScale > 0 && (scale - legacyScale).abs() < 0.001);
+  var revenue = 0.0;
+  if (scaleIsProductSum && anyOwned) {
+    revenue = ownedRevenue;
+  } else if (shares.isNotEmpty) {
+    final weighted = _faceWeightedIncomeShare(hydrated);
+    if (weighted != null) {
+      revenue = scale * weighted;
+    } else {
+      final first = shares.first;
+      if (shares.every((share) => _sameIncomeShare(share, first))) {
+        revenue = scale * first;
+      }
     }
   }
   return ProposalProductScaleRollup(

@@ -884,22 +884,29 @@ class TaskWorkbenchCard extends StatelessWidget {
                               ),
                             ),
                           ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            TaskMetaChip(
+                              text: task.overdue
+                                  ? '已逾期'
+                                  : taskStatusLabel(task.status),
+                              color: statusColor,
+                            ),
+                            if (task.hasPendingChange)
+                              TaskMetaChip(
+                                text: taskPendingChangeLabel(
+                                  task.pendingChangeKind,
+                                ),
+                                color: const Color(0xFFB45309),
+                              ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  TaskMetaChip(
-                    text: task.overdue ? '已逾期' : taskStatusLabel(task.status),
-                    color: statusColor,
-                  ),
-                  if (task.hasPendingChange)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 6),
-                      child: TaskMetaChip(
-                        text: taskPendingChangeLabel(task.pendingChangeKind),
-                        color: const Color(0xFFB45309),
-                      ),
-                    ),
                 ],
               ),
               if (groupMode) ...[
@@ -988,7 +995,9 @@ class TaskWorkbenchCard extends StatelessWidget {
               ],
               const SizedBox(height: 12),
               if (pending || onApprove != null || onReject != null)
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
                     if (pending || onApprove != null)
                       FilledButton(
@@ -1000,8 +1009,7 @@ class TaskWorkbenchCard extends StatelessWidget {
                         onPressed: onApprove,
                         child: Text(approveLabel),
                       ),
-                    if (pending || onReject != null) ...[
-                      const SizedBox(width: 8),
+                    if (pending || onReject != null)
                       OutlinedButton(
                         style: OutlinedButton.styleFrom(
                           visualDensity: VisualDensity.compact,
@@ -1009,7 +1017,6 @@ class TaskWorkbenchCard extends StatelessWidget {
                         onPressed: onReject,
                         child: Text(rejectLabel),
                       ),
-                    ],
                   ],
                 )
               else if (groupMode)
@@ -1041,32 +1048,40 @@ class TaskWorkbenchCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        if (onProgress != null)
-                          OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.end,
+                        children: [
+                          if (onProgress != null)
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              onPressed: onProgress,
+                              icon: const Icon(Icons.tune, size: 16),
+                              label: const Text('更新进度'),
                             ),
-                            onPressed: onProgress,
-                            icon: const Icon(Icons.tune, size: 16),
-                            label: const Text('更新进度'),
-                          ),
-                        if (onComplete != null) ...[
-                          const SizedBox(width: 8),
-                          FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: kTaskPurple,
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                          if (onComplete != null)
+                            FilledButton.icon(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: kTaskPurple,
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                ),
+                              ),
+                              onPressed: onComplete,
+                              icon: const Icon(
+                                Icons.check_circle_outline,
+                                size: 16,
+                              ),
+                              label: const Text('标记完成'),
                             ),
-                            onPressed: onComplete,
-                            icon: const Icon(Icons.check_circle_outline, size: 16),
-                            label: const Text('标记完成'),
-                          ),
                         ],
-                      ],
+                      ),
                     ),
                   ],
                 ),

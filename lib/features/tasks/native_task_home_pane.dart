@@ -171,49 +171,90 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       );
       return;
     }
+    final wide = MediaQuery.sizeOf(context).width >= 720;
     widget.onChromeChanged?.call(
       TaskShellChrome(
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              tooltip: '任务功能',
-              onPressed: _openManagement,
-              icon: const Icon(
-                Icons.widgets_outlined,
-                color: DunesColors.text2,
-              ),
-            ),
-            const SizedBox(width: 2),
-            IconButton(
-              tooltip: '使用指引',
-              onPressed: () => unawaited(_showGuide(force: true)),
-              icon: const Icon(Icons.help_outline, color: DunesColors.text2),
-            ),
-            const SizedBox(width: 4),
-            TextButton(
-              onPressed: () => _openCreate(),
-              child: const Text('完整创建'),
-            ),
-            const SizedBox(width: 4),
-            FilledButton.icon(
-              onPressed: _openQuickCreate,
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('快速新建'),
-              style: FilledButton.styleFrom(
-                backgroundColor: kTaskPurple,
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ],
+        trailing: wide ? _wideListActions() : _compactListActions(),
+      ),
+    );
+  }
+
+  Widget _wideListActions() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: '任务功能',
+          onPressed: _openManagement,
+          icon: const Icon(Icons.widgets_outlined, color: DunesColors.text2),
         ),
+        const SizedBox(width: 2),
+        IconButton(
+          tooltip: '使用指引',
+          onPressed: () => unawaited(_showGuide(force: true)),
+          icon: const Icon(Icons.help_outline, color: DunesColors.text2),
+        ),
+        const SizedBox(width: 4),
+        TextButton(
+          onPressed: () => _openCreate(),
+          child: const Text('完整创建'),
+        ),
+        const SizedBox(width: 4),
+        _quickCreateButton(label: '快速新建'),
+      ],
+    );
+  }
+
+  Widget _compactListActions() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        OutlinedButton(
+          onPressed: () => _openCreate(),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: kTaskPurple,
+            visualDensity: VisualDensity.compact,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            side: const BorderSide(color: Color(0xFFD9D0EA)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          child: const Text('完整创建'),
+        ),
+        const SizedBox(width: 6),
+        _quickCreateButton(label: '新建'),
+      ],
+    );
+  }
+
+  Widget _toolIcon({
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      icon: Icon(icon, size: 20, color: DunesColors.text2),
+    );
+  }
+
+  Widget _quickCreateButton({required String label}) {
+    return FilledButton.icon(
+      onPressed: _openQuickCreate,
+      icon: const Icon(Icons.add, size: 18),
+      label: Text(label),
+      style: FilledButton.styleFrom(
+        backgroundColor: kTaskPurple,
+        visualDensity: VisualDensity.compact,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -748,6 +789,19 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                         _tabChip('actionable', '今日'),
                         const SizedBox(width: 8),
                         _tabChip('goals', '主目标'),
+                        if (MediaQuery.sizeOf(context).width < 720) ...[
+                          const SizedBox(width: 4),
+                          _toolIcon(
+                            tooltip: '任务功能',
+                            icon: Icons.widgets_outlined,
+                            onPressed: _openManagement,
+                          ),
+                          _toolIcon(
+                            tooltip: '使用指引',
+                            icon: Icons.help_outline,
+                            onPressed: () => unawaited(_showGuide(force: true)),
+                          ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 8),

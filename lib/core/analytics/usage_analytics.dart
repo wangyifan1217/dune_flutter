@@ -29,7 +29,12 @@ class UsageAnalytics {
   bool _flushing = false;
   bool _foreground = true;
   String? _currentScreen;
+  String _currentScreenName = '';
+  String _currentModuleKey = '';
   DateTime? _pageEnterAt;
+  String? _primedScreenId;
+  String _primedScreenName = '';
+  String _primedModuleKey = '';
   http.Client? _client;
 
   bool get isBound => _session != null && _session!.userId > 0;
@@ -78,20 +83,48 @@ class UsageAnalytics {
     _reset();
   }
 
+  /// 下一次切屏改记成指定应用。企业应用导航都进 AM1，埋点要按应用拆开。
+  void primeScreen({
+    required String screenId,
+    required String screenName,
+    required String moduleKey,
+  }) {
+    final id = screenId.trim();
+    if (id.isEmpty) return;
+    _primedScreenId = id;
+    _primedScreenName = screenName.trim();
+    _primedModuleKey = moduleKey.trim();
+  }
+
   void trackScreen(String screenId) {
     if (!isBound || screenId.isEmpty) return;
-    if (_currentScreen == screenId && _pageEnterAt != null) return;
+    final primedId = _primedScreenId;
+    final primedName = _primedScreenName;
+    final primedModule = _primedModuleKey;
+    _primedScreenId = null;
+    _primedScreenName = '';
+    _primedModuleKey = '';
+    final reportId = (primedId == null || primedId.isEmpty) ? screenId : primedId;
+    final reportName = primedName.isNotEmpty
+        ? primedName
+        : usageScreenName(reportId);
+    final reportModule = primedModule.isNotEmpty
+        ? primedModule
+        : usageModuleKeyForScreen(reportId);
+    if (_currentScreen == reportId && _pageEnterAt != null) return;
     _closeCurrentPage();
-    _currentScreen = screenId;
+    _currentScreen = reportId;
+    _currentScreenName = reportName;
+    _currentModuleKey = reportModule;
     if (!_foreground) return;
     _pageEnterAt = DateTime.now();
     _enqueue(
       UsageEvent(
         eventType: 'page_enter',
         occurredAt: _pageEnterAt!,
-        screenId: screenId,
-        screenName: usageScreenName(screenId),
-        moduleKey: usageModuleKeyForScreen(screenId),
+        screenId: reportId,
+        screenName: reportName,
+        moduleKey: reportModule,
       ),
     );
   }
@@ -117,8 +150,8 @@ class UsageAnalytics {
           eventType: 'page_enter',
           occurredAt: _pageEnterAt!,
           screenId: screen,
-          screenName: usageScreenName(screen),
-          moduleKey: usageModuleKeyForScreen(screen),
+          screenName: _labelFor(screen),
+          moduleKey: _moduleFor(screen),
         ),
       );
     }
@@ -173,11 +206,23 @@ class UsageAnalytics {
         eventType: 'page_leave',
         occurredAt: DateTime.now(),
         screenId: screen,
-        screenName: usageScreenName(screen),
-        moduleKey: usageModuleKeyForScreen(screen),
+        screenName: _labelFor(screen),
+        moduleKey: _moduleFor(screen),
         durationMs: ms,
       ),
     );
+  }
+
+  String _labelFor(String screenId) {
+    final name = _currentScreenName.trim();
+    if (_currentScreen == screenId && name.isNotEmpty) return name;
+    return usageScreenName(screenId);
+  }
+
+  String _moduleFor(String screenId) {
+    final key = _currentModuleKey.trim();
+    if (_currentScreen == screenId && key.isNotEmpty) return key;
+    return usageModuleKeyForScreen(screenId);
   }
 
   void _enqueue(UsageEvent event) {
@@ -206,6 +251,11 @@ class UsageAnalytics {
     _sessionId = '';
     _queue.clear();
     _currentScreen = null;
+    _currentScreenName = '';
+    _currentModuleKey = '';
+    _primedScreenId = null;
+    _primedScreenName = '';
+    _primedModuleKey = '';
     _pageEnterAt = null;
     _foreground = true;
   }

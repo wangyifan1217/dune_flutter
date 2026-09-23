@@ -7,7 +7,11 @@ void main() {
     expect(usageModuleKeyForScreen('C1'), 'comm');
     expect(usageModuleKeyForScreen('C4'), 'nova');
     expect(usageModuleKeyForScreen('QJ'), 'nova');
-    expect(usageModuleKeyForScreen('QJUH'), 'nova');
+    expect(usageModuleKeyForScreen('C11'), 'nova');
+    expect(usageModuleKeyForScreen('QJUH'), 'workbench');
+    expect(usageModuleKeyForScreen('QJA'), 'workbench');
+    expect(usageModuleKeyForScreen('QJUHD'), 'workbench');
+    expect(usageModuleKeyForScreen('QJAM'), 'workbench');
     expect(usageModuleKeyForScreen('LH'), 'lighthouse');
     expect(usageModuleKeyForScreen('B2'), 'me');
     expect(usageModuleKeyForScreen('B1'), 'approval');
@@ -18,12 +22,18 @@ void main() {
     expect(usageModuleKeyForScreen('XA1'), 'comm');
     expect(usageModuleKeyForScreen('MM'), 'meeting');
     expect(usageModuleKeyForScreen('FD1'), 'drive');
-    expect(usageModuleKeyForScreen('XR1'), 'h5');
-    expect(usageModuleKeyForScreen('CT1'), 'h5');
+    expect(usageModuleKeyForScreen('XR1'), 'h5:xrxs');
+    expect(usageModuleKeyForScreen('CT1'), 'h5:ctrip');
+    expect(usageModuleKeyForScreen('AM1'), 'h5');
+    expect(usageModuleKeyForScreen('AM:digital-center'), 'h5:digital-center');
+    expect(enterpriseUsageModuleKey('Digital-Center'), 'h5:digital-center');
+    expect(enterpriseUsageScreenId('Digital-Center'), 'AM:digital-center');
+    expect(usageModuleLabel('h5:digital-center', '三桶油-数字中心'), '三桶油-数字中心');
   });
 
   test('usageModuleLabel uses product names instead of internal codes', () {
     expect(usageModuleLabel('nova'), '小饕');
+    expect(usageModuleLabel('workbench'), '工作台');
     expect(usageModuleLabel('NOVA'), '小饕');
     expect(usageModuleLabel('h5'), '网页应用');
     expect(usageModuleLabel('comm'), '通讯');
@@ -109,10 +119,26 @@ void main() {
       const AppUsagePageStay(
         screenId: 'KA1',
         screenName: 'KA1',
-        moduleKey: 'kb',
+        moduleKey: 'comm',
         uv: 1,
         pv: 2,
         durationMs: 45000,
+      ),
+      const AppUsagePageStay(
+        screenId: 'QJUH',
+        screenName: '使用热力',
+        moduleKey: 'workbench',
+        uv: 1,
+        pv: 4,
+        durationMs: 33 * 60 * 1000,
+      ),
+      const AppUsagePageStay(
+        screenId: 'C4',
+        screenName: '小饕',
+        moduleKey: 'nova',
+        uv: 1,
+        pv: 1,
+        durationMs: 40 * 1000,
       ),
       const AppUsagePageStay(
         screenId: 'B2PERF',
@@ -123,14 +149,52 @@ void main() {
         durationMs: 0,
       ),
     ]);
-    expect(pages.map((e) => e.screenName).toList(), ['会议', '通讯']);
-    expect(pages.first.durationMs, 90000);
-    expect(pages.last.durationMs, 45000);
+    expect(
+      pages.map((e) => e.screenName).toList(),
+      ['工作台', '会议', '通讯', '小饕'],
+    );
+    expect(pages.first.durationMs, 33 * 60 * 1000);
+    expect(pages[1].durationMs, 90000);
+    expect(pages[2].durationMs, 45000);
+    expect(pages.last.durationMs, 40 * 1000);
   });
 
   test('usageScreenName hides unmapped route codes', () {
     expect(usageScreenName('ZZ9'), '其他');
     expect(usagePageLabel(screenId: 'KA1', screenName: 'KA1'), '绩效助手');
+  });
+
+  test('groupedUsageModules keeps each enterprise app separate', () {
+    final pages = groupedUsageModules([
+      const AppUsagePageStay(
+        screenId: 'CT1',
+        screenName: '携程商旅',
+        moduleKey: 'h5:ctrip',
+        uv: 1,
+        pv: 2,
+        durationMs: 5000,
+      ),
+      const AppUsagePageStay(
+        screenId: 'AM:digital-center',
+        screenName: '三桶油-数字中心',
+        moduleKey: 'h5:digital-center',
+        uv: 1,
+        pv: 1,
+        durationMs: 8000,
+      ),
+      const AppUsagePageStay(
+        screenId: 'XR1',
+        screenName: '薪人薪事',
+        moduleKey: 'h5:xrxs',
+        uv: 1,
+        pv: 1,
+        durationMs: 3000,
+      ),
+    ]);
+    expect(
+      pages.map((e) => e.screenName).toList(),
+      ['三桶油-数字中心', '携程商旅', '薪人薪事'],
+    );
   });
 
   test('formatUsageStay', () {

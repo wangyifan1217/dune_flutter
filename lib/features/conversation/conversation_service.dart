@@ -215,6 +215,39 @@ class ConversationService {
     return (body['totalUnread'] as num?)?.toInt();
   }
 
+  /// 全员非默认状态。通讯录用它显示签名，不依赖是否已经私聊。
+  Future<Map<int, ImUserStatusValue>> fetchImStatusDirectory() async {
+    final resp = await _client.get(
+      _uri('/conversations/im-status/directory'),
+      headers: _headers,
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw Exception('状态加载失败: HTTP ${resp.statusCode}');
+    }
+    final body = _decode(resp.body);
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '状态加载失败').toString());
+    }
+    final data = body['data'];
+    final rawItems = data is Map ? data['items'] : null;
+    if (rawItems is! List) return const <int, ImUserStatusValue>{};
+    final out = <int, ImUserStatusValue>{};
+    for (final raw in rawItems) {
+      if (raw is! Map) continue;
+      final userId = (raw['userId'] as num?)?.toInt() ?? 0;
+      if (userId <= 0) continue;
+      final status = ImUserStatusCatalog.parse(
+        status: raw['status']?.toString(),
+        text: raw['text']?.toString(),
+        icon: raw['icon']?.toString(),
+        color: raw['color']?.toString(),
+      );
+      if (!status.showsBadge) continue;
+      out[userId] = status;
+    }
+    return out;
+  }
+
   Future<ImUserStatusValue> fetchImStatus() async {
     final resp = await _client.get(
       _uri('/conversations/im-status'),

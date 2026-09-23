@@ -100,6 +100,44 @@ void main() {
     expect(find.text('新建主目标'), findsOneWidget);
   });
 
+  test('quick create fills the fields the create API requires', () {
+    final start = DateTime(2026, 9, 23);
+    final due = DateTime(2026, 9, 23, 23, 59, 59);
+    final body = buildTaskQuickCreateBody(
+      title: '所有预警加白',
+      description: '15116444875',
+      startAt: start,
+      dueAt: due,
+      ownerUserId: 8,
+      asMain: true,
+    );
+
+    expect(body['title'], '所有预警加白');
+    expect(body['description'], '15116444875');
+    expect(body['acceptanceCriteria'], '15116444875');
+    expect(body['category'], '业务 · 销售');
+    expect(body['priority'], 'medium');
+    expect(body['ownerUserId'], 8);
+    expect(body['startAt'], start.toUtc().toIso8601String());
+    expect(body['dueAt'], due.toUtc().toIso8601String());
+  });
+
+  test('quick create uses the title when the optional note is empty', () {
+    final body = buildTaskQuickCreateBody(
+      title: ' 跟进方案 ',
+      description: '  ',
+      startAt: DateTime(2026, 9, 10),
+      dueAt: DateTime(2026, 9, 12, 23, 59, 59),
+      ownerUserId: 1,
+      asMain: false,
+      groupId: 3,
+    );
+
+    expect(body['title'], '跟进方案');
+    expect(body.containsKey('description'), isFalse);
+    expect(body['acceptanceCriteria'], '跟进方案');
+  });
+
   testWidgets('quick create requires start/end before confirmation', (
     tester,
   ) async {

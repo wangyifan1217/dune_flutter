@@ -99,6 +99,41 @@ abstract final class MeetingAudioFilePicker {
     return destPath;
   }
 
+  /// 结束录音后选择取消：把文件留在本机，不进入上传队列。
+  static Future<String> keepRecordingLocal(String sourcePath) async {
+    final src = File(sourcePath);
+    if (!await src.exists() || await src.length() <= 0) {
+      throw Exception('录音文件为空或未成功落盘');
+    }
+    final docs = await getApplicationDocumentsDirectory();
+    final dir = Directory('${docs.path}/meeting_local');
+    await dir.create(recursive: true);
+    final normalizedSrc = sourcePath.replaceAll('\\', '/');
+    final normalizedDir = dir.path.replaceAll('\\', '/');
+    if (normalizedSrc.startsWith('$normalizedDir/')) return sourcePath;
+    final destPath =
+        '${dir.path}/meeting_local_${DateTime.now().millisecondsSinceEpoch}${_extensionOf(sourcePath)}';
+    final dest = File(destPath);
+    final raf = await src.open();
+    final sink = dest.openWrite();
+    try {
+      const chunkSize = 64 * 1024;
+      while (true) {
+        final chunk = await raf.read(chunkSize);
+        if (chunk.isEmpty) break;
+        sink.add(chunk);
+      }
+      await sink.flush();
+    } finally {
+      await sink.close();
+      await raf.close();
+    }
+    if (!await dest.exists() || await dest.length() <= 0) {
+      throw Exception('录音文件保存失败');
+    }
+    return destPath;
+  }
+
   static String _extensionOf(String path) {
     final normalized = path.replaceAll('\\', '/');
     final slash = normalized.lastIndexOf('/');

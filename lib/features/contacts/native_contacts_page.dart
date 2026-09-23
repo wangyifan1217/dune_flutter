@@ -114,6 +114,7 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
     unawaited(_bootRealtime());
     unawaited(_hydrateSelfImStatus());
     unawaited(_hydratePeerStatuses());
+    unawaited(_hydrateDirectoryStatuses());
   }
 
   @override
@@ -227,16 +228,23 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
     } catch (_) {}
   }
 
+  Future<void> _hydrateDirectoryStatuses() async {
+    try {
+      final rows = await _convService.fetchImStatusDirectory();
+      if (!mounted) return;
+      setState(() => _imStatuses = rows);
+    } catch (_) {}
+  }
+
   Future<void> _hydratePeerStatuses() async {
     try {
       final rows = await _convService.fetchConversations();
       if (!mounted) return;
-      final next = Map<int, ImUserStatusValue>.from(_imStatuses);
-      var changed = false;
+      final incoming = <int, ImUserStatusValue>{};
       for (final item in rows) {
         if (!item.isPrivate || item.isSelfMemo) continue;
         final peerId = item.peerUserId ?? 0;
-        if (peerId <= 0 || next.containsKey(peerId)) continue;
+        if (peerId <= 0) continue;
         final status = ImUserStatusCatalog.parse(
           status: item.peerImStatus,
           text: item.peerImStatusText,
@@ -244,12 +252,19 @@ class _NativeContactsPageState extends State<NativeContactsPage> {
           color: item.peerImStatusColor,
         );
         if (!status.showsBadge) continue;
-        next[peerId] = status;
-        changed = true;
+        incoming[peerId] = status;
       }
-      if (changed) {
-        setState(() => _imStatuses = next);
-      }
+      if (incoming.isEmpty) return;
+      setState(() {
+        final next = Map<int, ImUserStatusValue>.from(_imStatuses);
+        var changed = false;
+        for (final entry in incoming.entries) {
+          if (next.containsKey(entry.key)) continue;
+          next[entry.key] = entry.value;
+          changed = true;
+        }
+        if (changed) _imStatuses = next;
+      });
     } catch (_) {}
   }
 

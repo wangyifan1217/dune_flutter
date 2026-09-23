@@ -2,7 +2,8 @@ import '../navigation/generated/screen_registry.dart';
 
 const kUsageModuleLabels = <String, String>{
   'comm': '通讯',
-  'nova': '小饕', // 小饕对话 + 饕管理工作台（原 NOVA 板块）
+  'nova': '小饕', // 只有小饕会话：QJ、C4、C11
+  'workbench': '工作台', // 千机工作台及其子页
   'lighthouse': '灯塔',
   'me': '我的',
   'approval': '审批',
@@ -163,35 +164,72 @@ bool _looksLikeRouteCode(String name) {
   return trimmed.length <= 10 && _routeCode.hasMatch(trimmed);
 }
 
-/// 人员明细按功能汇总时，优先用页面 ID 重新归类，避免历史脏 moduleKey。
+/// 功能停留、最常用按接口 moduleKey 汇总，不再用页面编号前缀改写。
 String usageResolvedModuleKey({
   String screenId = '',
   String screenName = '',
   String moduleKey = '',
 }) {
+  final key = moduleKey.trim().toLowerCase();
+  if (key.isNotEmpty && key != '_session') return key;
+  // 接口没给模块时才按页面归类，避免把已拆开的工作台画回小饕。
   final fromId = usageModuleKeyForScreen(screenId);
   if (fromId != 'other') return fromId;
   final fromName = usageModuleKeyForScreen(screenName);
   if (fromName != 'other') return fromName;
-  final key = moduleKey.trim().toLowerCase();
-  if (key.isNotEmpty &&
-      key != '_session' &&
-      kUsageModuleLabels.containsKey(key)) {
-    return key;
-  }
   return 'other';
+}
+
+/// 单点免登应用的模块键，须匹配服务端 `h5:` + 最多 29 位。
+String enterpriseUsageModuleKey(String appKey) {
+  final slug = enterpriseAppSlug(appKey);
+  if (slug.isEmpty) return 'h5';
+  return 'h5:$slug';
+}
+
+/// 单点免登应用的页面编号。导航仍走 AM1，埋点用这个编号把各应用拆开。
+String enterpriseUsageScreenId(String appKey) {
+  final slug = enterpriseAppSlug(appKey);
+  if (slug.isEmpty) return 'AM1';
+  return 'AM:$slug';
+}
+
+String enterpriseAppSlug(String appKey) {
+  final raw = appKey.trim().toLowerCase();
+  if (raw.isEmpty) return '';
+  final ascii = raw.replaceAll(RegExp(r'[^a-z0-9_-]'), '');
+  final slug = ascii.isNotEmpty ? ascii : _hexSlug(raw);
+  if (slug.length <= 29) return slug;
+  return slug.substring(0, 29);
+}
+
+String _hexSlug(String raw) {
+  final buf = StringBuffer();
+  for (final unit in raw.codeUnits) {
+    buf.write(unit.toRadixString(16));
+    if (buf.length >= 29) break;
+  }
+  final hex = buf.toString();
+  return hex.length > 29 ? hex.substring(0, 29) : hex;
 }
 
 String usageModuleKeyForScreen(String screenId) {
   final id = screenId.trim().toUpperCase();
   if (id.isEmpty) return 'other';
-  if (id == 'C4' || id == 'C11') return 'nova';
-  if (id.startsWith('QJ')) return 'nova';
+  if (id == 'C4' || id == 'C11' || id == 'QJ') return 'nova';
+  if (id.startsWith('QJ')) return 'workbench';
   if (id == 'LH' || id == 'LM') return 'lighthouse';
   if (id == 'B2' || id.startsWith('B2')) return 'me';
   if (id == 'FD1') return 'drive';
-  // 薪人薪事 / 携程商旅 / 资管 等内嵌网页，展示名「网页应用」
-  if (id == 'XR1' || id == 'CT1' || id == 'AM1') return 'h5';
+  // 企业应用按实际打开的系统拆开，不再并进同一个「网页应用」。
+  if (id == 'XR1') return 'h5:xrxs';
+  if (id == 'CT1') return 'h5:ctrip';
+  if (id.startsWith('AM:')) {
+    final slug = id.substring(3).toLowerCase();
+    if (RegExp(r'^[a-z0-9_-]{1,29}$').hasMatch(slug)) return 'h5:$slug';
+    return 'h5';
+  }
+  if (id == 'AM1') return 'h5';
   // 绩效助手 KA1 不能按 K 前缀算进知识库
   if (id == 'KA1' || id == 'XA1' || id == 'RA1') return 'comm';
   if (id.startsWith('K')) return 'kb';

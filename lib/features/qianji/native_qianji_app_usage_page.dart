@@ -676,7 +676,7 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
         ),
         const SizedBox(height: 4),
         const Text(
-          '格子越深，当天停得越久。网页应用指薪人薪事、携程、资管等内嵌页。',
+          '格子越深，当天停得越久。携程、薪人薪事和各免登应用分开统计。',
           style: TextStyle(fontSize: 12, color: DunesColors.text3),
         ),
         const SizedBox(height: 10),

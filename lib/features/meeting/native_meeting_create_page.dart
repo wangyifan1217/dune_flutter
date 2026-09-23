@@ -57,6 +57,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
   bool _picking = false;
   bool _endingLive = false;
   bool _persistingAfterEnd = false;
+  bool _keepingLocal = false;
   bool? _persistGenerate;
   bool _pendingPersistAfterEnd = false;
   String _pendingDraftTitle = '';
@@ -348,7 +349,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
         title: const Text('结束并保存？'),
         content: Text(
           '确定要结束录音「$title」吗？\n\n'
-          '结束后将无法继续追加录音，接下来可选择存为草稿或立即生成纪要。',
+          '结束后将无法继续追加录音，接下来可选择立即生成、存为草稿，或取消并只把录音留在本机。',
           style: DunesTypography.sans(fontSize: 13.5, height: 1.55),
         ),
         actions: [
@@ -422,52 +423,140 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     required String filePath,
   }) async {
     _dismissKeyboard();
-    final displayTitle = _resolvedPersistTitle();
-    final generate = await showDialog<bool>(
+    while (mounted) {
+      final displayTitle = _resolvedPersistTitle();
+      final choice = await showDialog<_AfterEndChoice>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('是否生成会议纪要？'),
+          content: Text(
+            '录音「$displayTitle」已结束。\n\n'
+            '选择「立即生成」将上传录音并开始转写；'
+            '选择「存为草稿」会保存到列表，稍后可进详情页生成；'
+            '选择「取消」只把录音留在本机，不上传会议纪要。',
+            style: DunesTypography.sans(fontSize: 13.5, height: 1.55),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                _dismissKeyboard();
+                Navigator.of(ctx).pop(_AfterEndChoice.cancel);
+              },
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () {
+                _dismissKeyboard();
+                Navigator.of(ctx).pop(_AfterEndChoice.draft);
+              },
+              child: const Text('存为草稿'),
+            ),
+            FilledButton(
+              onPressed: () {
+                _dismissKeyboard();
+                Navigator.of(ctx).pop(_AfterEndChoice.generate);
+              },
+              child: const Text('立即生成'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      final title = _resolvedPersistTitle();
+      if (choice == null || choice == _AfterEndChoice.draft) {
+        // 系统返回键关闭弹窗时，自动存为草稿。
+        await _persistAfterEnd(
+          title: title,
+          filePath: filePath,
+          generate: false,
+        );
+        return;
+      }
+      if (choice == _AfterEndChoice.generate) {
+        await _persistAfterEnd(
+          title: title,
+          filePath: filePath,
+          generate: true,
+        );
+        return;
+      }
+      final confirmed = await _confirmCancelAfterEnd(displayTitle);
+      if (!mounted) return;
+      if (confirmed != true) continue;
+      final kept = await _keepAudioLocalOnly(filePath: filePath, title: title);
+      if (kept) return;
+    }
+  }
+
+  Future<bool> _confirmCancelAfterEnd(String title) async {
+    _dismissKeyboard();
+    final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        title: const Text('是否生成会议纪要？'),
+        title: const Text('确认取消？'),
         content: Text(
-          '录音「$displayTitle」已结束。\n\n'
-          '选择「立即生成」将上传录音并开始转写；'
-          '选择「存为草稿」会保存到列表，稍后可进详情页生成。',
+          '确定取消「$title」吗？\n\n'
+          '录音会保存在本机，不会上传，也不会生成会议纪要。',
           style: DunesTypography.sans(fontSize: 13.5, height: 1.55),
         ),
         actions: [
           TextButton(
-            onPressed: () {
-              _dismissKeyboard();
-              Navigator.of(ctx).pop(false);
-            },
-            child: const Text('存为草稿'),
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('返回'),
           ),
           FilledButton(
-            onPressed: () {
-              _dismissKeyboard();
-              Navigator.of(ctx).pop(true);
-            },
-            child: const Text('立即生成'),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: DunesColors.coral),
+            child: const Text('确认取消'),
           ),
         ],
       ),
     );
-    if (!mounted) return;
-    final title = _resolvedPersistTitle();
-    if (generate == null) {
-      // 系统返回键关闭弹窗时，自动存为草稿。
-      await _persistAfterEnd(
-        title: title,
-        filePath: filePath,
-        generate: false,
-      );
-      return;
+    return confirmed == true;
+  }
+
+  Future<bool> _keepAudioLocalOnly({
+    required String filePath,
+    required String title,
+  }) async {
+    _dismissKeyboard();
+    setState(() {
+      _persistingAfterEnd = true;
+      _keepingLocal = true;
+      _persistGenerate = false;
+      _error = null;
+    });
+    await _waitForBusyOverlayFrame();
+    try {
+      await MeetingAudioFilePicker.keepRecordingLocal(filePath);
+      if (!mounted) return false;
+      _live.clearPreview();
+      _live.consumeRecordedFile();
+      setState(() {
+        _filePath = '';
+        _pendingPersistAfterEnd = false;
+        _pendingDraftTitle = '';
+      });
+      showDunesToast(context, '「$title」的录音已保存在本机，未上传会议纪要');
+      widget.onBack();
+      return true;
+    } catch (e) {
+      if (!mounted) return false;
+      final msg = friendlyErrorText(e, fallback: '录音保存在本机失败，请稍后重试');
+      setState(() => _error = '本地保存失败：$msg');
+      showDunesToast(context, msg, kind: DunesToastKind.error);
+      return false;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _persistingAfterEnd = false;
+          _keepingLocal = false;
+          _persistGenerate = null;
+        });
+      }
     }
-    await _persistAfterEnd(
-      title: title,
-      filePath: filePath,
-      generate: generate,
-    );
   }
 
   Future<bool> _confirmLeaveWhileProcessing() async {
@@ -480,9 +569,11 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
         content: Text(
           _endingLive
               ? '正在保存录音文件，现在离开可能中断保存。'
-              : _persistingAfterEnd
-                  ? '正在创建会议记录，请稍候...'
-                  : '录音正在后台上传，现在离开不影响上传进度。',
+              : _keepingLocal
+                  ? '正在把录音保存在本机，现在离开可能中断保存。'
+                  : _persistingAfterEnd
+                      ? '正在创建会议记录，请稍候...'
+                      : '录音正在后台上传，现在离开不影响上传进度。',
           style: DunesTypography.sans(fontSize: 13.5, height: 1.55),
         ),
         actions: [
@@ -603,6 +694,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
       if (mounted) {
         setState(() {
           _persistingAfterEnd = false;
+          _keepingLocal = false;
           _persistGenerate = null;
         });
       }
@@ -621,6 +713,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     if (_picking) return '正在导入录音文件…';
     if (_endingLive) return '正在保存录音…';
     if (_persistingAfterEnd) {
+      if (_keepingLocal) return '正在把录音保存在本机…';
       return _persistGenerate == true ? '正在创建会议记录…' : '正在保存草稿…';
     }
     if (_submitting) return '正在创建会议记录…';
@@ -632,6 +725,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
     if (_endingLive) {
       return '录音越长，保存可能需要更久，请稍候';
     }
+    if (_keepingLocal) return '不会上传，也不会生成会议纪要';
     return '完成后会自动进入会议详情';
   }
 
@@ -1319,7 +1413,7 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
             MeetingRecordingState.recordingBackground =>
               '已进入后台/锁屏，录音仍在继续',
             MeetingRecordingState.stopping => '正在停止并保存录音…',
-            _ => '麦克风采集中，结束后可选择生成纪要或存为草稿',
+            _ => '麦克风采集中，结束后可选择生成纪要、存为草稿或取消',
           };
 
     return Column(
@@ -1426,3 +1520,5 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
 }
 
 enum _CreateMode { upload, live }
+
+enum _AfterEndChoice { generate, draft, cancel }

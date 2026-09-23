@@ -34,6 +34,24 @@ class _CalendarLegend extends StatelessWidget {
   }
 }
 
+class _WeekdayLabel extends StatelessWidget {
+  const _WeekdayLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Center(
+        child: Text(
+          label,
+          style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+        ),
+      ),
+    );
+  }
+}
+
 class NativeTaskDailyReportPage extends StatefulWidget {
   const NativeTaskDailyReportPage({
     super.key,
@@ -412,34 +430,47 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
                     ),
                   ),
                 ),
-                const Spacer(),
-                IconButton(
-                  tooltip: '使用指引',
-                  onPressed: () => unawaited(_showGuide(force: true)),
-                  icon: const Icon(
-                    Icons.help_outline,
-                    color: DunesColors.text2,
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      reverse: true,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: '使用指引',
+                            onPressed: () => unawaited(_showGuide(force: true)),
+                            icon: const Icon(
+                              Icons.help_outline,
+                              color: DunesColors.text2,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _showHistory = !_showHistory;
+                                _showCalendar = false;
+                              });
+                              if (_showHistory) unawaited(_loadHistory());
+                            },
+                            child: Text(_showHistory ? '返回填写' : '历史日报'),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _showCalendar = !_showCalendar;
+                                _showHistory = false;
+                              });
+                              if (_showCalendar) unawaited(_loadCalendar());
+                            },
+                            child: Text(_showCalendar ? '返回填写' : '月历'),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _showHistory = !_showHistory;
-                      _showCalendar = false;
-                    });
-                    if (_showHistory) unawaited(_loadHistory());
-                  },
-                  child: Text(_showHistory ? '返回填写' : '历史日报'),
-                ),
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _showCalendar = !_showCalendar;
-                      _showHistory = false;
-                    });
-                    if (_showCalendar) unawaited(_loadCalendar());
-                  },
-                  child: Text(_showCalendar ? '返回填写' : '月历'),
                 ),
               ],
             ),
@@ -493,16 +524,19 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
               },
               icon: const Icon(Icons.chevron_right),
             ),
-            TaskFilterChipDropdown<bool>(
-              value: _teamCalendar,
-              label: _teamCalendar ? '团队月历' : '我的月历',
-              items: const [
-                (false, '我的日报月历'),
-                (true, '团队日报月历'),
-              ],
-              onChanged: (team) => unawaited(_loadCalendar(team: team)),
-            ),
           ],
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TaskFilterChipDropdown<bool>(
+            value: _teamCalendar,
+            label: _teamCalendar ? '团队月历' : '我的月历',
+            items: const [
+              (false, '我的日报月历'),
+              (true, '团队日报月历'),
+            ],
+            onChanged: (team) => unawaited(_loadCalendar(team: team)),
+          ),
         ),
         const SizedBox(height: 8),
         _calendarSummary(calendar.summary),
@@ -565,8 +599,27 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
   }
 
   Widget _personalCalendarGrid(TaskDailyReportCalendar calendar) {
-    final days = calendar.users.isEmpty ? const <TaskDailyReportCalendarDay>[] : calendar.users.first.days;
-    return GridView.builder(
+    final days = calendar.users.isEmpty
+        ? const <TaskDailyReportCalendarDay>[]
+        : calendar.users.first.days;
+    final first = days.isEmpty ? null : DateTime.tryParse(days.first.date);
+    // 周一为一列起点。接口从当月 1 号排起，前面补空格，避免日期和星期错位。
+    final lead = first == null ? 0 : first.weekday - 1;
+    return Column(
+      children: [
+        const Row(
+          children: [
+            _WeekdayLabel('一'),
+            _WeekdayLabel('二'),
+            _WeekdayLabel('三'),
+            _WeekdayLabel('四'),
+            _WeekdayLabel('五'),
+            _WeekdayLabel('六'),
+            _WeekdayLabel('日'),
+          ],
+        ),
+        const SizedBox(height: 6),
+        GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -574,9 +627,10 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
         crossAxisSpacing: 5,
         mainAxisSpacing: 5,
       ),
-      itemCount: days.length,
+      itemCount: lead + days.length,
       itemBuilder: (_, index) {
-        final day = days[index];
+        if (index < lead) return const SizedBox.shrink();
+        final day = days[index - lead];
         final parsed = DateTime.tryParse(day.date);
         return InkWell(
           borderRadius: BorderRadius.circular(8),
@@ -603,6 +657,8 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
           ),
         );
       },
+    ),
+      ],
     );
   }
 
@@ -772,28 +828,42 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
                   formatTaskYmd(_date),
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
-                const Spacer(),
-                if (submitted)
-                  Text(
-                    bundle?.report?.source == 'backfill' ? '已补交' : '已按时提交',
-                    style: TextStyle(
-                      color: bundle?.report?.source == 'backfill'
-                          ? const Color(0xFFB45309)
-                          : const Color(0xFF1F9D76),
-                    ),
-                  )
-                else if (bundle?.canBackfill == true)
-                  Text(
-                    '可补填至 ${bundle?.backfillUntil}',
-                    style: const TextStyle(color: Color(0xFFB45309)),
-                  )
-                else if (bundle?.canSubmit == true)
-                  const Text('待填', style: TextStyle(color: Color(0xFFB45309))),
-                if (bundle?.leaveExempt == true)
-                  const Text(
-                    '请假免填',
-                    style: TextStyle(color: Color(0xFF1F9D76)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      if (submitted)
+                        Text(
+                          bundle?.report?.source == 'backfill'
+                              ? '已补交'
+                              : '已按时提交',
+                          style: TextStyle(
+                            color: bundle?.report?.source == 'backfill'
+                                ? const Color(0xFFB45309)
+                                : const Color(0xFF1F9D76),
+                          ),
+                        )
+                      else if (bundle?.canBackfill == true)
+                        Text(
+                          '可补填至 ${bundle?.backfillUntil}',
+                          style: const TextStyle(color: Color(0xFFB45309)),
+                        )
+                      else if (bundle?.canSubmit == true)
+                        const Text(
+                          '待填',
+                          style: TextStyle(color: Color(0xFFB45309)),
+                        ),
+                      if (bundle?.leaveExempt == true)
+                        const Text(
+                          '请假免填',
+                          style: TextStyle(color: Color(0xFF1F9D76)),
+                        ),
+                    ],
                   ),
+                ),
               ],
             ),
           ),

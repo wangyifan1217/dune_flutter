@@ -2500,6 +2500,8 @@ class ConversationService {
       pinned: raw['pinned'] == true,
       isOwner: raw['isOwner'] == true,
       canLeave: raw['canLeave'] == true,
+      canMute: raw['canMute'] != false,
+      replySla: raw['replySla'] == true,
       dissolved: dissolved,
       createdAt: DateTime.tryParse((raw['createdAt'] ?? '').toString()),
       businessType: raw['businessType']?.toString(),

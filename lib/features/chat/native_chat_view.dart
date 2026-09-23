@@ -470,6 +470,9 @@ class _NativeChatViewState extends State<NativeChatView>
   Timer? _replySlaReloadDebounce;
   Timer? _replySlaTicker;
   int _replySlaLoadSeq = 0;
+  // 「去回复上级」：最早一条未关义务是否在视口内（在则隐藏按钮）。
+  bool _replySlaTargetVisible = true;
+  bool _replySlaVisibilityCheckPending = false;
   bool _messageMultiSelectMode = false;
   bool _messageActionsMenuOpen = false;
   final Set<int> _multiSelectedMessageIds = <int>{};
@@ -1051,6 +1054,7 @@ class _NativeChatViewState extends State<NativeChatView>
     if (!_scrollController.hasClients) return;
     final pos = _scrollController.position;
     _scheduleUnreadVisibilityCheck();
+    _scheduleReplySlaVisibilityCheck();
     if (_isBackgroundLayoutNoise) {
       // 最小化/视口被夹扁才冻滚动；仅切软件失焦时的 pixels 抖动不要当成在看历史。
       if (_foregroundPauseWasObscured || !_hasStableChatViewport) {
@@ -2480,7 +2484,8 @@ class _NativeChatViewState extends State<NativeChatView>
     // 滚动锚点 / 首条未读都需要 GlobalKey：前者供 ensureVisible，
     // 后者供「是否在视口内」判断（否则角标会一直误显）。
     if (_scrollRestoreAnchorId == messageId ||
-        _firstUnreadMessageId == messageId) {
+        _firstUnreadMessageId == messageId ||
+        (messageId > 0 && _replySlaJumpTargetId == messageId)) {
       return _scrollRestoreKeys.putIfAbsent(messageId, GlobalKey.new);
     }
     return ValueKey<int>(messageId);
@@ -5412,8 +5417,13 @@ class _NativeChatViewState extends State<NativeChatView>
     final snap = await _service.fetchReplySla(convId);
     if (!mounted || seq != _replySlaLoadSeq) return;
     if ((_conversation?.id ?? 0) != convId) return;
-    setState(() => _replySla = snap);
+    setState(() {
+      _replySla = snap;
+      // 新目标先按「不可见」处理，由下一帧的视口检测纠正。
+      _replySlaTargetVisible = false;
+    });
     _syncReplySlaTicker();
+    _scheduleReplySlaVisibilityCheck();
   }
 
   void _scheduleReplySlaReload() {
@@ -5447,7 +5457,7 @@ class _NativeChatViewState extends State<NativeChatView>
     final dur = formatReplySlaDuration(item.liveUnreplied(now));
     switch (item.status) {
       case ReplySlaStatus.unread:
-        return '未读';
+        return '未读 ${formatReplySlaDuration(item.liveUnread(now))}';
       case ReplySlaStatus.pending:
         return '已读 · 未回复 $dur';
       case ReplySlaStatus.replied:
@@ -5467,6 +5477,148 @@ class _NativeChatViewState extends State<NativeChatView>
       case ReplySlaStatus.voided:
         return DunesColors.text3;
     }
+  }
+
+  String _replySlaName(ReplySlaItem i) =>
+      i.receiverName.trim().isEmpty ? '成员' : i.receiverName.trim();
+
+  /// 「2人未回 · 3人已读未回 · 1人已回」，按 未回 → 已读未回 → 已回 排。
+  String _replySlaSummary(List<ReplySlaItem> items) {
+    var unread = 0, pending = 0, replied = 0, voided = 0;
+    for (final i in items) {
+      switch (i.status) {
+        case ReplySlaStatus.unread:
+          unread++;
+        case ReplySlaStatus.pending:
+          pending++;
+        case ReplySlaStatus.replied:
+          replied++;
+        case ReplySlaStatus.voided:
+          voided++;
+      }
+    }
+    final parts = <String>[
+      if (unread > 0) '$unread人未回',
+      if (pending > 0) '$pending人已读未回',
+      if (replied > 0) '$replied人已回',
+      if (voided > 0) '$voided人已失效',
+    ];
+    return parts.join(' · ');
+  }
+
+  Future<void> _showReplySlaRoster(List<ReplySlaItem> items) async {
+    final sorted = List<ReplySlaItem>.from(items)
+      ..sort((a, b) => a.sortRank.compareTo(b.sortRank));
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        final now = DateTime.now();
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(ctx).height * 0.6,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Text(
+                    _replySlaSummary(sorted),
+                    style: DunesTypography.sans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: sorted.length,
+                    itemBuilder: (_, index) {
+                      final i = sorted[index];
+                      return ListTile(
+                        dense: true,
+                        title: Text(_replySlaName(i)),
+                        trailing: Text(
+                          _replySlaStatusText(i, now),
+                          style: DunesTypography.mono(
+                            fontSize: 12,
+                            color: _replySlaStatusColor(i),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// 「去回复上级」目标：我作为被 @ 人最早一条未关义务；工作群已解散则无。
+  int get _replySlaJumpTargetId {
+    if (!_replySla.enabled || _conversation?.dissolved == true) return 0;
+    return _replySla.earliestOpenForReceiver(widget.session.userId);
+  }
+
+  void _scheduleReplySlaVisibilityCheck() {
+    if (_replySlaVisibilityCheckPending) return;
+    if (_replySlaJumpTargetId <= 0) return;
+    _replySlaVisibilityCheckPending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _replySlaVisibilityCheckPending = false;
+      if (!mounted) return;
+      final target = _replySlaJumpTargetId;
+      if (target <= 0) return;
+      final visible = _isMessageVisibleInViewport(target);
+      if (visible == _replySlaTargetVisible) return;
+      setState(() => _replySlaTargetVisible = visible);
+    });
+  }
+
+  /// 只定位不回复：滚到最早一条未关义务，回复仍须点气泡下的「回复此条」并发出引用。
+  Future<void> _jumpToReplySlaTarget() async {
+    final target = _replySlaJumpTargetId;
+    if (target <= 0) return;
+    await _jumpToQuotedMessage(target);
+  }
+
+  Widget _buildReplySlaJumpButton() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => unawaited(_jumpToReplySlaTarget()),
+        borderRadius: BorderRadius.circular(999),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            color: const Color(0xFFD4380D),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.keyboard_arrow_up_rounded, size: 16, color: Colors.white),
+              const SizedBox(width: 2),
+              Text(
+                '去回复上级',
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// 在气泡下方追加「回复此条」与时长。只有被 @ 人与原发送人能看到。
@@ -5530,11 +5682,39 @@ class _NativeChatViewState extends State<NativeChatView>
       );
     }
     if (m.senderUserId == me) {
-      for (final i in items) {
-        if (i.isReceiver) continue;
-        final name = i.receiverName.trim().isEmpty ? '成员' : i.receiverName.trim();
+      final others = items.where((i) => !i.isReceiver).toList()
+        ..sort((a, b) => a.sortRank.compareTo(b.sortRank));
+      if (others.length <= 3) {
+        for (final i in others) {
+          lines.add(
+            Text(
+              '@${_replySlaName(i)} ${_replySlaStatusText(i, now)}',
+              style: style(_replySlaStatusColor(i)),
+            ),
+          );
+        }
+      } else {
+        // 超过 3 人（多为 @所有人）：只留一行摘要，点开看名单。
         lines.add(
-          Text('@$name ${_replySlaStatusText(i, now)}', style: style(_replySlaStatusColor(i))),
+          InkWell(
+            onTap: () => unawaited(_showReplySlaRoster(others)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    _replySlaSummary(others),
+                    style: style(
+                      others.any((i) => i.isOpen)
+                          ? const Color(0xFFD4380D)
+                          : DunesColors.readReceipt,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.chevron_right, size: 14, color: DunesColors.text3),
+              ],
+            ),
+          ),
         );
       }
     }
@@ -9023,6 +9203,7 @@ class _NativeChatViewState extends State<NativeChatView>
         : memberLabel;
     final listEntries = _buildListEntries();
     _scheduleUnreadVisibilityCheck();
+    _scheduleReplySlaVisibilityCheck();
     final selecting = _messageMultiSelectMode;
     final scrollMetrics = _ChatScrollMetrics.fromScreenHeight(
       MediaQuery.sizeOf(context).height,
@@ -9788,6 +9969,14 @@ class _NativeChatViewState extends State<NativeChatView>
                                         ),
                                       ),
                                     ),
+                                  ),
+                                if (_replySlaJumpTargetId > 0 &&
+                                    !_replySlaTargetVisible &&
+                                    !selecting)
+                                  Positioned(
+                                    right: 12,
+                                    bottom: 12,
+                                    child: _buildReplySlaJumpButton(),
                                   ),
                                 if (_locatedMode)
                                   Positioned(

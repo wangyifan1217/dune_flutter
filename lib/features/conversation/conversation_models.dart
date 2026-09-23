@@ -512,6 +512,8 @@ class NativeGroupInfo {
     this.createdAt,
     this.businessType,
     this.businessId,
+    this.canMute = true,
+    this.replySla = false,
   });
 
   final int id;
@@ -523,6 +525,12 @@ class NativeGroupInfo {
   final bool isOwner;
   final bool canLeave;
   final bool dissolved;
+
+  /// 已读不回工作群（reply_sla）禁免打扰：服务端下发 canMute=false。
+  final bool canMute;
+
+  /// 上线后新建的工作群：已读不回计时，未解散不能主动退群。
+  final bool replySla;
   final DateTime? createdAt;
   final String? businessType;
   final String? businessId;

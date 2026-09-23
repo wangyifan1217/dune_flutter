@@ -105,7 +105,7 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
 
   Future<void> _toggleMuted() async {
     final info = _detail;
-    if (info == null) return;
+    if (info == null || !info.canMute) return;
     final nextMuted = !info.muted;
     try {
       await _service.patchMySettings(info.id, muted: nextMuted);
@@ -119,6 +119,8 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
             pinned: info.pinned,
             isOwner: info.isOwner,
             canLeave: info.canLeave,
+            canMute: info.canMute,
+            replySla: info.replySla,
             dissolved: info.dissolved,
             createdAt: info.createdAt,
             businessType: info.businessType,
@@ -151,6 +153,8 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
             pinned: nextPinned,
             isOwner: info.isOwner,
             canLeave: info.canLeave,
+            canMute: info.canMute,
+            replySla: info.replySla,
             dissolved: info.dissolved,
             createdAt: info.createdAt,
             businessType: info.businessType,
@@ -246,7 +250,10 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
     final info = _detail;
     if (info == null) return;
     if (!info.canLeave && !info.dissolved) {
-      _toast(context, '系统群不可退出');
+      _toast(
+        context,
+        info.replySla ? '工作群不能主动退出，群主解散后可退出' : '系统群不可退出',
+      );
       return;
     }
     final dissolved = info.dissolved;
@@ -467,12 +474,26 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
             ),
           ),
         const SizedBox(height: 10),
-        GroupInfoRow(
-          icon: Icons.notifications_off_outlined,
-          title: '消息免打扰',
-          trailing: GroupInfoToggle(value: info.muted),
-          onTap: _toggleMuted,
-        ),
+        if (info.canMute)
+          GroupInfoRow(
+            icon: Icons.notifications_off_outlined,
+            title: '消息免打扰',
+            trailing: GroupInfoToggle(value: info.muted),
+            onTap: _toggleMuted,
+          )
+        else
+          // 已读不回工作群：不可免打扰。
+          GroupInfoRow(
+            icon: Icons.notifications_off_outlined,
+            title: '消息免打扰',
+            trailing: Text(
+              '工作群不可开启',
+              style: DunesTypography.sans(
+                fontSize: 14,
+                color: const Color(0xFF888888),
+              ),
+            ),
+          ),
         GroupInfoRow(
           icon: Icons.push_pin_outlined,
           title: '置顶聊天',
@@ -492,6 +513,18 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
           GroupInfoDangerRow(
             label: info.dissolved ? '退出已解散群聊' : '删除并退出',
             onTap: _confirmLeave,
+          ),
+        if (info.replySla && !info.dissolved && !canLeave)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Text(
+              '工作群不能主动退出，群主解散后可退出。',
+              textAlign: TextAlign.center,
+              style: DunesTypography.sans(
+                fontSize: 12,
+                color: const Color(0xFF888888),
+              ),
+            ),
           ),
       ],
     );

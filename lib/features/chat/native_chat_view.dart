@@ -471,8 +471,10 @@ class _NativeChatViewState extends State<NativeChatView>
   Timer? _replySlaTicker;
   int _replySlaLoadSeq = 0;
   // 「去回复上级」：最早一条未关义务是否在视口内（在则隐藏按钮）。
+  // 默认按「已在屏内」藏住，视口量准且确认离开后才出现，避免和 @ 消息同屏时先闪出来。
   bool _replySlaTargetVisible = true;
   bool _replySlaVisibilityCheckPending = false;
+  bool _replySlaVisibilityKeyRetryUsed = false;
   bool _messageMultiSelectMode = false;
   bool _messageActionsMenuOpen = false;
   final Set<int> _multiSelectedMessageIds = <int>{};
@@ -809,6 +811,10 @@ class _NativeChatViewState extends State<NativeChatView>
         _unreadMessageVisible = false;
         _unreadVisibilityKeyRetryUsed = false;
         _firstUnreadTruncated = false;
+        _replySla = ReplySlaSnapshot.empty;
+        _replySlaTargetVisible = true;
+        _replySlaVisibilityKeyRetryUsed = false;
+        _replySlaLoadSeq++;
       });
       if (hasCache && hintUnread > 0 && cached != null) {
         _captureSessionUnread(widget.conversationHint!, cached);
@@ -5419,9 +5425,15 @@ class _NativeChatViewState extends State<NativeChatView>
     if (!mounted || seq != _replySlaLoadSeq) return;
     if ((_conversation?.id ?? 0) != convId) return;
     setState(() {
+      final previousTarget = _replySlaJumpTargetId;
       _replySla = snap;
-      // 新目标先按「不可见」处理，由下一帧的视口检测纠正。
-      _replySlaTargetVisible = false;
+      final nextTarget = _replySlaJumpTargetId;
+      // 同屏的 @ 消息不要先把按钮画出来再藏。目标变了就继续藏着，等视口检测确认离开再显示。
+      // 同一条义务刷新（进会话 + 已读回推）保留上次结论，避免连闪两次。
+      if (nextTarget <= 0 || nextTarget != previousTarget) {
+        _replySlaTargetVisible = true;
+        _replySlaVisibilityKeyRetryUsed = false;
+      }
     });
     _syncReplySlaTicker();
     _scheduleReplySlaVisibilityCheck();
@@ -5568,6 +5580,24 @@ class _NativeChatViewState extends State<NativeChatView>
     return _replySla.earliestOpenForReceiver(widget.session.userId);
   }
 
+  /// true=在视口内，false=已离开，null=这一帧还量不准（不要据此把按钮闪出来）。
+  bool? _measureReplySlaTargetVisible(int messageId) {
+    if (messageId <= 0) return true;
+    if (!_scrollController.hasClients) return null;
+    final pos = _scrollController.position;
+    if (!pos.hasContentDimensions) return null;
+    // 内容和 @ 消息在同一屏：已加载即视为可见，不必等 GlobalKey。
+    if (pos.maxScrollExtent <= 1) {
+      return _messages.any((m) => m.id == messageId);
+    }
+    final itemContext = _scrollRestoreKeys[messageId]?.currentContext;
+    if (itemContext == null) {
+      if (!_messages.any((m) => m.id == messageId)) return false;
+      return null;
+    }
+    return _isMessageVisibleInViewport(messageId);
+  }
+
   void _scheduleReplySlaVisibilityCheck() {
     if (_replySlaVisibilityCheckPending) return;
     if (_replySlaJumpTargetId <= 0) return;
@@ -5577,7 +5607,21 @@ class _NativeChatViewState extends State<NativeChatView>
       if (!mounted) return;
       final target = _replySlaJumpTargetId;
       if (target <= 0) return;
-      final visible = _isMessageVisibleInViewport(target);
+      var visible = _measureReplySlaTargetVisible(target);
+      if (visible == null) {
+        if (!_replySlaVisibilityKeyRetryUsed) {
+          _replySlaVisibilityKeyRetryUsed = true;
+          _scheduleReplySlaVisibilityCheck();
+          return;
+        }
+        // 重试后行仍未挂上，且列表已撑出一屏：不在构建范围，视为离开视口。
+        // 还在布局或本来就一屏装得下时继续藏着，避免和 @ 同屏闪一下。
+        if (!_scrollController.hasClients) return;
+        final pos = _scrollController.position;
+        if (!pos.hasContentDimensions || pos.maxScrollExtent <= 1) return;
+        visible = false;
+      }
+      _replySlaVisibilityKeyRetryUsed = false;
       if (visible == _replySlaTargetVisible) return;
       setState(() => _replySlaTargetVisible = visible);
     });

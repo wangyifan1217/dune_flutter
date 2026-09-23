@@ -5607,7 +5607,8 @@ class _NativeChatViewState extends State<NativeChatView>
       if (!mounted) return;
       final target = _replySlaJumpTargetId;
       if (target <= 0) return;
-      var visible = _measureReplySlaTargetVisible(target);
+      final measured = _measureReplySlaTargetVisible(target);
+      bool? visible = measured;
       if (visible == null) {
         if (!_replySlaVisibilityKeyRetryUsed) {
           _replySlaVisibilityKeyRetryUsed = true;
@@ -5621,9 +5622,10 @@ class _NativeChatViewState extends State<NativeChatView>
         if (!pos.hasContentDimensions || pos.maxScrollExtent <= 1) return;
         visible = false;
       }
+      final bool inViewport = visible ?? false;
       _replySlaVisibilityKeyRetryUsed = false;
-      if (visible == _replySlaTargetVisible) return;
-      setState(() => _replySlaTargetVisible = visible);
+      if (inViewport == _replySlaTargetVisible) return;
+      setState(() => _replySlaTargetVisible = inViewport);
     });
   }
 

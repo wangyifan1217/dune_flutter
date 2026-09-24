@@ -510,6 +510,32 @@ class LighthouseService {
     return map;
   }
 
+  /// 数据延迟预警（§十一）。与 overview 并行拉，单独一条 —— 预警按
+  /// OPEN / expire_at 活着，跟 overview 的按期间缓存不是一回事。
+  /// 任何异常都当「没有预警」，绝不让 Hero 跟着挂。
+  Future<List<LighthouseDelayNotice>> fetchDelayNotices() async {
+    try {
+      final data = await _getData(
+        '/lighthouse/delay-notice',
+        const <String, String>{},
+        '数据延迟预警加载失败',
+      );
+      final raw = data['notices'];
+      if (raw is! List) return const <LighthouseDelayNotice>[];
+      final out = <LighthouseDelayNotice>[];
+      for (final item in raw) {
+        if (item is! Map) continue;
+        final notice = LighthouseDelayNotice.fromJson(
+          Map<String, dynamic>.from(item),
+        );
+        if (!notice.isEmpty) out.add(notice);
+      }
+      return lighthouseDelayNoticesOrPreview(out);
+    } catch (_) {
+      return lighthouseDelayNoticesOrPreview(const <LighthouseDelayNotice>[]);
+    }
+  }
+
   Map<String, dynamic> _unwrapPayload(Map<String, dynamic> body) {
     if (body['success'] == false) {
       throw Exception((body['message'] ?? '灯塔数据加载失败').toString());

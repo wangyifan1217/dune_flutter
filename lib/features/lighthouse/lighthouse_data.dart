@@ -1,5 +1,83 @@
 import 'lighthouse_hero_metric.dart';
 
+/// 数据延迟预警（《灯塔移动端 · 数据查表说明》v1.5 §十一）。
+///
+///   [message] 是资管写好的横幅正文 —— 原文展示，不改写、不另拼一句。
+///   其余四个字段只作为展开区的附加事实，不许拼进正文。
+class LighthouseDelayNotice {
+  const LighthouseDelayNotice({
+    required this.sourceCode,
+    required this.message,
+    this.dataAsOf = '',
+    this.expectReadyAt = '',
+    this.affectedStatDate = '',
+    this.raisedAt = '',
+  });
+
+  factory LighthouseDelayNotice.fromJson(Map<String, dynamic> json) {
+    String str(String key) => (json[key] ?? '').toString().trim();
+    return LighthouseDelayNotice(
+      sourceCode: str('sourceCode').isEmpty
+          ? str('source_code')
+          : str('sourceCode'),
+      message: str('message'),
+      dataAsOf: str('dataAsOf').isEmpty ? str('data_as_of') : str('dataAsOf'),
+      expectReadyAt: str('expectReadyAt').isEmpty
+          ? str('expect_ready_at')
+          : str('expectReadyAt'),
+      affectedStatDate: str('affectedStatDate').isEmpty
+          ? str('affected_stat_date')
+          : str('affectedStatDate'),
+      raisedAt: str('raisedAt').isEmpty ? str('raised_at') : str('raisedAt'),
+    );
+  }
+
+  final String sourceCode;
+  final String message;
+  final String dataAsOf;
+  final String expectReadyAt;
+  final String affectedStatDate;
+  final String raisedAt;
+
+  bool get isEmpty => message.isEmpty;
+
+  /// 角标文案是本地标签，不是 message。来源多起来时在这里加。
+  String get sourceLabel {
+    switch (sourceCode.toUpperCase()) {
+      case 'SINOPEC':
+        return '石化';
+      case 'CNPC':
+        return '石油';
+      default:
+        return sourceCode.isEmpty ? '数据' : sourceCode;
+    }
+  }
+
+  /// 本地看皮用。线上没有路由、资管表也还没 OPEN 行时，
+  /// `--dart-define=DUNES_DELAY_NOTICE_PREVIEW=true` 才下发这一条。
+  static const previewSinopec = LighthouseDelayNotice(
+    sourceCode: 'SINOPEC',
+    message: '中石化结算回传延迟，今日经营数尚未补齐。',
+    dataAsOf: '2026-09-23',
+    expectReadyAt: '2026-09-24 18:00:00',
+    affectedStatDate: '2026-09-24',
+    raisedAt: '2026-09-24 10:00:00',
+  );
+}
+
+/// 接口空列表时要不要塞预览条。真数据优先，预览绝不覆盖。
+const lighthouseDelayNoticePreviewEnabled = bool.fromEnvironment(
+  'DUNES_DELAY_NOTICE_PREVIEW',
+);
+
+List<LighthouseDelayNotice> lighthouseDelayNoticesOrPreview(
+  List<LighthouseDelayNotice> notices, {
+  bool preview = lighthouseDelayNoticePreviewEnabled,
+}) {
+  if (notices.isNotEmpty || !preview) return notices;
+  return const [LighthouseDelayNotice.previewSinopec];
+}
+
 class LighthouseDataBundle {
   LighthouseDataBundle({
     required this.data,

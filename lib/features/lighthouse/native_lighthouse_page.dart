@@ -8834,21 +8834,23 @@ class _TrendChartState extends State<_TrendChart>
               ? (momUp ? LhColors.neg : LhColors.pos)
               : LhColors.mute2);
     const tabular = [FontFeature.tabularFigures()];
+    final compact = MediaQuery.sizeOf(context).width < 430;
+    final loudMom = momPct != null && lighthouseDeltaIsLoud(momPct);
     final cell = SizedBox(
-      height: 20,
+      height: compact ? 30 : 34,
       child: Row(
         children: [
           // 标记：画在图上的是一小段线（和图里的线同形），没画的只是一个灰点。
           SizedBox(
-            width: 12,
+            width: compact ? 12 : 14,
             child: Center(
               child: drawn
                   ? Container(
-                      width: 10,
+                      width: compact ? 10 : 12,
                       height: 2.5,
                       decoration: BoxDecoration(
                         color: color,
-                        borderRadius: BorderRadius.circular(1),
+                        borderRadius: BorderRadius.circular(1.5),
                       ),
                     )
                   : Container(
@@ -8867,15 +8869,17 @@ class _TrendChartState extends State<_TrendChart>
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              // 标签字号 / 字重跟账本摘要格同一档，不自造一套大字。
               style: LhTypography.sans(
-                size: 9,
+                size: compact ? 9.5 : lighthouseLedgerMetricLabelFontSize,
                 color: drawn || active ? LhColors.ink2 : LhColors.mute,
-                weight: FontWeight.w500,
+                weight: drawn || active ? FontWeight.w700 : FontWeight.w500,
                 height: 1.0,
+                letterSpacing: 0.2,
               ),
             ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 6),
           // 数值在窄屏仍完整显示；长数字只缩这一项，不挤掉其他指标。
           Flexible(
             child: FittedBox(
@@ -8885,22 +8889,27 @@ class _TrendChartState extends State<_TrendChart>
                 '${negative ? '−' : ''}$absFmt$unitFmt',
                 maxLines: 1,
                 softWrap: false,
-                style: LhTypography.mono(
-                  size: 9.5,
-                  color: negative
-                      ? LhColors.pos
-                      : (drawn
-                            ? lighthouseTrendEmphasisInk(_emphasisColor)
-                            : LhColors.ink2),
-                  weight: FontWeight.w700,
-                  height: 1.0,
-                ).copyWith(fontFeatures: tabular),
+                // 和账本格同一种数字（LhTypography.number）和字号档。
+                style:
+                    LhTypography.number(
+                      size: compact ? 11 : lighthouseLedgerValueFontSize,
+                      color: negative
+                          ? LhColors.pos
+                          : (drawn
+                                ? lighthouseTrendEmphasisInk(_emphasisColor)
+                                : LhColors.ink2),
+                    ).copyWith(
+                      fontWeight: drawn || active
+                          ? FontWeight.w700
+                          : FontWeight.w600,
+                      height: 1.0,
+                    ),
               ),
             ),
           ),
           // 环比压成短写（≥10% 不留小数，与大数下面那行同规则），给名称让宽度。
           SizedBox(
-            width: 32,
+            width: compact ? 34 : 40,
             child: FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerRight,
@@ -8913,10 +8922,11 @@ class _TrendChartState extends State<_TrendChart>
                 softWrap: false,
                 textAlign: TextAlign.right,
                 style: LhTypography.mono(
-                  size: 7.5,
+                  size: lighthouseLedgerSummaryDeltaFontSize,
                   color: momColor,
-                  weight: FontWeight.w600,
+                  weight: loudMom ? FontWeight.w700 : FontWeight.w600,
                   height: 1.0,
+                  letterSpacing: -0.2,
                 ).copyWith(fontFeatures: tabular),
               ),
             ),
@@ -8928,14 +8938,38 @@ class _TrendChartState extends State<_TrendChart>
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _toggleSolo(seriesKey),
-      child: Opacity(
-        opacity: dimmed ? 0.4 : 1,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: AnimatedOpacity(
+        opacity: dimmed ? 0.55 : 1,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          // 选中态跟账本摘要格一样「浮起来」：白底 + 淡紫细边 + 轻投影，
+          // 平时不给每格各自描边铺底 —— 底面交给外面那块面板。
+          // 只做水平 inset，上下再缩会让整行高度跳动。
+          margin: EdgeInsets.symmetric(
+            horizontal: active ? lighthouseLedgerSummaryActiveInsetH : 0.0,
+          ),
+          padding: EdgeInsets.symmetric(horizontal: active ? 6 : 8),
           decoration: BoxDecoration(
-            // 只有 solo 选中的那格挂一层和主线同色的薄底。
-            color: active ? _emphasisColor.withAlpha(22) : Colors.transparent,
-            borderRadius: BorderRadius.circular(4),
+            color: active ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color: active
+                  ? _LhPlum.primary.withAlpha(46)
+                  : Colors.transparent,
+              width: 0.8,
+            ),
+            boxShadow: active
+                ? [
+                    BoxShadow(
+                      color: _LhPlum.deep.withAlpha(28),
+                      blurRadius: 6,
+                      offset: const Offset(0, 1.5),
+                    ),
+                  ]
+                : null,
           ),
           child: cell,
         ),
@@ -8947,6 +8981,7 @@ class _TrendChartState extends State<_TrendChart>
   Widget build(BuildContext context) {
     final si = _selectedIndex;
     final isSelected = si != null && si >= 0 && si < _n;
+    final compactLegend = MediaQuery.sizeOf(context).width < 430;
 
     double at(List<double> l, int i) => (i >= 0 && i < l.length) ? l[i] : 0;
     final rVal = isSelected ? at(_series.revenue, si) : _totRev;
@@ -8988,69 +9023,87 @@ class _TrendChartState extends State<_TrendChart>
     final editorialLegend = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? _LhPlum.deep.withAlpha(22)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(3),
-              ),
-              child: Text(
-                statusText,
-                style: LhTypography.mono(
-                  size: 8.5,
-                  color: isSelected ? _LhPlum.deep : LhColors.mute2,
-                  weight: FontWeight.w700,
-                  letterSpacing: 0.8,
+        // 头一行不铺底不描边：一根色条 + 期间字，和展开体里「左侧色条 +
+        // 发丝线」同一套层级手法。
+        Padding(
+          padding: const EdgeInsets.fromLTRB(2, 0, 2, 0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 2.5,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? _LhPlum.deep
+                      : lighthouseTrendEmphasisInk(_emphasisColor),
+                  borderRadius: BorderRadius.circular(1.5),
                 ),
               ),
-            ),
-            const Spacer(),
-            // 「看全部」只在 solo 了某一条时出现 —— 平时它是一个点不动的词。
-            if (widget.showClearSolo &&
-                _soloKey != null &&
-                pnlLegendKeys.length > 1)
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _clearSolo,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 2,
+              const SizedBox(width: 6),
+              Text(
+                statusText,
+                style: LhTypography.mono(
+                  size: 9.5,
+                  color: isSelected ? _LhPlum.deep : LhColors.ink2,
+                  weight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              if (!compactLegend) ...[
+                const SizedBox(width: 8),
+                Text(
+                  _soloKey == null ? '点指标切换曲线' : '已聚焦单项',
+                  style: LhTypography.sans(
+                    size: 9,
+                    color: LhColors.mute2,
+                    weight: FontWeight.w500,
                   ),
-                  child: Text(
-                    '看全部',
-                    style: LhTypography.mono(
-                      size: 8,
-                      color: _LhPlum.primary,
-                      weight: FontWeight.w700,
-                      letterSpacing: 0.4,
+                ),
+              ],
+              const Spacer(),
+              // 「看全部」只在 solo 了某一条时出现 —— 平时它是一个点不动的词。
+              if (widget.showClearSolo &&
+                  _soloKey != null &&
+                  pnlLegendKeys.length > 1)
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _clearSolo,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 2,
+                    ),
+                    child: Text(
+                      '显示全部',
+                      style: LhTypography.mono(
+                        size: 9.5,
+                        color: _LhPlum.primary,
+                        weight: FontWeight.w700,
+                        letterSpacing: 0.4,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            if (isSelected)
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _clearSelection,
+              if (isSelected)
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _clearSelection,
 
-                child: const Padding(
-                  padding: EdgeInsets.all(2),
-                  child: Icon(
-                    Icons.close_rounded,
-                    size: 11,
-                    color: LhColors.mute2,
+                  child: const Padding(
+                    padding: EdgeInsets.all(2),
+                    child: Icon(
+                      Icons.close_rounded,
+                      size: 14,
+                      color: LhColors.mute2,
+                    ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
         if (pnlLegendKeys.isNotEmpty) ...[
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           LayoutBuilder(
             builder: (context, legendBox) {
               Widget chipFor(String key) => switch (key) {
@@ -9171,16 +9224,39 @@ class _TrendChartState extends State<_TrendChart>
               final cols = keys.length <= 1
                   ? 1
                   : (legendBox.maxWidth >= 460 ? 3 : 2);
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (var i = 0; i < keys.length; i += cols)
-                    Padding(
-                      padding: EdgeInsets.only(top: i == 0 ? 0 : 2),
-                      child: Row(
+              // v24 · 几格拼成一块面板：行与行、列与列只用内缩发丝线分隔，
+              //   不给每格各自描边铺底（和账本卡片摘要格 v23 同一套皮）。
+              return Container(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(lighthouseLedgerSummaryNeutralPanelValue),
+                  borderRadius: BorderRadius.circular(
+                    lighthouseLedgerSummaryPanelRadius,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < keys.length; i += cols) ...[
+                      if (i > 0)
+                        Container(
+                          height: lighthouseLedgerSummaryRowDividerHeight,
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: lighthouseLedgerSummaryDividerInset,
+                          ),
+                          color: LhColors.line2,
+                        ),
+                      Row(
                         children: [
                           for (var c = 0; c < cols; c++) ...[
-                            if (c > 0) const SizedBox(width: 10),
+                            // 末行缺格时不画那根孤零零的竖发丝线。
+                            if (c > 0 && i + c < keys.length)
+                              Container(
+                                width:
+                                    lighthouseLedgerSummaryRowDividerHeight,
+                                height: 16,
+                                color: LhColors.line2,
+                              ),
                             Expanded(
                               child: i + c < keys.length
                                   ? chipFor(keys[i + c])
@@ -9189,8 +9265,9 @@ class _TrendChartState extends State<_TrendChart>
                           ],
                         ],
                       ),
-                    ),
-                ],
+                    ],
+                  ],
+                ),
               );
             },
           ),
@@ -10828,6 +10905,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   bool _cubeShowChannelLabels = false; // 渠道轴名 + Z 轴刻度名（默认关）
   bool _cubeShowOwnerInitials = true; // owner 质心圆里的首字
   DateTime? _lastSyncedAt;
+
+  // ── 数据延迟预警（§十一）─────────────────────────────────────────
+  //   资管写好的「当前一条」预警。灯塔只在进页和下拉刷新时查一次：
+  //   页面停着不重新查，横幅也就不会自己消失。
+  List<LighthouseDelayNotice> _delayNotices = const <LighthouseDelayNotice>[];
+  bool _delayNoticeOpen = false;
+  bool _delayNoticeLoading = false;
   bool _refreshing = false; // 手动点击「数据同步」刷新中
   // ── 周期实例筛选（哪一天 / 哪个周 / 月 / 季 / 年）──
   // 0 = 当前实例（今日/本周/本月/本季/今年），-1 = 上一个，以此类推。
@@ -11487,9 +11571,40 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     _restoreMetricPrefs();
     if (widget.session.effectiveLighthouseAccess) {
       _load();
+      // 与 overview 并行：预警拿不到也不影响主数据。
+      unawaited(_loadDelayNotice());
     } else {
       _loading = false;
     }
+  }
+
+  /// 查一次数据延迟预警。只挂在「进页」和「下拉刷新」两处 —— 切期间、
+  /// 切 tab 都走 `_load()`，挂那里会变成到处在查，也不符合 §十一
+  /// 「页面停着不重新查」。失败一律当 0 行，不弹错、不拦主流程。
+  Future<void> _loadDelayNotice() async {
+    if (_delayNoticeLoading) return;
+    _delayNoticeLoading = true;
+    try {
+      final notices = await _service.fetchDelayNotices();
+      if (!mounted) return;
+      setState(() {
+        _delayNotices = notices;
+        // 这一轮没有预警，展开态也跟着收掉，别留一条空壳。
+        if (notices.isEmpty) _delayNoticeOpen = false;
+      });
+    } finally {
+      _delayNoticeLoading = false;
+    }
+  }
+
+  /// 当前要飘的那一条。净TA 走 bank_flow_mapped_daily，石化同步延迟影响的是
+  /// 经营宽表，所以净TA 不飘（2026-09-24 定）。
+  LighthouseDelayNotice? get _activeDelayNotice {
+    if (_tab == 'netTa') return null;
+    for (final n in _delayNotices) {
+      if (!n.isEmpty) return n;
+    }
+    return null;
   }
 
   @override
@@ -12845,6 +12960,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       _biWindowLoading.clear();
     });
     await _load();
+    // 预警跟着「下拉刷新 / 点同步印章」重查一次，与 overview 并行。
+    unawaited(_loadDelayNotice());
     if (_tab == 'analysis') await _loadAnalysisCube();
     if (mounted) setState(() => _refreshing = false);
   }
@@ -17084,6 +17201,41 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     return out;
   }
 
+  /// 主 Hero 图例会排几格 —— 趋势区高度按它算，图才不会被图例挤扁。
+  /// 只用于算高度，宁可多算一格也不要少算（少算就会把图压没）。
+  int _heroLegendMetricCount() {
+    bool usable(List<double> s) {
+      if (s.length < 2) return false;
+      for (final v in s) {
+        if (v.abs() > 1e-9) return true;
+      }
+      return false;
+    }
+
+    var n = 0;
+    if (_tab == 'netTa') {
+      const keys = [
+        'netTa',
+        'netTaFinancing',
+        'netTaOperating',
+        'netTaOpCost',
+        'netTaProjectCost',
+        'netTaBizCost',
+      ];
+      for (final k in keys) {
+        if (usable(_normalizeTrendSeriesForChart(_seriesForMetric(k)))) n++;
+      }
+      if (lighthouseSeriesHasVisibleData(_netTABankBalanceSeries())) n++;
+      return n.clamp(1, 7);
+    }
+    if (usable(_seriesForMetric('verifiedSales'))) n++;
+    if (usable(_seriesForMetric('sales'))) n++;
+    if (usable(_seriesForMetric('profit'))) n++;
+    if (usable(_seriesForMetric('revenue'))) n++;
+    if (usable(_seriesForMetric('totalCost'))) n++;
+    return n.clamp(1, 7);
+  }
+
   Widget _buildHeroUnifiedTrendChart({
     required Map<String, double> totals,
     required List<double> profitSeries,
@@ -17235,13 +17387,23 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         final maxH = box.maxHeight.isFinite && box.maxHeight > 0
             ? box.maxHeight
             : lighthouseCompactHeroSparkHeight;
-        final reserved =
-            76.0 +
-            18.0 +
-            (_isCurrentMonthView && scale.isNotEmpty ? 36.0 : 0.0);
+        // v24 · 图例不再按固定 76px 估：它现在是面板式的，几个指标就几行，
+        //   估少了走势图会被挤成一条缝。这里按行数实算，图保底不低于
+        //   [lighthouseTrendChartMinHeight]。
+        final reserved = lighthouseHeroTrendReservedHeightFor(
+          screenWidth: MediaQuery.sizeOf(context).width,
+          legendWidth: box.maxWidth,
+          metricCount: _heroLegendMetricCount(),
+          hasForecastStrip: _isCurrentMonthView && scale.isNotEmpty,
+        );
         final chartMax =
             chartMaxHeight ?? lighthouseCompactHeroChartMaxHeightWide;
-        final chartH = (maxH - reserved).clamp(48.0, chartMax);
+        final chartH = (maxH - reserved)
+            .clamp(
+              math.min(lighthouseTrendChartMinHeight, chartMax),
+              chartMax,
+            )
+            .toDouble();
         if (swapMetric) {
           return _heroMetricSoloTrendChart(
                 focus!,
@@ -17734,6 +17896,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ],
               ),
             ),
+            // 数据延迟预警角标（§十一）：跟「已同步」同一条出处带 ——
+            // 它们回答的是同一个问题「这份数据是什么时候的」。
+            if (totalsOverride == null && _activeDelayNotice != null) ...[
+              const SizedBox(width: 8),
+              _buildDelayNoticeBadge(_activeDelayNotice!),
+            ],
             // 「已同步 · 09:41」上提到标题行右端：它是这张卡的出处说明，
             // 留在卡底时正好卡在 Hero 与账本之间，把那道衔接撑成一条空带。
             if (totalsOverride == null) ...[
@@ -17748,6 +17916,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           const SizedBox(height: 9),
           Container(height: 1, color: LhColors.line),
         ],
+        // 展开的才是 §十一 要求的横幅：正文是 message 原文。
+        // 默认收起，平时这里不占高度。
+        if (totalsOverride == null &&
+            _delayNoticeOpen &&
+            _activeDelayNotice != null)
+          _buildDelayNoticeStrip(_activeDelayNotice!),
 
         // ── § 02 · 主数与趋势左右并排；窄屏只加高走势图 ─────────
         Padding(
@@ -17758,7 +17932,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               final hasBankBalance =
                   _tab == 'netTa' &&
                   (_bundle?.metrics['netTaBankBalance'] as num?) != null;
-              final sparkH = _tab == 'netTa'
+              final baseSparkH = _tab == 'netTa'
                   ? lighthouseNetTAHeroSparkHeightFor(
                       heroW,
                       hasBankBalance: hasBankBalance,
@@ -17768,6 +17942,26 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       heroW,
                       hasBiButton: totalsOverride == null,
                     );
+              // v24 · 手机上这一段是被图例压垮的：图例几行、有没有月末预测条
+              //   都在跟走势图抢同一个固定高度。改成「图例要多高就给多高，
+              //   走势图保底 104」，不够就把整段撑开 —— 图不再让位。
+              // 宽度只用来判图例排两列还是三列；两栏中缝按最宽的那版（拍平版
+              // 12 + 0.7 + 12）扣，宁可估窄一点 —— 估窄只会多留高度。
+              final trendColW =
+                  (heroW - 25) *
+                      lighthouseCompactHeroTrendFlex /
+                      (lighthouseCompactHeroKpiFlex +
+                          lighthouseCompactHeroTrendFlex) -
+                  lighthouseHeroChartCardPadding * 2;
+              final sparkH = math.max(
+                baseSparkH,
+                lighthouseHeroTrendSectionMinHeightFor(
+                  screenWidth: MediaQuery.sizeOf(context).width,
+                  legendWidth: trendColW,
+                  metricCount: _heroLegendMetricCount(),
+                  hasForecastStrip: _isCurrentMonthView,
+                ),
+              );
               final chartMaxH = lighthouseCompactHeroChartMaxHeightFor(heroW);
               final trendSectionH = sparkH + lighthouseHeroChartCardPadding * 2;
 
@@ -18233,6 +18427,144 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   ///
   /// 顺手接上刷新：点它就重拉，同步中原地转 —— 状态和动作合成一个东西，
   /// 比「顶栏显示状态、另一颗按钮负责刷新」少一次视线往返。
+  /// 数据延迟预警角标（§十一）。文案是本地标签（「石化预警」），
+  /// **不是** message —— 正文只在展开条里出，一字不改。
+  Widget _buildDelayNoticeBadge(LighthouseDelayNotice notice) {
+    final open = _delayNoticeOpen;
+    return _LhScrollSafeTap(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() => _delayNoticeOpen = !_delayNoticeOpen);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          // 预警走铜色：珊瑚是涨跌语义，挂在这里会被读成「跌了」。
+          color: LhColors.copper.withAlpha(open ? 36 : 22),
+          borderRadius: BorderRadius.circular(5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.campaign_rounded,
+              size: 12,
+              color: LhColors.copper,
+            ),
+            const SizedBox(width: 3),
+            Text(
+              '${notice.sourceLabel}预警',
+              style: LhTypography.sans(
+                size: 10,
+                color: LhColors.copper,
+                weight: FontWeight.w700,
+                letterSpacing: 0.2,
+                height: 1.0,
+              ),
+            ),
+            const SizedBox(width: 1),
+            Icon(
+              open
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded,
+              size: 12,
+              color: LhColors.copper.withAlpha(170),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 展开条 —— §十一 的横幅本体。
+  ///   正文只有 `message` 原文：不改写、不另拼一句、不截断。
+  ///   四个附加字段做成键值行（项 / 内容），不组句 —— 组句就是「另拼一句」。
+  Widget _buildDelayNoticeStrip(LighthouseDelayNotice notice) {
+    final facts = <({String k, String v})>[
+      if (notice.dataAsOf.isNotEmpty) (k: '数据截至', v: notice.dataAsOf),
+      if (notice.expectReadyAt.isNotEmpty) (k: '预计补齐', v: notice.expectReadyAt),
+      if (notice.affectedStatDate.isNotEmpty)
+        (k: '影响日期', v: notice.affectedStatDate),
+      if (notice.raisedAt.isNotEmpty) (k: '登记时间', v: notice.raisedAt),
+    ];
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
+      decoration: BoxDecoration(
+        color: LhColors.copper.withAlpha(16),
+        borderRadius: BorderRadius.circular(lighthouseLedgerSummaryPanelRadius),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 2.5,
+                height: 13,
+                margin: const EdgeInsets.only(top: 2, right: 7),
+                decoration: BoxDecoration(
+                  color: LhColors.copper,
+                  borderRadius: BorderRadius.circular(1.5),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  notice.message,
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                  style: LhTypography.sans(
+                    size: 11,
+                    color: LhColors.ink2,
+                    weight: FontWeight.w600,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (facts.isNotEmpty) ...[
+            const SizedBox(height: 7),
+            Wrap(
+              spacing: 14,
+              runSpacing: 5,
+              children: [
+                for (final f in facts)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        f.k,
+                        style: LhTypography.sans(
+                          size: 8.5,
+                          color: LhColors.mute2,
+                          weight: FontWeight.w600,
+                          height: 1.0,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        f.v,
+                        style: _tabular(
+                          LhTypography.mono(
+                            size: 9,
+                            color: LhColors.ink2,
+                            weight: FontWeight.w600,
+                            height: 1.0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildHeroSyncStamp({bool inline = false}) {
     final busy = _refreshing || _loading;
     final stamp = _buildHeroSyncStampChip(busy);

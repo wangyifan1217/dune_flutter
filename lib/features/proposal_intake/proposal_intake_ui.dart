@@ -920,18 +920,19 @@ class ProposalChoiceChip extends StatelessWidget {
   final ValueChanged<bool>? onSelected;
   final bool enabled;
 
-  /// 灯塔式低饱和选中态：用灰蓝底区分状态，不再用绿色抢占视觉焦点。
-  static const selectedFill = Color(0xFFEEF1F6);
+  /// 选中态比底色深一档，边框一起压深，避免和白底糊在一起。
+  static const selectedFill = Color(0xFFD5DEE9);
+  static const selectedBorder = Color(0xFFA9B6C8);
 
   @override
   Widget build(BuildContext context) {
     final canTap = enabled && onSelected != null;
     final background = !enabled
-        ? (selected ? const Color(0xFFE7E9EE) : ProposalPalette.page)
+        ? (selected ? const Color(0xFFD0D5DE) : ProposalPalette.page)
         : (selected ? selectedFill : Colors.white);
     final foreground = enabled ? ProposalPalette.text : ProposalPalette.text3;
     final border = selected
-        ? (enabled ? const Color(0xFFC7CFDA) : ProposalPalette.text4)
+        ? (enabled ? selectedBorder : ProposalPalette.text4)
         : ProposalPalette.text4;
     return Material(
       color: background,

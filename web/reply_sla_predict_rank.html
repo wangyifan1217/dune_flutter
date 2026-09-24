@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>三桶油资金库存预警 · 预计不处理榜</title>
+  <style>
+    :root {
+      --bg-page: #F4F1EA;
+      --bg-app: #FBFAF6;
+      --bg-soft: #F2EFE7;
+      --border: #DAD5C7;
+      --border-soft: #E5E1D3;
+      --text: #1F2421;
+      --text2: #5A5C56;
+      --text3: #94938A;
+      --accent: #2F5D62;
+      --pending: #D4380D;
+      --gold: #8A5A12;
+      --gold-soft: #F8EEDD;
+      --purple: #7B5CD8;
+      --purple-soft: #F3EEFA;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg-page);
+      color: var(--text);
+      font-family: "PingFang SC", "Noto Sans SC", "Geist", sans-serif;
+    }
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 28px 20px 72px; }
+    h1 { font-size: 22px; font-weight: 650; margin: 0 0 6px; }
+    .lead { color: var(--text2); font-size: 13.5px; line-height: 1.55; margin: 0 0 16px; max-width: 760px; }
+    .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 16px; }
+    .tab {
+      border: 1px solid var(--border);
+      background: #fff;
+      border-radius: 999px;
+      padding: 7px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      color: var(--text2);
+    }
+    .tab.active { background: var(--text); color: #fff; border-color: var(--text); }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 0 0 16px; }
+    @media (max-width: 720px) { .stats { grid-template-columns: 1fr; } }
+    .stat {
+      background: var(--bg-app);
+      border: 1px solid var(--border-soft);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+    .stat b { display: block; font-size: 22px; font-weight: 650; margin-top: 4px; }
+    .stat span { color: var(--text3); font-size: 12px; }
+    .board {
+      background: var(--bg-app);
+      border: 1px solid var(--border-soft);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .head, .person {
+      display: grid;
+      grid-template-columns: 52px 1.35fr 1.5fr 72px 88px 132px 96px;
+      gap: 8px;
+      align-items: center;
+      padding: 12px 16px;
+    }
+    .head {
+      color: var(--text3);
+      font-size: 12px;
+      border-bottom: 1px solid var(--border-soft);
+      background: #fff;
+    }
+    .person { border-bottom: 1px solid var(--border-soft); font-size: 14px; }
+    .person:last-child { border-bottom: 0; }
+    .person.top { background: #fff; }
+    .rank {
+      width: 28px; height: 28px; border-radius: 8px;
+      display: grid; place-items: center;
+      font-size: 13px; font-weight: 700;
+      background: var(--bg-soft); color: var(--text2);
+    }
+    .rank.r1 { background: #F4D7C8; color: var(--pending); }
+    .rank.r2 { background: var(--gold-soft); color: var(--gold); }
+    .rank.r3 { background: var(--purple-soft); color: #5A3FA8; }
+    .who b { display: block; font-weight: 650; }
+    .who small, .alert small { color: var(--text3); font-size: 12px; }
+    .alert b { display: block; font-weight: 600; font-size: 13px; }
+    .num { font-variant-numeric: tabular-nums; }
+    .pending { color: var(--pending); font-weight: 650; }
+    .tag {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .tag.unread { background: #F3F1EA; color: var(--text2); }
+    .tag.read_unconfirmed { background: #FDE8E2; color: var(--pending); }
+    .score {
+      justify-self: end;
+      background: #FDE8E2;
+      color: var(--pending);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .meta { display: none; }
+    .foot {
+      padding: 12px 16px 14px;
+      color: var(--text3);
+      font-size: 12px;
+      line-height: 1.5;
+      background: #fff;
+    }
+    @media (max-width: 900px) {
+      .head { display: none; }
+      .person { grid-template-columns: 36px 1fr auto; }
+      .meta { display: block; grid-column: 2; color: var(--text2); font-size: 12px; }
+      .hide-m { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>三桶油资金库存预警 · 预计不处理榜</h1>
+    <p class="lead">
+      只看「三桶油资金库存预警」里还没点确认的单。未读，或已打开仍未确认，并且已经超过这个人平时的确认时间，就记为预计不处理。示例数据，不连接口。
+    </p>
+    <div class="bar">
+      <button class="tab active" type="button" data-filter="all">全部</button>
+      <button class="tab" type="button" data-filter="unread">预计一直不读</button>
+      <button class="tab" type="button" data-filter="read_unconfirmed">预计已读不确认</button>
+    </div>
+    <div class="stats">
+      <div class="stat"><span>预计不处理</span><b id="stat-people">6</b></div>
+      <div class="stat"><span>未读</span><b id="stat-unread">3 单</b></div>
+      <div class="stat"><span>已读未确认</span><b id="stat-read">3 单</b></div>
+    </div>
+    <div class="board">
+      <div class="head">
+        <span></span>
+        <span>接收人</span>
+        <span>预警</span>
+        <span>状态</span>
+        <span>已推送</span>
+        <span>判断</span>
+        <span style="text-align:right">超过平时</span>
+      </div>
+      <div id="list"></div>
+      <div class="foot">状态对应推送接口：未读 = 还没打开会话，已读未确认 = 打开了还没点「确认」。平时用时取近 30 天从推送到确认的中位时间。已确认的不进榜。</div>
+    </div>
+  </div>
+  <script>
+    const rows = [
+      { name: "周可", dept: "资金岗", id: "OIL-20260924-0007", unit: "大庆油田", subject: "头寸", amount: "860.20 万", status: "未读", kind: "unread", waited: "1天4h", usual: "平时 35m", call: "预计一直不读", over: "超 1天" },
+      { name: "陈六", dept: "库存岗", id: "OIL-20260924-0004", unit: "胜利油田", subject: "库存资金", amount: "2,140.00 万", status: "已读未确认", kind: "read_unconfirmed", waited: "16h", usual: "平时 50m", call: "预计已读不确认", over: "超 15h" },
+      { name: "王奕凡", dept: "资金岗", id: "OIL-20260923-0018", unit: "长庆油田", subject: "头寸", amount: "640.80 万", status: "未读", kind: "unread", waited: "22h", usual: "平时 1h", call: "预计一直不读", over: "超 21h" },
+      { name: "赵七", dept: "财务", id: "OIL-20260924-0011", unit: "西南油气田", subject: "库存资金", amount: "1,520.40 万", status: "已读未确认", kind: "read_unconfirmed", waited: "9h", usual: "平时 40m", call: "预计已读不确认", over: "超 8h" },
+      { name: "李四", dept: "资金岗", id: "OIL-20260924-0002", unit: "辽河油田", subject: "头寸", amount: "410.00 万", status: "未读", kind: "unread", waited: "6h", usual: "平时 25m", call: "预计一直不读", over: "超 5h" },
+      { name: "钱八", dept: "库存岗", id: "OIL-20260924-0015", unit: "塔里木油田", subject: "库存资金", amount: "980.60 万", status: "已读未确认", kind: "read_unconfirmed", waited: "4h", usual: "平时 1h10m", call: "预计已读不确认", over: "超 3h" }
+    ];
+
+    const list = document.getElementById("list");
+    let filter = "all";
+
+    function render() {
+      const shown = rows.filter((row) => filter === "all" || row.kind === filter);
+      list.innerHTML = shown.map((row, i) => {
+        const n = i + 1;
+        const meta = `${row.unit} · ${row.subject} ${row.amount} · ${row.status} · 已推送 ${row.waited}`;
+        return `<div class="person${n <= 3 ? " top" : ""}">
+          <div class="rank${n <= 3 ? " r" + n : ""}">${n}</div>
+          <div class="who"><b>${row.name}</b><small>${row.dept} · ${row.usual}</small></div>
+          <div class="alert hide-m"><b>${row.unit} · ${row.subject}</b><small>${row.id} · 余额 ${row.amount}</small></div>
+          <div class="hide-m"><span class="tag ${row.kind}">${row.status}</span></div>
+          <div class="num pending hide-m">${row.waited}</div>
+          <div class="hide-m">${row.call}</div>
+          <div class="meta">${meta}</div>
+          <div class="score">${row.over}</div>
+        </div>`;
+      }).join("");
+      const unread = shown.filter((r) => r.kind === "unread").length;
+      const read = shown.filter((r) => r.kind === "read_unconfirmed").length;
+      document.getElementById("stat-people").textContent = String(shown.length);
+      document.getElementById("stat-unread").textContent = unread + " 单";
+      document.getElementById("stat-read").textContent = read + " 单";
+    }
+
+    document.querySelectorAll(".tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+        tab.classList.add("active");
+        filter = tab.dataset.filter;
+        render();
+      });
+    });
+    render();
+  </script>
+</body>
+</html>

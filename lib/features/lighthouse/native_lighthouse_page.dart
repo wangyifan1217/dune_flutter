@@ -2155,7 +2155,7 @@ void _trendDashedLine(
 //     上层主图 —— 只放同一根真轴上的东西：规模主线 + 差额带 + 规模族另一条；
 //     底部小柱 —— 毛利等各自归一的上下文序列，共用横轴、永不交叉；
 //     当月未走完 —— 虚线连到月末预测 + 进度胶囊，不再画半个月的假断崖；
-//     去掉逐点空心圆和整宽 MAX/MIN 虚线，只留三条发丝网格 + 极值小圈。
+//     每个日期默认画空心点；末端点单独加重。整宽 MAX/MIN 虚线不画。
 class _TrendLinesPainter extends CustomPainter {
   const _TrendLinesPainter({
     required this.series,
@@ -2526,34 +2526,25 @@ class _TrendLinesPainter extends CustomPainter {
       }
     }
 
-    // ── 4. 极值小圈（数字由外层 widget 贴 pill）────────────────────────────
+    // ── 4. 每个日期一个点。末端另有实心点，这里不重复画。
     final eFrom = math.max(0, extremeLo ?? 0);
     final eTo = math.min(
       heroSolid.length - 1,
       extremeHi ?? heroSolid.length - 1,
     );
-    if (heroDrawable && eTo - eFrom >= 2) {
-      var hi = eFrom;
-      var lo = eFrom;
-      for (var i = eFrom + 1; i <= eTo; i++) {
-        if (heroSolid[i] > heroSolid[hi]) hi = i;
-        if (heroSolid[i] < heroSolid[lo]) lo = i;
-      }
-      if ((heroSolid[hi] - heroSolid[lo]).abs() > 1e-6) {
-        for (final i in <int>{hi, lo}) {
-          if (i == heroSolid.length - 1) continue; // 末端有自己的点
-          final o = Offset(xOf(i), yOf(heroSolid[i], heroBounds));
-          canvas.drawCircle(o, 3.0, Paint()..color = Colors.white);
-          canvas.drawCircle(
-            o,
-            3.0,
-            Paint()
-              // 最高点在赚就是红、最低点在亏就是绿 —— 圈跟着自己那个点。
-              ..color = heroColorAt(heroSolid[i])
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 1.4,
-          );
-        }
+    if (heroDrawable && eTo >= eFrom) {
+      for (var i = eFrom; i <= eTo; i++) {
+        if (showEndpoint && i == heroSolid.length - 1) continue;
+        final o = Offset(xOf(i), yOf(heroSolid[i], heroBounds));
+        canvas.drawCircle(o, 3.0, Paint()..color = Colors.white);
+        canvas.drawCircle(
+          o,
+          3.0,
+          Paint()
+            ..color = heroColorAt(heroSolid[i])
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.4,
+        );
       }
     }
 
@@ -10760,9 +10751,6 @@ enum _DdMode { none, category, metric }
 /// 前者是好消息，后者是我们自己的问题。
 enum _LhNoticeFetch { pending, ok, failed }
 
-/// 出处那半句的三种读法。齐最弱、未取到次之、延迟最响。
-enum _LhNoticeTone { clear, missing, alert }
-
 class _NativeLighthousePageState extends State<NativeLighthousePage> {
   static const String _kPrefsMetricProduct = 'lighthouse.metrics.product';
   static const String _kPrefsMetricSupply = 'lighthouse.metrics.supply';
@@ -11608,7 +11596,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       setState(() {
         _delayNotices = res.notices;
         _delayNoticeFetch = res.ok ? _LhNoticeFetch.ok : _LhNoticeFetch.failed;
-        // 这一轮没有预警，展开态也跟着收掉，别留一条空壳。
         if (res.notices.isEmpty) _delayNoticeOpen = false;
       });
     } finally {
@@ -11616,25 +11603,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
   }
 
-  /// 出处的第三种读法，接在「已同步 13:34」后面：
-  ///   查成功 0 行 → 来源齐（灰、最弱）
-  ///   有 OPEN 行 → 石化延迟（铜色，点开才是原文）
+  /// 落款旁只留「查挂了」这一句。有记录时出小喇叭，点开才是 message 原文。
+  ///   查成功 0 行 → 不显示
+  ///   有 OPEN 行 → 小喇叭
   ///   404 / 表没有 / 查挂了 → 预警未取到
-  /// 不挂常驻角标：每天都在的东西会变成壁纸，还跟「已同步」抢同一句话。
-  /// 净TA 不写这半句（它看的不是经营宽表），二级/三级连印章都没有。
-  ({String text, _LhNoticeTone tone})? get _delayNoticeNote {
+  /// 净TA 不写（它看的不是经营宽表）。
+  String? get _delayNoticeMissNote {
     if (_tab == 'netTa') return null;
-    switch (_delayNoticeFetch) {
-      // 还没查回来先不写：宁可空着，也不要先说「齐」再改口。
-      case _LhNoticeFetch.pending:
-        return null;
-      case _LhNoticeFetch.failed:
-        return (text: '预警未取到', tone: _LhNoticeTone.missing);
-      case _LhNoticeFetch.ok:
-        final notice = _activeDelayNotice;
-        if (notice == null) return (text: '来源齐', tone: _LhNoticeTone.clear);
-        return (text: '${notice.sourceLabel}延迟', tone: _LhNoticeTone.alert);
-    }
+    if (_delayNoticeFetch == _LhNoticeFetch.failed) return '预警未取到';
+    return null;
   }
 
   /// 当前要飘的那一条。净TA 走 bank_flow_mapped_daily，石化同步延迟影响的是
@@ -17950,8 +17927,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           const SizedBox(height: 9),
           Container(height: 1, color: LhColors.line),
         ],
-        // 展开的才是 §十一 要求的横幅：正文是 message 原文。
-        // 默认收起，平时这里不占高度。
+        // 有记录时标题下不直接铺横幅。小喇叭点开后，这里才是 message 原文。
         if (totalsOverride == null &&
             _delayNoticeOpen &&
             _activeDelayNotice != null)
@@ -18452,73 +18428,40 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
-  /// 出处那半句（来源齐 / 石化延迟 / 预警未取到）。
-  ///   齐和未取到只是灰字，不铺底、不描边 —— 每天都在的东西一铺色就成壁纸。
-  ///   只有「延迟」才上铜色并可点：点开才是 message 原文。
-  Widget _buildDelayNoticeNote(({String text, _LhNoticeTone tone}) note) {
-    if (note.tone != _LhNoticeTone.alert) {
-      final missing = note.tone == _LhNoticeTone.missing;
-      return Text(
-        note.text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: LhTypography.sans(
-          size: 8.5,
-          // 「未取到」是我们自己没拿到，比「齐」重半档；都还在灰里。
-          color: missing ? LhColors.mute : LhColors.mute2,
-          weight: missing ? FontWeight.w600 : FontWeight.w500,
-          letterSpacing: 0.2,
-          height: 1.0,
-        ),
-      );
-    }
+  /// 查挂了才在落款旁写这一句。没有记录不写，有记录走小喇叭。
+  Widget _buildDelayNoticeMissNote(String text) {
+    return Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: LhTypography.sans(
+        size: 8.5,
+        color: LhColors.mute,
+        weight: FontWeight.w600,
+        letterSpacing: 0.2,
+        height: 1.0,
+      ),
+    );
+  }
+
+  /// 小喇叭。有当前预警才出现，点开看下面的详情。没有记录不画。
+  Widget _buildDelayNoticeHorn() {
     final open = _delayNoticeOpen;
     return _LhScrollSafeTap(
       onTap: () {
         HapticFeedback.selectionClick();
         setState(() => _delayNoticeOpen = !_delayNoticeOpen);
       },
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Flexible(
-            child: Text(
-              note.text,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              // 预警走铜色：珊瑚是涨跌语义，挂在这里会被读成「跌了」。
-              style: LhTypography.sans(
-                size: 8.5,
-                color: LhColors.copper,
-                weight: FontWeight.w700,
-                letterSpacing: 0.2,
-                height: 1.0,
-              ),
-            ),
-          ),
-          Icon(
-            open
-                ? Icons.keyboard_arrow_up_rounded
-                : Icons.keyboard_arrow_down_rounded,
-            size: 10,
-            color: LhColors.copper.withAlpha(170),
-          ),
-        ],
+      child: Icon(
+        Icons.campaign_rounded,
+        size: 13,
+        color: open ? LhColors.copper : LhColors.copper.withAlpha(210),
       ),
     );
   }
 
-  /// 展开条 —— §十一 的横幅本体。
-  ///   正文只有 `message` 原文：不改写、不另拼一句、不截断。
-  ///   四个附加字段做成键值行（项 / 内容），不组句 —— 组句就是「另拼一句」。
+  /// 点开小喇叭后的详情。正文是 `message` 原文，不改写。
   Widget _buildDelayNoticeStrip(LighthouseDelayNotice notice) {
-    final facts = <({String k, String v})>[
-      if (notice.dataAsOf.isNotEmpty) (k: '数据截至', v: notice.dataAsOf),
-      if (notice.expectReadyAt.isNotEmpty) (k: '预计补齐', v: notice.expectReadyAt),
-      if (notice.affectedStatDate.isNotEmpty)
-        (k: '影响日期', v: notice.affectedStatDate),
-      if (notice.raisedAt.isNotEmpty) (k: '登记时间', v: notice.raisedAt),
-    ];
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
@@ -18526,72 +18469,29 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         color: LhColors.copper.withAlpha(16),
         borderRadius: BorderRadius.circular(lighthouseLedgerSummaryPanelRadius),
       ),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 2.5,
-                height: 13,
-                margin: const EdgeInsets.only(top: 2, right: 7),
-                decoration: BoxDecoration(
-                  color: LhColors.copper,
-                  borderRadius: BorderRadius.circular(1.5),
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  notice.message,
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
-                  style: LhTypography.sans(
-                    size: 11,
-                    color: LhColors.ink2,
-                    weight: FontWeight.w600,
-                    height: 1.35,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (facts.isNotEmpty) ...[
-            const SizedBox(height: 7),
-            Wrap(
-              spacing: 14,
-              runSpacing: 5,
-              children: [
-                for (final f in facts)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        f.k,
-                        style: LhTypography.sans(
-                          size: 8.5,
-                          color: LhColors.mute2,
-                          weight: FontWeight.w600,
-                          height: 1.0,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        f.v,
-                        style: _tabular(
-                          LhTypography.mono(
-                            size: 9,
-                            color: LhColors.ink2,
-                            weight: FontWeight.w600,
-                            height: 1.0,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-              ],
+          Container(
+            width: 2.5,
+            height: 13,
+            margin: const EdgeInsets.only(top: 2, right: 7),
+            decoration: BoxDecoration(
+              color: LhColors.copper,
+              borderRadius: BorderRadius.circular(1.5),
             ),
-          ],
+          ),
+          Expanded(
+            child: Text(
+              notice.message,
+              style: LhTypography.sans(
+                size: 11,
+                color: LhColors.ink2,
+                weight: FontWeight.w600,
+                height: 1.35,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -18626,10 +18526,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   Widget _buildHeroSyncStampChip(bool busy) {
-    // 「延迟」那半句自己要能点（点开原文），所以刷新的点击区只包到时间为止。
+    // 刷新的点击区只包到时间为止。「预警未取到」是另一句话，不跟着重拉。
     // 绿点带呼吸环会比字高：必须和半句待在同一行里居中，不能先组完印章
     // 再和外面包一层 Flexible —— 两段各算各的中线，字就对不齐。
-    final note = busy ? null : _delayNoticeNote;
+    final missNote = busy ? null : _delayNoticeMissNote;
+    final showHorn = !busy && _activeDelayNotice != null;
     Widget sep() => Container(width: 0.7, height: 8, color: LhColors.line2);
     Text stampWord(
       String text, {
@@ -18700,11 +18601,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ],
             ),
           ),
-          if (note != null) ...[
+          if (showHorn) ...[
+            const SizedBox(width: 5),
+            sep(),
+            const SizedBox(width: 6),
+            _buildDelayNoticeHorn(),
+          ],
+          if (missNote != null) ...[
             const SizedBox(width: 5),
             sep(),
             const SizedBox(width: 5),
-            _buildDelayNoticeNote(note),
+            _buildDelayNoticeMissNote(missNote),
           ],
         ],
       ),

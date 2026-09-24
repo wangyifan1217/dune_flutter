@@ -13,6 +13,7 @@ import '../auth/auth_session.dart';
 import '../chat/chat_widgets.dart';
 import '../chat/user_avatar_widget.dart';
 import '../conversation/conversation_models.dart';
+import '../conversation/reply_sla_models.dart';
 import '../conversation/conversation_picker_sheet.dart';
 import '../conversation/conversation_realtime_hub.dart';
 import '../conversation/conversation_realtime_service.dart';
@@ -67,6 +68,9 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
   bool _waitingReply = false;
   bool _clearing = false;
   bool _awayFromLatest = false;
+  final Set<int> _confirmingAlertIds = {};
+  final Map<int, GlobalKey> _messageKeys = {};
+  bool _pendingConfirmVisible = true;
 
   /// 进会话贴底中：忽略短暂滚动偏移，避免 Markdown 撑高前误显「回到最新」。
   bool _enterStickBottomPending = false;
@@ -410,6 +414,10 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
 
   void _onRealtime(ConversationRealtimeEvent ev) {
     if (ev.conversationId != _convId) return;
+    if (ev.type == 'oil_fund_alert_ack' || ev.type == 'oil_fund_alert_read') {
+      _applyOilFundAlertTiming(ev.raw, confirmed: ev.type == 'oil_fund_alert_ack');
+      return;
+    }
     if (ev.type != 'message' && ev.type != 'conversation_updated') return;
     final msg = ev.raw['message'];
     var gotRobotReply = false;
@@ -528,6 +536,79 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     if (away != _awayFromLatest && mounted) {
       setState(() => _awayFromLatest = away);
     }
+    _syncPendingConfirmVisible();
+  }
+
+  GlobalKey _messageKey(int id) =>
+      _messageKeys.putIfAbsent(id, GlobalKey.new);
+
+  int? get _pendingConfirmMessageId {
+    if (_robotKey != 'r_oil_fund_alert') return null;
+    for (final m in _messages) {
+      if (_oilFundAlertId(m) == null) continue;
+      if (m.payload?['confirmed'] == true) continue;
+      return m.id;
+    }
+    return null;
+  }
+
+  bool _messageInViewport(int id) {
+    final itemContext = _messageKeys[id]?.currentContext;
+    if (itemContext == null || !_scroll.hasClients) return false;
+    final box = itemContext.findRenderObject();
+    final viewport = _scroll.position.context.storageContext.findRenderObject();
+    if (box is! RenderBox || viewport is! RenderBox || !box.hasSize) {
+      return false;
+    }
+    final top = box.localToGlobal(Offset.zero, ancestor: viewport).dy;
+    final bottom = top + box.size.height;
+    return bottom > 8 && top < viewport.size.height - 8;
+  }
+
+  void _syncPendingConfirmVisible() {
+    final id = _pendingConfirmMessageId;
+    final visible = id == null || _messageInViewport(id);
+    if (visible == _pendingConfirmVisible || !mounted) return;
+    setState(() => _pendingConfirmVisible = visible);
+  }
+
+  Future<void> _jumpToPendingConfirm() async {
+    final id = _pendingConfirmMessageId;
+    if (id == null) return;
+    final itemContext = _messageKeys[id]?.currentContext;
+    if (itemContext != null) {
+      await Scrollable.ensureVisible(
+        itemContext,
+        alignment: 0.25,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+      _syncPendingConfirmVisible();
+      return;
+    }
+    if (!_scroll.hasClients) return;
+    final index = _messages.indexWhere((m) => m.id == id);
+    if (index < 0) return;
+    final fromLatest = _messages.length - 1 - index;
+    final guess = (fromLatest * 220.0).clamp(
+      0.0,
+      _scroll.position.maxScrollExtent,
+    );
+    await _scroll.animateTo(
+      guess,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+    if (!mounted) return;
+    final built = _messageKeys[id]?.currentContext;
+    if (built != null) {
+      await Scrollable.ensureVisible(
+        built,
+        alignment: 0.25,
+        duration: const Duration(milliseconds: 220),
+      );
+    }
+    _syncPendingConfirmVisible();
   }
 
   void _dismissKeyboard() {
@@ -643,8 +724,10 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
     if (mounted && _focus.hasFocus) _jumpBottom();
   }
 
+  bool get _canClearHistory => _robotKey != 'r_oil_fund_alert';
+
   Future<void> _confirmClearHistory() async {
-    if (_clearing || _convId <= 0) return;
+    if (!_canClearHistory || _clearing || _convId <= 0) return;
     final role = _role ?? RobotCatalogCache.instance.resolve(_robotKey);
     final ok = await showDialog<bool>(
       context: context,
@@ -856,6 +939,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                         busy: _waitingReply,
                       ),
                       actions: [
+                        if (_canClearHistory)
                         IconButton(
                           tooltip: '清空会话',
                           onPressed: (_clearing || _loading)
@@ -972,6 +1056,9 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
       );
     }
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _syncPendingConfirmVisible();
+    });
     final wide = isWideChatLayout(context);
     final itemCount = _messages.length + (_waitingReply ? 1 : 0);
     return Stack(
@@ -1058,7 +1145,7 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                 withClock: true,
               );
               return KeyedSubtree(
-                key: ValueKey('msg-${m.id}-${m.kind}'),
+                key: _messageKey(m.id),
                 child: ChatMessageRow(
                   message: m,
                   mine: mine,
@@ -1108,6 +1195,14 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                                       ),
                                     ),
                             ),
+                            if (_oilFundAlertId(m) != null)
+                              _OilFundAlertConfirm(
+                                message: m,
+                                confirming: _confirmingAlertIds.contains(
+                                  _oilFundAlertId(m),
+                                ),
+                                onConfirm: () => unawaited(_confirmOilFundAlert(m)),
+                              ),
                             if (isRobotReply)
                               _RobotReplyQuickActions(
                                 onCopy: () => unawaited(_copyRobotReply(m)),
@@ -1121,6 +1216,47 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
             },
           ),
         ),
+        if (_pendingConfirmMessageId != null && !_pendingConfirmVisible)
+          Positioned(
+            right: 12,
+            bottom: 12,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => unawaited(_jumpToPendingConfirm()),
+                borderRadius: BorderRadius.circular(999),
+                child: Ink(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(999),
+                    color: const Color(0xFFD4380D),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.keyboard_arrow_up_rounded,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        '去确认',
+                        style: DunesTypography.sans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         if (_awayFromLatest)
           Positioned(
             left: 0,
@@ -1137,13 +1273,6 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
                       borderRadius: BorderRadius.circular(999),
                       color: Colors.white,
                       border: Border.all(color: DunesColors.borderSoft),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x1A000000),
-                          blurRadius: 8,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
                     ),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 14,
@@ -1175,6 +1304,76 @@ class _NativeRobotChatPageState extends State<NativeRobotChatPage> {
           ),
       ],
     );
+  }
+
+  int? _oilFundAlertId(NativeChatMessage m) {
+    final key = '${m.payload?['robotKey'] ?? ''}'.trim();
+    if (key.isNotEmpty && key != 'r_oil_fund_alert') return null;
+    final raw = m.payload?['alertId'];
+    if (raw == null) return null;
+    if (raw is num) return raw.toInt();
+    return int.tryParse('$raw');
+  }
+
+  void _applyOilFundAlertTiming(
+    Map<String, dynamic> raw, {
+    required bool confirmed,
+  }) {
+    final messageId = raw['messageId'];
+    final id = messageId is num
+        ? messageId.toInt()
+        : int.tryParse('$messageId');
+    if (id == null) return;
+    setState(() {
+      final index = _messages.indexWhere((item) => item.id == id);
+      if (index < 0) return;
+      final next = Map<String, dynamic>.from(_messages[index].payload ?? {});
+      for (final key in ['pushedAt', 'readAt', 'confirmedAt', 'unreadMs', 'confirmWaitMs']) {
+        if (raw[key] != null) next[key] = raw[key];
+      }
+      if (confirmed) next['confirmed'] = true;
+      _messages[index] = _messages[index].copyWith(payload: next);
+    });
+  }
+
+  Future<void> _confirmOilFundAlert(NativeChatMessage message) async {
+    final alertId = _oilFundAlertId(message);
+    if (alertId == null || _confirmingAlertIds.contains(alertId)) return;
+    if (message.payload?['confirmed'] == true) return;
+    setState(() => _confirmingAlertIds.add(alertId));
+    try {
+      final data = await _service.ackOilFundAlert(alertId);
+      if (!mounted) return;
+      setState(() {
+        final index = _messages.indexWhere((item) => item.id == message.id);
+        if (index >= 0) {
+          final next = Map<String, dynamic>.from(
+            _messages[index].payload ?? {},
+          );
+          next['confirmed'] = true;
+          for (final key in [
+            'pushedAt',
+            'readAt',
+            'confirmedAt',
+            'unreadMs',
+            'confirmWaitMs',
+          ]) {
+            if (data[key] != null) next[key] = data[key];
+          }
+          _messages[index] = _messages[index].copyWith(payload: next);
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          friendlyErrorText(e, fallback: '确认失败'),
+          kind: DunesToastKind.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _confirmingAlertIds.remove(alertId));
+    }
   }
 }
 
@@ -1218,6 +1417,121 @@ class _RobotReplyBubble extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _OilFundAlertConfirm extends StatefulWidget {
+  const _OilFundAlertConfirm({
+    required this.message,
+    required this.confirming,
+    required this.onConfirm,
+  });
+
+  final NativeChatMessage message;
+  final bool confirming;
+  final VoidCallback onConfirm;
+
+  @override
+  State<_OilFundAlertConfirm> createState() => _OilFundAlertConfirmState();
+}
+
+class _OilFundAlertConfirmState extends State<_OilFundAlertConfirm> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncTicker();
+  }
+
+  @override
+  void didUpdateWidget(covariant _OilFundAlertConfirm oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncTicker();
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  void _syncTicker() {
+    final confirmed = widget.message.payload?['confirmed'] == true;
+    if (confirmed) {
+      _ticker?.cancel();
+      _ticker = null;
+      return;
+    }
+    _ticker ??= Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  DateTime? _timeOf(String key) {
+    final raw = '${widget.message.payload?[key] ?? ''}'.trim();
+    if (raw.isEmpty) return null;
+    return DateTime.tryParse(raw)?.toLocal();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final pushed = _timeOf('pushedAt') ?? widget.message.createdAt?.toLocal();
+    final read = _timeOf('readAt');
+    final confirmedAt = _timeOf('confirmedAt');
+    final confirmed = widget.message.payload?['confirmed'] == true;
+    final readDur = read != null && pushed != null
+        ? formatReplySlaDuration(read.difference(pushed))
+        : null;
+    final pendingDur = !confirmed && read != null
+        ? formatReplySlaDuration(now.difference(read))
+        : null;
+    final unreadLive = !confirmed && read == null && pushed != null
+        ? formatReplySlaDuration(now.difference(pushed))
+        : null;
+    final waitDur = confirmed && confirmedAt != null && pushed != null
+        ? formatReplySlaDuration(confirmedAt.difference(pushed))
+        : null;
+
+    String status;
+    Color color;
+    if (confirmed) {
+      final readPart = readDur == null ? '已读' : '已读 $readDur';
+      status = waitDur == null ? '$readPart · 已确认' : '$readPart · 已确认 用时 $waitDur';
+      color = DunesColors.readReceipt;
+    } else if (read != null) {
+      status = pendingDur == null ? '已读 · 未确认' : '已读 · 未确认 $pendingDur';
+      color = const Color(0xFFD4380D);
+    } else {
+      status = unreadLive == null ? '未读' : '未读 $unreadLive';
+      color = DunesColors.text3;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            status,
+            style: DunesTypography.sans(fontSize: 12, color: color),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            onPressed: confirmed || widget.confirming ? null : widget.onConfirm,
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFD97706),
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+            ),
+            child: Text(
+              confirmed ? '已确认' : (widget.confirming ? '确认中…' : '确认'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

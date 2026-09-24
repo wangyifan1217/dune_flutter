@@ -224,7 +224,7 @@ class _NativeQianjiAppUsageDetailPageState
         const SizedBox(height: 12),
         Row(
           children: [
-            _Stat(label: '会话', value: '${detail.sessionCount}次'),
+            _Stat(label: '打开', value: '${detail.sessionCount}次'),
             const SizedBox(width: 8),
             _Stat(label: '浏览', value: '${detail.pv}次'),
             const SizedBox(width: 8),

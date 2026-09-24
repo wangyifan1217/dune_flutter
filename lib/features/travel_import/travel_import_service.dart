@@ -100,28 +100,50 @@ class TravelOrderRow {
     required this.id,
     required this.kind,
     required this.orderId,
+    this.ticketNo = '',
     required this.travelerName,
     required this.userDisplayName,
+    this.deptName = '',
+    this.sectorName = '',
     required this.matchStatus,
     required this.startAt,
+    this.endAt = '',
     required this.origin,
     required this.destination,
+    this.originCity = '',
+    this.destCity = '',
+    this.originProvince = '',
+    this.destProvince = '',
     required this.amountFen,
+    this.amountFenOrder = 0,
     this.rebookFeeFen = 0,
     required this.shared,
+    this.companionNames = '',
+    this.status = '',
   });
   final int id;
   final String kind;
   final String orderId;
+  final String ticketNo;
   final String travelerName;
   final String userDisplayName;
+  final String deptName;
+  final String sectorName;
   final String matchStatus;
   final String startAt;
+  final String endAt;
   final String origin;
   final String destination;
+  final String originCity;
+  final String destCity;
+  final String originProvince;
+  final String destProvince;
   final int amountFen;
+  final int amountFenOrder;
   final int rebookFeeFen;
   final bool shared;
+  final String companionNames;
+  final String status;
 
   bool get unmatched => matchStatus == 'unmatched';
   bool get ambiguous => matchStatus == 'ambiguous';
@@ -139,15 +161,26 @@ class TravelOrderRow {
       id: (json['id'] as num?)?.toInt() ?? 0,
       kind: '${json['kind'] ?? ''}',
       orderId: '${json['orderId'] ?? ''}',
+      ticketNo: '${json['ticketNo'] ?? ''}',
       travelerName: '${json['travelerName'] ?? ''}',
       userDisplayName: '${json['userDisplayName'] ?? ''}',
+      deptName: '${json['deptName'] ?? ''}',
+      sectorName: '${json['sectorName'] ?? ''}',
       matchStatus: '${json['matchStatus'] ?? ''}',
       startAt: '${json['startAt'] ?? ''}',
+      endAt: '${json['endAt'] ?? ''}',
       origin: '${json['origin'] ?? ''}',
       destination: '${json['destination'] ?? ''}',
+      originCity: '${json['originCity'] ?? ''}',
+      destCity: '${json['destCity'] ?? ''}',
+      originProvince: '${json['originProvince'] ?? ''}',
+      destProvince: '${json['destProvince'] ?? ''}',
       amountFen: (json['amountFen'] as num?)?.toInt() ?? 0,
+      amountFenOrder: (json['amountFenOrder'] as num?)?.toInt() ?? 0,
       rebookFeeFen: (json['rebookFeeFen'] as num?)?.toInt() ?? 0,
       shared: json['shared'] == true,
+      companionNames: '${json['companionNames'] ?? ''}',
+      status: '${json['status'] ?? ''}',
     );
   }
 }
@@ -283,16 +316,20 @@ class TravelImportService {
     required String kind,
     String match = '',
     String q = '',
+    String from = '',
+    String to = '',
     int page = 0,
     int pageSize = 20,
   }) async {
     final query = <String, String>{
-      'kind': kind,
       'page': page.toString(),
       'pageSize': pageSize.toString(),
     };
+    if (kind.trim().isNotEmpty) query['kind'] = kind.trim();
     if (match.isNotEmpty) query['match'] = match;
     if (q.trim().isNotEmpty) query['q'] = q.trim();
+    if (from.trim().isNotEmpty) query['from'] = from.trim();
+    if (to.trim().isNotEmpty) query['to'] = to.trim();
     final resp = await http.get(_uri('/travel-orders', query), headers: _headers);
     final data = _unwrap(resp);
     final map = data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
@@ -304,6 +341,51 @@ class TravelImportService {
       items: items,
       total: (map['total'] as num?)?.toInt() ?? items.length,
     );
+  }
+
+  /// Pull the full Ctrip settlement payload and wait until the workbook is ready.
+  Future<Uint8List> exportAll() async {
+    final start = await http.post(
+      _uri('/travel-orders/export'),
+      headers: {..._headers, 'Content-Type': 'application/json'},
+      body: '{}',
+    );
+    final started = _unwrap(start);
+    final map = started is Map ? Map<String, dynamic>.from(started) : <String, dynamic>{};
+    final id = '${map['id'] ?? ''}'.trim();
+    if (id.isEmpty) {
+      throw Exception('导出没有开始');
+    }
+    for (var i = 0; i < 180; i++) {
+      await Future<void>.delayed(const Duration(seconds: 2));
+      final statusResp = await http.get(
+        _uri('/travel-orders/export/$id'),
+        headers: _headers,
+      );
+      final statusData = _unwrap(statusResp);
+      final statusMap = statusData is Map
+          ? Map<String, dynamic>.from(statusData)
+          : <String, dynamic>{};
+      final status = '${statusMap['status'] ?? ''}';
+      if (status == 'failed') {
+        final message = '${statusMap['error'] ?? ''}'.trim();
+        throw Exception(message.isEmpty ? '导出失败' : message);
+      }
+      if (status != 'success') continue;
+      final fileResp = await http.get(
+        _uri('/travel-orders/export/$id/file'),
+        headers: {
+          ..._headers,
+          'Accept':
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        },
+      );
+      if (fileResp.statusCode < 200 || fileResp.statusCode >= 300) {
+        _unwrap(fileResp);
+      }
+      return fileResp.bodyBytes;
+    }
+    throw Exception('导出时间较长，请稍后重试');
   }
 
   List<String> _stringList(Object? raw) {

@@ -206,11 +206,13 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
   }
 
   bool get _canEvaluate {
-    if (_viewOnly || _pendingChangeLocked) return false;
+    if (widget.viewerHint != null || _pendingChangeLocked) return false;
     final t = _detail?.task;
     if (t == null) return false;
     if (t.status != 'completed' && !t.hasEval) return false;
     if (t.status == 'cancelled' || t.status == 'rejected') return false;
+    if (t.canEvaluate) return true;
+    if (_viewOnly) return false;
     final uid = widget.session.userId;
     return t.creatorUserId == uid || t.approverUserId == uid;
   }
@@ -1196,7 +1198,10 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      widget.viewerHint ?? '只读：可查看任务信息，不可编辑或操作',
+                      widget.viewerHint ??
+                          (_canEvaluate
+                              ? '只读查看。任务完成后可以填写评价。'
+                              : '只读：可查看任务信息，不可编辑或操作'),
                       style: const TextStyle(
                         fontSize: 12,
                         color: DunesColors.text2,

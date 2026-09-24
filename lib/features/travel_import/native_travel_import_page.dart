@@ -36,14 +36,17 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
   final TextEditingController _keywordCtrl = TextEditingController();
   Timer? _keywordDebounce;
 
-  String _kind = 'flight';
+  String _kind = '';
   String _match = '';
+  DateTime? _from;
+  DateTime? _to;
   int _page = 0;
   int _total = 0;
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
   bool _uploading = false;
+  bool _exporting = false;
   bool _fileDragging = false;
   String? _error;
   List<TravelOrderRow> _items = const [];
@@ -58,16 +61,38 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
   }
 
   static const _kinds = [
+    ('', '全部'),
     ('flight', '机票'),
     ('hotel', '酒店'),
     ('train', '火车'),
     ('ground', '用车'),
   ];
 
+  bool get _desktop => isDesktopCommOnly;
+
   bool get _hasFilters =>
       _keywordCtrl.text.trim().isNotEmpty ||
+      _kind.isNotEmpty ||
       _match == 'unmatched' ||
-      _match == 'ambiguous';
+      _match == 'ambiguous' ||
+      _from != null ||
+      _to != null;
+
+  String get _fromText => _from == null ? '' : _ymd(_from!);
+  String get _toText => _to == null ? '' : _ymd(_to!);
+
+  String _ymd(DateTime d) {
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$m-$day';
+  }
+
+  String get _rangeLabel {
+    if (_from == null || _to == null) return '时间段';
+    String md(DateTime d) =>
+        '${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    return '${md(_from!)}~${md(_to!)}';
+  }
 
   @override
   void initState() {
@@ -91,6 +116,10 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
   }
 
   void _publishChrome() {
+    if (_desktop) {
+      widget.onChromeChanged?.call(const TaskShellChrome());
+      return;
+    }
     widget.onChromeChanged?.call(
       TaskShellChrome(
         trailing: IconButton(
@@ -145,7 +174,43 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
     _keywordCtrl.removeListener(_onKeywordChanged);
     _keywordCtrl.clear();
     _keywordCtrl.addListener(_onKeywordChanged);
-    setState(() => _match = '');
+    setState(() {
+      _match = '';
+      _kind = '';
+      _from = null;
+      _to = null;
+    });
+    _reloadFromTop();
+  }
+
+  Future<void> _pickRange() async {
+    final now = DateTime.now();
+    final start = _from ?? now.subtract(const Duration(days: 6));
+    final end = _to ?? now;
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 1),
+      initialDateRange: DateTimeRange(start: start, end: end),
+      helpText: '选择时间段',
+      builder: (ctx, child) {
+        final base = Theme.of(ctx);
+        return Theme(
+          data: base.copyWith(
+            colorScheme: base.colorScheme.copyWith(
+              primary: _themePurple,
+              onPrimary: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (range == null || !mounted) return;
+    setState(() {
+      _from = DateTime(range.start.year, range.start.month, range.start.day);
+      _to = DateTime(range.end.year, range.end.month, range.end.day);
+    });
     _reloadFromTop();
   }
 
@@ -161,6 +226,8 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
         kind: _kind,
         match: _match,
         q: _keywordCtrl.text,
+        from: _fromText,
+        to: _toText,
         page: 0,
         pageSize: _pageSize,
       );
@@ -195,6 +262,8 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
         kind: _kind,
         match: _match,
         q: _keywordCtrl.text,
+        from: _fromText,
+        to: _toText,
         page: nextPage,
         pageSize: _pageSize,
       );
@@ -427,8 +496,43 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
 
   bool get _dropLive => TickerMode.valuesOf(context).enabled;
 
+  Future<void> _export() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    showDunesToast(context, '正在从携程拉取全部结算明细');
+    try {
+      final bytes = await _service.exportAll();
+      if (!mounted) return;
+      final name = '携程差旅明细.xlsx';
+      final location = await getSaveLocation(
+        suggestedName: name,
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'Excel', extensions: ['xlsx']),
+        ],
+      );
+      if (location == null) return;
+      await XFile.fromData(
+        bytes,
+        name: name,
+        mimeType:
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      ).saveTo(location.path);
+      if (mounted) showDunesToast(context, '已导出携程差旅明细');
+    } catch (e) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          friendlyErrorText(e, fallback: '导出失败'),
+          kind: DunesToastKind.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   Widget _wrapDrop(Widget child) {
-    if (!_supportsDesktopDrop) return child;
+    if (_desktop || !_supportsDesktopDrop) return child;
     return DropTarget(
       // 工作台 keep-alive 切走后页面仍挂在树上；desktop_drop 是窗口级监听，
       // 不看 Offstage/IgnorePointer。未加 enable 时，在 IM 里拖文件也会
@@ -450,6 +554,7 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
   }
 
   Widget _buildDropZone() {
+    if (_desktop) return const SizedBox.shrink();
     final hint = _uploading
         ? '处理中…'
         : (_supportsDesktopDrop || isDesktopCommOnly
@@ -560,16 +665,31 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  FilledButton.icon(
-                    onPressed: _uploading ? null : _pickAndPreview,
-                    icon: const Icon(Icons.upload_file, size: 18),
-                    label: Text(_uploading ? '处理中…' : '上传'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: _themePurple,
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                  if (_desktop)
+                    FilledButton.icon(
+                      onPressed: _exporting ? null : () => unawaited(_export()),
+                      icon: Icon(
+                        _exporting ? Icons.hourglass_top : Icons.file_download_outlined,
+                        size: 18,
+                      ),
+                      label: Text(_exporting ? '导出中…' : '导出'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _themePurple,
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                      ),
+                    )
+                  else
+                    FilledButton.icon(
+                      onPressed: _uploading ? null : _pickAndPreview,
+                      icon: const Icon(Icons.upload_file, size: 18),
+                      label: Text(_uploading ? '处理中…' : '上传'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _themePurple,
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -605,6 +725,12 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
                             _match = _match == 'ambiguous' ? '' : 'ambiguous');
                         _reloadFromTop();
                       },
+                    ),
+                    const SizedBox(width: 8),
+                    _FilterChip(
+                      label: _rangeLabel,
+                      active: _from != null && _to != null,
+                      onTap: () => unawaited(_pickRange()),
                     ),
                   ],
                 ),
@@ -738,7 +864,9 @@ class _NativeTravelImportPageState extends State<NativeTravelImportPage> {
           const SizedBox(height: 80),
           Center(
             child: Text(
-              _hasFilters ? '没有符合筛选条件的订单' : '暂无导入数据，点击上传或拖入携程 Excel',
+              _hasFilters
+                  ? '没有符合筛选条件的订单'
+                  : (_desktop ? '暂无差旅订单' : '暂无导入数据，点击上传或拖入携程 Excel'),
               style: const TextStyle(color: DunesColors.text3, fontSize: 14),
             ),
           ),

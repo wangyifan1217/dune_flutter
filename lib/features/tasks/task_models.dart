@@ -45,6 +45,7 @@ class TaskItem {
     this.displayStatus = '',
     this.hasPendingChange = false,
     this.pendingChangeKind = '',
+    this.canEvaluate = false,
   });
 
   final int id;
@@ -94,6 +95,9 @@ class TaskItem {
   final String displayStatus;
   final bool hasPendingChange;
   final String pendingChangeKind;
+
+  /// 当前查看人能否评价。上级看导入目标时创建人不是自己，靠这个字段显示评价。
+  final bool canEvaluate;
 
   bool get isMain => parentId == null;
   String get categoryLabel => subCategory.trim().isEmpty
@@ -162,6 +166,7 @@ class TaskItem {
       displayStatus: '${json['displayStatus'] ?? ''}',
       hasPendingChange: json['hasPendingChange'] == true,
       pendingChangeKind: '${json['pendingChangeKind'] ?? ''}',
+      canEvaluate: json['canEvaluate'] == true,
     );
   }
 }

@@ -994,6 +994,27 @@ class ConversationService {
     return <String, dynamic>{};
   }
 
+  Future<Map<String, dynamic>> ackOilFundAlert(int alertId) async {
+    if (alertId <= 0) throw Exception('alertId required');
+    final resp = await _client.post(
+      _uri('/robots/oil-fund-alert/$alertId/ack'),
+      headers: _headers,
+      body: '{}',
+    );
+    final body = _decode(resp.body);
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      final msg = (body['message'] ?? '').toString().trim();
+      throw Exception(msg.isEmpty ? '确认失败: HTTP ${resp.statusCode}' : msg);
+    }
+    if (body['success'] == false) {
+      throw Exception((body['message'] ?? '确认失败').toString());
+    }
+    final data = body['data'];
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return <String, dynamic>{};
+  }
+
   /// 确保一人一机 ROBOT 会话存在。
   Future<NativeConversation> ensureRobotSession(String robotKey) async {
     final key = robotKey.trim();

@@ -2,13 +2,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_data.dart';
 
 void main() {
-  test('SINOPEC 角标是石化，不取 message', () {
+  test('横幅正文就是 message 原文', () {
     const notice = LighthouseDelayNotice(
       sourceCode: 'SINOPEC',
       message: '中石化结算回传延迟，今日经营数尚未补齐。',
     );
-    expect(notice.sourceLabel, '石化');
-    expect(notice.sourceLabel, isNot(notice.message));
+    expect(notice.message, '中石化结算回传延迟，今日经营数尚未补齐。');
+    expect(notice.isEmpty, isFalse);
   });
 
   test('空列表 + 预览开关才下发预览条', () {

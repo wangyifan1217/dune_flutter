@@ -313,7 +313,7 @@ Future<UserWorkProfileSnapshot> loadUserWorkProfileSnapshot(
   } else {
     final facts = <String>[
       if (proposalCount != null) '发起提案 $proposalCount',
-      if (score != null) '灯塔规则 $countedTasks',
+      if (score != null) '规则 $countedTasks',
     ];
     const type = UserWorkProfileModuleType.business;
     const status = UserWorkProfileModuleStatus.ready;

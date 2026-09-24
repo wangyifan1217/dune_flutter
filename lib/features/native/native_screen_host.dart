@@ -1677,13 +1677,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     _goChatScreen('CR');
   }
 
-  /// NOVA 名片：可会话 → ensure 后进聊天；仅推送 → Toast，不进对话。
+  /// NOVA 名片：进机器人会话。仅推送的也可以打开看消息、点确认。
   Future<void> _openRobotFromCatalog(RobotRole role) async {
-    if (!role.canChat) {
-      if (!mounted) return;
-      showDunesToast(context, '该机器人仅推送通知，不支持对话');
-      return;
-    }
     try {
       final conv = await ConversationService(
         session: widget.session,

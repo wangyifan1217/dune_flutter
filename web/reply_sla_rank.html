@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>工作群 · 未回上级榜</title>
+  <style>
+    :root {
+      --bg-page: #F4F1EA;
+      --bg-app: #FBFAF6;
+      --bg-soft: #F2EFE7;
+      --border: #DAD5C7;
+      --border-soft: #E5E1D3;
+      --text: #1F2421;
+      --text2: #5A5C56;
+      --text3: #94938A;
+      --accent: #2F5D62;
+      --accent-soft: #E4ECEB;
+      --purple: #7B5CD8;
+      --purple-soft: #F3EEFA;
+      --read: #2E7544;
+      --pending: #D4380D;
+      --gold: #8A5A12;
+      --gold-soft: #F8EEDD;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg-page);
+      color: var(--text);
+      font-family: "PingFang SC", "Noto Sans SC", "Geist", sans-serif;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 28px 20px 72px; }
+    h1 { font-size: 22px; font-weight: 650; margin: 0 0 6px; }
+    .lead { color: var(--text2); font-size: 13.5px; line-height: 1.55; margin: 0 0 16px; max-width: 720px; }
+    .bar {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+      margin: 0 0 16px;
+    }
+    .tab, .seg {
+      border: 1px solid var(--border);
+      background: #fff;
+      border-radius: 999px;
+      padding: 7px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      color: var(--text2);
+    }
+    .tab.active, .seg.active { background: var(--text); color: #fff; border-color: var(--text); }
+    .stats {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+      margin: 0 0 16px;
+    }
+    @media (max-width: 720px) { .stats { grid-template-columns: 1fr; } }
+    .stat {
+      background: var(--bg-app);
+      border: 1px solid var(--border-soft);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+    .stat b { display: block; font-size: 22px; font-weight: 650; margin-top: 4px; }
+    .stat span { color: var(--text3); font-size: 12px; }
+    .board {
+      background: var(--bg-app);
+      border: 1px solid var(--border-soft);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .head, .person {
+      display: grid;
+      grid-template-columns: 52px 1.4fr 0.8fr 0.9fr 0.9fr 88px;
+      gap: 8px;
+      align-items: center;
+      padding: 12px 16px;
+    }
+    .head {
+      color: var(--text3);
+      font-size: 12px;
+      border-bottom: 1px solid var(--border-soft);
+      background: #fff;
+    }
+    .person { border-bottom: 1px solid var(--border-soft); font-size: 14px; }
+    .person:last-child { border-bottom: 0; }
+    .person.top { background: #fff; }
+    .rank {
+      width: 28px; height: 28px; border-radius: 8px;
+      display: grid; place-items: center;
+      font-size: 13px; font-weight: 700;
+      background: var(--bg-soft); color: var(--text2);
+    }
+    .rank.r1 { background: #F4D7C8; color: var(--pending); }
+    .rank.r2 { background: var(--gold-soft); color: var(--gold); }
+    .rank.r3 { background: var(--purple-soft); color: #5A3FA8; }
+    .who { display: flex; gap: 10px; align-items: center; min-width: 0; }
+    .avatar {
+      width: 34px; height: 34px; border-radius: 10px; flex: 0 0 34px;
+      background: #c9d6d4; color: var(--accent);
+      display: grid; place-items: center;
+      font-size: 13px; font-weight: 650;
+    }
+    .who b { display: block; font-weight: 650; }
+    .who small { color: var(--text3); font-size: 12px; }
+    .num { font-variant-numeric: tabular-nums; }
+    .num em { font-style: normal; color: var(--text3); font-size: 12px; margin-left: 2px; }
+    .unread { color: var(--text2); }
+    .pending { color: var(--pending); font-weight: 650; }
+    .meta { display: none; }
+    .score {
+      justify-self: end;
+      background: #FDE8E2;
+      color: var(--pending);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .foot {
+      padding: 12px 16px 14px;
+      color: var(--text3);
+      font-size: 12px;
+      line-height: 1.5;
+      background: #fff;
+    }
+    @media (max-width: 800px) {
+      .head { display: none; }
+      .person {
+        grid-template-columns: 36px 1fr auto;
+        grid-template-areas: "rank who score" "rank meta score";
+      }
+      .rank { grid-area: rank; }
+      .who { grid-area: who; }
+      .meta { display: block; grid-area: meta; grid-column: 2; color: var(--text2); font-size: 12px; }
+      .score { grid-area: score; }
+      .hide-m { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>工作群 · 未回上级榜</h1>
+    <p class="lead">
+      只统计工作群里上级 @ 下级之后：一直不读，或已读仍不回。示例数据，不连接口。次数越多、拖得越久，排得越前。
+    </p>
+    <div class="bar">
+      <button class="tab active" type="button" data-filter="all">全部</button>
+      <button class="tab" type="button" data-filter="unread">只看不读</button>
+      <button class="tab" type="button" data-filter="pending">只看已读不回</button>
+      <span style="flex:1"></span>
+      <button class="seg active" type="button">本周</button>
+      <button class="seg" type="button">本月</button>
+    </div>
+    <div class="stats">
+      <div class="stat"><span>上榜人数</span><b id="stat-people">8</b></div>
+      <div class="stat"><span>不读</span><b id="stat-unread">14 次</b></div>
+      <div class="stat"><span>已读不回</span><b id="stat-pending">19 次</b></div>
+    </div>
+    <div class="board">
+      <div class="head">
+        <span></span>
+        <span>人员</span>
+        <span>不读</span>
+        <span>已读不回</span>
+        <span>最长未处理</span>
+        <span style="text-align:right">未回上级</span>
+      </div>
+      <div id="list"></div>
+      <div class="foot">不读从上级发出算到首次打开。已读不回从打开算到引用回复。点「回复此条」但不发出，仍然算未回。普通群、同事互 @ 不进榜。</div>
+    </div>
+  </div>
+  <script>
+    const rows = [
+      { name: "王奕凡", dept: "财务 · 对账工作群", unread: 4, pending: 3, longest: "2天6h", kind: "both", score: 11 },
+      { name: "周可", dept: "销售 · 销售周会", unread: 3, pending: 2, longest: "1天8h", kind: "both", score: 8 },
+      { name: "陈六", dept: "运营 · 周目标群", unread: 0, pending: 5, longest: "18h", kind: "pending", score: 7 },
+      { name: "李四", dept: "财务 · 对账工作群", unread: 2, pending: 2, longest: "11h", kind: "both", score: 6 },
+      { name: "赵七", dept: "人事 · 入职协同群", unread: 3, pending: 0, longest: "1天2h", kind: "unread", score: 5 },
+      { name: "钱八", dept: "销售 · 销售周会", unread: 1, pending: 3, longest: "6h", kind: "both", score: 5 },
+      { name: "孙宁", dept: "研发 · 版本群", unread: 1, pending: 2, longest: "4h", kind: "both", score: 4 },
+      { name: "吴亮", dept: "客服 · 值班群", unread: 0, pending: 2, longest: "2h", kind: "pending", score: 3 }
+    ];
+
+    const list = document.getElementById("list");
+    let filter = "all";
+
+    function render() {
+      const shown = rows.filter((row) => filter === "all" || row.kind === "both" || row.kind === filter);
+      list.innerHTML = shown.map((row, i) => {
+        const n = i + 1;
+        const meta = `不读 ${row.unread} 次 · 已读不回 ${row.pending} 次 · 最长 ${row.longest}`;
+        return `<div class="person${n <= 3 ? " top" : ""}">
+          <div class="rank${n <= 3 ? " r" + n : ""}">${n}</div>
+          <div class="who"><div class="avatar">${row.name.slice(0, 1)}</div><div><b>${row.name}</b><small>${row.dept}</small></div></div>
+          <div class="num unread hide-m">${row.unread}<em>次</em></div>
+          <div class="num pending hide-m">${row.pending}<em>次</em></div>
+          <div class="num hide-m">${row.longest}</div>
+          <div class="meta">${meta}</div>
+          <div class="score">${row.score}</div>
+        </div>`;
+      }).join("");
+      const unread = shown.reduce((s, r) => s + r.unread, 0);
+      const pending = shown.reduce((s, r) => s + r.pending, 0);
+      document.getElementById("stat-people").textContent = String(shown.length);
+      document.getElementById("stat-unread").textContent = unread + " 次";
+      document.getElementById("stat-pending").textContent = pending + " 次";
+    }
+
+    document.querySelectorAll(".tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+        tab.classList.add("active");
+        filter = tab.dataset.filter;
+        render();
+      });
+    });
+    render();
+  </script>
+</body>
+</html>

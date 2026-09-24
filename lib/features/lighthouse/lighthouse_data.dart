@@ -2,8 +2,8 @@ import 'lighthouse_hero_metric.dart';
 
 /// 数据延迟预警（《灯塔移动端 · 数据查表说明》v1.5 §十一）。
 ///
-///   [message] 是资管写好的横幅正文 —— 原文展示，不改写、不另拼一句。
-///   其余四个字段只作为展开区的附加事实，不许拼进正文。
+///   [message] 是资管写好的横幅正文 —— 有记录时原文展示，不改写、不另拼一句。
+///   没有记录不显示。其余字段随接口带回，不进横幅。
 class LighthouseDelayNotice {
   const LighthouseDelayNotice({
     required this.sourceCode,
@@ -40,18 +40,6 @@ class LighthouseDelayNotice {
   final String raisedAt;
 
   bool get isEmpty => message.isEmpty;
-
-  /// 角标文案是本地标签，不是 message。来源多起来时在这里加。
-  String get sourceLabel {
-    switch (sourceCode.toUpperCase()) {
-      case 'SINOPEC':
-        return '石化';
-      case 'CNPC':
-        return '石油';
-      default:
-        return sourceCode.isEmpty ? '数据' : sourceCode;
-    }
-  }
 
   /// 本地看皮用。线上没有路由、资管表也还没 OPEN 行时，
   /// `--dart-define=DUNES_DELAY_NOTICE_PREVIEW=true` 才下发这一条。

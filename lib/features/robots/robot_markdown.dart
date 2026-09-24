@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'robot_models.dart';
@@ -116,12 +117,14 @@ class RobotMarkdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final data = markdown.trim();
+    final data = _rewriteColorTags(markdown.trim());
     if (data.isEmpty) return const SizedBox.shrink();
 
     MarkdownBody buildBody({required double imageMaxWidth, required bool fit}) {
       return MarkdownBody(
         data: data,
+        inlineSyntaxes: [_ColorInlineSyntax()],
+        builders: {'color': _ColorBuilder()},
         selectable: selectable && !compact,
         softLineBreak: true,
         fitContent: fit,
@@ -211,6 +214,74 @@ class _RobotMdImage extends StatelessWidget {
   }
 }
 
+final _fontColorTag = RegExp(
+  '''<font\\s+color=["\\']([^"\\']+)["\\']\\s*>([\\s\\S]*?)</font>''',
+  caseSensitive: false,
+);
+final _spanColorTag = RegExp(
+  '''<span\\s+style=["\\'][^"\\']*color\\s*:\\s*([^;"\\']+)[^"\\']*["\\']\\s*>([\\s\\S]*?)</span>''',
+  caseSensitive: false,
+);
+
+String _rewriteColorTags(String input) {
+  var s = input.replaceAllMapped(
+    _fontColorTag,
+    (m) => '[[c:${m[1]!.trim()}]]${m[2]}[[/c]]',
+  );
+  s = s.replaceAllMapped(
+    _spanColorTag,
+    (m) => '[[c:${m[1]!.trim()}]]${m[2]}[[/c]]',
+  );
+  return s;
+}
+
+class _ColorInlineSyntax extends md.InlineSyntax {
+  _ColorInlineSyntax() : super(r'\[\[c:([^\]]+)\]\]([\s\S]*?)\[\[/c\]\]');
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    final el = md.Element.text('color', match[2] ?? '');
+    el.attributes['color'] = (match[1] ?? '').trim();
+    parser.addNode(el);
+    return true;
+  }
+}
+
+class _ColorBuilder extends MarkdownElementBuilder {
+
+  @override
+  Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
+    return Text.rich(
+      TextSpan(
+        text: element.textContent,
+        style: (preferredStyle ?? const TextStyle(fontSize: 13, height: 1.55))
+            .copyWith(color: _parseMdColor(element.attributes['color'])),
+      ),
+    );
+  }
+}
+
+Color _parseMdColor(String? raw) {
+  final s = (raw ?? '').trim().toLowerCase();
+  const named = {
+    'red': Color(0xFFD4380D),
+    'green': Color(0xFF2E7544),
+    'orange': Color(0xFFD97706),
+    'blue': Color(0xFF1677FF),
+    'gray': Color(0xFF8A8A8A),
+    'grey': Color(0xFF8A8A8A),
+  };
+  if (named.containsKey(s)) return named[s]!;
+  var hex = s.startsWith('#') ? s.substring(1) : s;
+  if (hex.length == 3) {
+    hex = '${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}';
+  }
+  final value = int.tryParse(hex, radix: 16);
+  if (value == null) return RobotTheme.text;
+  if (hex.length == 8) return Color(value);
+  return Color(0xFF000000 | value);
+}
+
 /// 列表卡片预览：去掉常见 Markdown 标记，避免露出 `**`。
 String robotPlainPreview(String markdown, {int maxChars = 80}) {
   var s = markdown.trim();
@@ -221,6 +292,9 @@ String robotPlainPreview(String markdown, {int maxChars = 80}) {
       .replaceAll(RegExp(r'\*\*([^*]+)\*\*'), r'$1')
       .replaceAll(RegExp(r'__([^_]+)__'), r'$1')
       .replaceAll(RegExp(r'[*_]'), '')
+      .replaceAll(RegExp(r'</?font[^>]*>', caseSensitive: false), '')
+      .replaceAll(RegExp(r'</?span[^>]*>', caseSensitive: false), '')
+      .replaceAll(RegExp(r'\[\[c:[^\]]+\]\]|\[\[/c\]\]'), '')
       .replaceAll(RegExp(r'^#{1,6}\s*', multiLine: true), '')
       .replaceAll(RegExp(r'^\s*[-*+]\s+', multiLine: true), '')
       .replaceAll(RegExp(r'\s+'), ' ')

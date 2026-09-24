@@ -258,6 +258,7 @@ class NativeChatMessage {
   NativeChatMessage copyWith({
     String? senderAvatarPreset,
     String? senderAvatarObjectKey,
+    Map<String, dynamic>? payload,
   }) {
     return NativeChatMessage(
       id: id,
@@ -266,7 +267,7 @@ class NativeChatMessage {
       kind: kind,
       bodyText: bodyText,
       createdAt: createdAt,
-      payload: payload,
+      payload: payload ?? this.payload,
       peerRead: peerRead,
       senderAvatarPreset: senderAvatarPreset ?? this.senderAvatarPreset,
       senderAvatarObjectKey:

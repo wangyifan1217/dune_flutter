@@ -3619,6 +3619,44 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return widget.options.ratingFor(scale);
   }
 
+  /// 标题旁只放 S/A/B/C，没有年化规模时不占位。
+  String? get _headerRating {
+    final rating = _rating;
+    if (rating == '—' || rating.isEmpty) return null;
+    return rating;
+  }
+
+  Widget _ratingChip(String rating) {
+    final (Color bg, Color fg) = switch (rating) {
+      'S' => (ProposalPalette.purpleSoft, ProposalPalette.purpleDeep),
+      'A' => (ProposalPalette.greenSoft, ProposalPalette.green),
+      'B' => (ProposalPalette.amberSoft, ProposalPalette.amber),
+      _ => (const Color(0xFFF0ECF4), ProposalPalette.text2),
+    };
+    return Tooltip(
+      message: '任务评级 $rating，按年化规模自动',
+      child: Container(
+        key: const ValueKey('proposal-top-rating'),
+        height: 20,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          '$rating级',
+          style: TextStyle(
+            color: fg,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            height: 1.0,
+          ),
+        ),
+      ),
+    );
+  }
+
   /// 金额统一按万元展示，并按千分位分组。
   String _money(double value) {
     if (value == 0) return '0 万元';
@@ -3724,10 +3762,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     if (_visibleSection != target) {
       setState(() => _visibleSection = target);
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _jumpToKey(_keyForNavSection(target), target);
-    });
+    if (_scroll.hasClients && _scroll.offset != 0) {
+      _scroll.jumpTo(0);
+    }
     return true;
   }
 
@@ -4557,17 +4594,23 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ),
                   ),
                 ),
+                if (_headerRating != null) ...[
+                  const SizedBox(width: 6),
+                  _ratingChip(_headerRating!),
+                ],
                 if (_topStatusLine.isNotEmpty) ...[
                   const SizedBox(width: 8),
-                  Text(
-                    _topStatusLine,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: ProposalPalette.text3,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      height: 1.2,
+                  Flexible(
+                    child: Text(
+                      _topStatusLine,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: ProposalPalette.text3,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        height: 1.2,
+                      ),
                     ),
                   ),
                 ],
@@ -4709,16 +4752,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           foregroundColor: active
               ? ProposalPalette.purpleDeep
               : ProposalPalette.text2,
-          backgroundColor: active
-              ? Colors.white
-              : mine
-              ? const Color(0xFFF5F0FA)
-              : Colors.transparent,
+          backgroundColor: Colors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
-          elevation: active ? 2 : 0,
-          shadowColor: const Color(0x244F3488),
+          elevation: 0,
           padding: EdgeInsets.symmetric(
             horizontal: expand ? 8 : (compact ? 10 : 12),
           ),
@@ -4729,15 +4767,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               ? VisualDensity.standard
               : VisualDensity.compact,
         ),
-        child: Text(
-          proposalIntakeNavSectionLabel(section),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
+        child: AnimatedDefaultTextStyle(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
           style: TextStyle(
             fontSize: 12,
             height: 1.1,
             fontWeight: active || mine ? FontWeight.w700 : FontWeight.w600,
+            color: active ? ProposalPalette.purpleDeep : ProposalPalette.text2,
+          ),
+          child: Text(
+            proposalIntakeNavSectionLabel(section),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
           ),
         ),
       );
@@ -4808,11 +4851,42 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             border: Border.all(color: ProposalPalette.borderSoft),
             borderRadius: BorderRadius.circular(14),
           ),
-          child: Row(
-            children: [
-              for (final section in sections)
-                Expanded(child: chip(section, expand: true)),
-            ],
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final index = sections.indexOf(_visibleSection).clamp(0, sections.length - 1);
+              final tabWidth = constraints.maxWidth / sections.length;
+              return Stack(
+                children: [
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    left: tabWidth * index,
+                    top: 0,
+                    width: tabWidth,
+                    height: navH,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x144F3488),
+                            blurRadius: 8,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      for (final section in sections)
+                        Expanded(child: chip(section, expand: true)),
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -5272,26 +5346,75 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   Widget _topMoreButton() {
     final items = _topOverflowItems();
+    final compact = MediaQuery.sizeOf(context).width < ProposalLayout.compact;
     return PopupMenuButton<int>(
       key: const ValueKey('proposal-top-more'),
       tooltip: '更多',
       padding: EdgeInsets.zero,
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, 6),
+      color: ProposalPalette.card,
+      surfaceTintColor: Colors.transparent,
+      elevation: compact ? 0 : 8,
+      shadowColor: const Color(0x1A292530),
+      constraints: BoxConstraints(
+        minWidth: compact ? 220 : 196,
+        maxWidth: compact ? 320 : 280,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: ProposalPalette.border),
+      ),
+      menuPadding: const EdgeInsets.symmetric(vertical: 6),
       onSelected: (index) => items[index].onPressed?.call(),
-      itemBuilder: (context) => [
-        for (final (i, item) in items.indexed)
-          PopupMenuItem<int>(
-            value: i,
-            enabled: item.onPressed != null,
-            child: Text(
-              item.label,
-              style: TextStyle(
-                color: item.danger
-                    ? ProposalPalette.coral
-                    : ProposalPalette.text,
+      itemBuilder: (context) {
+        final entries = <PopupMenuEntry<int>>[];
+        var dangerStarted = false;
+        for (final (i, item) in items.indexed) {
+          if (item.danger && !dangerStarted && entries.isNotEmpty) {
+            dangerStarted = true;
+            entries.add(const PopupMenuDivider(height: 8));
+          } else if (item.danger) {
+            dangerStarted = true;
+          }
+          final enabled = item.onPressed != null;
+          entries.add(
+            PopupMenuItem<int>(
+              value: i,
+              enabled: enabled,
+              height: compact ? 44 : 36,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Container(
+                width: double.infinity,
+                padding: EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: compact ? 8 : 6,
+                ),
+                decoration: BoxDecoration(
+                  color: item.danger ? ProposalPalette.coralSoft : null,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  item.label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: !enabled
+                        ? ProposalPalette.text4
+                        : item.danger
+                        ? ProposalPalette.coral
+                        : ProposalPalette.text,
+                    fontSize: compact ? 14 : 13,
+                    fontWeight: FontWeight.w600,
+                    height: 1.2,
+                  ),
+                ),
               ),
             ),
-          ),
-      ],
+          );
+        }
+        return entries;
+      },
       child: DecoratedBox(
         decoration: _topToolDecoration,
         child: const SizedBox(
@@ -9612,7 +9735,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.72),
         borderRadius: BorderRadius.circular(8),
@@ -9674,28 +9797,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               height: 1.4,
             ),
           ),
-          Wrap(
-            spacing: 0,
-            runSpacing: 0,
-            children: [
-              TextButton(
-                onPressed: () => unawaited(
-                  _openSkuProductDialog(child: true, existing: row),
-                ),
-                child: Text(_canEditProducts ? '编辑' : '查看'),
-              ),
-              if (_canEditProducts)
-                TextButton(
-                  onPressed: () => unawaited(_confirmRemoveLinked(row)),
-                  child: const Text('删除'),
-                ),
-              TextButton(
-                onPressed: () =>
-                    unawaited(_openSkuSettleDialog(sku: row, child: true)),
-                child: Text(_canEditSkuSettlements ? '填写结算' : '查看结算'),
-              ),
-            ],
-          ),
+          _skuRowActions(row, child: true),
         ],
       ),
     );
@@ -9791,35 +9893,58 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             child: _skuPlatformStatusChip(row),
           ),
           const SizedBox(height: 4),
-          if (!child) _relatedProductsBox(row),
-          Wrap(
-            spacing: 0,
-            runSpacing: 0,
-            children: [
-              TextButton(
-                onPressed: () => unawaited(
-                  _openSkuProductDialog(child: child, existing: row),
-                ),
-                child: Text(_canEditProducts ? '编辑' : '查看'),
+          if (!child) ...[
+            const Text(
+              '业务产品',
+              style: TextStyle(
+                color: ProposalPalette.text3,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
               ),
-              if (_canEditProducts)
-                TextButton(
-                  onPressed: () => unawaited(
-                    child
-                        ? _confirmRemoveLinked(row)
-                        : _confirmRemoveProduct(row),
-                  ),
-                  child: const Text('删除'),
-                ),
-              TextButton(
-                onPressed: () =>
-                    unawaited(_openSkuSettleDialog(sku: row, child: child)),
-                child: Text(_canEditSkuSettlements ? '填写结算' : '查看结算'),
-              ),
-            ],
-          ),
+            ),
+            _skuRowActions(row, child: false),
+            _relatedProductsBox(row),
+          ] else
+            _skuRowActions(row, child: true),
         ],
       ),
+    );
+  }
+
+  Widget _skuRowActions(ProposalSkuDetailRow row, {required bool child}) {
+    final style = TextButton.styleFrom(
+      visualDensity: VisualDensity.compact,
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      minimumSize: const Size(0, 28),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+    );
+    return Wrap(
+      spacing: 0,
+      runSpacing: 0,
+      children: [
+        TextButton(
+          style: style,
+          onPressed: () => unawaited(
+            _openSkuProductDialog(child: child, existing: row),
+          ),
+          child: Text(_canEditProducts ? '编辑' : '查看'),
+        ),
+        if (_canEditProducts)
+          TextButton(
+            style: style,
+            onPressed: () => unawaited(
+              child ? _confirmRemoveLinked(row) : _confirmRemoveProduct(row),
+            ),
+            child: const Text('删除'),
+          ),
+        TextButton(
+          style: style,
+          onPressed: () =>
+              unawaited(_openSkuSettleDialog(sku: row, child: child)),
+          child: Text(_canEditSkuSettlements ? '填写结算' : '查看结算'),
+        ),
+      ],
     );
   }
 

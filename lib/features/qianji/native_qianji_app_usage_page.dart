@@ -634,7 +634,7 @@ class _NativeQianjiAppUsagePageState extends State<NativeQianjiAppUsagePage> {
           value: avg <= 0 ? '0分' : formatUsageStay((avg * 60000).round()),
         ),
         const SizedBox(width: 8),
-        _MetricTile(label: '会话', value: '${heatmap.sessionCount}'),
+        _MetricTile(label: '打开', value: '${heatmap.sessionCount}'),
       ],
     );
   }
@@ -1029,7 +1029,7 @@ class _UserCard extends StatelessWidget {
     final modules = usageRowTopModules(row);
     final avgStay = usageAvgStayMs(row.durationMs, row.sessionCount);
     final stats = <(String, String)>[
-      if (row.sessionCount > 0) ('会话', '${row.sessionCount}次'),
+      if (row.sessionCount > 0) ('打开', '${row.sessionCount}次'),
       if (avgStay > 0) ('次均', formatUsageStay(avgStay)),
       if (row.activeDays > 0) ('活跃', '${row.activeDays}天'),
       if (row.pv > 0) ('浏览', '${row.pv}次'),

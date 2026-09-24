@@ -38,6 +38,35 @@ abstract final class ProposalPalette {
   static const text4 = Color(0xFFC5BFCE);
 }
 
+/// 面板内部的三级字阶。板块大标题由 [ProposalSectionTitle] 统一承担，
+/// 面板里再往下只允许这三档，避免子块字号盖过父块。
+///
+/// 眉标（如「产品结算」）> 区块标题 > 子区块标题 > 说明文案。
+const kProposalEyebrowStyle = TextStyle(
+  color: ProposalPalette.text2,
+  fontSize: 11,
+  fontWeight: FontWeight.w700,
+  letterSpacing: .8,
+);
+
+const kProposalBlockTitleStyle = TextStyle(
+  color: ProposalPalette.text,
+  fontSize: 12,
+  fontWeight: FontWeight.w600,
+);
+
+const kProposalSubBlockTitleStyle = TextStyle(
+  color: ProposalPalette.text2,
+  fontSize: 12,
+  fontWeight: FontWeight.w600,
+);
+
+const kProposalCaptionStyle = TextStyle(
+  color: ProposalPalette.text3,
+  fontSize: 11,
+  height: 1.45,
+);
+
 /// 提案页统一断点与栅格尺寸。
 ///
 /// 同类区块必须用同一组阈值判断换行，手机与 PC 上栏位才能对齐；
@@ -120,11 +149,11 @@ class ProposalStatusChip extends StatelessWidget {
       ),
     };
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         color: bg,
         border: Border.all(color: border),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -206,11 +235,13 @@ class ProposalSectionTitle extends StatelessWidget {
     required this.title,
     required this.tag,
     required this.description,
+    this.lighthouse = false,
   });
 
   final String title;
   final String tag;
   final String description;
+  final bool lighthouse;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -228,14 +259,16 @@ class ProposalSectionTitle extends StatelessWidget {
               style: TextStyle(
                 color: ProposalPalette.text,
                 fontSize: stacked ? 17 : 19,
-                fontWeight: FontWeight.w700,
+                fontWeight: lighthouse ? FontWeight.w600 : FontWeight.w700,
               ),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: ProposalPalette.purpleSoft,
-                border: Border.all(color: ProposalPalette.borderStrong),
+                border: lighthouse
+                    ? null
+                    : Border.all(color: ProposalPalette.borderStrong),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
@@ -253,11 +286,7 @@ class ProposalSectionTitle extends StatelessWidget {
         final caption = Text(
           description,
           textAlign: stacked ? TextAlign.left : TextAlign.right,
-          style: const TextStyle(
-            color: ProposalPalette.text3,
-            fontSize: 11,
-            height: 1.45,
-          ),
+          style: kProposalCaptionStyle,
         );
         if (stacked) {
           return Column(
@@ -417,9 +446,9 @@ class ProposalField extends StatelessWidget {
     final resolved = tone ?? proposalFieldTone(enabled: true, source: source);
     final (bg, border, chipKind) = switch (resolved) {
       ProposalFieldTone.auto => (
-        const Color(0xFFFFF6E8),
-        const Color(0xFFE8D2A8),
-        ProposalChipKind.draft,
+        Colors.transparent,
+        Colors.transparent,
+        ProposalChipKind.normal,
       ),
       ProposalFieldTone.locked => (
         ProposalPalette.page,
@@ -432,17 +461,18 @@ class ProposalField extends StatelessWidget {
         ProposalChipKind.purple,
       ),
     };
+    // fill 与 auto 都靠输入框自身的 hairline 描边表达，外层不再套底色方块。
+    final framed =
+        resolved != ProposalFieldTone.fill && resolved != ProposalFieldTone.auto;
     return SizedBox(
       width: double.infinity,
       child: Padding(
         padding: const EdgeInsets.all(2),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: resolved == ProposalFieldTone.fill ? null : bg,
+            color: framed ? bg : null,
             borderRadius: BorderRadius.circular(10),
-            border: resolved == ProposalFieldTone.fill
-                ? null
-                : Border.all(color: border),
+            border: framed ? Border.all(color: border) : null,
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -503,6 +533,7 @@ class ProposalReviewToggle extends StatelessWidget {
     this.onReject,
     this.rejected = false,
     this.pendingLabel = '复核',
+    this.subtle = false,
   });
 
   final bool reviewed;
@@ -510,6 +541,7 @@ class ProposalReviewToggle extends StatelessWidget {
   final VoidCallback? onPressed;
   final VoidCallback? onReject;
   final String pendingLabel;
+  final bool subtle;
 
   @override
   Widget build(BuildContext context) {
@@ -520,6 +552,34 @@ class ProposalReviewToggle extends StatelessWidget {
           : rejected
           ? '已驳回'
           : pendingLabel;
+      if (subtle) {
+        final color = reviewed
+            ? ProposalPalette.green
+            : rejected
+            ? const Color(0xFFB42318)
+            : ProposalPalette.text3;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (reviewed || rejected) ...[
+              Icon(
+                reviewed ? Icons.check_rounded : Icons.error_outline_rounded,
+                size: 12,
+                color: color,
+              ),
+              const SizedBox(width: 3),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        );
+      }
       final chip = Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
         decoration: BoxDecoration(
@@ -812,7 +872,8 @@ InputDecoration proposalInputDecoration({
   ProposalFieldTone tone = ProposalFieldTone.fill,
 }) {
   final fillColor = switch (tone) {
-    ProposalFieldTone.auto => const Color(0xFFFFFBF3),
+    ProposalFieldTone.auto =>
+      readOnly ? ProposalPalette.app : ProposalPalette.card,
     ProposalFieldTone.locked => ProposalPalette.app,
     ProposalFieldTone.fill =>
       readOnly ? ProposalPalette.app : ProposalPalette.card,
@@ -859,25 +920,27 @@ class ProposalChoiceChip extends StatelessWidget {
   final ValueChanged<bool>? onSelected;
   final bool enabled;
 
-  static const selectedFill = Color(0xFF2F8F46);
+  /// 灯塔式低饱和选中态：用灰蓝底区分状态，不再用绿色抢占视觉焦点。
+  static const selectedFill = Color(0xFFEEF1F6);
 
   @override
   Widget build(BuildContext context) {
     final canTap = enabled && onSelected != null;
     final background = !enabled
-        ? (selected ? const Color(0xFFB7C4B5) : ProposalPalette.page)
+        ? (selected ? const Color(0xFFE7E9EE) : ProposalPalette.page)
         : (selected ? selectedFill : Colors.white);
-    final foreground = selected
-        ? Colors.white
-        : (enabled ? ProposalPalette.text : ProposalPalette.text3);
+    final foreground = enabled ? ProposalPalette.text : ProposalPalette.text3;
     final border = selected
-        ? (enabled ? const Color(0xFF1F6B32) : ProposalPalette.text3)
+        ? (enabled ? const Color(0xFFC7CFDA) : ProposalPalette.text4)
         : ProposalPalette.text4;
     return Material(
       color: background,
-      shape: StadiumBorder(side: BorderSide(color: border)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(6),
+        side: BorderSide(color: border),
+      ),
       child: InkWell(
-        customBorder: const StadiumBorder(),
+        borderRadius: BorderRadius.circular(6),
         onTap: canTap ? () => onSelected!(!selected) : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -941,7 +1004,9 @@ class ProposalPills extends StatelessWidget {
               fontSize: 11,
             ),
             visualDensity: VisualDensity.compact,
-            shape: const StadiumBorder(),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(6),
+            ),
           ),
       ],
     ),

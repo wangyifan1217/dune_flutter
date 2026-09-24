@@ -151,19 +151,19 @@ class FlowFieldJump {
 }
 
 const Map<String, FlowFieldJump> kFlowFieldJumps = {
-  'supplier': FlowFieldJump(ProposalIntakeNavSection.finance, [
+  'supplier': FlowFieldJump(ProposalIntakeNavSection.market, [
     'purchaseCounterparty',
   ]),
-  'hub': FlowFieldJump(ProposalIntakeNavSection.finance, [
+  'hub': FlowFieldJump(ProposalIntakeNavSection.market, [
     'salesOurParty',
     'salesScale',
     'margin',
   ]),
-  'channel': FlowFieldJump(ProposalIntakeNavSection.finance, [
+  'channel': FlowFieldJump(ProposalIntakeNavSection.market, [
     'salesCounterparty',
   ]),
   'tech': FlowFieldJump(ProposalIntakeNavSection.tech, ['technologyPlatform']),
-  'g1': FlowFieldJump(ProposalIntakeNavSection.finance, ['purchaseProducts']),
+  'g1': FlowFieldJump(ProposalIntakeNavSection.market, ['purchaseProducts']),
   'g2': FlowFieldJump(ProposalIntakeNavSection.tech, [
     'technologyCapabilities',
   ]),
@@ -176,11 +176,11 @@ const Map<String, FlowFieldJump> kFlowFieldJumps = {
     'supplySettleMode',
     'supplyPayAccount',
   ]),
-  'i1': FlowFieldJump(ProposalIntakeNavSection.finance, [
+  'i1': FlowFieldJump(ProposalIntakeNavSection.market, [
     'supplyProducts',
     'purchaseCounterparty',
   ]),
-  'isales': FlowFieldJump(ProposalIntakeNavSection.finance, [
+  'isales': FlowFieldJump(ProposalIntakeNavSection.market, [
     'salesInvoiceType',
     'productSalesSettle',
   ]),

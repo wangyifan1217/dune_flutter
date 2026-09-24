@@ -304,7 +304,11 @@ List<String> proposalSkuSettleMoneyBits(ProposalSkuSettleMoney money) {
   String amount({required bool has, required double wan, required double share}) {
     if (!has) return '';
     if (money.scale > 0) return '${proposalFormatWan(wan)}万';
-    return proposalFormatSharePct(share);
+    final rounded = proposalRoundWan(share);
+    if ((rounded - rounded.roundToDouble()).abs() < 0.001) {
+      return '${rounded.round()}';
+    }
+    return proposalFormatWan(rounded);
   }
 
   return [
@@ -313,7 +317,7 @@ List<String> proposalSkuSettleMoneyBits(ProposalSkuSettleMoney money) {
     if (money.hasCost)
       '成本 ${amount(has: true, wan: money.cost, share: money.costShare)}',
     if (money.hasBoth)
-      '利润 ${money.scale > 0 ? '${proposalFormatWan(money.profit)}万' : proposalFormatSharePct(money.profitShare)}',
+      '利润 ${money.scale > 0 ? '${proposalFormatWan(money.profit)}万' : amount(has: true, wan: money.profit, share: money.profitShare)}',
   ];
 }
 

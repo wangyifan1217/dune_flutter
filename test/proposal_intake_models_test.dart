@@ -4878,7 +4878,7 @@ void main() {
       form,
       includeSettlements: false,
     );
-    expect(issues, contains('${kProposalChildProductLabel}第1条请选择现金券或满减券'));
+    expect(issues, contains('${kProposalChildProductLabel}第1条请选择类型'));
     expect(issues.join(), isNot(contains('请填写产品名称')));
     final saved = ProposalSkuDetailRow.fromJson({
       'id': 'child-1',

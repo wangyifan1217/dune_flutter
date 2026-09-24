@@ -1435,6 +1435,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   int _fieldEpoch = 0;
   final Map<String, int> _settleXorStamp = {};
   ProposalSkuDetailRow? _skuSettingsClipboard;
+  ProposalSkuDetailRow? _businessProductClipboard;
+  ProposalSkuDetailRow? _linkedProductClipboard;
   List<ProposalSkuSettleRow>? _skuSettlementsClipboard;
   final Map<String, int> _costAmountStamp = {};
   bool _deleting = false;
@@ -6230,7 +6232,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           key: _techModuleReviewKey,
           title: '科技部板块审核',
           description:
-              '填写人填写，科技部负责人复核科技字段（含财务技术接口）并对产品相关整板块复核后统一确认。确认前会检查遗漏。发现问题可直接整板块驳回。',
+              '填写人填写，科技部负责人复核科技字段（含财务技术接口）并对业务平台产品整板块复核后统一确认。确认前会检查遗漏。发现问题可直接整板块驳回。',
           keyName: 'technologyCompleted',
           buttonLabel:
               proposalIntakeTechnologyReviewGaps(_review, form: _form).isEmpty
@@ -8327,13 +8329,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     widget.onChanged(_row);
   }
 
-  Future<void> _addChildProduct() async {
+  Future<void> _addChildProduct({String? parentSkuId}) async {
     if (!_canEditProducts) return;
-    if (proposalIntakeSkuDetails(_form).isEmpty) {
-      widget.onError('请先新增$kProposalMainProductLabel');
+    final parent = (parentSkuId ?? '').trim();
+    if (parent.isEmpty ||
+        !proposalIntakeSkuDetails(_form).any((row) => row.id == parent)) {
+      widget.onError('请先新增$kProposalMainProductLabel，并选择类型为权益');
       return;
     }
-    await _openSkuProductDialog(child: true);
+    await _openSkuProductDialog(child: true, parentSkuId: parent);
   }
 
   bool get _clipboardIsChild {
@@ -8343,7 +8347,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }
 
   void _pasteSkuProductOnto(ProposalSkuDetailRow target, {required bool child}) {
-    final source = _skuSettingsClipboard;
+    final source = child ? _linkedProductClipboard : _businessProductClipboard;
     if (source == null || !_canEditProducts) return;
     var next = proposalIntakeCloneSkuProduct(
       source,
@@ -8358,9 +8362,27 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ]),
       );
       _patchSkuDetail(target.id, (_) => next);
+      _showProductClipboardMessage(
+        source.id == target.id ? '请粘贴到另一条业务产品' : '已粘贴到当前业务产品',
+      );
       return;
     }
-    _patchChildProduct(target.id, (_) => next);
+    final quantities = Map<String, int>.from(
+      proposalIntakeBenefitProduct(_form).skuQuantities,
+    )..[target.id] = proposalIntakeChildProductQuantity(_form, source.id);
+    if (quantities[target.id]! < 1) quantities[target.id] = 1;
+    _writeChildProducts([
+      for (final row in proposalIntakeChildProducts(_form))
+        if (row.id == target.id) next else row,
+    ], childQuantities: quantities);
+    _showProductClipboardMessage(
+      source.id == target.id ? '请粘贴到另一条关联产品' : '已粘贴到当前关联产品',
+    );
+  }
+
+  void _showProductClipboardMessage(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   void _pasteSkuProductAsNew({required bool child}) {
@@ -8408,6 +8430,41 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       for (final row in proposalIntakeChildProducts(_form))
         if (row.id == id) update(row) else row,
     ], rebuild: rebuild);
+  }
+
+  Future<bool> _confirmRemove(String label) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认移除'),
+        content: Text('确定移除「$label」吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('移除'),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  Future<void> _confirmRemoveLinked(ProposalSkuDetailRow row) async {
+    final name = row.displayName.trim().isEmpty ? '关联产品' : row.displayName.trim();
+    if (!await _confirmRemove(name)) return;
+    _removeChildProduct(row.id);
+  }
+
+  Future<void> _confirmRemoveProduct(ProposalSkuDetailRow row) async {
+    final name = row.displayName.trim().isEmpty
+        ? kProposalMainProductLabel
+        : row.displayName.trim();
+    if (!await _confirmRemove(name)) return;
+    _removeSkuDetail(row.id);
   }
 
   void _removeChildProduct(String id) {
@@ -8505,7 +8562,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             void refresh() => setDialogState(() {});
             return AlertDialog(
               title: Text(
-                '${proposalIntakeProductKindLabel(child: child)}结算${titleBits.isEmpty ? '' : ' · $titleBits'}',
+                '${child ? '关联产品' : proposalIntakeProductKindLabel(child: false)}结算${titleBits.isEmpty ? '' : ' · $titleBits'}',
               ),
               content: SizedBox(
                 width: 760,
@@ -8683,13 +8740,20 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   Future<void> _openSkuProductDialog({
     required bool child,
     ProposalSkuDetailRow? existing,
+    String parentSkuId = '',
   }) async {
     if (!_canEditProducts && existing == null) return;
     final mains = proposalIntakeSkuDetails(_form);
     final seed =
         existing ?? (child ? _newChildProductRow() : _newSkuDetailRow());
+    final boundParent = child
+        ? (existing?.parentSkuId.trim().isNotEmpty == true
+              ? existing!.parentSkuId
+              : parentSkuId)
+        : '';
     final initial = seed.copyWith(
       rollback: proposalIntakeSkuRollbackValue(seed, form: _form),
+      parentSkuId: child ? boundParent : seed.parentSkuId,
     );
     final result = await showDialog<_SkuProductDraft>(
       context: context,
@@ -8704,12 +8768,26 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         mainProducts: mains,
         rollbackOptions: widget.options.rollbackOptions,
         readOnly: !_canEditProducts,
+        proposalTitle: _row.title,
+        initialLinked: child
+            ? const []
+            : [
+                for (final item in proposalIntakeChildProducts(_form))
+                  if (item.parentSkuId == initial.id)
+                    _SkuProductDraft(
+                      row: item,
+                      quantity: proposalIntakeChildProductQuantity(
+                        _form,
+                        item.id,
+                      ),
+                    ),
+              ],
       ),
     );
     if (result == null || !mounted || !_canEditProducts) return;
     if (child && _childCouponInUse(result.row)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('同一主产品下券类型和面值不能重复')),
+        const SnackBar(content: Text('同一业务产品下类型和面值不能重复')),
       );
       return;
     }
@@ -8731,10 +8809,34 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     }
     final rows = proposalIntakeSkuDetails(_form);
     if (existing == null) {
-      _writeSkuDetails([...rows, result.row]);
-      return;
+      _writeSkuDetails([...rows, result.row], rebuild: false);
+    } else {
+      _patchSkuDetail(existing.id, (_) => result.row, rebuild: false);
     }
-    _patchSkuDetail(existing.id, (_) => result.row);
+    final children = proposalIntakeChildProducts(_form);
+    final quantities = Map<String, int>.from(
+      proposalIntakeBenefitProduct(_form).skuQuantities,
+    );
+    final kept = [
+      for (final row in children)
+        if (row.parentSkuId != result.row.id) row,
+    ];
+    final next = <ProposalSkuDetailRow>[...kept];
+    for (final item in result.linked) {
+      final row = item.row.copyWith(parentSkuId: result.row.id);
+      if (_childCouponInUse(row) && !children.any((item) => item.id == row.id)) {
+        continue;
+      }
+      quantities[row.id] = item.quantity;
+      next.add(row);
+    }
+    for (final row in children) {
+      if (row.parentSkuId == result.row.id &&
+          !next.any((item) => item.id == row.id)) {
+        quantities.remove(row.id);
+      }
+    }
+    _writeChildProducts(next, childQuantities: quantities);
   }
 
   void _patchSkuDetail(
@@ -8765,7 +8867,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     _writeSkuDetails([
       for (final row in proposalIntakeSkuDetails(_form))
         if (row.id != id) row,
-    ]);
+    ], rebuild: false);
+    final quantities = Map<String, int>.from(
+      proposalIntakeBenefitProduct(_form).skuQuantities,
+    );
+    final children = [
+      for (final row in proposalIntakeChildProducts(_form))
+        if (row.parentSkuId == id) null else row,
+    ].whereType<ProposalSkuDetailRow>().toList();
+    for (final row in proposalIntakeChildProducts(_form)) {
+      if (row.parentSkuId == id) quantities.remove(row.id);
+    }
+    _writeChildProducts(children, childQuantities: quantities);
   }
 
   void _writeSkuSettlements(
@@ -8983,7 +9096,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    '产品相关',
+                    '业务平台产品',
                     style: TextStyle(
                       color: ProposalPalette.text,
                       fontWeight: FontWeight.w700,
@@ -8995,8 +9108,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     _reviewEnabled(
                           'technologyItem:$kProposalSkuProductsReviewKey',
                         )
-                        ? '填写人填写产品基础。科技部负责人对本板块整块复核：到本行点「点此复核」。'
-                        : '填写人填写产品基础。由科技部负责人在待科技复核阶段点此复核，不是每条产品各审一次。',
+                        ? '填写人填写业务平台产品基础。科技部负责人对本板块整块复核：到本行点「点此复核」。'
+                        : '填写人填写业务平台产品基础。由科技部负责人在待科技复核阶段点此复核，不是每条业务平台产品各审一次。',
                     style: const TextStyle(
                       color: ProposalPalette.text3,
                       fontSize: 11,
@@ -9014,47 +9127,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ],
         ),
         const SizedBox(height: 10),
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                kProposalMainProductLabel,
-                style: TextStyle(
-                  color: ProposalPalette.text,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
-              ),
+        if (_canEditProducts)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _addSkuDetail,
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('新增'),
             ),
-            if (_canEditProducts)
-              TextButton.icon(
-                onPressed: _addSkuDetail,
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('新增$kProposalMainProductLabel'),
-              ),
-            if (_canEditProducts &&
-                _skuSettingsClipboard != null &&
-                !_clipboardIsChild)
-              TextButton.icon(
-                onPressed: () => _pasteSkuProductAsNew(child: false),
-                icon: const Icon(Icons.content_paste, size: 16),
-                label: const Text('粘贴$kProposalMainProductLabel'),
-              ),
-          ],
-        ),
-        const Text(
-          '点新增后在弹框中填写，避免把整页拉得很长。新增$kProposalChildProductLabel时需选择对应$kProposalMainProductLabel和关联数量。',
-          style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
-        ),
-        if (rows.isEmpty)
-          const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: Text(
-              '尚未添加$kProposalMainProductLabel',
-              style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
-            ),
-          )
-        else ...[
+          ),
+        if (rows.isNotEmpty) ...[
           if (kProposalExistingBuiltEnabled) ...[
             const SizedBox(height: 8),
             _existingBuiltToggle(
@@ -9070,75 +9152,102 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ),
           ],
         ],
-        const SizedBox(height: 18),
-        _childProductsBlock(wide),
       ],
     );
   }
 
-  Widget _childProductsBlock(bool wide) {
-    final rows = proposalIntakeChildProducts(_form);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                kProposalChildProductLabel,
-                style: TextStyle(
-                  color: ProposalPalette.text,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
-              ),
+  Widget _relatedProductsBox(ProposalSkuDetailRow parent) {
+    final children = proposalIntakeChildProducts(
+      _form,
+    ).where((item) => item.parentSkuId == parent.id).toList(growable: false);
+    if (children.isEmpty) return const SizedBox.shrink();
+    if (parent.resolvedCouponKind != kProposalCouponKindBenefit) {
+      return const SizedBox.shrink();
+    }
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: ProposalPalette.purpleLine),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '关联产品',
+            style: TextStyle(
+              color: ProposalPalette.text,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
             ),
-            if (_canEditProducts)
-              TextButton.icon(
-                onPressed: _addChildProduct,
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('新增$kProposalChildProductLabel'),
-              ),
-            if (_canEditProducts &&
-                _skuSettingsClipboard != null &&
-                _clipboardIsChild)
-              TextButton.icon(
-                onPressed: () => _pasteSkuProductAsNew(child: true),
-                icon: const Icon(Icons.content_paste, size: 16),
-                label: const Text('粘贴$kProposalChildProductLabel'),
-              ),
-          ],
-        ),
-        const Text(
-          '$kProposalChildProductLabel与$kProposalMainProductLabel分开，点新增后选择现金券或满减券。科技与财务各自独立填写。',
-          style: TextStyle(color: ProposalPalette.text3, fontSize: 11),
-        ),
-        if (rows.isEmpty)
-          const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: Text(
-              '尚未添加$kProposalChildProductLabel',
-              style: TextStyle(color: ProposalPalette.text3, fontSize: 12),
-            ),
-          )
-        else ...[
-          if (kProposalExistingBuiltEnabled) ...[
-            const SizedBox(height: 8),
-            _existingBuiltToggle(
-              locked: _showSelectedAsText || !_canEditProducts,
-              child: true,
-            ),
-          ],
-          const SizedBox(height: 10),
-          for (var i = 0; i < rows.length; i++) ...[
-            if (i > 0) const SizedBox(height: 8),
-            _anchor(
-              'childDetail:${rows[i].id}',
-              _skuProductSummaryRow(rows[i], i + 1, child: true),
-            ),
-          ],
+          ),
+          for (var i = 0; i < children.length; i++)
+            _relatedProductLine(children[i], i + 1),
         ],
-      ],
+      ),
+    );
+  }
+
+  Widget _relatedProductLine(ProposalSkuDetailRow row, int index) {
+    final name = row.displayName.trim();
+    final title = name.isEmpty ? '关联产品 $index' : name;
+    final bits = <String>[
+      if (row.resolvedCouponKind.isNotEmpty && row.resolvedCouponKind != name)
+        row.resolvedCouponKind,
+      if (row.faceValue.trim().isNotEmpty) '面值 ${row.faceValue.trim()}',
+      if (row.inventoryQty.trim().isNotEmpty) '库存 ${row.inventoryQty.trim()}',
+      if (row.syncZhongyouHaoke.trim().isNotEmpty) row.syncZhongyouHaoke.trim(),
+      proposalIntakeSkuRollbackValue(row, form: _form),
+      '数量 ${proposalIntakeChildProductQuantity(_form, row.id)}',
+      proposalIntakeSkuSettlements(row).any((item) => !item.terms.isBlank)
+          ? '已填结算'
+          : '未填结算',
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: ProposalPalette.text,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            bits.join(' · '),
+            style: const TextStyle(color: ProposalPalette.text2, fontSize: 12),
+          ),
+          Wrap(
+            spacing: 0,
+            runSpacing: 0,
+            children: [
+              TextButton(
+                onPressed: () => unawaited(
+                  _openSkuProductDialog(child: true, existing: row),
+                ),
+                child: Text(_canEditProducts ? '编辑' : '查看'),
+              ),
+              if (_canEditProducts)
+                TextButton(
+                  onPressed: () => unawaited(_confirmRemoveLinked(row)),
+                  child: const Text('删除'),
+                ),
+              TextButton(
+                onPressed: () =>
+                    unawaited(_openSkuSettleDialog(sku: row, child: true)),
+                child: Text(_canEditSkuSettlements ? '填写结算' : '查看结算'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -9216,8 +9325,8 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       Text(
                         bits.join(' · '),
                         style: const TextStyle(
-                          color: ProposalPalette.text3,
-                          fontSize: 11,
+                          color: ProposalPalette.text2,
+                          fontSize: 12,
                         ),
                       ),
                     ],
@@ -9232,22 +9341,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             child: _skuPlatformStatusChip(row),
           ),
           const SizedBox(height: 4),
+          if (!child) _relatedProductsBox(row),
           Wrap(
             spacing: 0,
             runSpacing: 0,
             children: [
-              if (_canEditProducts) ...[
-                TextButton(
-                  onPressed: () => setState(() => _skuSettingsClipboard = row),
-                  child: const Text('复制产品'),
-                ),
-                TextButton(
-                  onPressed: _skuSettingsClipboard == null
-                      ? null
-                      : () => _pasteSkuProductOnto(row, child: child),
-                  child: const Text('粘贴产品'),
-                ),
-              ],
               TextButton(
                 onPressed: () => unawaited(
                   _openSkuProductDialog(child: child, existing: row),
@@ -9256,9 +9354,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               ),
               if (_canEditProducts)
                 TextButton(
-                  onPressed: () => child
-                      ? _removeChildProduct(row.id)
-                      : _removeSkuDetail(row.id),
+                  onPressed: () => unawaited(
+                    child
+                        ? _confirmRemoveLinked(row)
+                        : _confirmRemoveProduct(row),
+                  ),
                   child: const Text('删除'),
                 ),
               TextButton(
@@ -9693,9 +9793,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               ),
               if (_canEditMarket)
                 TextButton(
-                  onPressed: () => child
-                      ? _removeChildProduct(row.id)
-                      : _removeSkuDetail(row.id),
+                  onPressed: () => unawaited(
+                    child
+                        ? _confirmRemoveLinked(row)
+                        : _confirmRemoveProduct(row),
+                  ),
                   child: const Text('删除'),
                 ),
               TextButton.icon(
@@ -10688,7 +10790,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             const SizedBox(height: 8),
             if (productSource == 'CHANNEL') ...[
               _skuSettleKindSection(
-                label: '收入',
+                label: '销售（收入）',
                 kind: kProposalSkuSettleKindIncome,
                 rows: [
                   for (final item in settlements)
@@ -10713,7 +10815,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               ),
               const SizedBox(height: 12),
               _skuSettleKindSection(
-                label: '成本',
+                label: '采购（成本）',
                 kind: kProposalSkuSettleKindCost,
                 rows: [
                   for (final item in settlements)
@@ -10817,7 +10919,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   }) {
     final label = Text(
       proposalIntakeSettleLabel(index, kind: labelKind),
-      textAlign: TextAlign.center,
+      textAlign: TextAlign.start,
       style: const TextStyle(
         fontWeight: FontWeight.w700,
         fontSize: 12,
@@ -10880,31 +10982,21 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         borderRadius: BorderRadius.circular(10),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            width: 52,
-            alignment: Alignment.center,
             color: ProposalPalette.soft,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [label, ?deleteButton],
-            ),
-          ),
-          Expanded(
-            child: Column(
+            padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+            child: Row(
               children: [
-                if (headerTrailing != null)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: headerTrailing,
-                  ),
-                child,
+                Expanded(child: label),
+                ?deleteButton,
+                ?headerTrailing,
               ],
             ),
           ),
+          child,
         ],
       ),
     );
@@ -15356,10 +15448,15 @@ class _FlowFieldFlash extends StatelessWidget {
 }
 
 class _SkuProductDraft {
-  const _SkuProductDraft({required this.row, this.quantity = 1});
+  const _SkuProductDraft({
+    required this.row,
+    this.quantity = 1,
+    this.linked = const [],
+  });
 
   final ProposalSkuDetailRow row;
   final int quantity;
+  final List<_SkuProductDraft> linked;
 }
 
 class _SkuProductEditorDialog extends StatefulWidget {
@@ -15371,6 +15468,8 @@ class _SkuProductEditorDialog extends StatefulWidget {
     required this.mainProducts,
     required this.rollbackOptions,
     required this.readOnly,
+    this.proposalTitle = '',
+    this.initialLinked = const [],
   });
 
   final bool childProduct;
@@ -15380,6 +15479,8 @@ class _SkuProductEditorDialog extends StatefulWidget {
   final List<ProposalSkuDetailRow> mainProducts;
   final List<String> rollbackOptions;
   final bool readOnly;
+  final String proposalTitle;
+  final List<_SkuProductDraft> initialLinked;
 
   @override
   State<_SkuProductEditorDialog> createState() =>
@@ -15388,6 +15489,7 @@ class _SkuProductEditorDialog extends StatefulWidget {
 
 class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
   late final TextEditingController _name;
+  late final TextEditingController _remark;
   late final TextEditingController _face;
   late final TextEditingController _faceThreshold;
   late final TextEditingController _faceOff;
@@ -15398,11 +15500,20 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
   late String _parentSkuId;
   late String _rollback;
   late String _couponKind;
+  final List<_SkuProductDraft> _linked = [];
+  _SkuProductDraft? _linkedClipboard;
 
   @override
   void initState() {
     super.initState();
-    _name = TextEditingController(text: widget.initial.productName);
+    final seededName = widget.childProduct
+        ? widget.initial.productName
+        : (widget.initial.productName.trim().isNotEmpty
+              ? widget.initial.productName
+              : widget.proposalTitle.trim());
+    _name = TextEditingController(text: seededName);
+    _remark = TextEditingController(text: widget.initial.remark);
+    _linked.addAll(widget.initialLinked);
     _face = TextEditingController(text: widget.initial.faceValue);
     final split = proposalIntakeSplitDiscountFace(widget.initial.faceValue);
     _faceThreshold = TextEditingController(text: split.$1);
@@ -15419,6 +15530,7 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
   @override
   void dispose() {
     _name.dispose();
+    _remark.dispose();
     _face.dispose();
     _faceThreshold.dispose();
     _faceOff.dispose();
@@ -15428,32 +15540,27 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
     super.dispose();
   }
 
-  String get _kindLabel =>
-      proposalIntakeProductKindLabel(child: widget.childProduct);
-
   void _submit() {
     if (widget.readOnly) {
       Navigator.pop(context);
       return;
     }
-    if (widget.childProduct) {
-      if (_couponKind.trim().isEmpty || _parentSkuId.trim().isEmpty) return;
-    } else if (_name.text.trim().isEmpty) {
-      return;
-    }
+    if (_couponKind.trim().isEmpty) return;
+    if (!widget.childProduct && _name.text.trim().isEmpty) return;
+    if (widget.childProduct && _parentSkuId.trim().isEmpty) return;
     final quantity = int.tryParse(_quantity.text.trim()) ?? 1;
-    final couponKind = widget.childProduct
-        ? proposalIntakeNormalizeCouponKind(_couponKind)
-        : '';
-    final faceValue = widget.childProduct &&
-            couponKind == kProposalCouponKindDiscount
+    final couponKind = proposalIntakeNormalizeCouponKind(_couponKind);
+    final faceValue = couponKind == kProposalCouponKindDiscount
         ? proposalIntakeJoinDiscountFace(_faceThreshold.text, _faceOff.text)
         : _face.text.trim();
+    final productName = widget.childProduct
+        ? (_name.text.trim().isEmpty ? couponKind : _name.text.trim())
+        : _name.text.trim();
     Navigator.pop(
       context,
       _SkuProductDraft(
         row: widget.initial.copyWith(
-          productName: widget.childProduct ? couponKind : _name.text.trim(),
+          productName: productName,
           couponKind: couponKind,
           faceValue: faceValue,
           inventoryQty: _qty.text.trim(),
@@ -15461,8 +15568,144 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
           syncZhongyouHaoke: _syncZhongyouHaoke,
           parentSkuId: widget.childProduct ? _parentSkuId : '',
           rollback: _rollback,
+          remark: _remark.text.trim(),
         ),
         quantity: quantity < 1 ? 1 : quantity,
+        linked: couponKind == kProposalCouponKindBenefit
+            ? [for (final item in _linked) item]
+            : const [],
+      ),
+    );
+  }
+
+  Future<void> _addLinked() async {
+    final result = await showDialog<_SkuProductDraft>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _SkuProductEditorDialog(
+        childProduct: true,
+        creating: true,
+        initial: ProposalSkuDetailRow(
+          id: proposalIntakeNewChildSkuId(),
+          existingBuilt: widget.initial.existingBuilt,
+          rollback: kProposalDefaultRollback,
+          syncSourceRef: widget.initial.syncSourceRef,
+          parentSkuId: widget.initial.id,
+          settlements: const [],
+        ),
+        quantity: 1,
+        mainProducts: widget.mainProducts,
+        rollbackOptions: widget.rollbackOptions,
+        readOnly: widget.readOnly,
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() => _linked.add(result));
+  }
+
+  Future<void> _removeLinked(int index) async {
+    final item = _linked[index];
+    final name = item.row.productName.trim().isNotEmpty
+        ? item.row.productName.trim()
+        : (item.row.resolvedCouponKind.isEmpty
+              ? '关联产品 ${index + 1}'
+              : item.row.resolvedCouponKind);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认移除'),
+        content: Text('确定移除「$name」吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('移除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _linked.removeAt(index));
+  }
+
+  void _pasteLinked(int index) {
+    final source = _linkedClipboard;
+    if (source == null) return;
+    final target = _linked[index];
+    setState(() {
+      _linked[index] = _SkuProductDraft(
+        row: proposalIntakeCloneSkuProduct(
+          source.row,
+          id: target.row.id,
+          parentSkuId: target.row.parentSkuId,
+        ),
+        quantity: source.quantity,
+      );
+    });
+  }
+
+  Widget _linkedPreview(int index) {
+    final item = _linked[index];
+    final row = item.row;
+    final name = row.productName.trim().isNotEmpty
+        ? row.productName.trim()
+        : row.resolvedCouponKind;
+    final bits = <String>[
+      if (row.resolvedCouponKind.isNotEmpty && row.resolvedCouponKind != name)
+        row.resolvedCouponKind,
+      if (row.faceValue.trim().isNotEmpty) '面值 ${row.faceValue.trim()}',
+      if (row.inventoryQty.trim().isNotEmpty) '库存 ${row.inventoryQty.trim()}',
+      if (row.supplierCodes.trim().isNotEmpty) '供应商 ${row.supplierCodes.trim()}',
+      if (row.syncZhongyouHaoke.trim().isNotEmpty) row.syncZhongyouHaoke.trim(),
+      if (row.rollback.trim().isNotEmpty) row.rollback.trim(),
+      '数量 ${item.quantity}',
+    ];
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 4),
+      decoration: BoxDecoration(
+        color: ProposalPalette.soft,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: ProposalPalette.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            name.isEmpty ? '关联产品 ${index + 1}' : '关联产品 ${index + 1} · $name',
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              color: ProposalPalette.text,
+            ),
+          ),
+          if (bits.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              bits.join(' · '),
+              style: const TextStyle(color: ProposalPalette.text2, fontSize: 12),
+            ),
+          ],
+          Wrap(
+            spacing: 4,
+            children: [
+              TextButton(
+                onPressed: () => unawaited(_removeLinked(index)),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(36, 28),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text('移除'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -15565,20 +15808,52 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
     );
   }
 
+  Widget _pair(Widget left, Widget right) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: left),
+        const SizedBox(width: 12),
+        Expanded(child: right),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final title = widget.creating ? '新增$_kindLabel' : '编辑$_kindLabel';
+    final title = widget.childProduct
+        ? (widget.creating ? '新增关联' : '编辑关联')
+        : '业务产品信息填写';
+    final face = _couponKind == kProposalCouponKindDiscount
+        ? _discountFaceField()
+        : _textField(label: '面值', controller: _face, hint: '手填');
     return AlertDialog(
       title: Text(title),
       content: SizedBox(
-        width: 520,
+        width: 720,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (widget.childProduct)
+              if (!widget.childProduct) ...[
+                _pair(
+                  _textField(
+                    label: '业务产品名称',
+                    controller: _name,
+                    hint: '默认提案名称，可修改',
+                    required: true,
+                  ),
+                  _textField(
+                    label: '业务产品说明',
+                    controller: _remark,
+                    hint: '选填',
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              _pair(
                 ProposalField(
-                  label: '券类型',
+                  label: '类型',
                   required: true,
                   child: widget.readOnly
                       ? Text(
@@ -15590,8 +15865,8 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
                         )
                       : ProposalSelectField<String>(
                           value: _couponKind.isEmpty ? null : _couponKind,
-                          title: '券类型',
-                          hint: '请选择现金券或满减券',
+                          title: '类型',
+                          hint: '请选择现金券、满减券或权益',
                           options: [
                             for (final value in kProposalCouponKinds)
                               ProposalSelectOption(
@@ -15612,131 +15887,104 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
                             }
                           }),
                         ),
-                )
-              else
-                _textField(label: '产品名称', controller: _name, required: true),
-              const SizedBox(height: 10),
-              if (widget.childProduct &&
-                  _couponKind == kProposalCouponKindDiscount)
-                _discountFaceField()
-              else
-                _textField(label: '面值', controller: _face, hint: '手填'),
-              const SizedBox(height: 10),
-              _textField(
-                label: '库存数量',
-                controller: _qty,
-                hint: '数字',
-                keyboardType: TextInputType.number,
+                ),
+                face,
               ),
               const SizedBox(height: 10),
-              _textField(
-                label: '供应商编码',
-                controller: _suppliers,
-                hint: '多个用 | 分隔，越前面的排名越高，例如 A|B|C',
+              _pair(
+                _textField(
+                  label: '库存数量',
+                  controller: _qty,
+                  hint: '数字',
+                  keyboardType: TextInputType.number,
+                ),
+                _textField(
+                  label: '供应商编码',
+                  controller: _suppliers,
+                  hint: '多个用 | 分隔，越前面的排名越高，例如 A|B|C',
+                ),
               ),
               const SizedBox(height: 10),
-              ProposalField(
-                label: '是否回滚',
-                required: true,
-                child: widget.readOnly
-                    ? Text(
-                        _rollback.trim().isEmpty
-                            ? kProposalDefaultRollback
-                            : _rollback,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      )
-                    : ProposalSelectField<String>(
-                        value: _rollback.isEmpty ? null : _rollback,
-                        title: '是否回滚',
-                        hint: '请选择',
-                        options: [
-                          for (final value in widget.rollbackOptions)
-                            ProposalSelectOption(value: value, label: value),
-                        ],
-                        onSelected: (value) => setState(
-                          () => _rollback = (value ?? kProposalDefaultRollback)
-                              .trim(),
-                        ),
-                      ),
-              ),
-              const SizedBox(height: 10),
-              ProposalField(
-                label: '是否同步中油好客',
-                child: widget.readOnly
-                    ? Text(
-                        _syncZhongyouHaoke.trim().isEmpty
-                            ? '未填写'
-                            : _syncZhongyouHaoke,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: _syncZhongyouHaoke.trim().isEmpty
-                              ? ProposalPalette.text3
-                              : ProposalPalette.text,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      )
-                    : ProposalSelectField<String>(
-                        value: _syncZhongyouHaoke.isEmpty
-                            ? null
-                            : _syncZhongyouHaoke,
-                        title: '是否同步中油好客',
-                        hint: '请选择',
-                        options: const [
-                          ProposalSelectOption(value: '同步', label: '同步'),
-                          ProposalSelectOption(value: '不同步', label: '不同步'),
-                        ],
-                        onSelected: (value) =>
-                            setState(() => _syncZhongyouHaoke = value ?? ''),
-                      ),
-              ),
-              if (widget.childProduct) ...[
-                const SizedBox(height: 10),
+              _pair(
                 ProposalField(
-                  label: '关联$kProposalMainProductLabel',
+                  label: '是否回滚',
                   required: true,
                   child: widget.readOnly
                       ? Text(
-                          widget.mainProducts
-                                  .where((item) => item.id == _parentSkuId)
-                                  .map((item) => item.displayName)
-                                  .where((name) => name.trim().isNotEmpty)
-                                  .firstOrNull ??
-                              '未填写',
+                          _rollback.trim().isEmpty
+                              ? kProposalDefaultRollback
+                              : _rollback,
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                           ),
                         )
                       : ProposalSelectField<String>(
-                          value: _parentSkuId.isEmpty ? null : _parentSkuId,
-                          hint: widget.mainProducts.isEmpty
-                              ? '请先新增$kProposalMainProductLabel'
-                              : '请选择关联$kProposalMainProductLabel',
+                          value: _rollback.isEmpty ? null : _rollback,
+                          title: '是否回滚',
+                          hint: '请选择',
                           options: [
-                            for (var i = 0; i < widget.mainProducts.length; i++)
-                              ProposalSelectOption(
-                                value: widget.mainProducts[i].id,
-                                label:
-                                    widget.mainProducts[i].displayName.isEmpty
-                                    ? '$kProposalMainProductLabel ${i + 1}'
-                                    : widget.mainProducts[i].displayName,
-                              ),
+                            for (final value in widget.rollbackOptions)
+                              ProposalSelectOption(value: value, label: value),
                           ],
-                          onSelected: (value) =>
-                              setState(() => _parentSkuId = value ?? ''),
+                          onSelected: (value) => setState(
+                            () => _rollback = (value ?? kProposalDefaultRollback)
+                                .trim(),
+                          ),
                         ),
                 ),
+                ProposalField(
+                  label: '是否同步中油好客',
+                  child: widget.readOnly
+                      ? Text(
+                          _syncZhongyouHaoke.trim().isEmpty
+                              ? '未填写'
+                              : _syncZhongyouHaoke,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: _syncZhongyouHaoke.trim().isEmpty
+                                ? ProposalPalette.text3
+                                : ProposalPalette.text,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        )
+                      : ProposalSelectField<String>(
+                          value: _syncZhongyouHaoke.isEmpty
+                              ? null
+                              : _syncZhongyouHaoke,
+                          title: '是否同步中油好客',
+                          hint: '请选择',
+                          options: const [
+                            ProposalSelectOption(value: '同步', label: '同步'),
+                            ProposalSelectOption(value: '不同步', label: '不同步'),
+                          ],
+                          onSelected: (value) =>
+                              setState(() => _syncZhongyouHaoke = value ?? ''),
+                        ),
+                ),
+              ),
+              if (widget.childProduct) ...[
                 const SizedBox(height: 10),
                 _textField(
-                  label: '$kProposalChildProductLabel数量',
+                  label: '关联产品数量',
                   controller: _quantity,
                   hint: '至少为 1',
                   required: true,
                   keyboardType: TextInputType.number,
                 ),
+              ],
+              if (!widget.childProduct &&
+                  _couponKind == kProposalCouponKindBenefit) ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilledButton.icon(
+                    onPressed: widget.readOnly ? null : _addLinked,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('新增关联'),
+                  ),
+                ),
+                for (var i = 0; i < _linked.length; i++) _linkedPreview(i),
               ],
             ],
           ),

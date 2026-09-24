@@ -42,7 +42,7 @@ List<ProposalIntakeRow> proposalIntakeRowsOfKind(
 }
 
 /// 市场部产品类型展示名。
-const kProposalMainProductLabel = '主产品';
+const kProposalMainProductLabel = '业务产品';
 const kProposalChildProductLabel = '子产品';
 
 String proposalIntakeProductKindLabel({required bool child}) =>
@@ -50,13 +50,18 @@ String proposalIntakeProductKindLabel({required bool child}) =>
 
 const kProposalCouponKindCash = '现金券';
 const kProposalCouponKindDiscount = '满减券';
+const kProposalCouponKindBenefit = '权益';
 const kProposalCouponKinds = <String>[
   kProposalCouponKindCash,
   kProposalCouponKindDiscount,
+  kProposalCouponKindBenefit,
 ];
 
 String proposalIntakeNormalizeCouponKind(String raw) {
   final value = raw.trim();
+  if (value == kProposalCouponKindBenefit || value == '权益') {
+    return kProposalCouponKindBenefit;
+  }
   if (value == kProposalCouponKindCash || value.contains('现金')) {
     return kProposalCouponKindCash;
   }
@@ -2194,7 +2199,7 @@ const kProposalTechnologyReviewLabels = <String, String>{
   'rdAmount': '研发费用金额',
   'deliveryDate': '交付时间',
   'financeInterfaces': '财务技术接口',
-  kProposalSkuProductsReviewKey: '产品相关',
+  kProposalSkuProductsReviewKey: '业务平台产品',
 };
 
 List<String> proposalIntakeTechnologyReviewGaps(
@@ -2407,7 +2412,7 @@ String proposalIntakeTaskBannerBody(
   }
   return switch (action) {
     'review_tech' =>
-      '到各字段旁和「产品相关」点「点此复核」，财务技术接口也算科技一条。再到科技部最底部确认本板块，确认前会检查遗漏。也可直接整板块驳回。',
+      '到各字段旁和「业务平台产品」点「点此复核」，财务技术接口也算科技一条。再到科技部最底部确认本板块，确认前会检查遗漏。也可直接整板块驳回。',
     'review_finance' => '到各费用字段旁点复核。也可直接整板块驳回。',
     'review_finance_interface' => '到财务技术接口处点复核。',
     'review_contract' => '到合同处点复核。也可直接整板块驳回。',
@@ -5656,7 +5661,7 @@ List<String> proposalIntakeSkuSettleIssues(
       }
       if (child.resolvedCouponKind.isEmpty) {
         issues.add(
-          '$kProposalChildProductLabel${child.displayName.isEmpty ? '第${children.indexOf(child) + 1}条' : '「${child.displayName}」'}请选择现金券或满减券',
+          '$kProposalChildProductLabel${child.displayName.isEmpty ? '第${children.indexOf(child) + 1}条' : '「${child.displayName}」'}请选择类型',
         );
       }
     }
@@ -5762,6 +5767,7 @@ class ProposalSkuDetailRow {
     this.platformStatus = '',
     this.partnerProductCode = '',
     this.platformMessage = '',
+    this.remark = '',
     this.settlements = const [],
   });
 
@@ -5800,6 +5806,9 @@ class ProposalSkuDetailRow {
 
   /// 接口一失败或接口二回写的说明。
   final String platformMessage;
+
+  /// 业务产品说明，选填。
+  final String remark;
   final List<ProposalSkuSettleRow> settlements;
 
   String get syncSourceCode => (syncSourceRef?.code ?? '').trim();
@@ -5826,9 +5835,9 @@ class ProposalSkuDetailRow {
   String get displayName {
     final fromHit = (assetProduct?.label ?? '').trim();
     if (fromHit.isNotEmpty) return fromHit;
-    final kind = resolvedCouponKind;
-    if (kind.isNotEmpty && parentSkuId.isNotEmpty) return kind;
-    return productName.trim();
+    final name = productName.trim();
+    if (name.isNotEmpty) return name;
+    return resolvedCouponKind;
   }
 
   bool get isBlank =>
@@ -5851,7 +5860,8 @@ class ProposalSkuDetailRow {
       (channelRef == null || channelRef!.isEmpty) &&
       existingBuilt.isEmpty &&
       (assetProduct == null || assetProduct!.isEmpty) &&
-      parentSkuId.isEmpty;
+      parentSkuId.isEmpty &&
+      remark.isEmpty;
 
   ProposalSkuDetailRow copyWith({
     String? id,
@@ -5879,6 +5889,7 @@ class ProposalSkuDetailRow {
     String? platformStatus,
     String? partnerProductCode,
     String? platformMessage,
+    String? remark,
     List<ProposalSkuSettleRow>? settlements,
   }) => ProposalSkuDetailRow(
     id: id ?? this.id,
@@ -5918,6 +5929,7 @@ class ProposalSkuDetailRow {
     platformStatus: platformStatus ?? this.platformStatus,
     partnerProductCode: partnerProductCode ?? this.partnerProductCode,
     platformMessage: platformMessage ?? this.platformMessage,
+    remark: remark ?? this.remark,
     settlements: settlements ?? this.settlements,
   );
 
@@ -5998,6 +6010,7 @@ class ProposalSkuDetailRow {
     'platformStatus': normalizeProposalSkuPlatformStatus(platformStatus),
     'partnerProductCode': partnerProductCode.trim(),
     'platformMessage': platformMessage.trim(),
+    'remark': remark.trim(),
     'settlements': [
       for (final item in settlements)
         item
@@ -6076,6 +6089,7 @@ class ProposalSkuDetailRow {
       partnerProductCode: '${raw['partnerProductCode'] ?? ''}'.trim(),
       platformMessage: '${raw['platformMessage'] ?? raw['message'] ?? ''}'
           .trim(),
+      remark: '${raw['remark'] ?? ''}'.trim(),
       settlements: [
         for (final item
             in raw['settlements'] is List

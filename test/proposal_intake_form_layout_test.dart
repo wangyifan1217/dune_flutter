@@ -1979,21 +1979,20 @@ void main() {
     await tester.pumpWidget(_harness(1440));
     await tester.pump();
     await _scrollUntil(tester, '二、科技部内容');
-    await _scrollUntil(tester, kProposalMainProductLabel);
+    await _scrollUntil(tester, '业务平台产品');
     expect(find.text('产品、标签与人员'), findsOneWidget);
     expect(
       tester.getTopLeft(find.text('二、科技部内容')).dy,
-      lessThan(tester.getTopLeft(find.text('新增$kProposalMainProductLabel')).dy),
+      lessThan(tester.getTopLeft(find.text('新增')).dy),
     );
     expect(
       tester.getTopLeft(find.text('科技部负责人')).dy,
-      lessThan(tester.getTopLeft(find.text('新增$kProposalMainProductLabel')).dy),
+      lessThan(tester.getTopLeft(find.text('新增')).dy),
     );
     expect(find.text('产品明细'), findsNothing);
-    expect(find.text('新增$kProposalMainProductLabel'), findsOneWidget);
-    expect(find.text('尚未添加$kProposalMainProductLabel'), findsOneWidget);
-    expect(find.text(kProposalChildProductLabel), findsWidgets);
-    expect(find.text('尚未添加$kProposalChildProductLabel'), findsOneWidget);
+    expect(find.text('新增'), findsOneWidget);
+    expect(find.text('尚未添加$kProposalMainProductLabel'), findsNothing);
+    expect(find.text('尚未添加$kProposalChildProductLabel'), findsNothing);
     expect(find.text('$kProposalChildProductLabel科技'), findsNothing);
     expect(find.text('$kProposalChildProductLabel财务模块'), findsNothing);
     expect(find.text('是否已经建产品'), findsNothing);
@@ -2232,23 +2231,27 @@ void main() {
   testWidgets(
     'adding a main product shows manual fields without built picker',
     (tester) async {
-      tester.view.physicalSize = const Size(1440, 2400);
+      tester.view.physicalSize = const Size(1440, 3600);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
 
       await tester.pumpWidget(_harness(1440));
       await tester.pump();
-      final addProduct = find.text('新增$kProposalMainProductLabel');
+      final addProduct = find.text('新增');
       await tester.ensureVisible(addProduct);
       await tester.pump();
-      expect(find.text('尚未添加$kProposalMainProductLabel'), findsOneWidget);
+      expect(find.text('尚未添加$kProposalMainProductLabel'), findsNothing);
       expect(find.text('已建产品'), findsNothing);
 
       await tester.tap(addProduct);
       await tester.pump();
       expect(find.byType(AlertDialog), findsOneWidget);
       expect(find.text('是否已经建产品'), findsNothing);
-      expect(find.text('产品名称'), findsOneWidget);
+      expect(find.text('业务产品信息填写'), findsOneWidget);
+      expect(find.text('业务产品名称'), findsOneWidget);
+      expect(find.text('业务产品说明'), findsOneWidget);
+      expect(find.text('类型'), findsOneWidget);
+      expect(find.text('产品名称'), findsNothing);
       expect(find.text('面值'), findsOneWidget);
       expect(find.text('是否回滚'), findsOneWidget);
       expect(find.text('不回滚'), findsWidgets);
@@ -2268,15 +2271,18 @@ void main() {
       expect(find.text('产品失效日期'), findsNothing);
 
       final dialog = find.byType(AlertDialog);
+      await tester.tap(find.text('请选择现金券、满减券或权益'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('现金券').last);
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.descendant(of: dialog, matching: find.byType(TextFormField)).first,
-        '测试主产品',
+        '测试业务产品',
       );
-      await tester.pump();
       await tester.tap(find.descendant(of: dialog, matching: find.text('确定')));
       await tester.pump();
       expect(find.text('尚未添加$kProposalMainProductLabel'), findsNothing);
-      expect(find.text('$kProposalMainProductLabel 1 · 测试主产品'), findsOneWidget);
+      expect(find.text('$kProposalMainProductLabel 1 · 测试业务产品'), findsOneWidget);
     },
   );
 
@@ -2305,15 +2311,26 @@ void main() {
       ),
     );
     await tester.pump();
-    await _scrollUntil(tester, '新增$kProposalChildProductLabel');
-    await _tapVisible(tester, find.text('新增$kProposalChildProductLabel'));
-    expect(find.byType(AlertDialog), findsOneWidget);
+    await _scrollUntil(tester, '新增');
+    await _tapVisible(tester, find.text('新增'));
+    expect(find.text('业务产品信息填写'), findsOneWidget);
+    final typeHint = find.text('请选择现金券、满减券或权益');
+    await tester.ensureVisible(typeHint);
+    await tester.pumpAndSettle();
+    await tester.tap(typeHint);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('权益').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增关联'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNWidgets(2));
     expect(
       find.descendant(of: find.byType(AlertDialog), matching: find.text('产品名称')),
       findsNothing,
     );
-    expect(find.text('券类型'), findsOneWidget);
-    expect(find.text('请选择现金券或满减券'), findsOneWidget);
+    expect(find.text('类型'), findsWidgets);
+    expect(find.text('券类型'), findsNothing);
+    expect(find.text('请选择现金券、满减券或权益'), findsWidgets);
   });
 
   testWidgets('market basic info includes annual scale', (tester) async {
@@ -2357,10 +2374,10 @@ void main() {
 
     await tester.pumpWidget(_harness(1440, session: session, row: row));
     await tester.pump();
-    await _scrollUntil(tester, '产品相关');
+    await _scrollUntil(tester, '业务平台产品');
     expect(find.text('科技部负责人复核'), findsNothing);
     final header = find.ancestor(
-      of: find.text('产品相关'),
+      of: find.text('业务平台产品'),
       matching: find.byType(Row),
     ).first;
     expect(
@@ -2662,23 +2679,23 @@ void main() {
     expect(find.text('结算一'), findsNothing);
     await _tapVisible(tester, find.text('填写结算').last);
     final dialog = find.byType(AlertDialog);
-    expect(find.descendant(of: dialog, matching: find.text('收入')), findsWidgets);
-    expect(find.descendant(of: dialog, matching: find.text('成本')), findsWidgets);
+    expect(find.descendant(of: dialog, matching: find.text('销售（收入）')), findsWidgets);
+    expect(find.descendant(of: dialog, matching: find.text('采购（成本）')), findsWidgets);
     expect(find.descendant(of: dialog, matching: find.text('规模口径')), findsNothing);
     expect(find.descendant(of: dialog, matching: find.text('账单类型')), findsNothing);
     expect(find.descendant(of: dialog, matching: find.text('结算方式')), findsNothing);
     expect(find.descendant(of: dialog, matching: find.text('生效时间')), findsNothing);
     expect(find.descendant(of: dialog, matching: find.text('失效时间')), findsNothing);
-    expect(find.descendant(of: dialog, matching: find.text('新增收入')), findsOneWidget);
-    expect(find.descendant(of: dialog, matching: find.text('新增成本')), findsOneWidget);
+    expect(find.descendant(of: dialog, matching: find.text('新增销售（收入）')), findsOneWidget);
+    expect(find.descendant(of: dialog, matching: find.text('新增采购（成本）')), findsOneWidget);
     expect(find.descendant(of: dialog, matching: find.text('收入一')), findsNothing);
     expect(find.descendant(of: dialog, matching: find.text('成本一')), findsNothing);
     expect(
-      find.descendant(of: dialog, matching: find.text('尚未填写收入')),
+      find.descendant(of: dialog, matching: find.text('尚未填写销售（收入）')),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: dialog, matching: find.text('尚未填写成本')),
+      find.descendant(of: dialog, matching: find.text('尚未填写采购（成本）')),
       findsOneWidget,
     );
     expect(
@@ -2827,7 +2844,7 @@ void main() {
     final dialog = find.byType(AlertDialog);
     expect(find.descendant(of: dialog, matching: find.text('成本一')), findsOneWidget);
     expect(
-      find.descendant(of: dialog, matching: find.text('尚未填写收入')),
+      find.descendant(of: dialog, matching: find.text('尚未填写销售（收入）')),
       findsOneWidget,
     );
     await _tapVisible(
@@ -2836,7 +2853,7 @@ void main() {
     );
     expect(find.descendant(of: dialog, matching: find.text('成本一')), findsNothing);
     expect(
-      find.descendant(of: dialog, matching: find.text('尚未填写成本')),
+      find.descendant(of: dialog, matching: find.text('尚未填写采购（成本）')),
       findsOneWidget,
     );
     expect(find.descendant(of: dialog, matching: find.text('新增成本')), findsOneWidget);
@@ -4439,7 +4456,7 @@ void main() {
       await _tapVisible(tester, find.text('填写结算').last);
       final dialog = find.byType(AlertDialog);
       expect(
-        find.descendant(of: dialog, matching: find.text('收入')),
+        find.descendant(of: dialog, matching: find.text('销售（收入）')),
         findsWidgets,
       );
       expect(

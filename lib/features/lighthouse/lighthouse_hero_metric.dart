@@ -43,7 +43,7 @@ const double lighthouseCompactHeroSparkHeight = 180;
 /// 窄屏仍左右并排：走势图略加高，但不把「本日毛利润」整块挪到图上面。
 const double lighthouseCompactHeroSparkHeightNarrow = 216;
 const double lighthouseCompactHeroChartMaxHeightWide = 84;
-const double lighthouseCompactHeroChartMaxHeightNarrow = 112;
+const double lighthouseCompactHeroChartMaxHeightNarrow = 132;
 const double lighthouseCompactHeroNarrowBreakpoint = 600;
 
 bool lighthouseCompactHeroIsNarrow(double width) =>
@@ -203,6 +203,92 @@ List<String> lighthouseTrendPnlLegendKeys({
     if (hasScaleAlt) 'scaleAlt',
   ];
 }
+
+// ══ v24 · 趋势区高度按内容算 ═══════════════════════════════════════════
+//
+//  旧版把图例当成固定 76px 的一块，走势图分剩下的高度。图例改成面板式
+//  （一格一行、两列）之后，五六个指标要占三行 ≈ 120px，走势图被压到
+//  五六十像素，线挤成一条缝 —— 手机上尤其明显。
+//  现在图例高度按「行数 × 行高」实算，走势图有自己的下限；高度不够时
+//  由这几个函数把 Hero 这一段撑开，而不是让图去让位。
+
+/// 图例格行高 —— 必须和 `_trendLegendChip` 里那个 SizedBox 保持一致。
+/// v25 · 压矮一档（30/34 → 26/28）：图例是一排读数不是六张卡，行高贴着
+/// 文字走整块才像表；顺带把 Hero 还回去十几个像素。
+double lighthouseTrendLegendRowHeightFor(double screenWidth) =>
+    screenWidth < 430 ? 26 : 28;
+
+/// 图例列数 —— 和图例 LayoutBuilder 里的规则保持一致。
+int lighthouseTrendLegendColumnsFor(double legendWidth, int metricCount) =>
+    metricCount <= 1 ? 1 : (legendWidth >= 460 ? 3 : 2);
+
+int lighthouseTrendLegendRowCountFor(double legendWidth, int metricCount) {
+  if (metricCount <= 0) return 0;
+  final cols = lighthouseTrendLegendColumnsFor(legendWidth, metricCount);
+  return (metricCount + cols - 1) ~/ cols;
+}
+
+/// 图例头一行（期间字 / 显示全部）+ 头与面板的间距 + 面板上下内边距。
+const double lighthouseTrendLegendChromeHeight = 26;
+
+/// 图例整块高度（含头一行）。
+double lighthouseTrendLegendHeightFor({
+  required double screenWidth,
+  required double legendWidth,
+  required int metricCount,
+}) {
+  final rows = lighthouseTrendLegendRowCountFor(legendWidth, metricCount);
+  if (rows <= 0) return 14;
+  return lighthouseTrendLegendChromeHeight +
+      rows * lighthouseTrendLegendRowHeightFor(screenWidth) +
+      (rows - 1) * lighthouseLedgerSummaryRowDividerHeight;
+}
+
+/// 月末预测条（两行：预测数 + 区间说明）。
+const double lighthouseTrendForecastStripHeight = 40;
+
+/// 图例 / 预测条与下一块之间的间距，以及图上方的间距。
+const double lighthouseTrendBlockGap = 7;
+const double lighthouseTrendChartTopGap = 10;
+
+/// 横轴标签行 + 它与图之间的间距。
+const double lighthouseTrendAxisLabelHeight = 18;
+
+/// 走势图下限：再矮线就没有形状了，手机上尤其看不出走向。
+const double lighthouseTrendChartMinHeight = 104;
+
+/// 走势图以外的部分一共占多高（图例 + 预测条 + 横轴 + 各段间距）。
+double lighthouseHeroTrendReservedHeightFor({
+  required double screenWidth,
+  required double legendWidth,
+  required int metricCount,
+  required bool hasForecastStrip,
+}) =>
+    lighthouseTrendLegendHeightFor(
+      screenWidth: screenWidth,
+      legendWidth: legendWidth,
+      metricCount: metricCount,
+    ) +
+    (hasForecastStrip
+        ? lighthouseTrendBlockGap + lighthouseTrendForecastStripHeight
+        : 0) +
+    lighthouseTrendChartTopGap +
+    lighthouseTrendAxisLabelHeight;
+
+/// 趋势区至少要这么高，走势图才能拿到 [lighthouseTrendChartMinHeight]。
+double lighthouseHeroTrendSectionMinHeightFor({
+  required double screenWidth,
+  required double legendWidth,
+  required int metricCount,
+  required bool hasForecastStrip,
+}) =>
+    lighthouseHeroTrendReservedHeightFor(
+      screenWidth: screenWidth,
+      legendWidth: legendWidth,
+      metricCount: metricCount,
+      hasForecastStrip: hasForecastStrip,
+    ) +
+    lighthouseTrendChartMinHeight;
 
 /// 「本期合计」旁边不再挂主指标大数，所有指标只走下方小图例。
 const bool lighthouseTrendShowsHeroMetricBesideStatus = false;

@@ -8828,16 +8828,20 @@ class _TrendChartState extends State<_TrendChart>
     final drawn = seriesKey != null && _isDrawnSeries(seriesKey);
     final momUp = momPct != null && momPct >= 0;
     // 和下面那排指标格同一条规矩：只有越过门槛的环比才上色。
+    // 和下面那排指标格同一条规矩：只有越过 ±30% 才上红绿，其余走 ink2。
+    // （mute2 是暖灰，一排小字叠起来会泛黄，跟这张卡的冷底打架。）
     final momColor = momPct == null
         ? LhColors.mute2
         : (lighthouseDeltaIsLoud(momPct)
               ? (momUp ? LhColors.neg : LhColors.pos)
-              : LhColors.mute2);
+              : LhColors.ink2);
     const tabular = [FontFeature.tabularFigures()];
     final compact = MediaQuery.sizeOf(context).width < 430;
     final loudMom = momPct != null && lighthouseDeltaIsLoud(momPct);
     final cell = SizedBox(
-      height: compact ? 30 : 34,
+      // v25 · 格子压矮一档：图例是一排读数，不是六张卡片，
+      //   行高越接近文字本身，整块越像表、越不像框。
+      height: compact ? 26 : 28,
       child: Row(
         children: [
           // 标记：画在图上的是一小段线（和图里的线同形），没画的只是一个灰点。
@@ -8872,8 +8876,8 @@ class _TrendChartState extends State<_TrendChart>
               // 标签字号 / 字重跟账本摘要格同一档，不自造一套大字。
               style: LhTypography.sans(
                 size: compact ? 9.5 : lighthouseLedgerMetricLabelFontSize,
-                color: drawn || active ? LhColors.ink2 : LhColors.mute,
-                weight: drawn || active ? FontWeight.w700 : FontWeight.w500,
+                color: drawn || active ? LhColors.ink2 : LhColors.mute2,
+                weight: drawn || active ? FontWeight.w600 : FontWeight.w500,
                 height: 1.0,
                 letterSpacing: 0.2,
               ),
@@ -8889,15 +8893,14 @@ class _TrendChartState extends State<_TrendChart>
                 '${negative ? '−' : ''}$absFmt$unitFmt',
                 maxLines: 1,
                 softWrap: false,
-                // 和账本格同一种数字（LhTypography.number）和字号档。
+                // v25 · 数字一律走墨色，不再给「画在图上的那条」换成紫。
+                //   色相在 11px 下只表达「另一类」，不表达「更重要」（见
+                //   lighthouseTrendEmphasisInk 处 v19 的说明）；身份交给左边
+                //   那截线，轻重交给字重。负数仍按全站规矩走绿。
                 style:
                     LhTypography.number(
                       size: compact ? 11 : lighthouseLedgerValueFontSize,
-                      color: negative
-                          ? LhColors.pos
-                          : (drawn
-                                ? lighthouseTrendEmphasisInk(_emphasisColor)
-                                : LhColors.ink2),
+                      color: negative ? LhColors.pos : LhColors.ink,
                     ).copyWith(
                       fontWeight: drawn || active
                           ? FontWeight.w700
@@ -8953,8 +8956,10 @@ class _TrendChartState extends State<_TrendChart>
           ),
           padding: EdgeInsets.symmetric(horizontal: active ? 6 : 8),
           decoration: BoxDecoration(
-            color: active ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(9),
+            // 面板改白之后，选中态不能再靠「更白」浮起来：翻过来用淡紫面，
+            // 边和投影仍是账本那一套。
+            color: active ? _LhPlum.mist : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: active
                   ? _LhPlum.primary.withAlpha(46)
@@ -9226,10 +9231,13 @@ class _TrendChartState extends State<_TrendChart>
                   : (legendBox.maxWidth >= 460 ? 3 : 2);
               // v24 · 几格拼成一块面板：行与行、列与列只用内缩发丝线分隔，
               //   不给每格各自描边铺底（和账本卡片摘要格 v23 同一套皮）。
+              // v25 · 面板改白：趋势卡本身就是 F7F6FA，面板再铺同一个灰
+              //   等于没铺，整块糊成一片。账本那边是「白卡 + 灰面板」，
+              //   这里是灰卡，那就反过来 —— 差的是那一层，不是那个色。
               return Container(
                 padding: const EdgeInsets.symmetric(vertical: 2),
                 decoration: BoxDecoration(
-                  color: const Color(lighthouseLedgerSummaryNeutralPanelValue),
+                  color: LhColors.paper,
                   borderRadius: BorderRadius.circular(
                     lighthouseLedgerSummaryPanelRadius,
                   ),
@@ -9244,7 +9252,9 @@ class _TrendChartState extends State<_TrendChart>
                           margin: const EdgeInsets.symmetric(
                             horizontal: lighthouseLedgerSummaryDividerInset,
                           ),
-                          color: LhColors.line2,
+                          // Hero 里的发丝线走紫（全页 hairline 的规矩）：
+                          // line2 是暖米色，铺在白面板上会泛黄。
+                          color: _LhPlum.line,
                         ),
                       Row(
                         children: [
@@ -9254,8 +9264,8 @@ class _TrendChartState extends State<_TrendChart>
                               Container(
                                 width:
                                     lighthouseLedgerSummaryRowDividerHeight,
-                                height: 16,
-                                color: LhColors.line2,
+                                height: 14,
+                                color: _LhPlum.line,
                               ),
                             Expanded(
                               child: i + c < keys.length
@@ -10746,6 +10756,13 @@ class NativeLighthousePage extends StatefulWidget {
 
 enum _DdMode { none, category, metric }
 
+/// 预警这一路查得怎么样。「查成功没有」和「压根没查到」必须分得开：
+/// 前者是好消息，后者是我们自己的问题。
+enum _LhNoticeFetch { pending, ok, failed }
+
+/// 出处那半句的三种读法。齐最弱、未取到次之、延迟最响。
+enum _LhNoticeTone { clear, missing, alert }
+
 class _NativeLighthousePageState extends State<NativeLighthousePage> {
   static const String _kPrefsMetricProduct = 'lighthouse.metrics.product';
   static const String _kPrefsMetricSupply = 'lighthouse.metrics.supply';
@@ -10912,6 +10929,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   List<LighthouseDelayNotice> _delayNotices = const <LighthouseDelayNotice>[];
   bool _delayNoticeOpen = false;
   bool _delayNoticeLoading = false;
+  _LhNoticeFetch _delayNoticeFetch = _LhNoticeFetch.pending;
   bool _refreshing = false; // 手动点击「数据同步」刷新中
   // ── 周期实例筛选（哪一天 / 哪个周 / 月 / 季 / 年）──
   // 0 = 当前实例（今日/本周/本月/本季/今年），-1 = 上一个，以此类推。
@@ -11585,15 +11603,37 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     if (_delayNoticeLoading) return;
     _delayNoticeLoading = true;
     try {
-      final notices = await _service.fetchDelayNotices();
+      final res = await _service.fetchDelayNotices();
       if (!mounted) return;
       setState(() {
-        _delayNotices = notices;
+        _delayNotices = res.notices;
+        _delayNoticeFetch = res.ok ? _LhNoticeFetch.ok : _LhNoticeFetch.failed;
         // 这一轮没有预警，展开态也跟着收掉，别留一条空壳。
-        if (notices.isEmpty) _delayNoticeOpen = false;
+        if (res.notices.isEmpty) _delayNoticeOpen = false;
       });
     } finally {
       _delayNoticeLoading = false;
+    }
+  }
+
+  /// 出处的第三种读法，接在「已同步 13:34」后面：
+  ///   查成功 0 行 → 来源齐（灰、最弱）
+  ///   有 OPEN 行 → 石化延迟（铜色，点开才是原文）
+  ///   404 / 表没有 / 查挂了 → 预警未取到
+  /// 不挂常驻角标：每天都在的东西会变成壁纸，还跟「已同步」抢同一句话。
+  /// 净TA 不写这半句（它看的不是经营宽表），二级/三级连印章都没有。
+  ({String text, _LhNoticeTone tone})? get _delayNoticeNote {
+    if (_tab == 'netTa') return null;
+    switch (_delayNoticeFetch) {
+      // 还没查回来先不写：宁可空着，也不要先说「齐」再改口。
+      case _LhNoticeFetch.pending:
+        return null;
+      case _LhNoticeFetch.failed:
+        return (text: '预警未取到', tone: _LhNoticeTone.missing);
+      case _LhNoticeFetch.ok:
+        final notice = _activeDelayNotice;
+        if (notice == null) return (text: '来源齐', tone: _LhNoticeTone.clear);
+        return (text: '${notice.sourceLabel}延迟', tone: _LhNoticeTone.alert);
     }
   }
 
@@ -17896,12 +17936,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ],
               ),
             ),
-            // 数据延迟预警角标（§十一）：跟「已同步」同一条出处带 ——
-            // 它们回答的是同一个问题「这份数据是什么时候的」。
-            if (totalsOverride == null && _activeDelayNotice != null) ...[
-              const SizedBox(width: 8),
-              _buildDelayNoticeBadge(_activeDelayNotice!),
-            ],
             // 「已同步 · 09:41」上提到标题行右端：它是这张卡的出处说明，
             // 留在卡底时正好卡在 Hero 与账本之间，把那道衔接撑成一条空带。
             if (totalsOverride == null) ...[
@@ -18418,60 +18452,58 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
-  /// Hero 卡底部的同步落款。
-  ///
-  /// 它原来是顶栏上一颗胶囊。但「这批数是什么时候的」说的是数据，不是 App ——
-  /// 放在顶栏，它和 logo、缩放钮挤成一排互不相干的小东西；放在卡的最后一行，
-  /// 它就是这张卡的落款，跟印刷品在图表下角标数据来源是同一个道理：
-  /// 读者先读数，读完才会问「这是什么时候的」。
-  ///
-  /// 顺手接上刷新：点它就重拉，同步中原地转 —— 状态和动作合成一个东西，
-  /// 比「顶栏显示状态、另一颗按钮负责刷新」少一次视线往返。
-  /// 数据延迟预警角标（§十一）。文案是本地标签（「石化预警」），
-  /// **不是** message —— 正文只在展开条里出，一字不改。
-  Widget _buildDelayNoticeBadge(LighthouseDelayNotice notice) {
+  /// 出处那半句（来源齐 / 石化延迟 / 预警未取到）。
+  ///   齐和未取到只是灰字，不铺底、不描边 —— 每天都在的东西一铺色就成壁纸。
+  ///   只有「延迟」才上铜色并可点：点开才是 message 原文。
+  Widget _buildDelayNoticeNote(({String text, _LhNoticeTone tone}) note) {
+    if (note.tone != _LhNoticeTone.alert) {
+      final missing = note.tone == _LhNoticeTone.missing;
+      return Text(
+        note.text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: LhTypography.sans(
+          size: 8.5,
+          // 「未取到」是我们自己没拿到，比「齐」重半档；都还在灰里。
+          color: missing ? LhColors.mute : LhColors.mute2,
+          weight: missing ? FontWeight.w600 : FontWeight.w500,
+          letterSpacing: 0.2,
+          height: 1.0,
+        ),
+      );
+    }
     final open = _delayNoticeOpen;
     return _LhScrollSafeTap(
       onTap: () {
         HapticFeedback.selectionClick();
         setState(() => _delayNoticeOpen = !_delayNoticeOpen);
       },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-        decoration: BoxDecoration(
-          // 预警走铜色：珊瑚是涨跌语义，挂在这里会被读成「跌了」。
-          color: LhColors.copper.withAlpha(open ? 36 : 22),
-          borderRadius: BorderRadius.circular(5),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.campaign_rounded,
-              size: 12,
-              color: LhColors.copper,
-            ),
-            const SizedBox(width: 3),
-            Text(
-              '${notice.sourceLabel}预警',
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              note.text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              // 预警走铜色：珊瑚是涨跌语义，挂在这里会被读成「跌了」。
               style: LhTypography.sans(
-                size: 10,
+                size: 8.5,
                 color: LhColors.copper,
                 weight: FontWeight.w700,
                 letterSpacing: 0.2,
                 height: 1.0,
               ),
             ),
-            const SizedBox(width: 1),
-            Icon(
-              open
-                  ? Icons.keyboard_arrow_up_rounded
-                  : Icons.keyboard_arrow_down_rounded,
-              size: 12,
-              color: LhColors.copper.withAlpha(170),
-            ),
-          ],
-        ),
+          ),
+          Icon(
+            open
+                ? Icons.keyboard_arrow_up_rounded
+                : Icons.keyboard_arrow_down_rounded,
+            size: 10,
+            color: LhColors.copper.withAlpha(170),
+          ),
+        ],
       ),
     );
   }
@@ -18565,6 +18597,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
+  /// Hero 卡底部的同步落款。
+  ///
+  /// 它原来是顶栏上一颗胶囊。但「这批数是什么时候的」说的是数据，不是 App ——
+  /// 放在顶栏，它和 logo、缩放钮挤成一排互不相干的小东西；放在卡的最后一行，
+  /// 它就是这张卡的落款，跟印刷品在图表下角标数据来源是同一个道理：
+  /// 读者先读数，读完才会问「这是什么时候的」。
+  ///
+  /// 顺手接上刷新：点它就重拉，同步中原地转 —— 状态和动作合成一个东西，
+  /// 比「顶栏显示状态、另一颗按钮负责刷新」少一次视线往返。
   Widget _buildHeroSyncStamp({bool inline = false}) {
     final busy = _refreshing || _loading;
     final stamp = _buildHeroSyncStampChip(busy);
@@ -18585,49 +18626,87 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   Widget _buildHeroSyncStampChip(bool busy) {
-    return _LhScrollSafeTap(
-      onTap: () {
-        if (busy) return;
-        HapticFeedback.selectionClick();
-        unawaited(_refresh());
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (busy)
-              const _LhBrandLoader(size: 8)
-            else
-              const _LhPulseDot(color: LhColors.pos, size: 4.5),
-            const SizedBox(width: 5),
-            Text(
-              busy ? '同步中' : '已同步',
-              style: LhTypography.sans(
-                size: 8.5,
-                color: LhColors.mute,
-                weight: FontWeight.w600,
-                letterSpacing: 0.2,
-                height: 1.0,
-              ),
-            ),
-            if (!busy) ...[
-              const SizedBox(width: 5),
-              Container(width: 0.7, height: 8, color: LhColors.line2),
-              const SizedBox(width: 5),
-              Text(
-                _syncedAtLabelCompact(),
-                style: LhTypography.mono(
-                  size: 8.5,
-                  color: LhColors.mute2,
-                  weight: FontWeight.w600,
-                  letterSpacing: 0.3,
-                  height: 1.0,
-                ),
-              ),
-            ],
-          ],
+    // 「延迟」那半句自己要能点（点开原文），所以刷新的点击区只包到时间为止。
+    // 绿点带呼吸环会比字高：必须和半句待在同一行里居中，不能先组完印章
+    // 再和外面包一层 Flexible —— 两段各算各的中线，字就对不齐。
+    final note = busy ? null : _delayNoticeNote;
+    Widget sep() => Container(width: 0.7, height: 8, color: LhColors.line2);
+    Text stampWord(
+      String text, {
+      required Color color,
+      bool mono = false,
+      FontWeight weight = FontWeight.w600,
+    }) {
+      return Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: (mono ? LhTypography.mono : LhTypography.sans)(
+          size: 8.5,
+          color: color,
+          weight: weight,
+          letterSpacing: mono ? 0.3 : 0.2,
+          height: 1.0,
         ),
+      );
+    }
+
+    // 呼吸环比字高（8.5），先裁进和字一样高的槽，再和半句排进同一行。
+    final marker = busy
+        ? const SizedBox(
+            width: 8.5,
+            height: 8.5,
+            child: Center(child: _LhBrandLoader(size: 8)),
+          )
+        : const SizedBox(
+            width: 8.5,
+            height: 8.5,
+            child: OverflowBox(
+              maxWidth: 11,
+              maxHeight: 11,
+              child: _LhPulseDot(color: LhColors.pos, size: 4.5),
+            ),
+          );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _LhScrollSafeTap(
+            onTap: () {
+              if (busy) return;
+              HapticFeedback.selectionClick();
+              unawaited(_refresh());
+            },
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                marker,
+                const SizedBox(width: 5),
+                stampWord(busy ? '同步中' : '已同步', color: LhColors.mute),
+                if (!busy) ...[
+                  const SizedBox(width: 5),
+                  sep(),
+                  const SizedBox(width: 5),
+                  stampWord(
+                    _syncedAtLabelCompact(),
+                    color: LhColors.mute2,
+                    mono: true,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (note != null) ...[
+            const SizedBox(width: 5),
+            sep(),
+            const SizedBox(width: 5),
+            _buildDelayNoticeNote(note),
+          ],
+        ],
       ),
     );
   }

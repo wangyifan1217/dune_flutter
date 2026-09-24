@@ -513,7 +513,10 @@ class LighthouseService {
   /// 数据延迟预警（§十一）。与 overview 并行拉，单独一条 —— 预警按
   /// OPEN / expire_at 活着，跟 overview 的按期间缓存不是一回事。
   /// 任何异常都当「没有预警」，绝不让 Hero 跟着挂。
-  Future<List<LighthouseDelayNotice>> fetchDelayNotices() async {
+  /// [ok] 区分「查成功、没有预警」和「压根没查到」—— 这两件事在界面上
+  /// 长得不一样（来源齐 / 预警未取到），所以不能一起塞成空列表。
+  Future<({List<LighthouseDelayNotice> notices, bool ok})>
+  fetchDelayNotices() async {
     try {
       final data = await _getData(
         '/lighthouse/delay-notice',
@@ -521,7 +524,13 @@ class LighthouseService {
         '数据延迟预警加载失败',
       );
       final raw = data['notices'];
-      if (raw is! List) return const <LighthouseDelayNotice>[];
+      if (raw is! List) {
+        // 200 但结构不对：当成没查到，别报「来源齐」。
+        return (notices: const <LighthouseDelayNotice>[], ok: false);
+      }
+      // 后端说表还没建 / 查挂了 —— 那是「未取到」，不是「齐」。
+      // 老后端没有这个字段时按「查到了」算。
+      final available = data['available'] != false;
       final out = <LighthouseDelayNotice>[];
       for (final item in raw) {
         if (item is! Map) continue;
@@ -530,9 +539,15 @@ class LighthouseService {
         );
         if (!notice.isEmpty) out.add(notice);
       }
-      return lighthouseDelayNoticesOrPreview(out);
+      final notices = lighthouseDelayNoticesOrPreview(out);
+      return (notices: notices, ok: available || notices.isNotEmpty);
     } catch (_) {
-      return lighthouseDelayNoticesOrPreview(const <LighthouseDelayNotice>[]);
+      final fallback = lighthouseDelayNoticesOrPreview(
+        const <LighthouseDelayNotice>[],
+      );
+      // 预览开关塞进来的那条按「有预警」算：否则本地调试会同时看见横幅
+      // 和「预警未取到」，自相矛盾。
+      return (notices: fallback, ok: fallback.isNotEmpty);
     }
   }
 

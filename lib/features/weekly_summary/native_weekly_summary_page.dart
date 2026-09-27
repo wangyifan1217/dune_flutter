@@ -259,7 +259,7 @@ class _NativeWeeklySummaryPageState extends State<NativeWeeklySummaryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DunesColors.bgApp,
+      backgroundColor: const Color(0xFFF2F2F7),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -310,10 +310,13 @@ class _NativeWeeklySummaryPageState extends State<NativeWeeklySummaryPage> {
                                 ),
                               );
                             }
-                            final m =
-                                _messages[_loadingOlder ? index - 1 : index];
-                            final data =
-                                WeeklySummaryShare.fromPayload(m.payload);
+                            final messageIndex = _loadingOlder
+                                ? index - 1
+                                : index;
+                            final m = _messages[messageIndex];
+                            final data = WeeklySummaryShare.fromPayload(
+                              m.payload,
+                            );
                             final time = InboxFormat.msgTimeLabel(m.createdAt);
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 16),
@@ -333,9 +336,8 @@ class _NativeWeeklySummaryPageState extends State<NativeWeeklySummaryPage> {
                                   if (data != null)
                                     GestureDetector(
                                       onTap: () => unawaited(_openDetail(data)),
-                                      child: WeeklySummaryPoster(
-                                        data: data,
-                                        compact: true,
+                                      child: Center(
+                                        child: WeeklySummaryPoster(data: data),
                                       ),
                                     )
                                   else
@@ -499,8 +501,8 @@ class _WeeklySummaryDetailSheetState extends State<_WeeklySummaryDetailSheet> {
         margin: const EdgeInsets.fromLTRB(12, 8, 12, 12),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         decoration: BoxDecoration(
-          color: DunesColors.bgApp,
-          borderRadius: BorderRadius.circular(18),
+          color: const Color(0xFFF2F2F7),
+          borderRadius: BorderRadius.circular(22),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -523,12 +525,15 @@ class _WeeklySummaryDetailSheetState extends State<_WeeklySummaryDetailSheet> {
               ],
             ),
             const SizedBox(height: 8),
-            SingleChildScrollView(
-              child: Center(
-                child: RepaintBoundary(
-                  key: _posterKey,
-                  child: WeeklySummaryPoster(
-                    data: widget.data,
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+              ),
+              child: SingleChildScrollView(
+                child: Center(
+                  child: RepaintBoundary(
+                    key: _posterKey,
+                    child: WeeklySummaryPoster(data: widget.data),
                   ),
                 ),
               ),

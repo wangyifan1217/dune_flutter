@@ -2675,6 +2675,44 @@ void main() {
     expect(proposalProductScaleRollup(form)?.revenue, 272.6);
   });
 
+  test('owned product revenue is kept when market scale differs', () {
+    final form = {
+      'salesScale': 1459.8,
+      'skuDetails': [
+        {
+          'id': 'sku-60',
+          'faceValue': '60',
+          'settlements': [
+            {'id': 'st-60', 'scale': '81', 'settleUnitPrice': '24'},
+          ],
+        },
+        {
+          'id': 'sku-45',
+          'faceValue': '45',
+          'settlements': [
+            {'id': 'st-45', 'scale': '81', 'settleUnitPrice': '24'},
+          ],
+        },
+        {
+          'id': 'sku-60b',
+          'faceValue': '60',
+          'settlements': [
+            {'id': 'st-60b', 'scale': '81', 'settleUnitPrice': '32'},
+          ],
+        },
+        {
+          'id': 'sku-150',
+          'faceValue': '150',
+          'settlements': [
+            {'id': 'st-150', 'scale': '81', 'settleUnitPrice': '24'},
+          ],
+        },
+      ],
+    };
+    expect(proposalProductScaleRollup(form)?.salesScale, 1459.8);
+    expect(proposalProductScaleRollup(form)?.revenue, closeTo(131.76, 0.01));
+  });
+
   test('different ratios without product scales are not summed on the total', () {
     final form = {
       'salesScale': 6000,

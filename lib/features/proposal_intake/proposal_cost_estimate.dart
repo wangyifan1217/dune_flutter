@@ -406,6 +406,7 @@ ProposalProductScaleRollup? proposalProductScaleRollup(
   if (scale <= 0) return null;
   var ownedRevenue = 0.0;
   var anyOwned = false;
+  var anyUnowned = false;
   var anyShare = false;
   final shares = <double>[];
   for (final sku in proposalIntakeSkuDetails(hydrated)) {
@@ -417,15 +418,18 @@ ProposalProductScaleRollup? proposalProductScaleRollup(
     if (local > 0) {
       anyOwned = true;
       ownedRevenue += local * share;
+    } else {
+      anyUnowned = true;
     }
   }
-  // 总规模等于各产品规模之和时，按各产品自己的规模算。面值不改这份合计。
-  // 市场部另填了一个总规模、产品又没有各自规模时，这个总规模只乘一次。
+  // 产品自己有规模时，总收入就是这些产品收入之和。
+  // 市场部另填的总规模可以和这个和不一致，但不能把已经算出来的收入清成 0。
+  // 产品都没有各自规模时，总规模只乘一次：比例相同直接乘，否则按面值加权。
   final scaleIsProductSum =
       !explicitTotal ||
       (legacyScale > 0 && (scale - legacyScale).abs() < 0.001);
   var revenue = 0.0;
-  if (scaleIsProductSum && anyOwned) {
+  if (anyOwned && (scaleIsProductSum || !anyUnowned)) {
     revenue = ownedRevenue;
   } else if (shares.isNotEmpty) {
     final weighted = _faceWeightedIncomeShare(hydrated);

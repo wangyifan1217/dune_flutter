@@ -913,7 +913,16 @@ class _NativeChatViewState extends State<NativeChatView>
       _pendingStickBottomAfterForeground = true;
       _scrollBottom(force: true, gentle: false);
     } else if (_isBrowsingHistory) {
-      _restoreHistoryViewportAfterForeground();
+      if (!needsRepair && _historyViewportUnchangedSinceSnapshot) {
+        // 仅切软件：列表位置没被动过，再按估算锚点 ensureVisible 会每次往上挪一截。
+        if (!_olderScrollRestorePending &&
+            _scrollRestoreAnchorId == _stableHistoryAnchorId) {
+          _scrollRestoreAnchorId = null;
+        }
+        _finishHistoryViewportRestore();
+      } else {
+        _restoreHistoryViewportAfterForeground();
+      }
     } else if (!_locatedMode && needsRepair) {
       // 最小化/托盘还原：Windows 会把 reverse 列表夹到 0 或拽去历史。
       _pendingStickBottomAfterForeground = true;
@@ -1839,6 +1848,13 @@ class _NativeChatViewState extends State<NativeChatView>
         _scrollRestoreAnchorId = _stableHistoryAnchorId;
       }
     }
+  }
+
+  bool get _historyViewportUnchangedSinceSnapshot {
+    if (!_hasStableChatViewport) return false;
+    final saved = _stableHistoryPixels;
+    if (saved <= 72) return false;
+    return (_scrollController.position.pixels - saved).abs() <= 2.0;
   }
 
   void _clearStableHistoryViewport() {
@@ -8195,7 +8211,10 @@ class _NativeChatViewState extends State<NativeChatView>
         onLongPress: _messageMultiSelectMode
             ? null
             : () => _onMessageActions(m, mine),
-        child: WeeklySummaryPoster(data: weekly, compact: true),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: WeeklySummaryPoster(data: weekly),
+        ),
       );
     }
     final meetingShare = MeetingMinutesChatShare.fromPayload(m.payload);

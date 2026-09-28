@@ -787,6 +787,9 @@ List<String> proposalIntakeProjectCostNameCatalog({
   for (final name in names) {
     add(name);
   }
+  // An explicit admin catalog is authoritative; asset catalog labels are only
+  // used when no admin list has been configured.
+  if (out.isNotEmpty) return out;
   for (final item in catalog) {
     add(item.name);
   }

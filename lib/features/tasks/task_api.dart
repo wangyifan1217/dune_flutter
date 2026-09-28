@@ -463,12 +463,14 @@ class TaskApi {
   Future<List<HrbpDeptStat>> hrbpOverview({
     DateTime? dateFrom,
     DateTime? dateTo,
+    bool forLookup = false,
   }) async {
     final query = <String, String>{};
     final from = _dateQuery(dateFrom);
     final to = _dateQuery(dateTo);
     if (from != null) query['dateFrom'] = from;
     if (to != null) query['dateTo'] = to;
+    if (forLookup) query['access'] = 'lookup';
     final resp = await http.get(
       _uri('hrbp/overview', query.isEmpty ? null : query),
       headers: _headers,
@@ -500,12 +502,14 @@ class TaskApi {
     DateTime? dateTo,
     int page = 0,
     int size = 20,
+    bool forLookup = false,
   }) async {
     final query = <String, String>{'page': '$page', 'size': '$size'};
     final from = _dateQuery(dateFrom);
     final to = _dateQuery(dateTo);
     if (from != null) query['dateFrom'] = from;
     if (to != null) query['dateTo'] = to;
+    if (forLookup) query['access'] = 'lookup';
     final resp = await http.get(
       _uri('hrbp/department/$deptId', query),
       headers: _headers,

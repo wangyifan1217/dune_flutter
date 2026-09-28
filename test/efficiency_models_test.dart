@@ -208,5 +208,10 @@ void main() {
 
   test('QJEA is allowed on desktop', () {
     expect(isDesktopAllowedCommScreen('QJEA'), isTrue);
+    expect(isDesktopAllowedCommScreen('QJTS'), isTrue);
+    expect(isDesktopAllowedCommScreen('QJDR'), isTrue);
+    expect(isDesktopAllowedCommScreen('QJGR'), isTrue);
+    expect(isDesktopAllowedCommScreen('QJMO'), isTrue);
+    expect(isDesktopAllowedCommScreen('QJPA'), isTrue);
   });
 }

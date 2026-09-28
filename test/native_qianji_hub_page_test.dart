@@ -19,6 +19,18 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: NativeQianjiHubPage(
+            session: const AuthSession(
+              phone: '13812345678',
+              userId: 1001,
+              token: 'test-token',
+              apiBase: 'https://test.api',
+              roles: ['ADMIN'],
+              qianjiAccess: true,
+              digitalEmployeeAccess: true,
+              taskLookupAccess: true,
+              dailyReportLookupAccess: true,
+              groupReplyLookupAccess: true,
+            ),
             onOpenCursorAccount: () => cursorAccountTapped = true,
             onOpenEfficiencyBossPreview: () => bossPreviewTapped = true,
             onOpenCashFlow: () => cashFlowTapped = true,
@@ -48,7 +60,13 @@ void main() {
     expect(find.text('会议纪要'), findsWidgets);
     expect(find.text('IM会话'), findsOneWidget);
     expect(find.text('知识库'), findsOneWidget);
-    expect(find.text('Cursor账号'), findsOneWidget);
+    expect(find.text('任务'), findsOneWidget);
+    expect(find.text('日报'), findsOneWidget);
+    expect(find.text('群响应'), findsOneWidget);
+    expect(find.text('月结意见'), findsNothing);
+    expect(find.text('提案审核'), findsNothing);
+    expect(find.text('任务 · 日报 · 群响应'), findsOneWidget);
+    expect(find.text('研发账号'), findsOneWidget);
 
     // 3. Digital Employees Section
     expect(find.text('AI 数字员工'), findsOneWidget);
@@ -69,7 +87,7 @@ void main() {
     await tester.pump();
     expect(bossPreviewTapped, isTrue);
 
-    await tester.tap(find.text('Cursor账号'));
+    await tester.tap(find.text('研发账号'));
     await tester.pump();
     expect(cursorAccountTapped, isTrue);
   });
@@ -107,6 +125,9 @@ void main() {
     expect(find.text('全部人员'), findsOneWidget);
     expect(find.text('工作情况'), findsOneWidget);
     expect(find.text('使用热力'), findsOneWidget);
+    expect(find.text('任务'), findsNothing);
+    expect(find.text('日报'), findsNothing);
+    expect(find.text('群响应'), findsNothing);
   });
 }
 

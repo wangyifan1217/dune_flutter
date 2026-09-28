@@ -504,11 +504,15 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
       'jobTitle': widget.session.jobTitle,
       ...?profile,
     };
-    if ('${merged['departmentName'] ?? merged['department'] ?? ''}'.trim().isEmpty &&
+    if ('${merged['departmentName'] ?? merged['department'] ?? ''}'
+            .trim()
+            .isEmpty &&
         widget.session.departmentName.trim().isNotEmpty) {
       merged['departmentName'] = widget.session.departmentName.trim();
     }
-    if ('${merged['positionName'] ?? merged['jobTitle'] ?? ''}'.trim().isEmpty &&
+    if ('${merged['positionName'] ?? merged['jobTitle'] ?? ''}'
+            .trim()
+            .isEmpty &&
         widget.session.jobTitle.trim().isNotEmpty) {
       merged['positionName'] = widget.session.jobTitle.trim();
     }
@@ -905,7 +909,7 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
           children: [
             XflowDsBar(
               crumb: _pageCrumb,
-              title: _pageTitle,
+              title: '填写申请',
               onBack: () => widget.navigation.popTo(widget.backScreen),
               onMore: _canDeleteDraft ? _confirmDeleteDraft : null,
             ),
@@ -931,69 +935,131 @@ class _NativeXflowFormPageState extends State<NativeXflowFormPage>
                             10 + MediaQuery.viewInsetsOf(context).bottom,
                           ),
                           children: [
-                            XflowFormCard(
-                              title: _pageTitle,
-                              tag: 'XFlow',
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.fromLTRB(
+                                17,
+                                16,
+                                17,
+                                15,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(21),
+                                border: Border.all(
+                                  color: const Color(0xFFECEAF1),
+                                ),
+                              ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  if (_autosaveHint.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(
-                                        bottom: 10,
-                                      ),
-                                      child: Text(
-                                        _autosaveHint,
-                                        style: DunesTypography.sans(
-                                          fontSize: 12,
-                                          color: DunesColors.text3,
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 7,
+                                        height: 7,
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFF8064E6),
+                                          shape: BoxShape.circle,
                                         ),
                                       ),
+                                      const SizedBox(width: 7),
+                                      Text(
+                                        _isEditing ? '编辑申请' : '新建申请',
+                                        style: DunesTypography.sans(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: const Color(0xFF817B90),
+                                          letterSpacing: 1.0,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      if (_autosaveHint.isNotEmpty)
+                                        Flexible(
+                                          child: Text(
+                                            _autosaveHint,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            textAlign: TextAlign.right,
+                                            style: DunesTypography.sans(
+                                              fontSize: 9.5,
+                                              color: const Color(0xFF9691A0),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    _pageTitle,
+                                    style: DunesTypography.sans(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w700,
+                                      height: 1.25,
+                                      color: const Color(0xFF23212A),
                                     ),
-                                  XflowFormRenderer(
-                                    fields: _isDelegatedPendingInitiate
-                                        ? _template!.fields
-                                              .where((f) {
-                                                if (f.type != 'action')
-                                                  return true;
-                                                final kind =
-                                                    (f.raw['actionKind'] ??
-                                                            f.key)
-                                                        .toString();
-                                                return _isDelegatedClearActionKind(
-                                                  kind,
-                                                );
-                                              })
-                                              .toList(growable: false)
-                                        : _template!.fields,
-                                    values: _values,
-                                    layout: _template!.layout,
-                                    service: _service,
-                                    embedded: true,
-                                    showProgressCard:
-                                        widget.templateKey !=
-                                        kElectronicReimbursementTemplateKey,
-                                    allowedActionKinds:
-                                        _isDelegatedPendingInitiate
-                                        ? <String>{
-                                            'clear-form',
-                                            'clear_form',
-                                            'clearform',
-                                            'reset-form',
-                                          }
-                                        : null,
-                                    onChanged: (key, value) {
-                                      setState(() {
-                                        _values[key] = value;
-                                        _recompute();
-                                      });
-                                      _scheduleAutosave();
-                                      _scheduleApprovalPreview();
-                                    },
-                                    onAction: _handleAction,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  RichText(
+                                    text: TextSpan(
+                                      style: DunesTypography.sans(
+                                        fontSize: 11,
+                                        color: const Color(0xFF969F99),
+                                      ),
+                                      children: const [
+                                        TextSpan(text: '请填写申请信息，带 '),
+                                        TextSpan(
+                                          text: '*',
+                                          style: TextStyle(
+                                            color: Color(0xFFD46B6B),
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        TextSpan(text: ' 为必填项'),
+                                      ],
+                                    ),
                                   ),
                                 ],
                               ),
+                            ),
+                            XflowFormRenderer(
+                              fields: _isDelegatedPendingInitiate
+                                  ? _template!.fields
+                                        .where((f) {
+                                          if (f.type != 'action') return true;
+                                          final kind =
+                                              (f.raw['actionKind'] ?? f.key)
+                                                  .toString();
+                                          return _isDelegatedClearActionKind(
+                                            kind,
+                                          );
+                                        })
+                                        .toList(growable: false)
+                                  : _template!.fields,
+                              values: _values,
+                              layout: _template!.layout,
+                              service: _service,
+                              embedded: true,
+                              showProgressCard:
+                                  widget.templateKey !=
+                                  kElectronicReimbursementTemplateKey,
+                              allowedActionKinds: _isDelegatedPendingInitiate
+                                  ? <String>{
+                                      'clear-form',
+                                      'clear_form',
+                                      'clearform',
+                                      'reset-form',
+                                    }
+                                  : null,
+                              onChanged: (key, value) {
+                                setState(() {
+                                  _values[key] = value;
+                                  _recompute();
+                                });
+                                _scheduleAutosave();
+                                _scheduleApprovalPreview();
+                              },
+                              onAction: _handleAction,
                             ),
                             XflowApprovalFlowSection(
                               stages: _displayApprovalStages,

@@ -74,10 +74,10 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         if (widget.showProgressCard) _progressCard(),
         if (widget.showActionBar) _actionBar(actionKeys),
         Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
           decoration: BoxDecoration(
             color: XfProposalUi.card,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(21),
             border: Border.all(color: XfProposalUi.lineSoft),
           ),
           child: Column(
@@ -87,7 +87,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                     !actionKeys.contains(field.key) &&
                     _isVisible(field))
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.only(bottom: 15),
                     child: _fieldWidget(field),
                   ),
             ],
@@ -400,7 +400,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
   Widget _sectionField(XflowField field) {
     final tone = (field.raw['tone'] ?? field.raw['sectionStyle'] ?? '')
         .toString();
-    Color borderColor = DunesColors.accent;
+    Color borderColor = XfProposalUi.coral;
     if (tone == 'green' || tone == 'fin') borderColor = DunesColors.green;
     if (tone == 'amber') borderColor = DunesColors.amber;
     if (tone == 'blue') borderColor = DunesColors.blue;
@@ -619,7 +619,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         decoration: BoxDecoration(
           color: DunesColors.bgSoft,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: DunesColors.accentLine),
+          border: Border.all(color: const Color(0xFFE4DEF5)),
         ),
         child: Text(
           text.isEmpty ? '—' : text,
@@ -1617,7 +1617,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                         tag,
                         style: DunesTypography.sans(
                           fontSize: 11,
-                          color: DunesColors.accentDeep,
+                          color: XfProposalUi.coral,
                         ),
                       ),
                       deleteIcon: field.readonly
@@ -1628,8 +1628,8 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                               color: DunesColors.text3,
                             ),
                       onDeleted: field.readonly ? null : () => removeTag(tag),
-                      backgroundColor: DunesColors.accentSoft,
-                      side: const BorderSide(color: DunesColors.accentLine),
+                      backgroundColor: XfProposalUi.coralSoft,
+                      side: const BorderSide(color: Color(0xFFE4DEF5)),
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       visualDensity: VisualDensity.compact,
                     ),
@@ -1702,10 +1702,10 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
           vertical: compact ? 5 : 5,
         ),
         decoration: BoxDecoration(
-          color: selected ? DunesColors.accentSoft : DunesColors.bgSoft,
+          color: selected ? XfProposalUi.coralSoft : DunesColors.bgSoft,
           borderRadius: BorderRadius.circular(7),
           border: Border.all(
-            color: selected ? DunesColors.accent : DunesColors.border,
+            color: selected ? XfProposalUi.coral : DunesColors.border,
           ),
         ),
         child: Text(
@@ -1714,7 +1714,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
           style: DunesTypography.sans(
             fontSize: compact ? 10 : 11,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-            color: selected ? DunesColors.accentDeep : DunesColors.text2,
+            color: selected ? XfProposalUi.coral : DunesColors.text2,
           ),
         ),
       ),
@@ -2093,7 +2093,9 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
   String _displayName(dynamic val) {
     if (val is Map) {
       final name = (val['name'] ?? val['displayName'] ?? '').toString().trim();
-      final dept = (val['dept'] ?? val['departmentName'] ?? '').toString().trim();
+      final dept = (val['dept'] ?? val['departmentName'] ?? '')
+          .toString()
+          .trim();
       final title = (val['title'] ?? '').toString().trim();
       return [name, dept, title].where((e) => e.isNotEmpty).join(' · ');
     }
@@ -2193,66 +2195,73 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
         _releaseFocus();
       },
       child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TextField(
-          controller: _controller,
-          focusNode: _focus,
-          readOnly: widget.readonly,
-          enableInteractiveSelection: true,
-          contextMenuBuilder: (context, editableTextState) {
-            return AdaptiveTextSelectionToolbar.editableText(
-              editableTextState: editableTextState,
-            );
-          },
-          decoration: xfSearchPickerDecoration(
-            hint: widget.placeholder,
-            readonly: widget.readonly,
-            suffixIcon: widget.readonly
-                ? null
-                : xfSearchSuffixIcon(
-                    loading: _loading,
-                    hasText: hasText,
-                    readonly: widget.readonly,
-                    onClear: _clearSelection,
-                  ),
-          ),
-          minLines: 1,
-          maxLines: _results.isEmpty ? 4 : 1,
-          style: xfInputTextStyle(),
-          onTap: widget.readonly
-              ? null
-              : () {
-                  if (!_focus.hasFocus) _focus.requestFocus();
-                },
-          onChanged: widget.readonly ? null : _onQueryChanged,
-        ),
-        if (_results.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          XfPickerSuggestionList(
-            itemCount: _results.length,
-            labelOf: (i) {
-              final u = _results[i];
-              final name = (u['displayName'] ?? u['name'] ?? '')
-                  .toString()
-                  .trim();
-              final dept = (u['departmentName'] ?? u['dept'] ?? '')
-                  .toString()
-                  .trim();
-              final title = (u['title'] ?? '').toString().trim();
-              return [name, dept, title].where((e) => e.isNotEmpty).join(' · ');
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _controller,
+            focusNode: _focus,
+            readOnly: widget.readonly,
+            enableInteractiveSelection: true,
+            contextMenuBuilder: (context, editableTextState) {
+              return AdaptiveTextSelectionToolbar.editableText(
+                editableTextState: editableTextState,
+              );
             },
-            onSelect: (i) => _selectUser(_results[i]),
+            decoration: xfSearchPickerDecoration(
+              hint: widget.placeholder,
+              readonly: widget.readonly,
+              suffixIcon: widget.readonly
+                  ? null
+                  : xfSearchSuffixIcon(
+                      loading: _loading,
+                      hasText: hasText,
+                      readonly: widget.readonly,
+                      onClear: _clearSelection,
+                    ),
+            ),
+            minLines: 1,
+            maxLines: _results.isEmpty ? 4 : 1,
+            style: xfInputTextStyle(),
+            onTap: widget.readonly
+                ? null
+                : () {
+                    if (!_focus.hasFocus) _focus.requestFocus();
+                  },
+            onChanged: widget.readonly ? null : _onQueryChanged,
           ),
-        ] else if (_searched && !_loading && hasText) ...[
-          const SizedBox(height: 6),
-          Text(
-            '未找到匹配人员，请换个关键词',
-            style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
-          ),
+          if (_results.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            XfPickerSuggestionList(
+              itemCount: _results.length,
+              labelOf: (i) {
+                final u = _results[i];
+                final name = (u['displayName'] ?? u['name'] ?? '')
+                    .toString()
+                    .trim();
+                final dept = (u['departmentName'] ?? u['dept'] ?? '')
+                    .toString()
+                    .trim();
+                final title = (u['title'] ?? '').toString().trim();
+                return [
+                  name,
+                  dept,
+                  title,
+                ].where((e) => e.isNotEmpty).join(' · ');
+              },
+              onSelect: (i) => _selectUser(_results[i]),
+            ),
+          ] else if (_searched && !_loading && hasText) ...[
+            const SizedBox(height: 6),
+            Text(
+              '未找到匹配人员，请换个关键词',
+              style: DunesTypography.sans(
+                fontSize: 11,
+                color: DunesColors.text3,
+              ),
+            ),
+          ],
         ],
-      ],
-    ),
+      ),
     );
   }
 }
@@ -2586,55 +2595,59 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
         _releaseFocus();
       },
       child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TextField(
-          controller: _controller,
-          focusNode: _focus,
-          readOnly: widget.readonly,
-          decoration: xfSearchPickerDecoration(
-            hint: widget.placeholder,
-            suffixIcon: xfSearchSuffixIcon(
-              loading: _loading,
-              hasText: hasText,
-              readonly: widget.readonly,
-              onClear: _clearSelection,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _controller,
+            focusNode: _focus,
+            readOnly: widget.readonly,
+            decoration: xfSearchPickerDecoration(
+              hint: widget.placeholder,
+              suffixIcon: xfSearchSuffixIcon(
+                loading: _loading,
+                hasText: hasText,
+                readonly: widget.readonly,
+                onClear: _clearSelection,
+              ),
             ),
+            minLines: 1,
+            maxLines: _results.isEmpty ? 4 : 1,
+            style: xfInputTextStyle(),
+            onTap: widget.readonly
+                ? null
+                : () {
+                    if (!_focus.hasFocus) _focus.requestFocus();
+                  },
+            onChanged: widget.readonly ? null : _onQueryChanged,
           ),
-          minLines: 1,
-          maxLines: _results.isEmpty ? 4 : 1,
-          style: xfInputTextStyle(),
-          onTap: widget.readonly
-              ? null
-              : () {
-                  if (!_focus.hasFocus) _focus.requestFocus();
-                },
-          onChanged: widget.readonly ? null : _onQueryChanged,
-        ),
-        if (_results.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          XfPickerSuggestionList(
-            itemCount: _results.length,
-            labelOf: (i) {
-              final row = _results[i];
-              final code = (row['code'] ?? '').toString().trim();
-              final title = (row['title'] ?? row['name'] ?? '')
-                  .toString()
-                  .trim();
-              if (code.isNotEmpty && title.isNotEmpty) return '$code · $title';
-              return code.isNotEmpty ? code : title;
-            },
-            onSelect: (i) => _selectProposal(_results[i]),
-          ),
-        ] else if (_searched && !_loading && hasText) ...[
-          const SizedBox(height: 6),
-          Text(
-            '无匹配提案',
-            style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
-          ),
+          if (_results.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            XfPickerSuggestionList(
+              itemCount: _results.length,
+              labelOf: (i) {
+                final row = _results[i];
+                final code = (row['code'] ?? '').toString().trim();
+                final title = (row['title'] ?? row['name'] ?? '')
+                    .toString()
+                    .trim();
+                if (code.isNotEmpty && title.isNotEmpty)
+                  return '$code · $title';
+                return code.isNotEmpty ? code : title;
+              },
+              onSelect: (i) => _selectProposal(_results[i]),
+            ),
+          ] else if (_searched && !_loading && hasText) ...[
+            const SizedBox(height: 6),
+            Text(
+              '无匹配提案',
+              style: DunesTypography.sans(
+                fontSize: 11,
+                color: DunesColors.text3,
+              ),
+            ),
+          ],
         ],
-      ],
-    ),
+      ),
     );
   }
 }
@@ -2721,7 +2734,9 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
       _selectedFullLabel = '';
       return incoming;
     }
-    if (selected == next || selected.contains(next) || next.contains(selected)) {
+    if (selected == next ||
+        selected.contains(next) ||
+        next.contains(selected)) {
       return selected;
     }
     _selectedFullLabel = incoming;
@@ -2931,53 +2946,56 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
         _releaseFocus();
       },
       child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TextField(
-          controller: _controller,
-          focusNode: _focus,
-          readOnly: widget.readonly,
-          enableInteractiveSelection: true,
-          contextMenuBuilder: (context, editableTextState) {
-            return AdaptiveTextSelectionToolbar.editableText(
-              editableTextState: editableTextState,
-            );
-          },
-          decoration: xfSearchPickerDecoration(
-            hint: widget.placeholder,
-            suffixIcon: xfSearchSuffixIcon(
-              loading: _loading,
-              hasText: hasText,
-              readonly: widget.readonly,
-              onClear: _clearSelection,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _controller,
+            focusNode: _focus,
+            readOnly: widget.readonly,
+            enableInteractiveSelection: true,
+            contextMenuBuilder: (context, editableTextState) {
+              return AdaptiveTextSelectionToolbar.editableText(
+                editableTextState: editableTextState,
+              );
+            },
+            decoration: xfSearchPickerDecoration(
+              hint: widget.placeholder,
+              suffixIcon: xfSearchSuffixIcon(
+                loading: _loading,
+                hasText: hasText,
+                readonly: widget.readonly,
+                onClear: _clearSelection,
+              ),
             ),
+            minLines: 1,
+            maxLines: _results.isEmpty ? 4 : 1,
+            style: xfInputTextStyle(),
+            onTap: widget.readonly
+                ? null
+                : () {
+                    if (!_focus.hasFocus) _focus.requestFocus();
+                  },
+            onChanged: widget.readonly ? null : _onQueryChanged,
           ),
-          minLines: 1,
-          maxLines: _results.isEmpty ? 4 : 1,
-          style: xfInputTextStyle(),
-          onTap: widget.readonly
-              ? null
-              : () {
-                  if (!_focus.hasFocus) _focus.requestFocus();
-                },
-          onChanged: widget.readonly ? null : _onQueryChanged,
-        ),
-        if (_results.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          XfPickerSuggestionList(
-            itemCount: _results.length,
-            labelOf: (i) => _cfg.labelOf(_results[i]),
-            onSelect: (i) => _selectRow(_results[i]),
-          ),
-        ] else if (_searched && !_loading && hasText) ...[
-          const SizedBox(height: 6),
-          Text(
-            '无匹配结果',
-            style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
-          ),
+          if (_results.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            XfPickerSuggestionList(
+              itemCount: _results.length,
+              labelOf: (i) => _cfg.labelOf(_results[i]),
+              onSelect: (i) => _selectRow(_results[i]),
+            ),
+          ] else if (_searched && !_loading && hasText) ...[
+            const SizedBox(height: 6),
+            Text(
+              '无匹配结果',
+              style: DunesTypography.sans(
+                fontSize: 11,
+                color: DunesColors.text3,
+              ),
+            ),
+          ],
         ],
-      ],
-    ),
+      ),
     );
   }
 }

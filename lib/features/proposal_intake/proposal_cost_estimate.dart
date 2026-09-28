@@ -14,6 +14,7 @@ const kProposalTaxCostManualKey = 'taxCostItemManual';
 const kProposalBusinessCostManualKey = 'businessCostItemManual';
 const kProposalProjectCostManualKey = 'costItemManual';
 const kProposalProcurementManualKey = 'couponProcurementCostManual';
+const kProposalRevenueManualKey = 'revenueManual';
 
 const kProposalVatEnergyName = '增值税及附加（能源）';
 const kProposalVatOperatorName = '增值税及附加（运营商+公共出行）';
@@ -465,7 +466,13 @@ double proposalEffectiveSalesScale(Map<String, dynamic> form) {
   return proposalProductScaleRollup(hydrated)?.salesScale ?? 0;
 }
 
+bool proposalRevenueIsManual(Map<String, dynamic> form) =>
+    form[kProposalRevenueManualKey] == true;
+
 double proposalEffectiveRevenue(Map<String, dynamic> form) {
+  if (proposalRevenueIsManual(form)) {
+    return proposalFinanceAmount(form, 'revenue');
+  }
   return proposalProductScaleRollup(form)?.revenue ??
       proposalFinanceAmount(form, 'revenue');
 }
@@ -499,8 +506,10 @@ Map<String, dynamic> proposalApplyProductScaleRollup(
   final hydrated = proposalIntakeHydrateMarketSalesScale(form);
   final rollup = proposalProductScaleRollup(hydrated);
   if (rollup == null) return hydrated;
-  final next = Map<String, dynamic>.from(hydrated)
-    ..['revenue'] = rollup.revenue;
+  final next = Map<String, dynamic>.from(hydrated);
+  if (!proposalRevenueIsManual(form)) {
+    next['revenue'] = rollup.revenue;
+  }
   if (!proposalIntakeFormHasText(form, kProposalSalesScaleKey)) {
     next[kProposalSalesScaleKey] = rollup.salesScale;
   }

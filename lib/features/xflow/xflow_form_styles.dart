@@ -6,16 +6,16 @@ import '../../core/theme/dunes_theme.dart';
 class XfProposalUi {
   const XfProposalUi._();
 
-  static const bg = Color(0xFFF8F7F5);
+  static const bg = Color(0xFFF3F5F4);
   static const card = Color(0xFFFFFFFF);
-  static const cardAlt = Color(0xFFFAF9F6);
-  static const ink = Color(0xFF232320);
-  static const mute = Color(0xFF7A7770);
-  static const mute2 = Color(0xFF9A968E);
-  static const line = Color(0xFFDED9D0);
-  static const lineSoft = Color(0xFFECE8DE);
-  static const coral = Color(0xFFD85A30);
-  static const coralSoft = Color(0xFFFFEFE8);
+  static const cardAlt = Color(0xFFFAF9FD);
+  static const ink = Color(0xFF23212A);
+  static const mute = Color(0xFF7A7684);
+  static const mute2 = Color(0xFF9A96A2);
+  static const line = Color(0xFFE5E1EE);
+  static const lineSoft = Color(0xFFECEAF1);
+  static const coral = Color(0xFF7054D8);
+  static const coralSoft = Color(0xFFF1EEFB);
 }
 
 /// WebView `.xf-action-btn` 1:1
@@ -302,14 +302,14 @@ class XfFieldLabel extends StatelessWidget {
             child: SizedBox(
               height: compact ? 14 : null,
               child: Text(
-                label.toUpperCase(),
+                label,
                 maxLines: compact ? 1 : 2,
                 overflow: TextOverflow.ellipsis,
-                style: DunesTypography.mono(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 0.04 * 10,
-                  color: DunesColors.text3,
+                style: DunesTypography.sans(
+                  fontSize: compact ? 10 : 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0,
+                  color: const Color(0xFF69756E),
                   height: compact ? 1.2 : 1.25,
                 ),
               ),
@@ -318,7 +318,7 @@ class XfFieldLabel extends StatelessWidget {
           if (required)
             const Text(
               '*',
-              style: TextStyle(color: DunesColors.coral, fontSize: 10),
+              style: const TextStyle(color: Color(0xFFD46B6B), fontSize: 11),
             ),
         ],
       ),
@@ -335,20 +335,20 @@ InputDecoration xfInputDecoration({
     hintText: hint,
     isDense: true,
     filled: true,
-    fillColor: readonly ? XfProposalUi.cardAlt : Colors.white,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+    fillColor: readonly ? const Color(0xFFF5F3FA) : const Color(0xFFFBFCFB),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     hintStyle: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text3),
     border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: BorderRadius.circular(12),
       borderSide: const BorderSide(color: XfProposalUi.line),
     ),
     enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: BorderRadius.circular(12),
       borderSide: const BorderSide(color: XfProposalUi.line),
     ),
     focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(9),
-      borderSide: const BorderSide(color: XfProposalUi.coral),
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Color(0xFFB4A5E8), width: 1.3),
     ),
   );
 }
@@ -488,9 +488,7 @@ class _XfPickerSuggestionListState extends State<XfPickerSuggestionList> {
               final selected = widget.selectedIndex == index;
               final label = widget.labelOf(index).trim();
               return Material(
-                color: selected
-                    ? const Color(0xFFF3EEFA)
-                    : Colors.transparent,
+                color: selected ? const Color(0xFFF3EEFA) : Colors.transparent,
                 child: InkWell(
                   onTap: () => widget.onSelect(index),
                   child: Listener(
@@ -568,9 +566,9 @@ class XflowApprovalSubmitButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final canTap = enabled && !loading && onPressed != null;
     final bgColor = canTap
-        ? XfProposalUi.ink
-        : XfProposalUi.ink.withValues(alpha: 0.28);
-    final fgColor = XfProposalUi.bg;
+        ? const Color(0xFF7054D8)
+        : const Color(0xFF7054D8).withValues(alpha: 0.28);
+    const fgColor = Colors.white;
     final fgAlpha = canTap ? 255 : 180;
 
     return GestureDetector(
@@ -585,7 +583,7 @@ class XflowApprovalSubmitButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 16),
         decoration: BoxDecoration(
           color: bgColor,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(15),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,

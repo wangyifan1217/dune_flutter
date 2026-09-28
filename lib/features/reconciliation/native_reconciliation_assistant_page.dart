@@ -576,6 +576,7 @@ class _NativeReconciliationAssistantPageState
         rows: current.rows,
         assignees: current.assignees,
         comments: [...current.comments, item],
+        snapshotHint: current.snapshotHint,
       );
     });
   }
@@ -789,9 +790,13 @@ class _NativeReconciliationAssistantPageState
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      confirmable.isEmpty
-                          ? '没有待你确认的日行，仍可填意见。'
-                          : '右侧可直接确认，意见选填。',
+                      [
+                        confirmable.isEmpty
+                            ? '没有待你确认的日行，仍可填意见。'
+                            : '右侧可直接确认，意见选填。',
+                        if ((snap?.snapshotHint ?? '').trim().isNotEmpty)
+                          snap!.snapshotHint.trim(),
+                      ].join(' · '),
                       style: DunesTypography.sans(
                         fontSize: 12.5,
                         color: DunesColors.text2,

@@ -222,7 +222,7 @@ class _NativeQianjiCursorAccountPageState
           const SizedBox(width: 8),
           const Expanded(
             child: Text(
-              'Cursor账号',
+              '研发账号',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
@@ -378,7 +378,7 @@ class _NativeQianjiCursorAccountPageState
           SizedBox(height: 120),
           Center(
             child: Text(
-              '暂无 Cursor 账号',
+              '暂无研发账号',
               style: TextStyle(color: DunesColors.text3, fontSize: 14),
             ),
           ),

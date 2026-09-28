@@ -103,10 +103,14 @@ import '../qianji/efficiency/native_qianji_efficiency_boss_preview.dart';
 import '../qianji/efficiency/native_qianji_efficiency_page.dart';
 import '../qianji/native_qianji_iteration_page.dart';
 import '../qianji/native_qianji_kb_supervise_page.dart';
+import '../qianji/native_qianji_lookup_preview_page.dart';
 import '../qianji/digital_auto/digital_auto_config.dart';
 import '../qianji/digital_auto/digital_employee_service.dart';
 import '../qianji/digital_auto/native_digital_auto_chat_page.dart';
 import '../qianji/native_qianji_meeting_supervise_page.dart';
+import '../qianji/native_qianji_record_supervise_page.dart';
+import '../qianji/native_qianji_task_people_page.dart';
+import '../qianji/qianji_record_supervise_service.dart';
 import '../qianji/native_qianji_my_perf_page.dart';
 import '../qianji/native_qianji_project_tasks_page.dart';
 import '../qianji/native_qianji_projects_page.dart';
@@ -3863,6 +3867,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenMeetingSupervise: () => widget.navigation.go('QJMM'),
           onOpenSessionSupervise: () => widget.navigation.go('QJSS'),
           onOpenKbSupervise: () => widget.navigation.go('QJKB'),
+          onOpenTaskMonitor: () => widget.navigation.go('QJTS'),
+          onOpenDailyReportMonitor: () => widget.navigation.go('QJDR'),
+          onOpenGroupReply: () => widget.navigation.go('QJGR'),
+          onOpenMonthlyOpinion: () => widget.navigation.go('QJMO'),
+          onOpenProposalReview: () => widget.navigation.go('QJPA'),
           onOpenEfficiencyAnalysis: () => widget.navigation.go('QJEA'),
           onOpenEfficiencyBossPreview: () {
             setState(() {
@@ -4059,6 +4068,33 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       case 'QJKB':
         return NativeQianjiKbSupervisePage(
           session: widget.session,
+          onBack: widget.navigation.back,
+        );
+      case 'QJTS':
+        return NativeQianjiTaskPeoplePage(
+          session: widget.session,
+          onBack: widget.navigation.back,
+        );
+      case 'QJDR':
+        return NativeQianjiRecordSupervisePage(
+          session: widget.session,
+          kind: QianjiRecordSuperviseKind.dailyReport,
+          onBack: widget.navigation.back,
+        );
+      case 'QJGR':
+        return NativeQianjiRecordSupervisePage(
+          session: widget.session,
+          kind: QianjiRecordSuperviseKind.groupReply,
+          onBack: widget.navigation.back,
+        );
+      case 'QJMO':
+        return NativeQianjiLookupPreviewPage(
+          kind: QianjiLookupKind.monthlyOpinion,
+          onBack: widget.navigation.back,
+        );
+      case 'QJPA':
+        return NativeQianjiLookupPreviewPage(
+          kind: QianjiLookupKind.proposalReview,
           onBack: widget.navigation.back,
         );
       case 'QJEA':
@@ -5618,6 +5654,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJDE',
       'QJSS',
       'QJKB',
+      'QJTS',
+      'QJDR',
+      'QJGR',
+      'QJMO',
+      'QJPA',
       'QJEA',
       'QJEAB',
       'QJUH',
@@ -5715,6 +5756,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'QJDE' ||
         screen == 'QJSS' ||
         screen == 'QJKB' ||
+        screen == 'QJTS' ||
+        screen == 'QJDR' ||
+        screen == 'QJGR' ||
+        screen == 'QJMO' ||
+        screen == 'QJPA' ||
         screen == 'QJEA' ||
         screen == 'QJEAB' ||
         screen == 'QJUH' ||
@@ -5822,6 +5868,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJDE',
       'QJSS',
       'QJKB',
+      'QJTS',
+      'QJDR',
+      'QJGR',
+      'QJMO',
+      'QJPA',
       'QJEA',
       'QJEAB',
       'QJUH',
@@ -5875,6 +5926,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJDE' => const ['QJ', 'QJDE'],
       'QJSS' => const ['QJ', 'QJSS'],
       'QJKB' => const ['QJ', 'QJKB'],
+      'QJTS' => const ['QJ', 'QJTS'],
+      'QJDR' => const ['QJ', 'QJDR'],
+      'QJGR' => const ['QJ', 'QJGR'],
+      'QJMO' => const ['QJ', 'QJMO'],
+      'QJPA' => const ['QJ', 'QJPA'],
       'QJEA' => const ['QJ', 'QJEA'],
       'QJEAB' => const ['QJ', 'QJEAB'],
       'QJUH' => const ['QJ', 'QJUH'],

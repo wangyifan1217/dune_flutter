@@ -12,6 +12,7 @@ void main() {
   test('Tag3DailySnapshot parses confirm flags and sorts periods', () {
     final snap = Tag3DailySnapshot.fromJson({
       'asOfDate': '2026-09-15',
+      'snapshotHint': '该日快照未跑完',
       'rows': [
         {
           'rowKey': '多渠道|亿科景信',
@@ -76,6 +77,7 @@ void main() {
       ],
     });
     expect(snap.rows.length, 3);
+    expect(snap.snapshotHint, '该日快照未跑完');
     expect(snap.confirmableRows.length, 2);
     expect(snap.rows.where((r) => r.isMonthCumulative).first.showConfirmAction, isFalse);
     expect(snap.rows.where((r) => r.isMonthCumulative).first.showCommentAction, isFalse);
@@ -253,6 +255,19 @@ void main() {
         }),
       ]),
       '3 条日行 · 待业务确认 1 · 待运营确认 1 · 已完成 1',
+    );
+    expect(
+      tag3DailySnapshotStatusLine(
+        [
+          Tag3DailyRow.fromJson({
+            'rowKey': 'a',
+            'period': 'DAY',
+            'confirmationStatus': 'WAIT_BUSINESS',
+          }),
+        ],
+        snapshotHint: '该日快照未跑完',
+      ),
+      '1 条日行 · 待业务确认 1 · 该日快照未跑完',
     );
     expect(
       ReconDateItem.fromJson({

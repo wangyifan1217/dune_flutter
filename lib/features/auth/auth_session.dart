@@ -34,6 +34,9 @@ class AuthSession {
     this.fundSecondmentAccess = false,
     this.cashFlowAccess = false,
     this.monthlyBillAccess = false,
+    this.taskLookupAccess = false,
+    this.dailyReportLookupAccess = false,
+    this.groupReplyLookupAccess = false,
     this.contractViewAccess = false,
     this.contractConfigAccess = false,
     this.contractKbSyncAccess = false,
@@ -89,6 +92,15 @@ class AuthSession {
 
   /// 后端下发的 NOVA「月结」看板开关。
   final bool monthlyBillAccess;
+
+  /// 业务查阅「任务」。关闭后入口隐藏，对应接口拒绝访问。
+  final bool taskLookupAccess;
+
+  /// 业务查阅「日报」。
+  final bool dailyReportLookupAccess;
+
+  /// 业务查阅「群响应」。
+  final bool groupReplyLookupAccess;
 
   /// 合同归集查看权限。
   final bool contractViewAccess;
@@ -251,6 +263,15 @@ class AuthSession {
       if (!next.monthlyBillAccess) {
         next = next.copyWith(monthlyBillAccess: true);
       }
+      if (!next.taskLookupAccess) {
+        next = next.copyWith(taskLookupAccess: true);
+      }
+      if (!next.dailyReportLookupAccess) {
+        next = next.copyWith(dailyReportLookupAccess: true);
+      }
+      if (!next.groupReplyLookupAccess) {
+        next = next.copyWith(groupReplyLookupAccess: true);
+      }
       if (!next.workSituationViewAll) {
         next = next.copyWith(workSituationViewAll: true);
       }
@@ -307,6 +328,9 @@ class AuthSession {
     bool? fundSecondmentAccess,
     bool? cashFlowAccess,
     bool? monthlyBillAccess,
+    bool? taskLookupAccess,
+    bool? dailyReportLookupAccess,
+    bool? groupReplyLookupAccess,
     bool? contractViewAccess,
     bool? contractConfigAccess,
     bool? contractKbSyncAccess,
@@ -355,6 +379,11 @@ class AuthSession {
       fundSecondmentAccess: fundSecondmentAccess ?? this.fundSecondmentAccess,
       cashFlowAccess: cashFlowAccess ?? this.cashFlowAccess,
       monthlyBillAccess: monthlyBillAccess ?? this.monthlyBillAccess,
+      taskLookupAccess: taskLookupAccess ?? this.taskLookupAccess,
+      dailyReportLookupAccess:
+          dailyReportLookupAccess ?? this.dailyReportLookupAccess,
+      groupReplyLookupAccess:
+          groupReplyLookupAccess ?? this.groupReplyLookupAccess,
       contractViewAccess: contractViewAccess ?? this.contractViewAccess,
       contractConfigAccess: contractConfigAccess ?? this.contractConfigAccess,
       contractKbSyncAccess: contractKbSyncAccess ?? this.contractKbSyncAccess,
@@ -440,6 +469,9 @@ class AuthSession {
       fundSecondmentAccess: data['fundSecondmentAccess'] == true,
       cashFlowAccess: data['cashFlowAccess'] == true,
       monthlyBillAccess: data['monthlyBillAccess'] == true,
+      taskLookupAccess: data['taskLookupAccess'] == true,
+      dailyReportLookupAccess: data['dailyReportLookupAccess'] == true,
+      groupReplyLookupAccess: data['groupReplyLookupAccess'] == true,
       contractViewAccess: data['contractViewAccess'] == true,
       contractConfigAccess: data['contractConfigAccess'] == true,
       contractKbSyncAccess: data['contractKbSyncAccess'] == true,
@@ -499,6 +531,9 @@ class AuthSession {
       fundSecondmentAccess: claims['fundSecondmentAccess'] == true,
       cashFlowAccess: claims['cashFlowAccess'] == true,
       monthlyBillAccess: claims['monthlyBillAccess'] == true,
+      taskLookupAccess: claims['taskLookupAccess'] == true,
+      dailyReportLookupAccess: claims['dailyReportLookupAccess'] == true,
+      groupReplyLookupAccess: claims['groupReplyLookupAccess'] == true,
       contractViewAccess: claims['contractViewAccess'] == true,
       contractConfigAccess: claims['contractConfigAccess'] == true,
       contractKbSyncAccess: claims['contractKbSyncAccess'] == true,
@@ -564,6 +599,9 @@ class AuthSession {
       'fundSecondmentAccess': fundSecondmentAccess,
       'cashFlowAccess': cashFlowAccess,
       'monthlyBillAccess': monthlyBillAccess,
+      'taskLookupAccess': taskLookupAccess,
+      'dailyReportLookupAccess': dailyReportLookupAccess,
+      'groupReplyLookupAccess': groupReplyLookupAccess,
       'contractViewAccess': contractViewAccess,
       'contractConfigAccess': contractConfigAccess,
       'contractKbSyncAccess': contractKbSyncAccess,
@@ -618,6 +656,9 @@ class AuthSession {
       fundSecondmentAccess: json['fundSecondmentAccess'] == true,
       cashFlowAccess: json['cashFlowAccess'] == true,
       monthlyBillAccess: json['monthlyBillAccess'] == true,
+      taskLookupAccess: json['taskLookupAccess'] == true,
+      dailyReportLookupAccess: json['dailyReportLookupAccess'] == true,
+      groupReplyLookupAccess: json['groupReplyLookupAccess'] == true,
       contractViewAccess: json['contractViewAccess'] == true,
       contractConfigAccess: json['contractConfigAccess'] == true,
       contractKbSyncAccess: json['contractKbSyncAccess'] == true,

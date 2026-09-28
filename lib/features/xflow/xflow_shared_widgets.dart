@@ -1372,10 +1372,10 @@ class XflowFormCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
         color: XfProposalUi.card,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(21),
         border: Border.all(color: XfProposalUi.lineSoft),
       ),
       child: Column(
@@ -1387,8 +1387,8 @@ class XflowFormCard extends StatelessWidget {
                 child: Text(
                   title,
                   style: DunesTypography.sans(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
                     color: XfProposalUi.ink,
                   ),
                 ),

@@ -1202,6 +1202,36 @@ void main() {
       expect(form['salesScale'], 300);
       expect(form['revenue'], 272.6);
       expect(form['profit'], 187.6);
+      final manualRevenue = proposalApplyEstimatedFinanceCosts({
+        'revenue': 10,
+        'revenueManual': true,
+        'couponProcurementCost': 80,
+        'projectCost': 5,
+        'skuDetails': [
+          {
+            'id': 'sku-1',
+            'settlements': [
+              {
+                'id': 'st-1',
+                'scale': '100',
+                'settleRatio': '0.926',
+                'taxRate': '6%',
+              },
+            ],
+          },
+          {
+            'id': 'sku-2',
+            'settlements': [
+              {'id': 'st-2', 'scale': '200', 'settleRatio': '90%'},
+            ],
+          },
+        ],
+      });
+      expect(manualRevenue['revenue'], 10);
+      expect(manualRevenue['revenueManual'], isTrue);
+      expect(manualRevenue['salesScale'], 300);
+      expect(manualRevenue['profit'], -75);
+      expect(manualRevenue['margin'], -25);
       expect(form['margin'], 62.53);
       expect(form['taxCostItemAmounts']['印花税'], 0.18);
       expect(form['taxCostItemAmounts']['增值税及附加（能源）'], 12.61);
@@ -2426,11 +2456,7 @@ void main() {
         'costItems': ['推广费', '平台服务费', '专项活动费'],
       },
     });
-    expect(configured.resolvedProjectCostItems, [
-      '推广费',
-      '平台交易服务费',
-      '专项活动费',
-    ]);
+    expect(configured.resolvedProjectCostItems, ['推广费', '平台交易服务费', '专项活动费']);
     final form = {
       'salesScale': 100,
       'skuDetails': [
@@ -2513,19 +2539,18 @@ void main() {
         {'id': 'st-cost', 'kind': 'cost', 'settleRatio': '0.8'},
       ],
     });
-    final money = proposalSkuSettleMoney(sku, form: {
-      'salesScale': 100,
-      'skuDetails': [sku.toJson()],
-    });
+    final money = proposalSkuSettleMoney(
+      sku,
+      form: {
+        'salesScale': 100,
+        'skuDetails': [sku.toJson()],
+      },
+    );
     expect(money.hasBoth, isTrue);
     expect(money.scale, 100);
     expect(money.income, 90);
     expect(money.cost, 80);
-    expect(proposalSkuSettleMoneyBits(money), [
-      '收入 90万',
-      '成本 80万',
-      '利润 10万',
-    ]);
+    expect(proposalSkuSettleMoneyBits(money), ['收入 90万', '成本 80万', '利润 10万']);
 
     final ratioOnly = proposalSkuSettleMoney(sku, form: {});
     expect(ratioOnly.scale, 0);
@@ -2713,26 +2738,29 @@ void main() {
     expect(proposalProductScaleRollup(form)?.revenue, closeTo(131.76, 0.01));
   });
 
-  test('different ratios without product scales are not summed on the total', () {
-    final form = {
-      'salesScale': 6000,
-      'skuDetails': [
-        {
-          'id': 'sku-1',
-          'settlements': [
-            {'id': 'st-1', 'settleRatio': '0.9'},
-          ],
-        },
-        {
-          'id': 'sku-2',
-          'settlements': [
-            {'id': 'st-2', 'settleRatio': '0.8'},
-          ],
-        },
-      ],
-    };
-    expect(proposalProductScaleRollup(form)?.revenue, 0);
-  });
+  test(
+    'different ratios without product scales are not summed on the total',
+    () {
+      final form = {
+        'salesScale': 6000,
+        'skuDetails': [
+          {
+            'id': 'sku-1',
+            'settlements': [
+              {'id': 'st-1', 'settleRatio': '0.9'},
+            ],
+          },
+          {
+            'id': 'sku-2',
+            'settlements': [
+              {'id': 'st-2', 'settleRatio': '0.8'},
+            ],
+          },
+        ],
+      };
+      expect(proposalProductScaleRollup(form)?.revenue, 0);
+    },
+  );
 
   test('project cost matches 成本类型 without payable bill path', () {
     final form = {
@@ -2951,6 +2979,44 @@ void main() {
       ).map((item) => item['id']),
       [91, 92],
     );
+  });
+
+  test('removing the last contract file does not bring it back', () {
+    final uploaded = proposalIntakeSetContractFiles(
+      {'purchaseMode': '未签署合同'},
+      prefix: 'purchase',
+      files: [
+        {'fileName': '采购合同.pdf', 'objectKey': 'proposals/a.pdf'},
+      ],
+    );
+    expect(uploaded['purchaseFileName'], '采购合同.pdf');
+
+    final cleared = proposalIntakeSetContractFiles(
+      uploaded,
+      prefix: 'purchase',
+      files: const [],
+    );
+    expect(proposalIntakeContractFiles(cleared, 'purchase'), isEmpty);
+    expect(cleared['purchaseFileName'], '');
+    expect(cleared['purchaseObjectKey'], '');
+
+    final fromRef = proposalIntakeSetContractFiles(
+      {
+        'purchaseContractIds': [91],
+        'purchaseContracts': [
+          {
+            'id': 91,
+            'files': [
+              {'fileName': '框架.pdf', 'objectKey': 'contracts/a.pdf'},
+            ],
+          },
+        ],
+      },
+      prefix: 'purchase',
+      files: const [],
+    );
+    expect(proposalIntakeContractFiles(fromRef, 'purchase'), isEmpty);
+    expect(fromRef['purchaseContractIds'], [91]);
   });
 
   test('legacy single contract file still counts as uploaded', () {
@@ -4299,7 +4365,10 @@ void main() {
       ProposalIntakeProgressState.current,
     );
     expect(_progressById(steps, 'initiate').statusText, '填写中');
-    expect(_progressById(steps, 'initiate').action, '填写市场、科技与产品 · 点右上角「通知财务填写」');
+    expect(
+      _progressById(steps, 'initiate').action,
+      '填写市场、科技与产品 · 点右上角「通知财务填写」',
+    );
     expect(
       _progressById(steps, 'initiate').time,
       formatProposalIntakeProgressTime('2026-09-04T02:48:00Z'),
@@ -4483,7 +4552,10 @@ void main() {
       _progressById(steps, 'review_finance_module').state,
       ProposalIntakeProgressState.current,
     );
-    expect(_progressById(steps, 'review_finance_module').statusText, '请 邓艳丽 点击复核');
+    expect(
+      _progressById(steps, 'review_finance_module').statusText,
+      '请 邓艳丽 点击复核',
+    );
     expect(
       _progressById(steps, 'notify_president').state,
       ProposalIntakeProgressState.pending,
@@ -4905,11 +4977,7 @@ void main() {
         {'id': 'main-1', 'productName': '权益主产品'},
       ],
       'childProducts': [
-        {
-          'id': 'child-1',
-          'parentSkuId': 'main-1',
-          'faceValue': '100',
-        },
+        {'id': 'child-1', 'parentSkuId': 'main-1', 'faceValue': '100'},
       ],
     };
     final issues = proposalIntakeSkuSettleIssues(
@@ -5048,50 +5116,53 @@ void main() {
     },
   );
 
-  test('purchase persist keeps market and finance remark after unreviewed merge', () {
-    const review = {
-      'marketCompleted': false,
-      'financeCompleted': true,
-      'purchaseContractCompleted': true,
-      'salesContractCompleted': true,
-    };
-    final form = proposalIntakeBuildPersistForm(
-      {
-        'salesPolicy': '新销售政策',
-        'supplierPolicy': '新供给政策',
-        'executionPlan': '新执行计划',
-        'riskPoints': '新风险点',
-        'purchaseProducts': <String>['现金券'],
-        'supplyProducts': [
-          {'id': 'sp-1', 'productName': '供给A'},
-        ],
-        'financeRemark': '采购财务备注',
-        'purchaseName': '应保持合同名',
-      },
-      keepUnreviewed: (current) => proposalIntakeKeepUnreviewedForm(
-        baseline: {
-          'salesPolicy': '',
-          'supplierPolicy': '',
-          'executionPlan': '',
-          'riskPoints': '',
-          'purchaseProducts': <String>[],
-          'supplyProducts': <Map<String, dynamic>>[],
-          'financeRemark': '',
-          'purchaseName': '旧合同',
+  test(
+    'purchase persist keeps market and finance remark after unreviewed merge',
+    () {
+      const review = {
+        'marketCompleted': false,
+        'financeCompleted': true,
+        'purchaseContractCompleted': true,
+        'salesContractCompleted': true,
+      };
+      final form = proposalIntakeBuildPersistForm(
+        {
+          'salesPolicy': '新销售政策',
+          'supplierPolicy': '新供给政策',
+          'executionPlan': '新执行计划',
+          'riskPoints': '新风险点',
+          'purchaseProducts': <String>['现金券'],
+          'supplyProducts': [
+            {'id': 'sp-1', 'productName': '供给A'},
+          ],
+          'financeRemark': '采购财务备注',
+          'purchaseName': '应保持合同名',
         },
-        current: current,
-        review: review,
-      ),
-    );
-    expect(form['salesPolicy'], '新销售政策');
-    expect(form['supplierPolicy'], '新供给政策');
-    expect(form['executionPlan'], '新执行计划');
-    expect(form['riskPoints'], '新风险点');
-    expect(form['purchaseProducts'], <String>['现金券']);
-    expect((form['supplyProducts'] as List).single['productName'], '供给A');
-    expect(form['financeRemark'], '采购财务备注');
-    expect(form['purchaseName'], '旧合同');
-  });
+        keepUnreviewed: (current) => proposalIntakeKeepUnreviewedForm(
+          baseline: {
+            'salesPolicy': '',
+            'supplierPolicy': '',
+            'executionPlan': '',
+            'riskPoints': '',
+            'purchaseProducts': <String>[],
+            'supplyProducts': <Map<String, dynamic>>[],
+            'financeRemark': '',
+            'purchaseName': '旧合同',
+          },
+          current: current,
+          review: review,
+        ),
+      );
+      expect(form['salesPolicy'], '新销售政策');
+      expect(form['supplierPolicy'], '新供给政策');
+      expect(form['executionPlan'], '新执行计划');
+      expect(form['riskPoints'], '新风险点');
+      expect(form['purchaseProducts'], <String>['现金券']);
+      expect((form['supplyProducts'] as List).single['productName'], '供给A');
+      expect(form['financeRemark'], '采购财务备注');
+      expect(form['purchaseName'], '旧合同');
+    },
+  );
 
   test(
     'estimating keeps user-edited main settle fields over stale productFinance',

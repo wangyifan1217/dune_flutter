@@ -248,6 +248,7 @@ class _NativeDailyReconciliationPageState
             createdAt: now.toIso8601String(),
           ),
         ],
+        snapshotHint: current.snapshotHint,
       );
     });
   }
@@ -503,7 +504,10 @@ class _NativeDailyReconciliationPageState
                   Text(
                     snap == null
                         ? '右侧可直接确认，意见选填。'
-                        : tag3DailySnapshotStatusLine(snap.rows),
+                        : tag3DailySnapshotStatusLine(
+                            snap.rows,
+                            snapshotHint: snap.snapshotHint,
+                          ),
                     style: DunesTypography.sans(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,

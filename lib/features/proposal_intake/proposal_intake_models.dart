@@ -112,7 +112,8 @@ double proposalIntakeParseFaceNumber(String raw) {
 /// 测算用面值：现金券取面值；满减券取满额（与销售规模同口径）。
 double proposalIntakeSkuSettleFace(ProposalSkuDetailRow sku) {
   final face = sku.faceValue.trim();
-  final discount = sku.resolvedCouponKind == kProposalCouponKindDiscount ||
+  final discount =
+      sku.resolvedCouponKind == kProposalCouponKindDiscount ||
       proposalIntakeIsDiscountFace(face);
   if (discount) {
     final split = proposalIntakeSplitDiscountFace(face);
@@ -1164,8 +1165,7 @@ class ProposalIntakeOptions {
   List<String> get resolvedSettleCycles =>
       settleCycles.isNotEmpty ? settleCycles : kProposalPreSettleCycles;
 
-  List<CatalogRef> get resolvedBusinessPlatforms =>
-      businessPlatforms.isNotEmpty
+  List<CatalogRef> get resolvedBusinessPlatforms => businessPlatforms.isNotEmpty
       ? businessPlatforms
       : [
           for (final name in kProposalDefaultBusinessPlatforms)
@@ -1176,9 +1176,7 @@ class ProposalIntakeOptions {
     final names = unitPriceFormulas.isNotEmpty
         ? unitPriceFormulas
         : kProposalDefaultUnitPriceFormulas;
-    return [
-      for (final name in names) CatalogRef(code: name, name: name),
-    ];
+    return [for (final name in names) CatalogRef(code: name, name: name)];
   }
 
   List<String> get resolvedProjectCostItems =>
@@ -1555,11 +1553,30 @@ Map<String, dynamic> proposalIntakeSetContractFiles(
   required List<Map<String, dynamic>> files,
 }) {
   final next = Map<String, dynamic>.from(form);
-  next['${prefix}Files'] = [
+  final kept = [
     for (final file in files)
       if (!proposalIntakeContractFileIsEmpty(file))
         proposalIntakeContractFileMap(file),
   ];
+  next['${prefix}Files'] = kept;
+  // 空列表时 proposalIntakeContractFiles 会回退到合同引用的 files 和旧的单文件字段，
+  // 不清掉的话刚删除的最后一个文件会被读回来。
+  if (kept.isEmpty) {
+    next['${prefix}FileName'] = '';
+    next['${prefix}ObjectKey'] = '';
+    next['${prefix}FileUrl'] = '';
+    next['${prefix}FileSize'] = null;
+    final refs = next['${prefix}Contracts'];
+    if (refs is List) {
+      next['${prefix}Contracts'] = [
+        for (final ref in refs)
+          if (ref is Map)
+            (Map<String, dynamic>.from(ref)..remove('files'))
+          else
+            ref,
+      ];
+    }
+  }
   return proposalIntakeSyncContractCollections(next, prefix);
 }
 
@@ -2419,10 +2436,8 @@ String proposalIntakeTaskBannerBody(
     'president_confirm' => '审批进度和其他人看到的一样。看完各板块后，到页面底部点「确认通过」或「驳回」。',
     'fill' => '先填市场部和产品，科技字段一并填。填完后点右上角「通知财务填写」。定位条带「填」的就是当前板块。',
     'fill_tech' => '到科技部填写平台、能力和产品。财务技术接口由财务部负责人二填写。定位条带「填」的就是当前板块。',
-    'notify_market2' =>
-      '等财务部负责人二填完财务技术接口和项目成本后，点右上角「确认并提交复核」。',
-    'fill_finance_interface' =>
-        '到科技部勾选财务技术接口，再到财务部核对项目成本。定位条带「填」的就是当前板块。',
+    'notify_market2' => '等财务部负责人二填完财务技术接口和项目成本后，点右上角「确认并提交复核」。',
+    'fill_finance_interface' => '到科技部勾选财务技术接口，再到财务部核对项目成本。定位条带「填」的就是当前板块。',
     'revise' => '最终人驳回后流程从头开始。改完后重新通知财务填写。',
     'revise_module' => '按驳回意见改对应板块，改完后点右上角重新提交复核。',
     'start_review' => '内容改完后点右上角重新提交复核。',
@@ -2794,9 +2809,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       id: 'start_review',
       role: inStartReview ? '提交人' : '填写人',
       name: initiatorName,
-      action: inStartReview
-          ? '重新提交复核 · 点右上角重新提交复核'
-          : '财务填完后，点右上角「确认并提交复核」',
+      action: inStartReview ? '重新提交复核 · 点右上角重新提交复核' : '财务填完后，点右上角「确认并提交复核」',
       state: startReviewState(),
       time: handoffAt,
       currentTime: handoffAt,
@@ -2821,9 +2834,7 @@ List<ProposalIntakeProgressStep> proposalIntakeProgressSteps({
       id: 'review_contract',
       role: '财务部负责人二',
       name: ownerName('financeOwner2'),
-      action: purchase
-          ? '到合同处点「点此复核」'
-          : '到主产品合计及产品「填写结算」的收入/成本旁点「点此复核」',
+      action: purchase ? '到合同处点「点此复核」' : '到主产品合计及产品「填写结算」的收入/成本旁点「点此复核」',
       state: reviewerState(
         'purchaseContractCompleted',
         rejected: contractRejected,
@@ -4180,10 +4191,7 @@ bool proposalIntakeSettleIsTier(ProposalFinanceSettleTerms terms) {
 }
 
 const kProposalDefaultBusinessPlatforms = <String>['能源', '出行'];
-const kProposalDefaultUnitPriceFormulas = <String>[
-  '按核销统计结算单价',
-  '按销售统计结算单价',
-];
+const kProposalDefaultUnitPriceFormulas = <String>['按核销统计结算单价', '按销售统计结算单价'];
 
 /// 结算比例和结算单价只能填一项：填了比例就清掉单价，反之亦然。
 ProposalFinanceSettleTerms proposalIntakeApplySettleXor(
@@ -4601,6 +4609,7 @@ const kProposalProductFinanceChildren = 'children';
 const _kProposalProductFinanceFields = <String>[
   'salesScale',
   'revenue',
+  'revenueManual',
   'couponProcurementCost',
   'profit',
   'margin',
@@ -5585,7 +5594,9 @@ const _kDerivedFinanceMetricKeys = {
   'margin',
 };
 
-List<String> proposalIntakeLegacySkuSettleReviewKeys(Map<String, dynamic> form) {
+List<String> proposalIntakeLegacySkuSettleReviewKeys(
+  Map<String, dynamic> form,
+) {
   return [
     for (final sku in proposalIntakeAllSellableSkus(form))
       for (final settle in proposalIntakeSkuSettlements(sku))

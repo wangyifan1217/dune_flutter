@@ -266,10 +266,10 @@ class XflowApprovalFlowCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 15),
       decoration: BoxDecoration(
         color: XfProposalUi.card,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: XfProposalUi.lineSoft, width: 0.6),
       ),
       child: Column(children: children),
@@ -465,8 +465,7 @@ class _FlowTrackRow extends StatelessWidget {
                                 child: Text(
                                   data.role!,
                                   style: TextStyle(
-                                    fontFamily: 'monospace',
-                                    fontSize: 11,
+                                    fontSize: 10,
                                     fontWeight: FontWeight.w700,
                                     color: data.state == XflowApprovalFlowStepState.done
                                         ? const Color(0xFF085041)
@@ -481,8 +480,7 @@ class _FlowTrackRow extends StatelessWidget {
                       Text(
                         data.time,
                         style: const TextStyle(
-                          fontFamily: 'monospace',
-                          fontSize: 11,
+                          fontSize: 10,
                           color: XfProposalUi.mute2,
                           letterSpacing: 0.2,
                         ),
@@ -506,8 +504,7 @@ class _FlowTrackRow extends StatelessWidget {
                         Text(
                           formatDetailPlainText(data.comment),
                           style: TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 12.5,
+                            fontSize: 12,
                             height: 1.65,
                             color: commentStyle.fg,
                             fontWeight: data.state == XflowApprovalFlowStepState.current
@@ -563,7 +560,7 @@ class _FlowDot extends StatelessWidget {
           decoration: BoxDecoration(
             color: XfProposalUi.card,
             shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF3B82F6), width: 2),
+            border: Border.all(color: const Color(0xFF7054D8), width: 2),
           ),
         );
       case XflowApprovalFlowStepState.rejected:
@@ -595,7 +592,7 @@ Color _statusColor(XflowApprovalFlowStepState state) {
     case XflowApprovalFlowStepState.done:
       return const Color(0xFF4A7A3E);
     case XflowApprovalFlowStepState.current:
-      return const Color(0xFF3B82F6);
+      return const Color(0xFF7054D8);
     case XflowApprovalFlowStepState.rejected:
       return const Color(0xFFB4443D);
     case XflowApprovalFlowStepState.pending:
@@ -613,9 +610,9 @@ Color _statusColor(XflowApprovalFlowStepState state) {
       );
     case XflowApprovalFlowStepState.current:
       return (
-        bg: const Color(0xFFEFF6FF),
-        fg: const Color(0xFF1D4ED8),
-        border: const Color(0xFF3B82F6),
+        bg: const Color(0xFFF7F4FE),
+        fg: const Color(0xFF5F47B2),
+        border: const Color(0xFFB4A5E8),
       );
     case XflowApprovalFlowStepState.rejected:
       return (

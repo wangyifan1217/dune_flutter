@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/navigation/navigation_controller.dart';
-import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
@@ -15,6 +14,7 @@ import 'task_todo_actions.dart';
 import 'xflow_detail_comments.dart';
 import 'xflow_detail_logic.dart';
 import 'xflow_detail_widgets.dart';
+import 'xflow_form_styles.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
@@ -545,7 +545,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
         ? template!.title.trim()
         : (detail.title.trim().isEmpty ? '审批详情' : detail.title.trim());
     final submitter = _submitterName.trim();
-    final title = submitter.isEmpty ? formTitle : '$submitter - $formTitle';
+    final title = formTitle;
     final code = detail.businessId > 0
         ? 'S-${detail.businessId}'
         : (detail.templateKey.isEmpty ? '—' : detail.templateKey);
@@ -589,7 +589,7 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
         submitter.isEmpty ? formTitle : '$submitter - $formTitle';
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return ColoredBox(
-      color: DunesColors.bgApp,
+      color: XfProposalUi.bg,
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -617,10 +617,10 @@ class _NativeXflowSubmissionPageState extends State<NativeXflowSubmissionPage> {
                         child: ListView(
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
-                      padding: const EdgeInsets.all(14),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                       children: [
                         if (hero != null)
-                          XfDetHero(detail: hero, showStatus: false),
+                          XfDetHero(detail: hero),
                         if (bundle != null) ...[
                           XfDetClosedBanner(detail: bundle.detail),
                           XfDetRejectBanner(

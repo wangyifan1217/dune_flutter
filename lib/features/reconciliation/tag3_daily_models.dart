@@ -311,12 +311,14 @@ class Tag3DailySnapshot {
     required this.rows,
     required this.assignees,
     this.comments = const [],
+    this.snapshotHint = '',
   });
 
   final String asOfDate;
   final List<Tag3DailyRow> rows;
   final List<Tag3DailyAssignee> assignees;
   final List<Tag3DailyComment> comments;
+  final String snapshotHint;
 
   factory Tag3DailySnapshot.fromJson(Map<String, dynamic> json) {
     final rawRows = json['rows'];
@@ -342,6 +344,7 @@ class Tag3DailySnapshot {
                 Tag3DailyComment.fromJson(Map<String, dynamic>.from(item)),
             ]
           : const [],
+      snapshotHint: '${json['snapshotHint'] ?? ''}'.trim(),
     );
   }
 
@@ -414,6 +417,7 @@ class Tag3DailyDrilldown {
     required this.totalSales,
     required this.totalWriteOff,
     required this.totalProfit,
+    this.snapshotHint = '',
   });
 
   final String metricKey;
@@ -421,6 +425,7 @@ class Tag3DailyDrilldown {
   final double totalSales;
   final double totalWriteOff;
   final double totalProfit;
+  final String snapshotHint;
 
   factory Tag3DailyDrilldown.fromJson(Map<String, dynamic> json) {
     final raw = json['items'];
@@ -435,6 +440,7 @@ class Tag3DailyDrilldown {
       totalSales: tag3DailyNum(json['totalSales']),
       totalWriteOff: tag3DailyNum(json['totalWriteOff']),
       totalProfit: tag3DailyNum(json['totalProfit']),
+      snapshotHint: '${json['snapshotHint'] ?? ''}'.trim(),
     );
   }
 }
@@ -471,10 +477,16 @@ String tag3DailyDateProgressLine({
   return bits.join(' · ');
 }
 
-String tag3DailySnapshotStatusLine(List<Tag3DailyRow> rows) {
+String tag3DailySnapshotStatusLine(
+  List<Tag3DailyRow> rows, {
+  String snapshotHint = '',
+}) {
   final day = [for (final row in rows) if (!row.isMonthCumulative) row];
   if (day.isEmpty) {
-    return rows.isEmpty ? '暂无日清月结明细' : '本月累计只展示，暂无日行';
+    return _withTag3DailySnapshotHint(
+      rows.isEmpty ? '暂无日清月结明细' : '本月累计只展示，暂无日行',
+      snapshotHint,
+    );
   }
   var waitBiz = 0;
   var waitOps = 0;
@@ -492,12 +504,21 @@ String tag3DailySnapshotStatusLine(List<Tag3DailyRow> rows) {
         waitBiz++;
     }
   }
-  return [
-    '${day.length} 条日行',
-    if (waitBiz > 0) '待业务确认 $waitBiz',
-    if (waitOps > 0) '待运营确认 $waitOps',
-    if (done > 0) '已完成 $done',
-  ].join(' · ');
+  return _withTag3DailySnapshotHint(
+    [
+      '${day.length} 条日行',
+      if (waitBiz > 0) '待业务确认 $waitBiz',
+      if (waitOps > 0) '待运营确认 $waitOps',
+      if (done > 0) '已完成 $done',
+    ].join(' · '),
+    snapshotHint,
+  );
+}
+
+String _withTag3DailySnapshotHint(String line, String snapshotHint) {
+  final hint = snapshotHint.trim();
+  if (hint.isEmpty) return line;
+  return '$line · $hint';
 }
 
 List<Tag3DailyRow> sortTag3DailyRows(List<Tag3DailyRow> rows) {

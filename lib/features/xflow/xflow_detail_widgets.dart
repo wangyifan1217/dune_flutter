@@ -28,7 +28,7 @@ class XfDetCard extends StatelessWidget {
     this.title,
     this.icon,
     this.marginBottom = 10,
-    this.padding = const EdgeInsets.all(12),
+    this.padding = const EdgeInsets.all(17),
     this.decoration,
   });
 
@@ -48,8 +48,8 @@ class XfDetCard extends StatelessWidget {
           decoration ??
           BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: DunesColors.borderSoft),
+            borderRadius: BorderRadius.circular(21),
+            border: Border.all(color: const Color(0xFFECEAF1)),
           ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -60,14 +60,33 @@ class XfDetCard extends StatelessWidget {
               child: Row(
                 children: [
                   if (icon != null) ...[
-                    Icon(icon, size: 16, color: DunesColors.text2),
+                    Container(
+                      width: 27,
+                      height: 27,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1EEFB),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(icon, size: 15, color: const Color(0xFF7054D8)),
+                    ),
                     const SizedBox(width: 6),
+                  ] else ...[
+                    Container(
+                      width: 3,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF8064E6),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                   ],
                   Text(
                     title!,
                     style: DunesTypography.sans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
                       color: DunesColors.text,
                     ),
                   ),
@@ -81,7 +100,7 @@ class XfDetCard extends StatelessWidget {
   }
 }
 
-/// `.xf-det-hero` — 浅色渐变，非紫色
+/// 审批详情页主信息卡片。
 class XfDetHero extends StatelessWidget {
   const XfDetHero({
     super.key,
@@ -90,7 +109,7 @@ class XfDetHero extends StatelessWidget {
   });
 
   final XflowProposalDetail detail;
-  /// 动态审批详情可不展示状态角标（状态已在审批进度区体现）。
+  /// 可选隐藏状态角标；详情页默认同时展示状态和流程进度。
   final bool showStatus;
 
   @override
@@ -105,6 +124,9 @@ class XfDetHero extends StatelessWidget {
     final coverageRaw = raw['coverage'] ?? detail.formValues['provinces'];
     final coverageText = fmtList(coverageRaw).trim();
     final tone = detailStatusTone(detail.status);
+    final amount = detail.amountText.trim();
+    final owner = detail.ownerName.trim();
+    final createdAt = fmtDetailTime(raw['createdAt']);
 
     final chips = <Widget>[
       if (tag1.isNotEmpty && tag1 != '—')
@@ -117,15 +139,21 @@ class XfDetHero extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(20, 19, 20, 18),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFFEDE4D6), Colors.white],
+          colors: [Color(0xFF30235F), Color(0xFF51408F), Color(0xFF7058B6)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: DunesColors.borderSoft),
+        borderRadius: BorderRadius.circular(25),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x2630235F),
+            blurRadius: 20,
+            offset: Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -136,30 +164,77 @@ class XfDetHero extends StatelessWidget {
               Text(
                 detail.code,
                 style: DunesTypography.mono(
-                  fontSize: 11,
-                  color: DunesColors.text3,
+                  fontSize: 10,
+                  color: const Color(0xFFCFC6EA),
                 ),
               ),
               if (showStatus)
                 _StatusPill(label: detailStatusLabel(detail.status), tone: tone),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 14),
           Text(
             detail.title.isEmpty ? '销售提案' : detail.title,
             style: DunesTypography.sans(
-              fontSize: 16,
+              fontSize: 20,
               fontWeight: FontWeight.w700,
               height: 1.35,
-              color: DunesColors.text,
+              color: Colors.white,
             ),
           ),
+          if (amount.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: Text(
+                    amount,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: DunesTypography.sans(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: -0.8,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    '申请金额',
+                    style: DunesTypography.sans(
+                      fontSize: 11,
+                      color: const Color(0xFFD5CDEB),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (chips.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 13),
             Wrap(
-              spacing: 8,
-              runSpacing: 4,
+              spacing: 7,
+              runSpacing: 6,
               children: chips,
+            ),
+          ],
+          if (owner.isNotEmpty || createdAt.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Container(height: 1, color: Colors.white.withValues(alpha: 0.16)),
+            const SizedBox(height: 13),
+            Row(
+              children: [
+                if (owner.isNotEmpty) ...[
+                  Expanded(child: _heroMeta('申请人', owner)),
+                  const Spacer(),
+                ],
+                if (createdAt.isNotEmpty)
+                  _heroMeta('提交时间', createdAt, align: CrossAxisAlignment.end),
+              ],
             ),
           ],
         ],
@@ -171,11 +246,44 @@ class XfDetHero extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 12, color: DunesColors.text2),
+        Icon(icon, size: 12, color: const Color(0xFFE2D9F8)),
         const SizedBox(width: 4),
         Text(
           text,
-          style: DunesTypography.sans(fontSize: 11, color: DunesColors.text2),
+          style: DunesTypography.sans(
+            fontSize: 10,
+            color: const Color(0xFFE2D9F8),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _heroMeta(
+    String label,
+    String value, {
+    CrossAxisAlignment align = CrossAxisAlignment.start,
+  }) {
+    return Column(
+      crossAxisAlignment: align,
+      children: [
+        Text(
+          label,
+          style: DunesTypography.sans(
+            fontSize: 9,
+            color: const Color(0xFFBFB4DE),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: DunesTypography.sans(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
         ),
       ],
     );
@@ -886,14 +994,45 @@ class _SectionBlockState extends State<_SectionBlock> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '${widget.section.title} · ${items.length} 项',
-            style: DunesTypography.sans(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            children: [
+              Container(
+                width: 3,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8064E6),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  widget.section.title,
+                  style: DunesTypography.sans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF292531),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1EEFB),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${items.length} 项',
+                  style: DunesTypography.sans(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF7054D8),
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 13),
           for (final item in visible)
             item.expandable
                 ? XfDetKvExpand(item: item, service: widget.service)
@@ -966,23 +1105,21 @@ class XfDetKv extends StatelessWidget {
     final text = formatDetailPlainText(value);
     final long = !linkStyle && isLongDetailPlainText(text);
     final valueStyle = DunesTypography.sans(
-      fontSize: 14,
-      height: long ? 1.7 : 1.45,
-      fontWeight: long ? FontWeight.w400 : FontWeight.w500,
-      color: linkStyle ? DunesColors.accent : DunesColors.text,
+      fontSize: 13,
+      height: long ? 1.65 : 1.45,
+      fontWeight: long ? FontWeight.w400 : FontWeight.w600,
+      color: linkStyle ? const Color(0xFF7054D8) : DunesColors.text,
     ).copyWith(
       decoration: linkStyle ? TextDecoration.underline : TextDecoration.none,
-      decorationColor: linkStyle ? DunesColors.accent : null,
+      decorationColor: linkStyle ? const Color(0xFF7054D8) : null,
     );
     final body = Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(13, 11, 13, 12),
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: DunesColors.borderSoft.withValues(alpha: 0.7),
-          ),
-        ),
+        color: const Color(0xFFF8F7FB),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: long
           ? Column(
@@ -991,11 +1128,12 @@ class XfDetKv extends StatelessWidget {
                 Text(
                   label,
                   style: DunesTypography.sans(
-                    fontSize: 13,
-                    color: DunesColors.text2,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF8D879A),
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 7),
                 SelectableText(
                   text,
                   textAlign: TextAlign.left,
@@ -1003,26 +1141,22 @@ class XfDetKv extends StatelessWidget {
                 ),
               ],
             )
-          : Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 140),
-                  child: Text(
-                    label,
-                    style: DunesTypography.sans(
-                      fontSize: 14,
-                      color: DunesColors.text2,
-                    ),
+                Text(
+                  label,
+                  style: DunesTypography.sans(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF8D879A),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    text,
-                    textAlign: TextAlign.right,
-                    style: valueStyle,
-                  ),
+                const SizedBox(height: 6),
+                Text(
+                  text,
+                  textAlign: TextAlign.left,
+                  style: valueStyle,
                 ),
               ],
             ),
@@ -1032,6 +1166,7 @@ class XfDetKv extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
         child: body,
       ),
     );
@@ -1055,51 +1190,54 @@ class _XfDetKvExpandState extends State<XfDetKvExpand> {
   @override
   Widget build(BuildContext context) {
     return Container(
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: DunesColors.borderSoft.withValues(alpha: 0.7),
-          ),
-        ),
+        color: const Color(0xFFF8F7FB),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
         children: [
           InkWell(
             onTap: () => setState(() => _open = !_open),
+            borderRadius: BorderRadius.circular(14),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
+              padding: const EdgeInsets.fromLTRB(13, 11, 13, 11),
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      widget.item.label,
-                      style: DunesTypography.sans(
-                        fontSize: 14,
-                        color: DunesColors.text2,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.item.label,
+                          style: DunesTypography.sans(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF8D879A),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          widget.item.value,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: DunesTypography.sans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF292531),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      widget.item.value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.right,
-                      style: DunesTypography.sans(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
                   AnimatedRotation(
                     turns: _open ? 0.5 : 0,
                     duration: const Duration(milliseconds: 200),
-                    child: Icon(
+                    child: const Icon(
                       Icons.expand_more,
                       size: 18,
-                      color: DunesColors.text3,
+                      color: Color(0xFF8D879A),
                     ),
                   ),
                 ],
@@ -1108,7 +1246,7 @@ class _XfDetKvExpandState extends State<XfDetKvExpand> {
           ),
           if (_open)
             Padding(
-              padding: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.fromLTRB(13, 0, 13, 12),
               child: _ExpandBody(item: widget.item, service: widget.service),
             ),
         ],
@@ -1950,9 +2088,9 @@ class XfDetApproveDock extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: DunesColors.bgApp,
+        color: Colors.white.withValues(alpha: 0.96),
         border: Border(
-          top: BorderSide(color: DunesColors.borderSoft.withValues(alpha: 0.9)),
+          top: BorderSide(color: const Color(0xFFECEAF1).withValues(alpha: 0.9)),
         ),
       ),
       child: Padding(
@@ -2084,20 +2222,16 @@ class _XfDetApproveCardState extends State<XfDetApproveCard> {
   Widget build(BuildContext context) {
     return XfDetCard(
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFFF8F6), Colors.white],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFF0C4BC), width: 1.5),
+        color: const Color(0xFFFAF9FD),
+        borderRadius: BorderRadius.circular(21),
+        border: Border.all(color: const Color(0xFFE4DEF5)),
       ),
       title: '待您审批',
       icon: Icons.gavel_outlined,
       marginBottom: 0,
       padding: widget.compact
-          ? const EdgeInsets.fromLTRB(12, 10, 12, 12)
-          : const EdgeInsets.all(12),
+          ? const EdgeInsets.fromLTRB(16, 14, 16, 15)
+          : const EdgeInsets.all(17),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2126,10 +2260,17 @@ class _XfDetApproveCardState extends State<XfDetApproveCard> {
               ),
               filled: true,
               fillColor: Colors.white,
-              contentPadding: const EdgeInsets.all(10),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 11,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(13),
+                borderSide: const BorderSide(color: Color(0xFFB4A5E8)),
+              ),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: DunesColors.borderSoft),
+                borderRadius: BorderRadius.circular(13),
+                borderSide: const BorderSide(color: Color(0xFFE5E1EE)),
               ),
             ),
           ),
@@ -2179,19 +2320,19 @@ class _ApvBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = approve ? DunesColors.accent : Colors.white;
+    final bg = approve ? const Color(0xFF7054D8) : Colors.white;
     final fg = approve ? Colors.white : DunesColors.coral;
-    final border = approve ? DunesColors.accent : const Color(0xFFF0C4BC);
+    final border = approve ? const Color(0xFF7054D8) : DunesColors.coral;
     return Material(
       color: bg,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: loading ? null : onPressed,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(color: border),
           ),
           child: loading

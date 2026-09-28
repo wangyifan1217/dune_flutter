@@ -7160,7 +7160,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           const SizedBox(height: 16),
           const Padding(
             padding: EdgeInsets.only(bottom: 10),
-            child: Text('各项指标按本组产品结算自动测算。', style: kProposalCaptionStyle),
+            child: Text(
+              '收入默认按本组结算测算，填写人可改；其余自动测算。',
+              style: kProposalCaptionStyle,
+            ),
           ),
           LayoutBuilder(
             builder: (_, box) {
@@ -7270,7 +7273,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         const Padding(
           padding: EdgeInsets.only(bottom: 10),
           child: Text(
-            '销售规模取市场部填报，其余按$kProposalMainProductLabel结算自动测算。',
+            '销售规模取市场部填报。收入默认按结算测算，填写人可改；其余自动测算。',
             style: kProposalCaptionStyle,
           ),
         ),
@@ -7378,9 +7381,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         ? 'financeItem:children:$key'
         : 'financeItem:$key';
     final computed = _financeComputedMetric(key, formOverride: scope);
-    final current = computed?.display ?? '${scope[key] ?? ''}'.trim();
+    final revenueEditable = key == 'revenue';
+    final revenueManual =
+        revenueEditable && proposalRevenueIsManual(scope);
+    final current = revenueEditable
+        ? (revenueManual
+              ? _looseAmountText(scope['revenue'])
+              : (computed?.display ?? ''))
+        : (computed?.display ?? '${scope[key] ?? ''}'.trim());
     final enabled =
-        computed == null &&
+        (computed == null || revenueEditable) &&
         _fillEnabled(
           _canEditUnreviewedFinance,
           resetReview: 'financeCompleted',
@@ -7396,7 +7406,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     };
     final addLabel = _settleAddLabel(key);
     final Widget input;
-    if (computed != null || _showSelectedAsText || !enabled) {
+    if ((computed != null && !revenueEditable) ||
+        _showSelectedAsText ||
+        !enabled) {
       input = _readonlySelectedText(current);
     } else if (options.isNotEmpty || addLabel != null) {
       input = ProposalSelectField<String>(
@@ -7422,13 +7434,21 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     } else {
       input = TextFormField(
         key: ValueKey(
-          'finance-${owner == kProposalProductFinanceChildren ? 'children' : 'main'}-$key-${_row.id}-$_fieldEpoch',
+          revenueEditable
+              ? 'finance-revenue-${owner == kProposalProductFinanceChildren ? 'children' : 'main'}-${revenueManual ? 'manual' : 'auto-$current'}-${_row.id}-$_fieldEpoch'
+              : 'finance-${owner == kProposalProductFinanceChildren ? 'children' : 'main'}-$key-${_row.id}-$_fieldEpoch',
         ),
         initialValue: current,
+        keyboardType: revenueEditable
+            ? const TextInputType.numberWithOptions(decimal: true)
+            : null,
         maxLines: _isFinanceLongTextKey(key) ? 3 : 1,
-        onChanged: (value) =>
-            _writeProductFinanceValue(owner, key, value, rebuild: false),
-        decoration: proposalInputDecoration(),
+        onChanged: (value) => revenueEditable
+            ? _writeRevenue(owner, value)
+            : _writeProductFinanceValue(owner, key, value, rebuild: false),
+        decoration: proposalInputDecoration(
+          hint: revenueEditable ? '默认按结算测算，可改' : null,
+        ),
       );
     }
     final fieldWidget = ProposalField(
@@ -7441,7 +7461,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           : _rowReviewToggle(reviewSection, _financeReviewLabel),
       child: input,
     );
-    if (computed == null) return fieldWidget;
+    if (computed == null || (revenueEditable && enabled)) return fieldWidget;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: const Color(0xFFF3F6FA),
@@ -7449,6 +7469,35 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       ),
       child: fieldWidget,
     );
+  }
+
+  String _looseAmountText(Object? raw) {
+    if (raw == null) return '';
+    if (raw is num) return proposalFormatWan(raw.toDouble());
+    return '$raw'.trim();
+  }
+
+  void _writeRevenue(String owner, String raw) {
+    final finance = Map<String, dynamic>.from(
+      proposalIntakeProductFinance(_form, owner: owner),
+    );
+    final text = raw.trim();
+    if (text.isEmpty) {
+      finance.remove('revenue');
+      finance[kProposalRevenueManualKey] = false;
+    } else {
+      finance['revenue'] = text;
+      finance[kProposalRevenueManualKey] = true;
+    }
+    final form = _withEstimatedFinanceCosts(
+      proposalIntakeWriteProductFinance(_form, owner: owner, finance: finance),
+    );
+    final review = Map<String, dynamic>.from(_review)
+      ..['financeCompleted'] = false;
+    _markFormDirty();
+    _row = _row.copyWith(form: form, review: review, status: _statusAfterEdit);
+    if (mounted) setState(() {});
+    widget.onChanged(_row);
   }
 
   void _writeProductFinanceValue(
@@ -13592,12 +13641,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         final procurement =
             proposalEstimatedProcurementCost(form) ??
             proposalFinanceAmount(form, kProposalCouponProcurementCostKey);
+        final revenue = proposalEffectiveRevenue(form);
         return (
-          display: rollup == null
+          display: rollup == null && !proposalRevenueIsManual(form)
               ? ''
               : proposalFormatWan(
                   proposalRoundWan(
-                    rollup.revenue -
+                    revenue -
                         procurement -
                         proposalFinanceAmount(form, 'projectCost'),
                   ),
@@ -13606,9 +13656,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         );
       case 'margin':
         final rollup = proposalProductScaleRollup(form);
-        if (rollup == null || rollup.salesScale == 0) {
+        final scale = rollup?.salesScale ?? proposalEffectiveSalesScale(form);
+        if ((rollup == null && !proposalRevenueIsManual(form)) || scale == 0) {
           return (
-            display: rollup == null ? '' : '0',
+            display: rollup == null && !proposalRevenueIsManual(form)
+                ? ''
+                : '0',
             formula: kProposalMarginFormula,
           );
         }
@@ -13616,7 +13669,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             proposalEstimatedProcurementCost(form) ??
             proposalFinanceAmount(form, kProposalCouponProcurementCostKey);
         final profit = proposalRoundWan(
-          rollup.revenue -
+          proposalEffectiveRevenue(form) -
               procurement -
               proposalFinanceAmount(form, 'projectCost'),
         );
@@ -13624,7 +13677,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           display: proposalFormatWan(
             proposalEstimatedMarginAmount(
               form,
-              salesScale: rollup.salesScale,
+              salesScale: scale,
               profit: profit,
             ),
           ),

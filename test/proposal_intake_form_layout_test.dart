@@ -4337,6 +4337,13 @@ void main() {
         findsOneWidget,
       );
       expect(
+        find.descendant(
+          of: _fieldOf('收入（万元）'),
+          matching: find.byType(TextFormField),
+        ),
+        findsOneWidget,
+      );
+      expect(
         find.descendant(of: _fieldOf('利润（万元）'), matching: find.text('187.60')),
         findsOneWidget,
       );

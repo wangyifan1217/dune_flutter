@@ -28,6 +28,11 @@ class NativeQianjiHubPage extends StatefulWidget {
     this.onOpenMeetingSupervise,
     this.onOpenSessionSupervise,
     this.onOpenKbSupervise,
+    this.onOpenTaskMonitor,
+    this.onOpenDailyReportMonitor,
+    this.onOpenGroupReply,
+    this.onOpenMonthlyOpinion,
+    this.onOpenProposalReview,
     this.onOpenEfficiencyAnalysis,
     this.onOpenEfficiencyBossPreview,
     this.onOpenAppUsage,
@@ -45,6 +50,11 @@ class NativeQianjiHubPage extends StatefulWidget {
   final VoidCallback? onOpenMeetingSupervise;
   final VoidCallback? onOpenSessionSupervise;
   final VoidCallback? onOpenKbSupervise;
+  final VoidCallback? onOpenTaskMonitor;
+  final VoidCallback? onOpenDailyReportMonitor;
+  final VoidCallback? onOpenGroupReply;
+  final VoidCallback? onOpenMonthlyOpinion;
+  final VoidCallback? onOpenProposalReview;
   final VoidCallback? onOpenEfficiencyAnalysis;
   final VoidCallback? onOpenEfficiencyBossPreview;
   final VoidCallback? onOpenAppUsage;
@@ -359,33 +369,62 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
     final personalItems = <_SuperviseItemData>[
       _SuperviseItemData(
         title: '会议纪要',
-        subtitle: '本人及下级',
+        subtitle: '',
         icon: Icons.fact_check_outlined,
         gradientColors: const [Color(0xFF9E43C2), Color(0xFF7A25A0)],
         onTap: widget.onOpenMeetingSupervise,
       ),
       _SuperviseItemData(
         title: 'IM会话',
-        subtitle: '本人及下级',
+        subtitle: '',
         icon: Icons.forum_outlined,
         gradientColors: const [Color(0xFF4884E8), Color(0xFF2E63BE)],
         onTap: widget.onOpenSessionSupervise,
       ),
       _SuperviseItemData(
         title: '知识库',
-        subtitle: '本人及下级',
+        subtitle: '',
         icon: Icons.folder_shared_outlined,
         gradientColors: const [Color(0xFFD67E33), Color(0xFFB5611B)],
         onTap: widget.onOpenKbSupervise,
       ),
+      if (widget.session?.taskLookupAccess == true)
+        _SuperviseItemData(
+          title: '任务',
+          subtitle: '',
+          icon: Icons.task_alt_outlined,
+          gradientColors: const [Color(0xFF2F8F7E), Color(0xFF1F6F62)],
+          onTap: widget.onOpenTaskMonitor,
+        ),
+      if (widget.session?.dailyReportLookupAccess == true)
+        _SuperviseItemData(
+          title: '日报',
+          subtitle: '',
+          icon: Icons.edit_calendar_outlined,
+          gradientColors: const [Color(0xFF3D7A8C), Color(0xFF2A5C6B)],
+          onTap: widget.onOpenDailyReportMonitor,
+        ),
+      if (widget.session?.groupReplyLookupAccess == true)
+        _SuperviseItemData(
+          title: '群响应',
+          subtitle: '',
+          icon: Icons.mark_chat_unread_outlined,
+          gradientColors: const [Color(0xFF5B6FC4), Color(0xFF3E529E)],
+          onTap: widget.onOpenGroupReply,
+        ),
       _SuperviseItemData(
-        title: 'Cursor账号',
-        subtitle: '账号与用量',
+        title: '研发账号',
+        subtitle: '',
         icon: Icons.manage_accounts_outlined,
         gradientColors: const [Color(0xFF4A3E66), Color(0xFF322849)],
         onTap: widget.onOpenCursorAccount,
       ),
     ];
+    final lookupSubtitle = [
+      if (widget.session?.taskLookupAccess == true) '任务',
+      if (widget.session?.dailyReportLookupAccess == true) '日报',
+      if (widget.session?.groupReplyLookupAccess == true) '群响应',
+    ].join(' · ');
 
     return ColoredBox(
       color: _bgSurface,
@@ -466,7 +505,9 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                                 personalItems,
                                 isWide: isWide,
                                 title: '业务查阅',
-                                subtitle: '会议 · 会话 · 知识 · 账号',
+                                subtitle: lookupSubtitle.isEmpty
+                                    ? '会议纪要 · IM会话 · 知识库'
+                                    : lookupSubtitle,
                               ),
                               SizedBox(height: isWide ? 18 : 14),
                             ],
@@ -1191,19 +1232,19 @@ class _AlipayGridItem extends StatelessWidget {
                   letterSpacing: -0.2,
                 ),
               ),
-              const SizedBox(height: 2),
-
-              // 副标题小说明
-              Text(
-                subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 10.5,
-                  color: _subText,
-                  fontWeight: FontWeight.w400,
+              if (subtitle.trim().isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    color: _subText,
+                    fontWeight: FontWeight.w400,
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),

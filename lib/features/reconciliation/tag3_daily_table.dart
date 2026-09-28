@@ -7,24 +7,29 @@ import '../../core/theme/dunes_theme.dart';
 import 'recon_pinned_table.dart';
 import 'tag3_daily_models.dart';
 
-const _kTag3DailyHeaderH = 40.0;
-const _kTag3DailyActionWidth = 128.0;
+const _kTag3DailyHeaderH = 48.0;
+const _kTag3DailyActionWidth = 148.0;
+const _kTag3DailyRowMin = 64.0;
+const _kTag3DailyProjectGap = 12.0;
 const _kTag3DailyDataColWidths = <double>[
-  88,
+  100,
+  156,
   108,
-  92,
-  72,
-  88,
-  80,
-  80,
-  96,
-  88,
-  80,
-  96,
-  72,
-  148,
+  112,
+  124,
+  124,
+  108,
+  124,
+  124,
+  124,
+  124,
+  108,
+  200,
 ];
-const _kTag3DailyDataWidth = 1188.0;
+const _kTag3DailyDataWidth = 1636.0;
+const _kProjectFillA = Color(0xFFF3F0F8);
+const _kProjectFillB = Color(0xFFFFFCF8);
+const _kProjectEdge = Color(0xFFD4CCE3);
 const _kTag3DailyDataLabels = <String>[
   '渠道',
   '项目',
@@ -40,7 +45,20 @@ const _kTag3DailyDataLabels = <String>[
   '补贴应收',
   '审核记录',
 ];
-const _kTag3DailyRowLine = Border(bottom: BorderSide(color: Color(0xB3DAD5C7)));
+
+class _ProjectBand {
+  const _ProjectBand({
+    required this.fill,
+    required this.accent,
+    required this.start,
+    required this.end,
+  });
+
+  final Color fill;
+  final Color accent;
+  final bool start;
+  final bool end;
+}
 
 class Tag3DailyTable extends StatelessWidget {
   const Tag3DailyTable({
@@ -89,6 +107,7 @@ class Tag3DailyTable extends StatelessWidget {
     final heights = [
       for (var i = 0; i < sorted.length; i++) _rowHeight(sorted, i),
     ];
+    final bands = _projectBands(sorted);
     final pinned = ReconPinnedTable(
       headerHeight: _kTag3DailyHeaderH,
       dataWidth: _kTag3DailyDataWidth,
@@ -98,18 +117,19 @@ class Tag3DailyTable extends StatelessWidget {
             _head(_kTag3DailyDataLabels[c], _kTag3DailyDataColWidths[c]),
         ],
       ),
-      trailingHeader: _actionChrome(child: _head('操作', _kTag3DailyActionWidth)),
+      trailingHeader: _actionHeaderChrome(
+        child: _head('操作', _kTag3DailyActionWidth),
+      ),
       rowCount: sorted.length,
       rowHeight: (i) => heights[i],
-      dataRowBuilder: (context, i) => _dataRow(sorted, i, heights[i]),
-      trailingRowBuilder: (context, i) => _actionChrome(
-        child: DecoratedBox(
-          decoration: const BoxDecoration(border: _kTag3DailyRowLine),
-          child: SizedBox(
-            width: _kTag3DailyActionWidth,
-            height: heights[i],
-            child: _actionCell(sorted[i]),
-          ),
+      dataRowBuilder: (context, i) => _dataRow(sorted, i, heights[i], bands[i]),
+      trailingRowBuilder: (context, i) => _projectBox(
+        band: bands[i],
+        height: heights[i],
+        action: true,
+        child: SizedBox(
+          width: _kTag3DailyActionWidth,
+          child: _actionCell(sorted[i]),
         ),
       ),
     );
@@ -123,92 +143,168 @@ class Tag3DailyTable extends StatelessWidget {
     );
   }
 
-  Widget _dataRow(List<Tag3DailyRow> sorted, int i, double height) {
+  Widget _dataRow(
+    List<Tag3DailyRow> sorted,
+    int i,
+    double height,
+    _ProjectBand band,
+  ) {
     final row = sorted[i];
     final showChannel =
         i == 0 ||
         sorted[i - 1].channelCategoryL1Name != row.channelCategoryL1Name;
     final showProject = i == 0 || sorted[i - 1].rowKey != row.rowKey;
-    return DecoratedBox(
-      decoration: const BoxDecoration(border: _kTag3DailyRowLine),
-      child: SizedBox(
-        height: height,
-        child: Row(
-          children: [
-            _cell(
-              showChannel ? row.channelCategoryL1Name : '',
-              _kTag3DailyDataColWidths[0],
-              height,
-            ),
+    final contentHeight = height - (band.end ? _kTag3DailyProjectGap : 0);
+    return _projectBox(
+      band: band,
+      height: height,
+      child: Row(
+        children: [
+          _cell(
+            showChannel ? row.channelCategoryL1Name : '',
+            _kTag3DailyDataColWidths[0],
+            contentHeight,
+          ),
+          _projectMark(
+            band,
             _tappable(
               showProject ? row.projectName : '',
               _kTag3DailyDataColWidths[1],
-              height,
+              contentHeight,
               onTap: showProject && onProjectTap != null
                   ? () => onProjectTap!(row)
                   : null,
             ),
-            _cell(row.periodLabel, _kTag3DailyDataColWidths[2], height),
-            _cell(row.paymentTerm, _kTag3DailyDataColWidths[3], height),
-            _cell(
-              tag3DailyMoney(row.salesAmount),
-              _kTag3DailyDataColWidths[4],
-              height,
-              alignRight: true,
+          ),
+          _cell(row.periodLabel, _kTag3DailyDataColWidths[2], contentHeight),
+          _cell(row.paymentTerm, _kTag3DailyDataColWidths[3], contentHeight),
+          _cell(
+            tag3DailyMoney(row.salesAmount),
+            _kTag3DailyDataColWidths[4],
+            contentHeight,
+            alignRight: true,
+            maxLines: 1,
+          ),
+          _cell(
+            tag3DailyMoney(row.writeOffAmount),
+            _kTag3DailyDataColWidths[5],
+            contentHeight,
+            alignRight: true,
+            maxLines: 1,
+          ),
+          _cell(
+            tag3DailyMoney(row.profitAmount),
+            _kTag3DailyDataColWidths[6],
+            contentHeight,
+            alignRight: true,
+            maxLines: 1,
+          ),
+          _cell(
+            tag3DailyMoney(row.cashFlowAmount),
+            _kTag3DailyDataColWidths[7],
+            contentHeight,
+            alignRight: true,
+            maxLines: 1,
+          ),
+          _tappable(
+            tag3DailyMoney(row.cashReceivableAmount),
+            _kTag3DailyDataColWidths[8],
+            contentHeight,
+            alignRight: true,
+            maxLines: 1,
+            onTap: onReceivableTap == null ? null : () => onReceivableTap!(row),
+          ),
+          _cell(
+            tag3DailyMoney(row.cashPaidAmount),
+            _kTag3DailyDataColWidths[9],
+            contentHeight,
+            alignRight: true,
+            maxLines: 1,
+          ),
+          _cell(
+            tag3DailyMoney(row.cashReceivableDiff),
+            _kTag3DailyDataColWidths[10],
+            contentHeight,
+            alignRight: true,
+            maxLines: 1,
+          ),
+          _cell(
+            tag3DailyMoney(row.subsidyReceivableAmount),
+            _kTag3DailyDataColWidths[11],
+            contentHeight,
+            alignRight: true,
+            maxLines: 1,
+          ),
+          _auditCell(row, _kTag3DailyDataColWidths[12], contentHeight),
+        ],
+      ),
+    );
+  }
+
+  List<_ProjectBand> _projectBands(List<Tag3DailyRow> sorted) {
+    final out = <_ProjectBand>[];
+    var group = 0;
+    for (var i = 0; i < sorted.length; i++) {
+      if (i > 0 && sorted[i].rowKey != sorted[i - 1].rowKey) group++;
+      out.add(
+        _ProjectBand(
+          fill: group.isEven ? _kProjectFillA : _kProjectFillB,
+          accent: group.isEven
+              ? const Color(0xFF8B7BA8)
+              : const Color(0xFF2F5D62),
+          start: i == 0 || sorted[i].rowKey != sorted[i - 1].rowKey,
+          end:
+              i == sorted.length - 1 ||
+              sorted[i].rowKey != sorted[i + 1].rowKey,
+        ),
+      );
+    }
+    return out;
+  }
+
+  Widget _projectBox({
+    required _ProjectBand band,
+    required double height,
+    required Widget child,
+    bool action = false,
+  }) {
+    final gap = band.end ? _kTag3DailyProjectGap : 0.0;
+    return Padding(
+      padding: EdgeInsets.only(bottom: gap),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: band.fill,
+          border: Border(
+            left: action
+                ? const BorderSide(color: Color(0xFFD9D4CC), width: 0.5)
+                : BorderSide.none,
+            top: band.start
+                ? const BorderSide(color: _kProjectEdge)
+                : BorderSide.none,
+            bottom: BorderSide(
+              color: band.end ? _kProjectEdge : const Color(0x80E6E1D6),
             ),
-            _cell(
-              tag3DailyMoney(row.writeOffAmount),
-              _kTag3DailyDataColWidths[5],
-              height,
-              alignRight: true,
-            ),
-            _cell(
-              tag3DailyMoney(row.profitAmount),
-              _kTag3DailyDataColWidths[6],
-              height,
-              alignRight: true,
-            ),
-            _cell(
-              tag3DailyMoney(row.cashFlowAmount),
-              _kTag3DailyDataColWidths[7],
-              height,
-              alignRight: true,
-            ),
-            _tappable(
-              tag3DailyMoney(row.cashReceivableAmount),
-              _kTag3DailyDataColWidths[8],
-              height,
-              alignRight: true,
-              onTap: onReceivableTap == null
-                  ? null
-                  : () => onReceivableTap!(row),
-            ),
-            _cell(
-              tag3DailyMoney(row.cashPaidAmount),
-              _kTag3DailyDataColWidths[9],
-              height,
-              alignRight: true,
-            ),
-            _cell(
-              tag3DailyMoney(row.cashReceivableDiff),
-              _kTag3DailyDataColWidths[10],
-              height,
-              alignRight: true,
-            ),
-            _cell(
-              tag3DailyMoney(row.subsidyReceivableAmount),
-              _kTag3DailyDataColWidths[11],
-              height,
-              alignRight: true,
-            ),
-            _auditCell(row, _kTag3DailyDataColWidths[12], height),
-          ],
+          ),
+        ),
+        child: SizedBox(
+          height: height - gap,
+          width: action ? null : double.infinity,
+          child: child,
         ),
       ),
     );
   }
 
-  Widget _actionChrome({required Widget child}) {
+  Widget _projectMark(_ProjectBand band, Widget child) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: band.accent, width: 3)),
+      ),
+      child: child,
+    );
+  }
+
+  Widget _actionHeaderChrome({required Widget child}) {
     return DecoratedBox(
       decoration: const BoxDecoration(
         color: Color(0xFFF5F6F8),
@@ -239,11 +335,13 @@ class Tag3DailyTable extends StatelessWidget {
         i == 0 ||
         sorted[i - 1].channelCategoryL1Name != row.channelCategoryL1Name;
     final showProject = i == 0 || sorted[i - 1].rowKey != row.rowKey;
-    var height = 44.0;
+    final projectEnd =
+        i == sorted.length - 1 || sorted[i].rowKey != sorted[i + 1].rowKey;
+    var height = _kTag3DailyRowMin;
     if (showChannel) {
       height = math.max(
         height,
-        20 +
+        28 +
             _measureText(
               row.channelCategoryL1Name,
               _kTag3DailyDataColWidths[0],
@@ -253,30 +351,31 @@ class Tag3DailyTable extends StatelessWidget {
     if (showProject) {
       height = math.max(
         height,
-        20 + _measureText(row.projectName, _kTag3DailyDataColWidths[1]),
+        28 + _measureText(row.projectName, _kTag3DailyDataColWidths[1]),
       );
     }
-    return math.max(height, math.max(_auditHeight(row), _actionHeight(row)));
+    height = math.max(
+      height,
+      28 + _measureText(row.paymentTerm, _kTag3DailyDataColWidths[3]),
+    );
+    height = math.max(height, math.max(_auditHeight(row), _actionHeight(row)));
+    if (projectEnd) height += _kTag3DailyProjectGap;
+    return height;
   }
 
   double _actionHeight(Tag3DailyRow row) {
-    if (row.isMonthCumulative) return 44;
-    return _commentsFor(row).isEmpty ? 48.0 : 68.0;
+    if (row.isMonthCumulative) return _kTag3DailyRowMin;
+    return _commentsFor(row).isEmpty ? 68.0 : 88.0;
   }
 
   double _auditHeight(Tag3DailyRow row) {
+    if (row.isMonthCumulative) return 0;
     final lanes = tag3DailyAuditLanes(
       assignee: _assigneeFor(row),
       comments: _commentsFor(row),
     );
-    var height = 20.0;
-    if (row.confirmationStatusLabel.trim().isNotEmpty) {
-      height += 22;
-    }
-    if (lanes.isNotEmpty) {
-      height += lanes.length * 18 + (lanes.length - 1) * 4;
-    }
-    return height;
+    if (lanes.isEmpty) return 0;
+    return 20 + lanes.length * 26 + (lanes.length - 1) * 8;
   }
 
   double _measureText(String text, double colWidth) {
@@ -284,64 +383,69 @@ class Tag3DailyTable extends StatelessWidget {
     final painter = TextPainter(
       text: TextSpan(
         text: text,
-        style: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text),
+        style: DunesTypography.sans(
+          fontSize: 13,
+          height: 1.35,
+          color: DunesColors.text,
+        ),
       ),
       maxLines: 2,
       ellipsis: '…',
       textDirection: TextDirection.ltr,
-    )..layout(maxWidth: (colWidth - 16).clamp(24.0, colWidth));
+    )..layout(maxWidth: (colWidth - 24).clamp(24.0, colWidth));
     return painter.height;
   }
 
   Widget _auditCell(Tag3DailyRow row, double width, double height) {
+    if (row.isMonthCumulative) {
+      return SizedBox(width: width, height: height);
+    }
     final lanes = tag3DailyAuditLanes(
       assignee: _assigneeFor(row),
       comments: _commentsFor(row),
     );
-    final statusLabel = row.confirmationStatusLabel.trim();
-    final statusColor = switch (row.confirmationStatus) {
-      'ALL_CONFIRMED' || 'CONFIRMED' => DunesColors.green,
-      'WAIT_OPERATION' || 'WAIT_BUSINESS' => DunesColors.amber,
-      _ => DunesColors.text2,
-    };
     return SizedBox(
       width: width,
       height: height,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (statusLabel.isNotEmpty) ...[
-              Text(
-                statusLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: DunesTypography.sans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: statusColor,
-                ),
-              ),
-              const SizedBox(height: 4),
-            ],
             for (var i = 0; i < lanes.length; i++) ...[
-              if (i > 0) const SizedBox(height: 4),
-              Text(
-                '${lanes[i].role} ${lanes[i].names} · ${lanes[i].statusLabel}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: DunesTypography.sans(
-                  fontSize: 11.5,
-                  fontWeight: lanes[i].done ? FontWeight.w600 : FontWeight.w400,
-                  color: lanes[i].done ? DunesColors.green : DunesColors.text3,
-                ),
-              ),
+              if (i > 0) const SizedBox(height: 8),
+              _auditLane(lanes[i]),
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _auditLane(Tag3DailyAuditLane lane) {
+    final color = lane.done ? DunesColors.green : DunesColors.amber;
+    final icon = lane.done ? Icons.check_circle : Icons.schedule;
+    return Semantics(
+      label: '${lane.role} ${lane.names} ${lane.statusLabel}',
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              '${lane.role} ${lane.names}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: DunesTypography.sans(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: lane.done ? DunesColors.green : DunesColors.text,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -367,7 +471,7 @@ class Tag3DailyTable extends StatelessWidget {
     final showConfirm = row.showConfirmAction && !mineConfirmed;
     final showComment = row.showCommentAction;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisAlignment: MainAxisAlignment.center,
@@ -443,7 +547,7 @@ class Tag3DailyTable extends StatelessWidget {
         onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(8),
         child: Ink(
-          height: 32,
+          height: 34,
           decoration: BoxDecoration(
             color: filled
                 ? (enabled
@@ -473,7 +577,7 @@ class Tag3DailyTable extends StatelessWidget {
       width: width,
       height: _kTag3DailyHeaderH,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         child: Align(
           alignment: Alignment.centerLeft,
           child: Text(
@@ -481,7 +585,8 @@ class Tag3DailyTable extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: DunesTypography.sans(
-              fontSize: 11.5,
+              fontSize: 12,
+              height: 1.3,
               fontWeight: FontWeight.w600,
               color: DunesColors.text2,
             ),
@@ -496,21 +601,23 @@ class Tag3DailyTable extends StatelessWidget {
     double width,
     double height, {
     bool alignRight = false,
+    int maxLines = 2,
   }) {
     return SizedBox(
       width: width,
       height: height,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Align(
           alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
           child: Text(
             text,
-            maxLines: 2,
+            maxLines: maxLines,
             overflow: TextOverflow.ellipsis,
             textAlign: alignRight ? TextAlign.right : TextAlign.left,
             style: DunesTypography.sans(
-              fontSize: 12.5,
+              fontSize: 13,
+              height: 1.35,
               color: DunesColors.text,
             ),
           ),
@@ -525,8 +632,15 @@ class Tag3DailyTable extends StatelessWidget {
     double height, {
     VoidCallback? onTap,
     bool alignRight = false,
+    int maxLines = 2,
   }) {
-    final child = _cell(text, width, height, alignRight: alignRight);
+    final child = _cell(
+      text,
+      width,
+      height,
+      alignRight: alignRight,
+      maxLines: maxLines,
+    );
     if (onTap == null || text.trim().isEmpty) return child;
     return InkWell(
       onTap: onTap,
@@ -577,6 +691,16 @@ class Tag3DailyDrilldownSheet extends StatelessWidget {
                 color: DunesColors.text3,
               ),
             ),
+            if (data.snapshotHint.trim().isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                data.snapshotHint.trim(),
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  color: DunesColors.accent,
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             if (data.items.isEmpty)
               Text(
@@ -770,6 +894,7 @@ class _Tag3DailyCommentDialogState extends State<Tag3DailyCommentDialog> {
         controller: _controller,
         autofocus: true,
         maxLines: 4,
+        maxLength: 512,
         onChanged: (_) => setState(() {}),
         decoration: const InputDecoration(hintText: '填写意见'),
       ),

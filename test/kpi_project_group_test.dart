@@ -125,7 +125,10 @@ void main() {
     expect(kpiCanonicalMarketGroup(_task(product: '小套-出行会员')), '出行会员');
     expect(kpiCanonicalMarketGroup(_task(product: '小套-加油会员')), '加油会员');
     expect(kpiCanonicalMarketGroup(_task(product: '小套-明星来电')), '明星来电');
-    expect(kpiCanonicalMarketGroup(_task(product: '点播-加油权益')), '点播加油权益');
+    expect(kpiCanonicalMarketGroup(_task(product: '点播-加油权益')), '加油权益');
+    expect(kpiCanonicalMarketGroup(_task(product: '会员套餐点播')), '加油权益');
+    expect(kpiCanonicalMarketGroup(_task(product: '移动点播（积分）')), '加油权益');
+    expect(kpiCanonicalMarketGroup(_task(product: '移动点播（积分） › 出行金')), '出行金');
     expect(kpiCanonicalMarketGroup(_task(product: '出行金')), '出行金');
     expect(kpiCanonicalMarketGroup(_task(product: '中石油现金券')), '中石油');
     expect(kpiCanonicalMarketGroup(_task(product: '中石化现金券')), '中石化');

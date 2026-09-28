@@ -12,6 +12,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'lighthouse_forecast_model.dart';
+import 'lighthouse_forecast.dart';
 import 'lighthouse_product_ordinal.dart';
 import 'lighthouse_product_ordinal_view.dart';
 import 'lighthouse_theme.dart';
@@ -42,7 +43,6 @@ class LighthouseForecastReportSheet extends StatelessWidget {
     this.ordinalLoader,
     this.productMetric = 'verify',
   });
-
   final LighthouseForecastReport report;
   final String metricLabel;
   final bool profit;
@@ -50,441 +50,517 @@ class LighthouseForecastReportSheet extends StatelessWidget {
   final Future<LighthouseOrdinalBundle?> Function(String dim)? ordinalLoader;
   final String productMetric;
 
-  Color get _ink {
-    if (!profit) return accent;
-    return report.summary.forecast >= 0 ? LhColors.neg : LhColors.pos;
-  }
+  static const _muted = Color(0xFF647083);
+  static const _line = Color(0xFFE7EBF1);
+  static const _wash = Color(0xFFF5F7FB);
+  Color get _ink => profit
+      ? (report.summary.forecast >= 0 ? LhColors.neg : LhColors.pos)
+      : const Color(0xFF51418E);
+
+  TextStyle _text([
+    double size = 12,
+    Color color = LhColors.ink,
+    FontWeight weight = FontWeight.w500,
+  ]) =>
+      LhTypography.sans(size: size, color: color, weight: weight, height: 1.5);
 
   @override
-  Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 1,
-      minChildSize: 0.55,
-      maxChildSize: 1,
-      expand: true,
-      builder: (ctx, scroll) {
-        return ListView(
-          controller: scroll,
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: LhColors.line,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+  Widget build(BuildContext context) => DraggableScrollableSheet(
+    initialChildSize: 1,
+    minChildSize: 0.55,
+    maxChildSize: 1,
+    expand: true,
+    builder: (ctx, scroll) => ColoredBox(
+      color: Colors.white,
+      child: ListView(
+        controller: scroll,
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 36),
+        children: [
+          Center(
+            child: Container(
+              width: 32,
+              height: 4,
+              decoration: BoxDecoration(
+                color: _line,
+                borderRadius: BorderRadius.circular(3),
               ),
             ),
-            const SizedBox(height: 12),
-            _header(),
-            const SizedBox(height: 14),
-            _conclusion(),
-            if (ordinalLoader != null)
-              _section(
-                '月末结构预测 · 产品 / 供给 / 渠道',
-                '每个实体本月全月比上月全月：下降超 5% / ±5% 内 / 增长超 5% 的概率（贝叶斯多层有序 logit）',
-                LighthouseProductOrdinalSection(
-                  loader: ordinalLoader!,
-                  initialMetric: productMetric,
-                  accent: accent,
-                ),
+          ),
+          const SizedBox(height: 20),
+          _header(),
+          _section('本月判断', '预测是估计，不是承诺，也不改动已发生金额。', _conclusion()),
+          _section('累计走势', '实线为已发生；虚线与浅色区间来自逐日模拟。', _cumChart()),
+          _section('预测原理', '已发生固定，只对剩余日期建模。', _principles()),
+          _section('模型对照', '动态日模型与原算法在相同历史月份比较 WAPE。', _methodTable()),
+          _section('月内各时点回测', '每个时点重新拟合；不预设越晚一定越准。', _checkpointChart()),
+          if (report.rows.isNotEmpty)
+            _section('逐月回测', '退回同一月内进度，仅用截止日及以前的数据。', _backtestTable()),
+          _section('学到的日节奏', '星期与月底效应联合估计，避免重复放大。', _params()),
+          if (ordinalLoader != null)
+            _section(
+              '结构预测 · 产品 / 供给 / 渠道',
+              '判断各实体比上月的涨跌概率；不是主金额预测的替代。',
+              LighthouseProductOrdinalSection(
+                loader: ordinalLoader!,
+                initialMetric: productMetric,
+                accent: accent,
               ),
-            _section('累计走势', '本月已发生 · 模型预测 · 80% 区间 · 上月同期', _cumChart()),
-            _section('三种方法对比', '回测误差越小越好，组合权重按误差倒数分配', _methodTable()),
-            if (report.checkpoints.isNotEmpty)
-              _section('月里越晚越准', '第 N 天预测时，过去几个月的平均误差', _checkpointChart()),
-            if (report.rows.isNotEmpty)
-              _section(
-                '回测明细',
-                '把过去每个整月退回到同一天，只用当时能看到的数据预测',
-                _backtestTable(),
-              ),
-            _section('模型学到的规律', '来自近 56 天日数据与前 6 个整月', _params()),
-            const SizedBox(height: 14),
-            _footnote(),
-          ],
-        );
-      },
-    );
-  }
+            ),
+          const SizedBox(height: 24),
+          _footnote(),
+        ],
+      ),
+    ),
+  );
 
-  // ── 头部：大数 + 区间 + 概率 ─────────────────────────────────────────
   Widget _header() {
     final s = report.summary;
     final prev = s.prevMonthTotal;
     final vs = prev == null || prev.abs() < 1e-9
         ? null
         : (s.forecast - prev) / prev.abs();
-    final pm = DateTime(DateTime.now().year, DateTime.now().month - 1, 1);
-    final prevName = '${pm.month}月';
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: accent.withAlpha(22),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                '量化报告',
-                style: LhTypography.mono(
-                  size: 9,
-                  color: accent,
-                  weight: FontWeight.w800,
-                  letterSpacing: 0.6,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 '$metricLabel · 月末预测',
-                style: LhTypography.sans(size: 14, weight: FontWeight.w700),
+                style: _text(17, LhColors.ink, FontWeight.w700),
               ),
             ),
+            _tag('预测', accent),
           ],
+        ),
+        const SizedBox(height: 5),
+        Text(
+          '${s.month.year}年${s.month.month}月 · 截至${s.cutoffDay}日 · T+1',
+          style: _text(11, _muted),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          _money(s.forecast),
+          style: LhTypography.number(size: 34, color: _ink),
         ),
         const SizedBox(height: 4),
         Text(
-          '截至 ${s.cutoffDay} 日（T+1）· 当月 ${s.totalDays} 天 · '
-          '回测 ${s.backtestMonths} 个月',
-          style: LhTypography.mono(size: 9, color: LhColors.mute2),
+          '80% 近似预测区间  ${_money(s.lo)} — ${_money(s.hi)}',
+          style: _text(12, _muted),
         ),
-        const SizedBox(height: 12),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(_money(s.forecast), style: LhTypography.number(size: 30, color: _ink)),
-            const SizedBox(width: 10),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 5),
-              child: Text(
-                '80% 区间  ${_money(s.lo)} – ${_money(s.hi)}',
-                style: LhTypography.mono(
-                  size: 10,
-                  color: LhColors.ink2,
-                  weight: FontWeight.w600,
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: const BoxDecoration(
+            border: Border(
+              top: BorderSide(color: _line),
+              bottom: BorderSide(color: _line),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _stat(
+                  '超上月概率',
+                  lighthouseForecastProbabilityLabel(s.beatPrevProb),
+                  '同一分布的模拟占比',
                 ),
               ),
-            ),
-          ],
+              const SizedBox(width: 16),
+              Expanded(
+                child: _stat(
+                  '较上月预计',
+                  vs == null ? '—' : '${vs >= 0 ? '+' : '−'}${_pct(vs.abs())}',
+                  prev == null ? '上月数据不完整' : '上月全月 ${_money(prev)}',
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         Wrap(
-          spacing: 6,
+          spacing: 8,
           runSpacing: 6,
           children: [
-            if (s.beatPrevProb != null)
-              _chip(
-                '超$prevName概率 ${(s.beatPrevProb! * 100).round()}%',
-                s.beatPrevProb! >= 0.5 ? LhColors.neg : LhColors.pos,
-              ),
-            if (vs != null)
-              _chip(
-                '较$prevName ${vs >= 0 ? '↑' : '↓'}${(vs.abs() * 100).toStringAsFixed(1)}%',
-                vs >= 0 ? LhColors.neg : LhColors.pos,
-              ),
-            _chip(
-              s.usedModel ? '采用：组合模型' : '采用：原算法（模型未跑赢）',
-              s.usedModel ? accent : LhColors.mute2,
-            ),
+            _tag('采用：${s.modelLabel}', accent),
+            _tag('${s.backtestMonths} 个有效回测月', _muted),
           ],
         ),
       ],
     );
   }
 
-  Widget _chip(String text, Color c) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+  Widget _tag(String label, Color color) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
     decoration: BoxDecoration(
-      color: c.withAlpha(18),
+      color: color.withAlpha(15),
       borderRadius: BorderRadius.circular(5),
-      border: Border.all(color: c.withAlpha(50), width: 0.6),
     ),
-    child: Text(
-      text,
-      style: LhTypography.mono(size: 9, color: c, weight: FontWeight.w700),
-    ),
+    child: Text(label, style: _text(10, color, FontWeight.w600)),
   );
 
-  // ── 结论：三句人话，全部由数字推出 ─────────────────────────────────────
-  Widget _conclusion() {
-    final s = report.summary;
-    final left = s.totalDays - s.cutoffDay;
-    final need = s.forecast - s.actual;
-    final needDaily = left <= 0 ? 0.0 : need / left;
-    final lines = <String>[
-      '照现在的节奏，月末约 ${_money(s.forecast)}'
-          '${s.beatPrevProb != null ? '，有 ${(s.beatPrevProb! * 100).round()}% 的把握超过上月（${_money(s.prevMonthTotal ?? 0)}）' : ''}。',
-      if (left > 0)
-        '还剩 $left 天，要再做 ${_money(need)}，折合日均 ${_money(needDaily)}；'
-            '近期去掉星期效应后的日均是 ${_money(report.dailyLevel)}。',
-      s.usedModel
-          ? '过去 ${s.backtestMonths} 个月回测：模型平均误差 ${_pct(s.modelMape)}，'
-                '原算法 ${_pct(s.linearMape)}。'
-          : '过去 ${s.backtestMonths} 个月回测里模型没跑赢原算法（${_pct(report.mapeEnsemble)} vs ${_pct(s.linearMape)}），本月沿用原算法。',
-    ];
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: BoxDecoration(
-        color: accent.withAlpha(10),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: accent.withAlpha(34), width: 0.6),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (var i = 0; i < lines.length; i++) ...[
-            if (i > 0) const SizedBox(height: 6),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 1),
-                  child: Text(
-                    '${i + 1}',
-                    style: LhTypography.mono(
-                      size: 9,
-                      color: accent,
-                      weight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    lines[i],
-                    style: LhTypography.sans(
-                      size: 12,
-                      color: LhColors.ink,
-                      height: 1.45,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
+  Widget _stat(String label, String value, String note) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: _text(11, _muted)),
+      const SizedBox(height: 3),
+      Text(value, style: _text(18, LhColors.ink, FontWeight.w700)),
+      Text(note, style: _text(10, _muted)),
+    ],
+  );
 
-  Widget _section(String title, String sub, Widget child) => Padding(
-    padding: const EdgeInsets.only(top: 18),
+  Widget _section(String title, String note, Widget child) => Padding(
+    padding: const EdgeInsets.only(top: 26),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Container(
-              width: 3,
-              height: 12,
-              decoration: BoxDecoration(
-                color: accent,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(title, style: LhTypography.sans(size: 13, weight: FontWeight.w700)),
-          ],
-        ),
-        const SizedBox(height: 2),
-        Padding(
-          padding: const EdgeInsets.only(left: 9),
-          child: Text(sub, style: LhTypography.mono(size: 8.5, color: LhColors.mute2)),
-        ),
-        const SizedBox(height: 10),
+        Text(title, style: _text(14, LhColors.ink, FontWeight.w700)),
+        const SizedBox(height: 3),
+        Text(note, style: _text(11, _muted)),
+        const SizedBox(height: 12),
         child,
       ],
     ),
   );
 
-  // ── 累计走势图 ─────────────────────────────────────────────────────────
-  Widget _cumChart() {
-    Widget key(Widget mark, String t) => Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        mark,
-        const SizedBox(width: 4),
-        Text(t, style: LhTypography.mono(size: 8.5, color: LhColors.ink2)),
-      ],
-    );
+  Widget _conclusion() {
+    final s = report.summary;
+    final days = s.totalDays - s.cutoffDay;
+    final remaining = s.forecast - s.actual;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          height: 190,
-          width: double.infinity,
-          child: CustomPaint(
-            size: Size.infinite,
-            painter: _CumPainter(report: report, color: _ink),
-          ),
+        Text(
+          '已发生 ${_money(s.actual)}；剩余 $days 天预计净贡献 ${_money(remaining)}。',
+          style: _text(),
         ),
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 12,
-          runSpacing: 4,
-          children: [
-            key(Container(width: 12, height: 2, color: _ink), '本月已发生'),
-            key(
-              SizedBox(
-                width: 12,
-                height: 2,
-                child: Row(
-                  children: [
-                    Container(width: 4, height: 1.6, color: _ink),
-                    const SizedBox(width: 2),
-                    Container(width: 4, height: 1.6, color: _ink),
-                  ],
-                ),
-              ),
-              '模型预测',
-            ),
-            key(
-              Container(width: 10, height: 10, color: _ink.withAlpha(30)),
-              '80% 区间',
-            ),
-            key(
-              Container(width: 12, height: 1.2, color: LhColors.mute2),
-              '上月同期',
-            ),
-          ],
+        Text(
+          s.usedModel
+              ? '动态日模型回测 WAPE ${_pct(s.dynamicMape)}，低于或等于原算法 ${_pct(s.linearMape)}，本月采用动态日模型。'
+              : s.dynamicMape == null
+              ? '有效回测不足，主金额暂用原算法，动态模型区间仅作参考。'
+              : '动态日模型回测 WAPE ${_pct(s.dynamicMape)}，高于原算法 ${_pct(s.linearMape)}，主金额暂用原算法。',
+          style: _text(12, _muted),
         ),
+        if (s.trial) ...[
+          const SizedBox(height: 8),
+          Text('独立月份较少：概率与区间是模型估计，不代表经过验证的覆盖率。', style: _text(11, _muted)),
+        ],
       ],
     );
   }
 
-  // ── 方法对比表 ─────────────────────────────────────────────────────────
+  Widget _principles() {
+    final s = report.summary;
+    final rows = <(String, String)>[
+      ('月末总额 = 已发生 + 剩余每日金额之和', '本月已发生不重新预测；把每个未来日期的金额加总。'),
+      (
+        s.signed
+            ? '每日金额 = 动态水平 + 星期效应 + 月底效应'
+            : 'log(日均金额) = 动态水平 + 星期效应 + 月底效应',
+        s.signed
+            ? '利润或存在负值的金额用 Gaussian 分布，允许未来亏损。'
+            : '正金额用 Gamma 分布；真实零值单独估计发生概率，不把缺失当零。',
+      ),
+      (
+        '水平逐日变化，日历效应分别学习',
+        '把月初前三天的集中结算与星期、月末三天、最后一天分开估计，避免月初脉冲压低月底预测；当前未单独学习节假日。',
+      ),
+      (
+        '${s.paths.length} 条未来路径 → 均值 / 区间 / 概率',
+        '动态模型点预测为分布均值；10%/90% 分位给区间，超过上月全月的占比给概率。'
+            '原算法保底时对剩余路径同口径校准，三项一起更新。',
+      ),
+      ('按时间前推回测，绝不读被预测月份的未来', 'WAPE = 总绝对误差 ÷ 实际金额绝对值之和。组合对照的权重仅由更早的回测月份决定。'),
+    ];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      decoration: BoxDecoration(
+        color: _wash,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < rows.length; i++)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                border: i == rows.length - 1
+                    ? null
+                    : const Border(
+                        bottom: BorderSide(color: _line, width: 0.7),
+                      ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    rows[i].$1,
+                    style: _text(12, LhColors.ink, FontWeight.w600),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(rows[i].$2, style: _text(11, _muted)),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _cumChart() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      SizedBox(
+        height: 200,
+        child: CustomPaint(
+          size: Size.infinite,
+          painter: _CumPainter(report: report, color: _ink),
+        ),
+      ),
+      const SizedBox(height: 10),
+      Wrap(
+        spacing: 14,
+        runSpacing: 5,
+        children: [
+          _tag('— 已发生', _ink),
+          _tag('··· 预测', _ink),
+          _tag('80% 近似区间', accent),
+          _tag('— 上月同期', _muted),
+        ],
+      ),
+    ],
+  );
+
   Widget _methodTable() {
     final s = report.summary;
-    final rows = <({String name, String sub, double? v, double? mape, String w, bool used})>[
-      (
-        name: '原算法',
-        sub: '已发生 ÷ 天数 × 当月天数',
-        v: s.linear,
-        mape: report.mapeLinear,
-        w: '—',
-        used: !s.usedModel,
-      ),
-      (
-        name: '月内节奏曲线',
-        sub: '已发生 ÷ 第 d 天典型完成比例',
-        v: report.pace,
-        mape: report.mapePace,
-        w: _pct(report.weightPace, digits: 0),
-        used: false,
-      ),
-      (
-        name: '剩余天数逐日加总',
-        sub: '日均 × 星期系数 × 月末系数',
-        v: report.daily,
-        mape: report.mapeDaily,
-        w: _pct(report.weightDaily, digits: 0),
-        used: false,
-      ),
-      (
-        name: '组合模型',
-        sub: '两个模型按误差加权',
-        v: s.usedModel ? s.forecast : null,
-        mape: report.mapeEnsemble,
-        w: '100%',
-        used: s.usedModel,
-      ),
-    ];
-    final best = rows
-        .map((r) => r.mape)
-        .whereType<double>()
-        .fold<double?>(null, (a, b) => a == null || b < a ? b : a);
-    final head = LhTypography.mono(size: 8.5, color: LhColors.mute2, weight: FontWeight.w700);
+    final common = report.rows
+        .where((r) => r.pace != null && r.daily != null)
+        .length;
+    final ensMonths = report.rows.where((r) => r.ensemble != null).length;
+    final methods =
+        <
+          ({
+            String name,
+            String sub,
+            double? value,
+            double? error,
+            int months,
+            bool used,
+          })
+        >[
+          (
+            name: '动态日模型',
+            sub: '动态水平 + 星期 + 月底',
+            value: s.dynamic.forecast,
+            error: s.dynamicMape,
+            months: s.backtestMonths,
+            used: s.usedModel,
+          ),
+          (
+            name: '原算法',
+            sub: '已发生 ÷ 截止天数 × 月天数',
+            value: s.linear,
+            error: report.mapeLinear,
+            months: s.backtestMonths,
+            used: !s.usedModel,
+          ),
+          (
+            name: 'M1 节奏曲线',
+            sub: '历史累计完成比例',
+            value: report.pace,
+            error: report.mapePace,
+            months: common,
+            used: false,
+          ),
+          (
+            name: 'M2 剩余逐日',
+            sub: '近期日均 × 星期 × 月末',
+            value: report.daily,
+            error: report.mapeDaily,
+            months: common,
+            used: false,
+          ),
+          (
+            name: 'M1 + M2 组合',
+            sub: '更早回测误差倒数加权',
+            value: report.ensemble,
+            error: report.mapeEnsemble,
+            months: ensMonths,
+            used: false,
+          ),
+        ];
     return Column(
       children: [
         Row(
           children: [
-            Expanded(flex: 5, child: Text('方法', style: head)),
-            Expanded(flex: 3, child: Text('本月预测', style: head, textAlign: TextAlign.right)),
-            Expanded(flex: 3, child: Text('回测误差', style: head, textAlign: TextAlign.right)),
-            Expanded(flex: 2, child: Text('权重', style: head, textAlign: TextAlign.right)),
-          ],
-        ),
-        const SizedBox(height: 6),
-        for (final r in rows)
-          Container(
-            margin: const EdgeInsets.only(bottom: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-            decoration: BoxDecoration(
-              color: r.used ? accent.withAlpha(14) : LhColors.mist,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: r.used ? accent.withAlpha(90) : LhColors.line2,
-                width: r.used ? 0.9 : 0.5,
+            Expanded(flex: 5, child: Text('方法', style: _text(11, _muted))),
+            Expanded(
+              flex: 3,
+              child: Text(
+                '月末金额',
+                textAlign: TextAlign.right,
+                style: _text(11, _muted),
               ),
             ),
+            Expanded(
+              flex: 3,
+              child: Text(
+                'WAPE',
+                textAlign: TextAlign.right,
+                style: _text(11, _muted),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        for (final r in methods)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: _line, width: 0.7)),
+            ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   flex: 5,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              r.name,
-                              overflow: TextOverflow.ellipsis,
-                              style: LhTypography.sans(size: 11.5, weight: FontWeight.w700),
-                            ),
-                          ),
-                          if (r.used) ...[
-                            const SizedBox(width: 4),
-                            Text(
-                              '采用',
-                              style: LhTypography.mono(size: 8, color: accent, weight: FontWeight.w800),
-                            ),
-                          ],
-                        ],
-                      ),
                       Text(
-                        r.sub,
-                        overflow: TextOverflow.ellipsis,
-                        style: LhTypography.mono(size: 8, color: LhColors.mute2),
+                        '${r.name}${r.used ? ' · 采用' : ''}',
+                        style: _text(
+                          12,
+                          r.used ? accent : LhColors.ink,
+                          FontWeight.w600,
+                        ),
                       ),
+                      Text(r.sub, style: _text(10, _muted)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    r.value == null ? '—' : _money(r.value!),
+                    textAlign: TextAlign.right,
+                    style: _text(12, LhColors.ink, FontWeight.w600),
+                  ),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        _pct(r.error),
+                        style: _text(12, LhColors.ink, FontWeight.w600),
+                      ),
+                      Text('${r.months} 月', style: _text(10, _muted)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 8),
+        Text(
+          'M1、M2、组合仅作对照；回测折数不同，不能直接跨行排名。'
+          '组合当前权重 M1 ${_pct(report.weightPace, digits: 0)} / M2 ${_pct(report.weightDaily, digits: 0)}。',
+          style: _text(10, _muted),
+        ),
+      ],
+    );
+  }
+
+  Widget _checkpointChart() => SizedBox(
+    height: 160,
+    child: CustomPaint(
+      size: Size.infinite,
+      painter: _CheckpointPainter(
+        rows: report.checkpoints,
+        color: accent,
+        nowDay: report.summary.cutoffDay,
+      ),
+    ),
+  );
+
+  Widget _backtestTable() {
+    Widget cell(double? value, double truth) => Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          value == null ? '—' : _money(value),
+          style: _text(11, LhColors.ink, FontWeight.w600),
+        ),
+        Text(
+          _signedPct(LighthouseBacktestRow.err(value, truth)),
+          style: _text(10, _muted),
+        ),
+      ],
+    );
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text('月份 / 截止', style: _text(10, _muted))),
+            Expanded(
+              child: Text(
+                '实际',
+                textAlign: TextAlign.right,
+                style: _text(10, _muted),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                '原算法',
+                textAlign: TextAlign.right,
+                style: _text(10, _muted),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                '动态模型',
+                textAlign: TextAlign.right,
+                style: _text(10, _muted),
+              ),
+            ),
+          ],
+        ),
+        for (final r in report.rows)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: _line, width: 0.7)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${r.month.year % 100}年${r.month.month}月',
+                        style: _text(11),
+                      ),
+                      Text('第 ${r.asOfDay} 天', style: _text(10, _muted)),
                     ],
                   ),
                 ),
                 Expanded(
-                  flex: 3,
                   child: Text(
-                    r.v == null ? '—' : _money(r.v!),
+                    _money(r.truth),
                     textAlign: TextAlign.right,
-                    style: LhTypography.mono(size: 10.5, color: LhColors.ink, weight: FontWeight.w700),
+                    style: _text(11, LhColors.ink, FontWeight.w600),
                   ),
                 ),
-                Expanded(
-                  flex: 3,
-                  child: Text(
-                    _pct(r.mape),
-                    textAlign: TextAlign.right,
-                    style: LhTypography.mono(
-                      size: 10.5,
-                      color: r.mape != null && r.mape == best ? LhColors.neg : LhColors.ink2,
-                      weight: r.mape != null && r.mape == best ? FontWeight.w800 : FontWeight.w500,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    r.w,
-                    textAlign: TextAlign.right,
-                    style: LhTypography.mono(size: 10, color: LhColors.ink2),
-                  ),
-                ),
+                Expanded(child: cell(r.linear, r.truth)),
+                Expanded(child: cell(r.dynamic, r.truth)),
               ],
             ),
           ),
@@ -492,202 +568,90 @@ class LighthouseForecastReportSheet extends StatelessWidget {
     );
   }
 
-  // ── 月里越晚越准：误差随天数的两条线 ───────────────────────────────────
-  Widget _checkpointChart() {
-    return SizedBox(
-      height: 150,
-      width: double.infinity,
-      child: CustomPaint(
-        size: Size.infinite,
-        painter: _CheckpointPainter(
-          rows: report.checkpoints,
-          color: accent,
-          nowDay: report.summary.cutoffDay,
-        ),
-      ),
-    );
-  }
-
-  // ── 回测明细 ───────────────────────────────────────────────────────────
-  Widget _backtestTable() {
-    final head = LhTypography.mono(size: 8.5, color: LhColors.mute2, weight: FontWeight.w700);
-    Widget errCell(double? f, double truth, bool better) {
-      final e = LighthouseBacktestRow.err(f, truth);
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
-            f == null ? '—' : _money(f),
-            style: LhTypography.mono(size: 10, color: LhColors.ink, weight: FontWeight.w600),
-          ),
-          Text(
-            _signedPct(e),
-            style: LhTypography.mono(
-              size: 8.5,
-              color: better ? LhColors.neg : LhColors.mute2,
-              weight: better ? FontWeight.w800 : FontWeight.w500,
-            ),
-          ),
-        ],
-      );
-    }
-
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(flex: 3, child: Text('月份', style: head)),
-            Expanded(flex: 3, child: Text('实际全月', style: head, textAlign: TextAlign.right)),
-            Expanded(flex: 3, child: Text('原算法', style: head, textAlign: TextAlign.right)),
-            Expanded(flex: 3, child: Text('组合模型', style: head, textAlign: TextAlign.right)),
-          ],
-        ),
-        const SizedBox(height: 4),
-        for (final r in report.rows)
-          () {
-            final eLin = LighthouseBacktestRow.err(r.linear, r.truth)?.abs();
-            final eEns = LighthouseBacktestRow.err(r.ensemble, r.truth)?.abs();
-            final ensBetter = eEns != null && (eLin == null || eEns < eLin);
-            return Container(
-              padding: const EdgeInsets.symmetric(vertical: 7),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: LhColors.line2, width: 0.5)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${r.month.year % 100}年${r.month.month}月',
-                          style: LhTypography.sans(size: 11.5, weight: FontWeight.w600),
-                        ),
-                        Text(
-                          '退回第 ${r.asOfDay} 天',
-                          style: LhTypography.mono(size: 8, color: LhColors.mute2),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    flex: 3,
-                    child: Text(
-                      _money(r.truth),
-                      textAlign: TextAlign.right,
-                      style: LhTypography.mono(size: 10, color: LhColors.ink, weight: FontWeight.w700),
-                    ),
-                  ),
-                  Expanded(flex: 3, child: errCell(r.linear, r.truth, !ensBetter && eLin != null)),
-                  Expanded(flex: 3, child: errCell(r.ensemble, r.truth, ensBetter)),
-                ],
-              ),
-            );
-          }(),
-      ],
-    );
-  }
-
-  // ── 参数：星期系数（竖柱）+ 三个关键数 ─────────────────────────────────
   Widget _params() {
-    const names = ['一', '二', '三', '四', '五', '六', '日'];
-    final wf = report.weekdayFactors;
-    final maxF = wf.fold<double>(1.2, (a, b) => math.max(a, b));
-    Widget stat(String k, String v, String note) => Expanded(
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(8, 7, 8, 7),
-        decoration: BoxDecoration(
-          color: LhColors.mist,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: LhColors.line2, width: 0.5),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(k, style: LhTypography.mono(size: 8, color: LhColors.mute2, weight: FontWeight.w700)),
-            const SizedBox(height: 3),
-            Text(v, style: LhTypography.sans(size: 13, weight: FontWeight.w800)),
-            Text(note, maxLines: 2, style: LhTypography.mono(size: 7.5, color: LhColors.mute2)),
-          ],
-        ),
-      ),
-    );
-    final share = report.paceShare;
     final s = report.summary;
-    final linShare = s.cutoffDay / s.totalDays;
+    final wf = report.weekdayFactors;
+    const names = ['一', '二', '三', '四', '五', '六', '日'];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('星期系数（1.00 = 平均一天）', style: LhTypography.mono(size: 8.5, color: LhColors.ink2, weight: FontWeight.w700)),
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 78,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              for (var i = 0; i < 7 && i < wf.length; i++)
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Text(
-                        wf[i].toStringAsFixed(2),
-                        style: LhTypography.mono(
-                          size: 8,
-                          color: wf[i] >= 1.1
-                              ? LhColors.neg
-                              : (wf[i] <= 0.9 ? LhColors.pos : LhColors.ink2),
-                          weight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Container(
-                        width: 14,
-                        height: (wf[i] / maxF * 44).clamp(2.0, 44.0).toDouble(),
-                        decoration: BoxDecoration(
-                          color: accent.withAlpha(i >= 5 ? 90 : 170),
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text('周${names[i]}', style: LhTypography.mono(size: 8, color: LhColors.mute2)),
-                    ],
-                  ),
-                ),
-            ],
-          ),
+        Text(
+          s.signed ? '星期额外贡献（金额）' : '星期系数（相对基础日水平）',
+          style: _text(11, _muted),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Row(
           children: [
-            stat(
-              '月末三天',
-              '×${report.monthEndFactor.toStringAsFixed(2)}',
-              '末三天日均是全月日均的倍数',
-            ),
-            const SizedBox(width: 6),
-            stat('近期日均', _money(report.dailyLevel), '近 28 天去星期效应'),
-            const SizedBox(width: 6),
-            stat(
-              '第 ${s.cutoffDay} 天完成',
-              share == null ? '—' : _pct(share, digits: 0),
-              '原算法假设 ${_pct(linShare, digits: 0)}',
-            ),
+            for (var i = 0; i < 7; i++)
+              Expanded(
+                child: Column(
+                  children: [
+                    Text('周${names[i]}', style: _text(10, _muted)),
+                    const SizedBox(height: 5),
+                    Text(
+                      s.signed ? _money(wf[i]) : '×${wf[i].toStringAsFixed(2)}',
+                      style: _text(10, LhColors.ink, FontWeight.w600),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
+        const SizedBox(height: 18),
+        _parameter(
+          '月末三天',
+          s.signed
+              ? _money(report.monthEndFactor)
+              : '×${report.monthEndFactor.toStringAsFixed(2)}',
+          '在星期效应之外',
+        ),
+        _parameter(
+          '最后一天额外效应',
+          s.signed
+              ? _money(s.dynamic.lastDayFactor)
+              : '×${s.dynamic.lastDayFactor.toStringAsFixed(2)}',
+          '在月末三天效应之外',
+        ),
+        _parameter('当前基础日水平', _money(report.dailyLevel), '去掉星期、月底后的潜在水平'),
+        _parameter('训练观测', '${s.dynamic.observations} 天', '最多使用近 240 个自然日'),
       ],
     );
   }
 
+  Widget _parameter(String label, String value, String note) => Container(
+    padding: const EdgeInsets.symmetric(vertical: 10),
+    decoration: const BoxDecoration(
+      border: Border(bottom: BorderSide(color: _line, width: 0.7)),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: _text(12)),
+              Text(note, style: _text(10, _muted)),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(value, style: _text(12, LhColors.ink, FontWeight.w600)),
+      ],
+    ),
+  );
+
   Widget _footnote() => Text(
-    '口径说明\n'
-    '· 数据按 T+1 只用到昨天；今天的部分数据不参与建模。\n'
-    '· 80% 区间 = 回测中「实际 ÷ 预测」的 10% 与 90% 分位 × 本月预测。\n'
-    '· 超上月概率 = 回测误差分布下本月超过上月全月的比例。\n'
-    '· 组合模型回测不如原算法时自动沿用原算法。本模型为试行，'
-    '正式口径仍为运营会确定的线性日均外推。',
-    style: LhTypography.mono(size: 8.5, color: LhColors.mute2, height: 1.6),
+    '计算与数据口径\n'
+    '只使用不晚于昨天的可用日数据。当前月缺失日期时暂停模型，历史缺失不填零。'
+    '接口尚未提供完整性水位，“有数”不保证已完成业务对账。\n'
+    '动态水平为随机游走，星期与月底参数带收缩先验；采用经验贝叶斯参数估计与 '
+    'Laplace 后验近似，不是完整 MCMC。波动参数固定在训练窗估计值，区间尚未做外部覆盖率校准。\n'
+    '原算法保底时，正金额缩放剩余模拟金额，有符号金额按未来进度平移；'
+    '展示为 80% 近似预测区间，不能理解为保证 80% 命中。模型按历史回测选择，未来仍可能失准。\n'
+    '预测仅对当前月的金额指标生效；比率、历史月份与原有财务确认流程不变。',
+    style: _text(11, _muted),
   );
 }
 
@@ -710,26 +674,19 @@ class _CumPainter extends CustomPainter {
     const padB = 18.0;
     final w = size.width - padL - padR;
     final h = size.height - padT - padB;
-    final typ = report.typicalShare;
     final actual = cum.last;
-    // 预测延长线：沿典型节奏从「已发生」走到「预测」。
     double projAt(int j, double target) {
       if (j <= c) return cum[j - 1];
-      final t = typ;
-      if (t != null && t.length >= total) {
-        final a = t[c - 1];
-        final span = 1 - a;
-        if (span.abs() > 1e-6) {
-          final r = ((t[j - 1] - a) / span).clamp(0.0, 1.0).toDouble();
-          return actual + (target - actual) * r;
-        }
-      }
-      return actual + (target - actual) * (j - c) / (total - c);
+      if (target == s.hi) return s.cumulativeHi[j - 1];
+      if (target == s.lo) return s.cumulativeLo[j - 1];
+      return s.cumulativeMean[j - 1];
     }
 
     final prev = report.prevCum;
-    var lo = math.min(0.0, math.min(s.lo, cum.reduce(math.min)));
-    var hi = math.max(s.hi, cum.reduce(math.max));
+    var lo = math.min(0.0, s.cumulativeLo.reduce(math.min));
+    var hi = s.cumulativeHi.reduce(math.max);
+    lo = math.min(lo, s.cumulativeMean.reduce(math.min));
+    hi = math.max(hi, s.cumulativeMean.reduce(math.max));
     if (prev != null && prev.isNotEmpty) {
       lo = math.min(lo, prev.reduce(math.min));
       hi = math.max(hi, prev.reduce(math.max));
@@ -833,22 +790,30 @@ class _CumPainter extends CustomPainter {
     );
 
     // 右侧读数
+    final occupiedLabels = <Rect>[];
     void label(String text, double yy, Color col, {bool bold = false}) {
       final tp = TextPainter(
         text: TextSpan(
           text: text,
-          style: LhTypography.mono(
+          style: LhTypography.sans(
             size: 8.5,
             color: col,
             weight: bold ? FontWeight.w800 : FontWeight.w500,
           ),
         ),
         textDirection: TextDirection.ltr,
+        maxLines: 1,
+        ellipsis: '…',
       )..layout(maxWidth: padR - 4);
-      tp.paint(
-        canvas,
-        Offset(padL + w + 5, (yy - tp.height / 2).clamp(0.0, size.height - tp.height).toDouble()),
-      );
+      final top = (yy - tp.height / 2)
+          .clamp(0.0, size.height - tp.height)
+          .toDouble();
+      final bounds = Rect.fromLTWH(padL + w + 5, top, tp.width, tp.height);
+      if (!bold && occupiedLabels.any((r) => r.inflate(3).overlaps(bounds))) {
+        return;
+      }
+      occupiedLabels.add(bounds);
+      tp.paint(canvas, Offset(padL + w + 5, top));
     }
 
     label(_money(s.forecast), y(s.forecast), color, bold: true);
@@ -861,14 +826,17 @@ class _CumPainter extends CustomPainter {
     if (prev != null && prev.length >= total) {
       final py = y(prev[total - 1]);
       if ((py - y(s.forecast)).abs() > 11) {
-        label('上月 ${_money(prev[total - 1])}', py, LhColors.mute2);
+        label(_money(prev[total - 1]), py, LhColors.mute2);
       }
     }
 
     // 横轴
     void xl(int j, String t, {Color col = LhColors.mute2}) {
       final tp = TextPainter(
-        text: TextSpan(text: t, style: LhTypography.mono(size: 8, color: col)),
+        text: TextSpan(
+          text: t,
+          style: LhTypography.sans(size: 8, color: col),
+        ),
         textDirection: TextDirection.ltr,
       )..layout();
       tp.paint(
@@ -923,7 +891,7 @@ class _CheckpointPainter extends CustomPainter {
     final h = size.height - padT - padB;
     var hi = 0.0;
     for (final r in rows) {
-      for (final v in [r.linear, r.ensemble]) {
+      for (final v in [r.linear, r.dynamic]) {
         if (v != null && v.isFinite) hi = math.max(hi, v);
       }
     }
@@ -959,7 +927,12 @@ class _CheckpointPainter extends CustomPainter {
       Paint()..color = color.withAlpha(14),
     );
 
-    void series(double? Function(LighthouseCheckpointRow) pick, Color col, double width, bool labelAbove) {
+    void series(
+      double? Function(LighthouseCheckpointRow) pick,
+      Color col,
+      double width,
+      bool labelAbove,
+    ) {
       Offset? last;
       for (var i = 0; i < n; i++) {
         final v = pick(rows[i]);
@@ -990,7 +963,11 @@ class _CheckpointPainter extends CustomPainter {
         final tp = TextPainter(
           text: TextSpan(
             text: '${(v * 100).toStringAsFixed(1)}%',
-            style: LhTypography.mono(size: 7.5, color: col, weight: FontWeight.w700),
+            style: LhTypography.sans(
+              size: 7.5,
+              color: col,
+              weight: FontWeight.w700,
+            ),
           ),
           textDirection: TextDirection.ltr,
         )..layout();
@@ -1006,13 +983,13 @@ class _CheckpointPainter extends CustomPainter {
     }
 
     series((r) => r.linear, LhColors.mute2, 1.2, false);
-    series((r) => r.ensemble, color, 2.0, true);
+    series((r) => r.dynamic, color, 2.0, true);
 
     for (var i = 0; i < n; i++) {
       final tp = TextPainter(
         text: TextSpan(
           text: '第${rows[i].day}天',
-          style: LhTypography.mono(
+          style: LhTypography.sans(
             size: 8,
             color: i == nearest ? color : LhColors.mute2,
             weight: i == nearest ? FontWeight.w800 : FontWeight.w500,
@@ -1033,12 +1010,16 @@ class _CheckpointPainter extends CustomPainter {
       text: TextSpan(
         children: [
           TextSpan(
-            text: '— 组合模型  ',
-            style: LhTypography.mono(size: 8, color: color, weight: FontWeight.w700),
+            text: '— 动态日模型  ',
+            style: LhTypography.sans(
+              size: 8,
+              color: color,
+              weight: FontWeight.w700,
+            ),
           ),
           TextSpan(
             text: '— 原算法',
-            style: LhTypography.mono(size: 8, color: LhColors.mute2),
+            style: LhTypography.sans(size: 8, color: LhColors.mute2),
           ),
         ],
       ),

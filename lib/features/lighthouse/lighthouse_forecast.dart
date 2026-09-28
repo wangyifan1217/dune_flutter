@@ -23,6 +23,14 @@ import 'package:flutter/foundation.dart' show immutable;
 int lighthouseDaysInMonth(int year, int month) =>
     DateTime(year, month + 1, 0).day;
 
+/// 有限模拟未命中不代表绝不可能；避免把 0 / 1 显示成确定性承诺。
+String lighthouseForecastProbabilityLabel(double? probability) {
+  if (probability == null || !probability.isFinite) return '—';
+  if (probability < 0.005) return '<1%';
+  if (probability >= 0.995) return '>99%';
+  return '${(probability * 100).round()}%';
+}
+
 @immutable
 class LighthousePaceForecast {
   const LighthousePaceForecast({
@@ -36,6 +44,9 @@ class LighthousePaceForecast {
     this.modelMape,
     this.linearMape,
     this.byModel = false,
+    this.modelLabel = '原算法',
+    this.backtestMonths = 0,
+    this.trial = true,
   });
 
   /// v2 模型给的 80% 区间（线性外推没有区间，为 null）。
@@ -51,6 +62,9 @@ class LighthousePaceForecast {
 
   /// true = 数学模型（lighthouse_forecast_model.dart）；false = 线性日均外推。
   final bool byModel;
+  final String modelLabel;
+  final int backtestMonths;
+  final bool trial;
 
   /// 本月已发生规模（实线末端的值）。
   final double actual;

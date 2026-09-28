@@ -1,32 +1,12 @@
-// ═════════════════════════════════════════════════════════════════════════════
-// 月末预测 v2 · 数学模型（试行，2026-09）
-//
-//   v1（lighthouse_forecast.dart）是线性日均外推：已发生 ÷ 已过天数 × 当月天数，
-//   等于假设每天做的量一样多。v2 用每天的数据建两个模型，按历史回测误差加权：
-//
-//   M1 · 月内节奏曲线
-//        过去 6 个整月里「到第 d 天通常已完成全月的几成」，越近的月权重越大；
-//        预测 = 已发生 ÷ 第 d 天的典型完成比例。月末冲量、周末偏低自动吃进去。
-//
-//   M2 · 剩余天数逐日加总
-//        每天水平 = 近 28 天去掉星期效应后的指数加权均值（半衰期 7 天），
-//        剩下每一天 = 水平 × 星期几系数 × 月末三天系数；预测 = 已发生 + Σ剩余。
-//        月中业务突然变好 / 变差，它比 M1 反应快。
-//
-//   回测：把过去每个整月都「退回到同一天」，只用那一天之前的数据让 M0/M1/M2
-//        各预测一次，再和那个月的真实全月比。误差小的模型权重大；组合模型
-//        回测反而不如线性时，诚实地退回线性。
-//   区间：组合模型回测里「真实 ÷ 预测」的 10% / 90% 分位 × 本次预测 = 80% 区间。
-//   概率：同一组比值里，有几成会让本月超过上月全月。
-//
-//   截止日：日数据按 T+1 口径只用到昨天，今天不算（22 号看 = 截至 21 号）。
-//   全部是纯函数，便于单测，日后可原样搬到 lighthouse-go。
-// ═════════════════════════════════════════════════════════════════════════════
+// 月末预测 v4：分离月初结算 + 动态日模型 + 严格时间回测。
+// 详见 docs/lighthouse-monthly-forecast.md；纯函数，不改变实际经营指标。
+// 正金额：零值门控 + Gamma / log 链接；有符号金额：Gaussian。
+// 联合估计动态水平、星期、月末效应；经验贝叶斯 + Laplace 近似。
+// 主金额、10/90 分位、超上月概率由同一预测分布产生。
 
 import 'dart:math' as math;
-
 import 'package:flutter/foundation.dart' show immutable;
-
+import 'lighthouse_dynamic_forecast.dart';
 import 'lighthouse_forecast.dart';
 
 @immutable
@@ -45,34 +25,27 @@ class LighthouseModelForecast {
     required this.usedModel,
     this.beatPrevProb,
     this.prevMonthTotal,
+    required this.month,
+    required this.dynamic,
+    required this.dynamicMape,
+    required this.signed,
+    required this.cumulativeMean,
+    required this.cumulativeLo,
+    required this.cumulativeHi,
+    required this.paths,
   });
-
-  /// 模型预测的月末值。
-  final double forecast;
-
-  /// 80% 区间。
-  final double lo;
-  final double hi;
-
-  /// 截至 [cutoffDay] 的日数据累计（模型自己用的已发生）。
-  final double actual;
-  final int cutoffDay;
-  final int totalDays;
-
-  /// 同一截止日的线性外推（对照用）。
-  final double linear;
-
-  /// 回测平均绝对误差率（0.021 = 2.1%）。
-  final double modelMape;
-  final double linearMape;
-  final int backtestMonths;
-
-  /// false = 组合模型回测不如线性，已退回线性。
-  final bool usedModel;
-
-  /// 本月超过上月全月的概率 0~1；没有上月数据时为 null。
-  final double? beatPrevProb;
-  final double? prevMonthTotal;
+  final double forecast, lo, hi, actual, linear, modelMape, linearMape;
+  final int cutoffDay, totalDays, backtestMonths;
+  final bool usedModel, signed;
+  final double? beatPrevProb, prevMonthTotal;
+  final DateTime month;
+  final LighthouseDynamicForecast dynamic;
+  final double? dynamicMape;
+  final List<double> cumulativeMean, cumulativeLo, cumulativeHi;
+  final List<List<double>> paths;
+  // 尚无独立覆盖率审计，不能只因为达到 6 折就自动宣布“正式模型”。
+  bool get trial => true;
+  String get modelLabel => usedModel ? '动态日模型' : '原算法';
 }
 
 DateTime _day(DateTime t) => DateTime(t.year, t.month, t.day);
@@ -117,10 +90,11 @@ _Pred _predictAt(
   for (var k = 1; k <= 6; k++) {
     final ms = DateTime(y, m - k, 1);
     if (ms.isBefore(earliest)) break;
+    if (!_complete(d, ms.year, ms.month, _daysIn(ms.year, ms.month))) continue;
     final dk = _daysIn(ms.year, ms.month);
     final tk = _sumRange(d, ms.year, ms.month, 1, dk);
     if (tk.abs() < 1e-6) continue;
-    // 同号才有「完成几成」可言（毛利一会儿赚一会儿亏时这条不成立）。
+    // 同号才有「完成几成」可言（利润一会儿赚一会儿亏时这条不成立）。
     if (actual.abs() > 1e-6 && (tk > 0) != (actual > 0)) continue;
     final ck = (c * dk / total).round().clamp(1, dk);
     final share = _sumRange(d, ms.year, ms.month, 1, ck) / tk;
@@ -143,7 +117,7 @@ _Pred _predictAt(
   final hist = <DateTime>[
     for (var i = 55; i >= 0; i--) DateTime(y, m, c - i),
   ].where((t) => !t.isBefore(earliest)).toList();
-  if (hist.length >= 28) {
+  if (hist.length >= 28 && hist.every(d.containsKey)) {
     final absAll = <double>[for (final t in hist) (d[t] ?? 0).abs()];
     final meanAbs = absAll.reduce((a, b) => a + b) / absAll.length;
     final wf = List<double>.filled(8, 1.0);
@@ -176,6 +150,9 @@ _Pred _predictAt(
     for (var k = 1; k <= 6; k++) {
       final ms = DateTime(y, m - k, 1);
       if (ms.isBefore(earliest)) break;
+      if (!_complete(d, ms.year, ms.month, _daysIn(ms.year, ms.month))) {
+        continue;
+      }
       final dk = _daysIn(ms.year, ms.month);
       final all = _sumRange(d, ms.year, ms.month, 1, dk) / dk;
       if (all.abs() < 1e-9) continue;
@@ -208,179 +185,17 @@ _Pred _predictAt(
   );
 }
 
-double _quantile(List<double> xs, double q) {
-  final s = [...xs]..sort();
-  if (s.isEmpty) return 1;
-  final pos = (s.length - 1) * q;
-  final lo = pos.floor();
-  final hi = pos.ceil();
-  return s[lo] + (s[hi] - s[lo]) * (pos - lo);
-}
+bool _complete(Map<DateTime, double> d, int y, int m, int to) =>
+    [for (var i = 1; i <= to; i++) DateTime(y, m, i)].every(d.containsKey);
 
-/// 用日数据给出本月月末预测。数据不够（历史不足 2 个整月、本月不足 2 天）返回 null。
-///
-/// [daily]：日期 → 当天金额，至少覆盖本月 1 号之前约 6 个月；缺的天按 0。
-/// [today]：北京时间今天。截止日 = 昨天。
-LighthouseModelForecast? lighthouseModelForecast({
-  required Map<DateTime, double> daily,
-  required DateTime today,
-}) {
-  if (daily.isEmpty) return null;
-  final d = <DateTime, double>{
+Map<DateTime, double> _observed(Map<DateTime, double> daily, DateTime today) {
+  final latest = _day(today).subtract(const Duration(days: 1));
+  return {
     for (final e in daily.entries)
-      if (e.value.isFinite) _day(e.key): e.value,
+      if (e.value.isFinite && !_day(e.key).isAfter(latest))
+        _day(e.key): e.value,
   };
-  final earliest = d.keys.reduce((a, b) => a.isBefore(b) ? a : b);
-  final t = _day(today);
-  final y = t.year;
-  final m = t.month;
-  final total = _daysIn(y, m);
-  final c = t.day - 1; // T+1：只用到昨天
-  if (c < 2 || c >= total) return null;
-
-  final now = _predictAt(d, earliest, y, m, c);
-
-  // ── 回测：过去每个整月退回到同一天 ─────────────────────────────────
-  final errLin = <double>[];
-  final errPace = <double>[];
-  final errDaily = <double>[];
-  final bt = <({double truth, double? pace, double? daily, double linear})>[];
-  for (var k = 1; k <= 6; k++) {
-    final ms = DateTime(y, m - k, 1);
-    if (ms.isBefore(earliest)) break;
-    final dk = _daysIn(ms.year, ms.month);
-    final truth = _sumRange(d, ms.year, ms.month, 1, dk);
-    if (truth.abs() < 1e-6) continue;
-    final ck = (c * dk / total).round().clamp(2, dk - 1);
-    final p = _predictAt(d, earliest, ms.year, ms.month, ck);
-    double err(double f) => ((f - truth) / truth).abs();
-    errLin.add(err(p.linear));
-    if (p.pace != null) errPace.add(err(p.pace!));
-    if (p.daily != null) errDaily.add(err(p.daily!));
-    bt.add((truth: truth, pace: p.pace, daily: p.daily, linear: p.linear));
-  }
-  double mean(List<double> xs) =>
-      xs.isEmpty ? double.nan : xs.reduce((a, b) => a + b) / xs.length;
-  final mLin = mean(errLin);
-  final mPace = mean(errPace);
-  final mDaily = mean(errDaily);
-
-  // ── 组合：误差倒数加权；只用「现在算得出、回测至少 2 个月」的模型 ─────
-  double combine(double? pace, double? dly) {
-    var w = 0.0;
-    var v = 0.0;
-    if (pace != null && errPace.length >= 2) {
-      final wi = 1 / (mPace + 0.01);
-      w += wi;
-      v += pace * wi;
-    }
-    if (dly != null && errDaily.length >= 2) {
-      final wi = 1 / (mDaily + 0.01);
-      w += wi;
-      v += dly * wi;
-    }
-    return w > 0 ? v / w : double.nan;
-  }
-
-  final ratios = <double>[];
-  final errEns = <double>[];
-  for (final b in bt) {
-    final f = combine(b.pace, b.daily);
-    if (!f.isFinite || f.abs() < 1e-9) continue;
-    ratios.add(b.truth / f);
-    errEns.add(((f - b.truth) / b.truth).abs());
-  }
-  final mEns = mean(errEns);
-  var forecast = combine(now.pace, now.daily);
-  var usedModel = forecast.isFinite && errEns.length >= 2;
-  if (usedModel && errLin.isNotEmpty && mEns > mLin) usedModel = false;
-  if (!usedModel) {
-    forecast = now.linear;
-    ratios
-      ..clear()
-      ..addAll([
-        for (final b in bt)
-          if (b.linear.abs() > 1e-9) b.truth / b.linear,
-      ]);
-  }
-  if (!forecast.isFinite) return null;
-
-  // ── 80% 区间 + 超上月概率 ──────────────────────────────────────────
-  final spread = usedModel ? mEns : mLin;
-  double lo;
-  double hi;
-  if (ratios.length >= 3) {
-    final a = forecast * _quantile(ratios, 0.1);
-    final b = forecast * _quantile(ratios, 0.9);
-    lo = math.min(a, b);
-    hi = math.max(a, b);
-  } else {
-    final w = forecast.abs() * (spread.isFinite ? spread : 0.1);
-    lo = forecast - w;
-    hi = forecast + w;
-  }
-  // 区间至少要包住预测值本身，且不窄于回测平均误差的一半。
-  final minHalf = forecast.abs() * (spread.isFinite ? spread / 2 : 0.03);
-  lo = math.min(lo, forecast - minHalf);
-  hi = math.max(hi, forecast + minHalf);
-
-  final pm = DateTime(y, m - 1, 1);
-  double? prev;
-  double? beat;
-  if (!pm.isBefore(earliest)) {
-    prev = _sumRange(d, pm.year, pm.month, 1, _daysIn(pm.year, pm.month));
-    if (ratios.isNotEmpty) {
-      final hit = ratios.where((r) => forecast * r > prev!).length;
-      beat = (hit + 0.5) / (ratios.length + 1);
-    }
-  }
-
-  return LighthouseModelForecast(
-    forecast: forecast,
-    lo: lo,
-    hi: hi,
-    actual: now.actual,
-    cutoffDay: c,
-    totalDays: total,
-    linear: now.linear,
-    modelMape: usedModel ? mEns : mLin,
-    linearMape: mLin,
-    backtestMonths: bt.length,
-    usedModel: usedModel,
-    beatPrevProb: beat,
-    prevMonthTotal: prev,
-  );
 }
-
-/// 把模型结果套进图上用的 [LighthousePaceForecast]。
-/// [shownActual] 是图上实线末端的值（月度序列的本月），与模型的日累计同源但可能
-/// 多含今天的部分数据；预测值不低于它。
-LighthousePaceForecast lighthousePaceFromModel(
-  LighthouseModelForecast mf, {
-  required double shownActual,
-}) {
-  final up = mf.forecast >= 0;
-  final fc = up
-      ? math.max(mf.forecast, shownActual)
-      : math.min(mf.forecast, shownActual);
-  return LighthousePaceForecast(
-    actual: shownActual,
-    forecast: fc,
-    elapsedDays: mf.cutoffDay,
-    totalDays: mf.totalDays,
-    lo: math.min(mf.lo, fc),
-    hi: math.max(mf.hi, fc),
-    beatPrevProb: mf.beatPrevProb,
-    modelMape: mf.modelMape,
-    linearMape: mf.linearMape,
-    byModel: mf.usedModel,
-  );
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// 量化报告：把上面的预测摊开 —— 各模型本月怎么说、回测每个月准不准、
-// 月里不同时点的准度、模型学到的参数，以及累计走势图要用的曲线。
-// ═════════════════════════════════════════════════════════════════════════════
 
 @immutable
 class LighthouseBacktestRow {
@@ -392,21 +207,19 @@ class LighthouseBacktestRow {
     this.pace,
     this.daily,
     this.ensemble,
+    this.dynamic,
+    this.weightPace = 0,
+    this.weightDaily = 0,
   });
-
-  /// 被回测的那个整月（1 号）。
   final DateTime month;
-
-  /// 退回到的那一天（与本月截止日按天数比例对齐）。
   final int asOfDay;
-  final double truth;
-  final double linear;
-  final double? pace;
-  final double? daily;
-  final double? ensemble;
+  final double truth, linear;
+  final double? pace, daily, ensemble, dynamic;
 
+  /// 仅由此月之前的已完成回测折计算；没有历史依据时不构造组合。
+  final double weightPace, weightDaily;
   static double? err(double? f, double truth) =>
-      f == null || truth.abs() < 1e-9 ? null : (f - truth) / truth;
+      f == null || truth.abs() < 1e-9 ? null : (f - truth) / truth.abs();
 }
 
 @immutable
@@ -418,17 +231,201 @@ class LighthouseCheckpointRow {
     this.pace,
     this.daily,
     this.ensemble,
+    this.dynamic,
   });
-
-  final int day;
-  final int months;
-
-  /// 平均绝对误差率（0.021 = 2.1%）。
-  final double? linear;
-  final double? pace;
-  final double? daily;
-  final double? ensemble;
+  final int day, months;
+  final double? linear, pace, daily, ensemble, dynamic;
 }
+
+/// WAPE = Σ|预测−真实| / Σ|真实|；适用于存在零月、负月的金额。
+/// 只有所有被比较方法均可计算的月份才用于该项评分。
+double? _wape(
+  List<LighthouseBacktestRow> rows,
+  double? Function(LighthouseBacktestRow) prediction,
+) {
+  if (rows.length < 2 || rows.any((r) => prediction(r) == null)) return null;
+  var denominator = 0.0, numerator = 0.0;
+  for (final r in rows) {
+    denominator += r.truth.abs();
+    numerator += (prediction(r)! - r.truth).abs();
+  }
+  return denominator > 1e-9 ? numerator / denominator : null;
+}
+
+({double pace, double daily}) _weights(List<LighthouseBacktestRow> rows) {
+  final common = rows.where((r) => r.pace != null && r.daily != null).toList();
+  final p = _wape(common, (r) => r.pace);
+  final d = _wape(common, (r) => r.daily);
+  if (p == null || d == null) return (pace: 0.0, daily: 0.0);
+  final wp = 1 / (p + 0.01), wd = 1 / (d + 0.01);
+  return (pace: wp / (wp + wd), daily: wd / (wp + wd));
+}
+
+List<LighthouseBacktestRow> _backtestAt(
+  Map<DateTime, double> d,
+  DateTime month,
+  int c,
+  bool signed,
+) {
+  final earliest = d.keys.reduce((a, b) => a.isBefore(b) ? a : b);
+  final total = _daysIn(month.year, month.month);
+  final rows = <LighthouseBacktestRow>[];
+  // 从早到晚：组合的权重只读以前的折，绝不读当前被打分月份。
+  for (var k = 6; k >= 1; k--) {
+    final ms = DateTime(month.year, month.month - k, 1);
+    final days = _daysIn(ms.year, ms.month);
+    if (!_complete(d, ms.year, ms.month, days)) continue;
+    // 最后一周按剩余天数对齐，保证比较的是同样的月底窗口，而非不同尾日。
+    final ck =
+        (total - c <= 7 ? days - (total - c) : (c * days / total).round())
+            .clamp(2, days - 1);
+    final dm = lighthouseDynamicForecast(
+      daily: d,
+      cutoff: DateTime(ms.year, ms.month, ck),
+      signed: signed,
+      simulations: 0,
+    );
+    if (dm == null) continue;
+    final p = _predictAt(d, earliest, ms.year, ms.month, ck);
+    final w = _weights(rows);
+    final ens = p.pace != null && p.daily != null && w.pace + w.daily > 0
+        ? p.pace! * w.pace + p.daily! * w.daily
+        : null;
+    rows.add(
+      LighthouseBacktestRow(
+        month: ms,
+        asOfDay: ck,
+        truth: _sumRange(d, ms.year, ms.month, 1, days),
+        linear: p.linear,
+        pace: p.pace,
+        daily: p.daily,
+        ensemble: ens,
+        dynamic: dm.forecast,
+        weightPace: w.pace,
+        weightDaily: w.daily,
+      ),
+    );
+  }
+  return rows;
+}
+
+/// 最新可用日期不晚于昨天。当前月有缺口则暂停模型，不能把缺失当 0。
+/// 没有后端完整性水位时，“可用”不等于数据已完成业务对账。
+LighthouseModelForecast? lighthouseModelForecast({
+  required Map<DateTime, double> daily,
+  required DateTime today,
+  bool signed = false,
+}) {
+  final d = _observed(daily, today);
+  final current = d.keys.where(
+    (t) => t.year == today.year && t.month == today.month,
+  );
+  if (current.isEmpty) return null;
+  final cutoff = current.reduce((a, b) => a.isAfter(b) ? a : b);
+  final c = cutoff.day, total = _daysIn(today.year, today.month);
+  if (c < 2 || c >= total || !_complete(d, today.year, today.month, c)) {
+    return null;
+  }
+  var completeMonths = 0;
+  for (var k = 1; k <= 6; k++) {
+    final ms = DateTime(today.year, today.month - k, 1);
+    if (_complete(d, ms.year, ms.month, _daysIn(ms.year, ms.month))) {
+      completeMonths++;
+    }
+  }
+  if (completeMonths < 2) return null;
+  // 分布口径只由当前可见数据决定，未来负金额不能反向影响历史拟合。
+  final isSigned = signed || d.values.any((v) => v < 0);
+  final dm = lighthouseDynamicForecast(
+    daily: d,
+    cutoff: cutoff,
+    signed: isSigned,
+  );
+  if (dm == null) return null;
+  final month = DateTime(today.year, today.month, 1);
+  final rows = _backtestAt(d, month, c, signed);
+  final ml = _wape(rows, (r) => r.linear);
+  final md = _wape(rows, (r) => r.dynamic);
+  final linear = dm.actual / c * total;
+  final use = ml != null && md != null && md <= ml;
+  final target = use ? dm.forecast : linear;
+  // 主预测与分布保持一致：原算法保底时，正金额只缩放“剩余部分”；
+  // 有符号金额按剩余进度平移。不会把未来利润强行夹到已发生利润以上。
+  final remaining = dm.forecast - dm.actual;
+  double align(double v, int day) {
+    if (day <= c) return v;
+    if (!isSigned && remaining > 1e-9) {
+      return dm.actual + (v - dm.actual) * (target - dm.actual) / remaining;
+    }
+    return v + (target - dm.forecast) * (day - c) / (total - c);
+  }
+
+  final mean = [
+    for (var i = 0; i < total; i++) align(dm.cumulativeMean[i], i + 1),
+  ];
+  final paths = [
+    for (final path in dm.paths)
+      [for (var i = 0; i < total; i++) align(path[i], i + 1)],
+  ];
+  final lo = [
+    for (var i = 0; i < total; i++)
+      lighthouseForecastQuantile([for (final path in paths) path[i]], 0.1),
+  ];
+  final hi = [
+    for (var i = 0; i < total; i++)
+      lighthouseForecastQuantile([for (final path in paths) path[i]], 0.9),
+  ];
+  final pm = DateTime(today.year, today.month - 1, 1);
+  final previous = _complete(d, pm.year, pm.month, _daysIn(pm.year, pm.month))
+      ? _sumRange(d, pm.year, pm.month, 1, _daysIn(pm.year, pm.month))
+      : null;
+  final beat = previous == null
+      ? null
+      : paths.where((p) => p.last > previous).length / paths.length;
+  return LighthouseModelForecast(
+    forecast: target,
+    lo: lo.last,
+    hi: hi.last,
+    actual: dm.actual,
+    cutoffDay: c,
+    totalDays: total,
+    linear: linear,
+    modelMape: (use ? md : ml) ?? double.nan,
+    linearMape: ml ?? double.nan,
+    backtestMonths: rows.length,
+    usedModel: use,
+    beatPrevProb: beat,
+    prevMonthTotal: previous,
+    month: month,
+    dynamic: dm,
+    dynamicMape: md,
+    signed: isSigned,
+    cumulativeMean: mean,
+    cumulativeLo: lo,
+    cumulativeHi: hi,
+    paths: paths,
+  );
+}
+
+/// 实线可以是实时累计；预测与概率仍保持同一个 T+1 截止口径，不单独夹点值。
+LighthousePaceForecast lighthousePaceFromModel(
+  LighthouseModelForecast mf, {
+  required double shownActual,
+}) => LighthousePaceForecast(
+  actual: shownActual,
+  forecast: mf.forecast,
+  elapsedDays: mf.cutoffDay,
+  totalDays: mf.totalDays,
+  lo: mf.lo,
+  hi: mf.hi,
+  beatPrevProb: mf.beatPrevProb,
+  modelMape: mf.modelMape,
+  linearMape: mf.linearMape,
+  byModel: mf.usedModel,
+  modelLabel: mf.modelLabel,
+  backtestMonths: mf.backtestMonths,
+  trial: mf.trial,
+);
 
 @immutable
 class LighthouseForecastReport {
@@ -436,6 +433,7 @@ class LighthouseForecastReport {
     required this.summary,
     required this.pace,
     required this.daily,
+    required this.ensemble,
     required this.weightPace,
     required this.weightDaily,
     required this.mapeLinear,
@@ -452,255 +450,97 @@ class LighthouseForecastReport {
     required this.typicalShare,
     required this.prevCum,
   });
-
   final LighthouseModelForecast summary;
-
-  /// 本月两个子模型各自的预测。
-  final double? pace;
-  final double? daily;
-
-  /// 组合权重（0~1，合计 1；某个模型不可用时为 0）。
-  final double weightPace;
-  final double weightDaily;
-
-  final double? mapeLinear;
-  final double? mapePace;
-  final double? mapeDaily;
-  final double? mapeEnsemble;
-
-  /// 回测明细（按本月截止日对齐），新月份在前。
-  final List<LighthouseBacktestRow> rows;
-
-  /// 月里第 5 / 10 / 15 / 20 / 25 天分别预测时的准度。
-  final List<LighthouseCheckpointRow> checkpoints;
-
-  /// 星期一 … 星期日 的日量系数（1 = 平均）。
-  final List<double> weekdayFactors;
-  final double monthEndFactor;
-
-  /// 去掉星期效应后的近期日均水平。
-  final double dailyLevel;
-
-  /// 到截止日「通常已完成全月的几成」。
+  final double? pace,
+      daily,
+      ensemble,
+      mapeLinear,
+      mapePace,
+      mapeDaily,
+      mapeEnsemble;
+  final double weightPace, weightDaily, monthEndFactor, dailyLevel;
   final double? paceShare;
-
-  /// 本月 1 号 … 截止日 的累计。
-  final List<double> cumActual;
-
-  /// 1 号 … 月末 的典型累计完成比例（历史加权，0~1）。
-  final List<double>? typicalShare;
-
-  /// 上月 1 号 … 月末 的累计（按本月天数对齐）。
-  final List<double>? prevCum;
+  final List<LighthouseBacktestRow> rows;
+  final List<LighthouseCheckpointRow> checkpoints;
+  final List<double> weekdayFactors, cumActual;
+  final List<double>? typicalShare, prevCum;
 }
 
-({
-  List<LighthouseBacktestRow> rows,
-  double? lin,
-  double? pace,
-  double? daily,
-  double? ens,
-  double wPace,
-  double wDaily,
-})
-_backtestAt(
-  Map<DateTime, double> d,
-  DateTime earliest,
-  int y,
-  int m,
-  int c,
-) {
-  final total = _daysIn(y, m);
-  final raw = <({DateTime month, int ck, double truth, _Pred p})>[];
-  for (var k = 1; k <= 6; k++) {
-    final ms = DateTime(y, m - k, 1);
-    if (ms.isBefore(earliest)) break;
-    final dk = _daysIn(ms.year, ms.month);
-    final truth = _sumRange(d, ms.year, ms.month, 1, dk);
-    if (truth.abs() < 1e-6) continue;
-    final ck = (c * dk / total).round().clamp(2, dk - 1);
-    raw.add((
-      month: ms,
-      ck: ck,
-      truth: truth,
-      p: _predictAt(d, earliest, ms.year, ms.month, ck),
-    ));
-  }
-  double? mape(Iterable<double?> errs) {
-    final xs = [
-      for (final e in errs)
-        if (e != null) e.abs(),
-    ];
-    return xs.length < 2 ? null : xs.reduce((a, b) => a + b) / xs.length;
-  }
-
-  final mLin = mape(
-    raw.map((r) => LighthouseBacktestRow.err(r.p.linear, r.truth)),
-  );
-  final mPace = mape(
-    raw.map((r) => LighthouseBacktestRow.err(r.p.pace, r.truth)),
-  );
-  final mDaily = mape(
-    raw.map((r) => LighthouseBacktestRow.err(r.p.daily, r.truth)),
-  );
-  final wp = mPace == null ? 0.0 : 1 / (mPace + 0.01);
-  final wd = mDaily == null ? 0.0 : 1 / (mDaily + 0.01);
-  double? ensOf(double? p, double? dl) {
-    var w = 0.0;
-    var v = 0.0;
-    if (p != null && wp > 0) {
-      w += wp;
-      v += p * wp;
-    }
-    if (dl != null && wd > 0) {
-      w += wd;
-      v += dl * wd;
-    }
-    return w > 0 ? v / w : null;
-  }
-
-  final rows = [
-    for (final r in raw)
-      LighthouseBacktestRow(
-        month: r.month,
-        asOfDay: r.ck,
-        truth: r.truth,
-        linear: r.p.linear,
-        pace: r.p.pace,
-        daily: r.p.daily,
-        ensemble: ensOf(r.p.pace, r.p.daily),
-      ),
-  ];
-  final mEns = mape(
-    rows.map((r) => LighthouseBacktestRow.err(r.ensemble, r.truth)),
-  );
-  final wSum = wp + wd;
-  return (
-    rows: rows,
-    lin: mLin,
-    pace: mPace,
-    daily: mDaily,
-    ens: mEns,
-    wPace: wSum > 0 ? wp / wSum : 0.0,
-    wDaily: wSum > 0 ? wd / wSum : 0.0,
-  );
-}
-
-/// 生成量化报告；数据不够建模时返回 null（与 [lighthouseModelForecast] 同条件）。
 LighthouseForecastReport? lighthouseForecastReport({
   required Map<DateTime, double> daily,
   required DateTime today,
+  bool signed = false,
 }) {
-  final summary = lighthouseModelForecast(daily: daily, today: today);
+  final summary = lighthouseModelForecast(
+    daily: daily,
+    today: today,
+    signed: signed,
+  );
   if (summary == null) return null;
-  final d = <DateTime, double>{
-    for (final e in daily.entries)
-      if (e.value.isFinite) _day(e.key): e.value,
-  };
+  final d = _observed(daily, today);
   final earliest = d.keys.reduce((a, b) => a.isBefore(b) ? a : b);
-  final t = _day(today);
-  final y = t.year;
-  final m = t.month;
-  final total = _daysIn(y, m);
-  final c = summary.cutoffDay;
-  final now = _predictAt(d, earliest, y, m, c);
-  final bt = _backtestAt(d, earliest, y, m, c);
-  // 本月某个子模型算不出来时，权重全给另一个。
-  final wp0 = now.pace == null ? 0.0 : bt.wPace;
-  final wd0 = now.daily == null ? 0.0 : bt.wDaily;
-  final wNow = wp0 + wd0;
-  final wPaceNow = wNow > 0 ? wp0 / wNow : 0.0;
-  final wDailyNow = wNow > 0 ? wd0 / wNow : 0.0;
-
-  final checkpoints = <LighthouseCheckpointRow>[
-    for (final cc in const [5, 10, 15, 20, 25])
-      if (cc < total)
-        () {
-          final b = _backtestAt(d, earliest, y, m, cc);
-          return LighthouseCheckpointRow(
-            day: cc,
-            months: b.rows.length,
-            linear: b.lin,
-            pace: b.pace,
-            daily: b.daily,
-            ensemble: b.ens,
-          );
-        }(),
+  final m = summary.month, c = summary.cutoffDay, total = summary.totalDays;
+  final now = _predictAt(d, earliest, m.year, m.month, c);
+  final rows = _backtestAt(d, m, c, signed);
+  final w = _weights(rows);
+  final common = rows.where((r) => r.pace != null && r.daily != null).toList();
+  final ensCommon = rows.where((r) => r.ensemble != null).toList();
+  final checkpoints = [
+    for (final day in {
+      5,
+      10,
+      15,
+      20,
+      25,
+      total - 3,
+      total - 1,
+    }.toList()..sort())
+      () {
+        final b = _backtestAt(d, m, day, signed);
+        return LighthouseCheckpointRow(
+          day: day,
+          months: b.length,
+          linear: _wape(b, (r) => r.linear),
+          dynamic: _wape(b, (r) => r.dynamic),
+        );
+      }(),
   ];
-
-  final cum = <double>[];
-  var acc = 0.0;
-  for (var i = 1; i <= c; i++) {
-    acc += d[DateTime(y, m, i)] ?? 0;
-    cum.add(acc);
-  }
-
-  // 典型完成比例曲线：前 6 个整月加权（同号月份才算）。
-  List<double>? typical;
-  {
-    final months = <({int yy, int mm, int dk, double tk, double w})>[];
-    for (var k = 1; k <= 6; k++) {
-      final ms = DateTime(y, m - k, 1);
-      if (ms.isBefore(earliest)) break;
-      final dk = _daysIn(ms.year, ms.month);
-      final tk = _sumRange(d, ms.year, ms.month, 1, dk);
-      if (tk.abs() < 1e-6) continue;
-      if (summary.forecast.abs() > 1e-6 && (tk > 0) != (summary.forecast > 0)) {
-        continue;
-      }
-      months.add((
-        yy: ms.year,
-        mm: ms.month,
-        dk: dk,
-        tk: tk,
-        w: math.pow(0.75, k - 1).toDouble(),
-      ));
-    }
-    if (months.length >= 2) {
-      typical = [
-        for (var j = 1; j <= total; j++)
-          () {
-            var ws = 0.0;
-            var ss = 0.0;
-            for (final mo in months) {
-              final jk = (j * mo.dk / total).round().clamp(1, mo.dk);
-              ss += _sumRange(d, mo.yy, mo.mm, 1, jk) / mo.tk * mo.w;
-              ws += mo.w;
-            }
-            return ws > 0 ? ss / ws : 0.0;
-          }(),
-      ];
-    }
-  }
-
-  List<double>? prevCum;
-  final pm = DateTime(y, m - 1, 1);
-  if (!pm.isBefore(earliest)) {
-    final dk = _daysIn(pm.year, pm.month);
-    prevCum = [
+  final pm = DateTime(m.year, m.month - 1, 1);
+  List<double>? previous;
+  if (summary.prevMonthTotal != null) {
+    final days = _daysIn(pm.year, pm.month);
+    previous = [
       for (var j = 1; j <= total; j++)
-        _sumRange(d, pm.year, pm.month, 1, (j * dk / total).round().clamp(1, dk)),
+        _sumRange(
+          d,
+          pm.year,
+          pm.month,
+          1,
+          (j * days / total).round().clamp(1, days),
+        ),
     ];
   }
-
   return LighthouseForecastReport(
     summary: summary,
     pace: now.pace,
     daily: now.daily,
-    weightPace: wPaceNow,
-    weightDaily: wDailyNow,
-    mapeLinear: bt.lin,
-    mapePace: bt.pace,
-    mapeDaily: bt.daily,
-    mapeEnsemble: bt.ens,
-    rows: bt.rows,
+    ensemble: now.pace != null && now.daily != null && w.pace + w.daily > 0
+        ? now.pace! * w.pace + now.daily! * w.daily
+        : null,
+    weightPace: w.pace,
+    weightDaily: w.daily,
+    mapeLinear: summary.linearMape.isFinite ? summary.linearMape : null,
+    mapePace: _wape(common, (r) => r.pace),
+    mapeDaily: _wape(common, (r) => r.daily),
+    mapeEnsemble: _wape(ensCommon, (r) => r.ensemble),
+    rows: rows.reversed.toList(),
     checkpoints: checkpoints,
-    weekdayFactors: now.weekday,
-    monthEndFactor: now.monthEnd,
-    dailyLevel: now.level,
+    weekdayFactors: summary.dynamic.weekdayFactors,
+    monthEndFactor: summary.dynamic.monthEndFactor,
+    dailyLevel: summary.dynamic.dailyLevel,
     paceShare: now.share,
-    cumActual: cum,
-    typicalShare: typical,
-    prevCum: prevCum,
+    cumActual: summary.cumulativeMean.take(c).toList(),
+    typicalShare: null,
+    prevCum: previous,
   );
 }

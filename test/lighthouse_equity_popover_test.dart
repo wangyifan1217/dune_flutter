@@ -88,7 +88,7 @@ void main() {
     expect(opened?.row, '湖北移动');
   });
 
-  testWidgets('多个候选显示各自的权益收入和毛利，不合并交易账', (tester) async {
+  testWidgets('多个候选显示各自的权益收入和利润，不合并交易账', (tester) async {
     LhEquityLink? opened;
     await tester.pumpWidget(
       _host(
@@ -117,23 +117,23 @@ void main() {
     expect(find.text('2项'), findsOneWidget);
     expect(find.text('湖北移动'), findsOneWidget);
     expect(find.text('湖北电信'), findsOneWidget);
-    expect(find.text('同省权益线索 · 合计不与标签二交易毛利相加 · 点击项目直达详情'), findsOneWidget);
+    expect(find.text('同省权益线索 · 合计不与标签二交易利润相加 · 点击项目直达详情'), findsOneWidget);
     expect(find.text('标签二交易'), findsOneWidget);
-    expect(find.text('交易毛利'), findsOneWidget);
+    expect(find.text('交易利润'), findsOneWidget);
     expect(find.text('−16.69万'), findsOneWidget);
     expect(find.text('会员套餐订阅'), findsOneWidget);
     expect(find.text('会员套餐点播'), findsOneWidget);
-    expect(find.text('毛利润'), findsNWidgets(2));
+    expect(find.text('利润'), findsNWidgets(2));
     expect(find.text('841.6万'), findsOneWidget);
     expect(find.text('+282.0万'), findsOneWidget);
     expect(find.text('120.0万'), findsOneWidget);
     expect(find.text('+18.50万'), findsOneWidget);
-    expect(find.text('候选权益毛利润合计'), findsOneWidget);
+    expect(find.text('候选权益利润合计'), findsOneWidget);
     expect(find.text('+300.5万'), findsOneWidget);
-    expect(find.textContaining('合计不与标签二交易毛利相加'), findsOneWidget);
+    expect(find.textContaining('合计不与标签二交易利润相加'), findsOneWidget);
     expect(find.text('湖北省 · 双账对照'), findsNothing);
 
-    await tester.tap(find.text('毛利润').first);
+    await tester.tap(find.text('利润').first);
     await tester.pumpAndSettle();
     expect(find.byType(Dialog), findsNothing);
     expect(opened?.row, '湖北移动');

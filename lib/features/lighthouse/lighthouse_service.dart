@@ -465,7 +465,7 @@ class LighthouseService {
     String errorPrefix,
   ) {
     final uri = _uri(path, query);
-    // 同一个页面可能同时要当前供给列表与资金池毛利，两个请求的 URI
+    // 同一个页面可能同时要当前供给列表与资金池利润，两个请求的 URI
     // 完全相同时只发一次；完成后立即移除，手动刷新仍取最新数据。
     final pending = _inFlight[uri];
     if (pending != null) return pending;

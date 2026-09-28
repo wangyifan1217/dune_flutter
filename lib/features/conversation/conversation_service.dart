@@ -1192,6 +1192,7 @@ class ConversationService {
     required String fileName,
     required String mimeType,
     required String sourceLabel,
+    Map<String, dynamic>? lighthouseCard,
     Uint8List? previewBytes,
     String? previewFileName,
     String? previewMimeType,
@@ -1277,6 +1278,7 @@ class ConversationService {
         'mimeType': mimeType,
         // 保留原图字节数，预览页无需再次请求 HEAD 即可展示准确大小。
         'sizeBytes': bytes.length,
+        if (lighthouseCard != null) 'lighthouseCard': lighthouseCard,
       },
     );
   }

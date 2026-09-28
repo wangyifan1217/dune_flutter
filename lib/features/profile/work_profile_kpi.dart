@@ -657,7 +657,7 @@ const kKpiTelecomLeaders = ['石淼', '徐峥', '李同池'];
 /// 能源领导层置顶顺序。
 const kKpiEnergyLeaders = ['王一凡', '吕宙'];
 
-const kKpiTelecomGroupOrder = ['出行会员', '加油会员', '出行金', '明星来电', '点播加油权益'];
+const kKpiTelecomGroupOrder = ['出行会员', '加油会员', '出行金', '明星来电', '加油权益'];
 
 const kKpiEnergyGroupOrder = ['中石油', '中石化', '民营加油', '平安', '石油科技'];
 
@@ -691,7 +691,7 @@ String kpiCanonicalMarketGroup(WorkProfileKpiTask task) {
   if (product.contains('加油会员')) return '加油会员';
   if (product.contains('明星来电')) return '明星来电';
   if (product.contains('出行金')) return '出行金';
-  if (product.contains('点播')) return '点播加油权益';
+  if (product.contains('加油权益') || product.contains('点播')) return '加油权益';
   final title = kpiLighthouseSliceTitle(task).trim();
   if (title.isEmpty || kpiLighthouseBucketDim(title)) return '未分组';
   return title;

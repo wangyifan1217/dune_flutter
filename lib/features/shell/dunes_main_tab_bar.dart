@@ -55,6 +55,17 @@ double dunesAppBottomNavContentPadding(
   return overlay + kDunesAppBottomNavContentGap;
 }
 
+/// 灯塔等 APP 根页：把可视区收到悬浮底栏上沿。
+///
+/// [dunesAppBottomNavOverlayExtent] 在桌面侧栏模式下是 0；Web / 手机始终至少
+/// 让出胶囊堆叠高度，避免最后一张卡画到毛玻璃底下。
+double dunesAppBottomNavViewportReserve(BuildContext context) {
+  if (isDesktopCommOnly) return 0;
+  final overlay = dunesAppBottomNavOverlayExtent(context);
+  const floor = kDunesAppBottomNavStackHeight + kDunesAppBottomNavMinGap;
+  return overlay > floor ? overlay : floor;
+}
+
 class DunesMainTabBar extends StatefulWidget {
   const DunesMainTabBar({
     super.key,

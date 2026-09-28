@@ -181,7 +181,7 @@ void main() {
     expect(lighthouseAggregateRowsDeltaPct(const [], key: 'profit'), isNull);
   });
 
-  test('毛利润环比必须用 prevProfit，上期亏损时不能用百分比反推', () {
+  test('利润环比必须用 prevProfit，上期亏损时不能用百分比反推', () {
     expect(lighthouseSignedDeltaPct(100, 60), closeTo(40 / 60 * 100, 0.001));
     expect(lighthouseSignedDeltaPct(10, 0), isNull);
     expect(lighthouseRecoverPreviousAmount(current: 120, deltaPct: 50), 80);

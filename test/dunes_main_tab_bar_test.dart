@@ -47,7 +47,12 @@ Future<void> _pumpBar(
             );
             return Scaffold(
               body: axis == Axis.vertical
-                  ? Row(children: [bar, const Expanded(child: SizedBox())])
+                  ? Row(
+                      children: [
+                        bar,
+                        const Expanded(child: SizedBox()),
+                      ],
+                    )
                   : const SizedBox.expand(),
               bottomNavigationBar: axis == Axis.horizontal ? bar : null,
             );
@@ -111,7 +116,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('AI opens C4 and back restores the previous page', (tester) async {
+  testWidgets('AI opens C4 and back restores the previous page', (
+    tester,
+  ) async {
     final navigation = DunesNavigationController(initialScreen: 'C4');
     addTearDown(navigation.dispose);
     navigation.go('B2');
@@ -277,10 +284,7 @@ void main() {
         ),
         child: Builder(
           builder: (context) {
-            overlay = dunesAppBottomNavOverlayExtent(
-              context,
-              appOverlay: true,
-            );
+            overlay = dunesAppBottomNavOverlayExtent(context, appOverlay: true);
             padding = dunesAppBottomNavContentPadding(
               context,
               fallback: 14,
@@ -309,6 +313,45 @@ void main() {
       14,
     );
   });
+
+  testWidgets(
+    'APP viewport reserve keeps content above stacked nav when viewPadding is 0',
+    (tester) async {
+      const size = Size(390, 844);
+      late double reserve;
+      await tester.binding.setSurfaceSize(size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(size: size),
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: Builder(
+              builder: (context) {
+                reserve = dunesAppBottomNavViewportReserve(context);
+                return SizedBox(
+                  width: size.width,
+                  height: size.height,
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: reserve),
+                    child: const ClipRect(
+                      child: ColoredBox(color: Color(0xFFFFFFFF)),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      expect(reserve, kDunesAppBottomNavStackHeight + kDunesAppBottomNavMinGap);
+      expect(
+        tester.getRect(find.byType(ClipRect)).bottom,
+        size.height - reserve,
+      );
+    },
+  );
 
   testWidgets('APP tab capsule uses a stroke-only purple gradient border', (
     tester,

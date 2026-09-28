@@ -193,8 +193,8 @@ class _PlatformTreeState extends State<PlatformTree>
                       kicker: '市场部 · 统计平台',
                       accent: const Color(0xFFC47A3A),
                       lines: const [
-                        ('哨兵', '折扣改写 / 毛利跳变 / 口径偏差'),
-                        ('规模', '双口径毛利 · 本期偏差追踪'),
+                        ('哨兵', '折扣改写 / 利润跳变 / 口径偏差'),
+                        ('规模', '双口径利润 · 本期偏差追踪'),
                         ('结构', 'Top3 增幅 / 塌陷 / 反常'),
                       ],
                       actionLabel: '进入灯塔',

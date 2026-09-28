@@ -16,7 +16,7 @@ import 'lighthouse_theme.dart';
 //
 //   所以这里只做「指路」：
 //     · 点供给名称始终先开卡片，单项也不直接跳；
-//     · 卡片列出权益侧每个项目的收入与毛利，点项目再进入权益详情；
+//     · 卡片列出权益侧每个项目的收入与利润，点项目再进入权益详情；
 //       交易侧金额留在原行和跳转后的来路条，不合并两套账。
 
 enum _PopoverPlacement { right, left, below, above }
@@ -539,7 +539,7 @@ class _EquityPopover extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Text('交易毛利', style: LhTypography.sans(size: 9, color: LhColors.ink2)),
+          Text('交易利润', style: LhTypography.sans(size: 9, color: LhColors.ink2)),
           const Spacer(),
           Text(
             _signedMoney(value),
@@ -639,7 +639,7 @@ class _EquityPopover extends StatelessWidget {
                   _amountLine('收入', _incomeMoney(link.revenue), LhColors.ink2),
                   const SizedBox(height: 3),
                   _amountLine(
-                    '毛利润',
+                    '利润',
                     _signedMoney(link.profit),
                     link.profit < 0
                         ? LhColors.pos
@@ -676,7 +676,7 @@ class _EquityPopover extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            '候选权益毛利润合计',
+            '候选权益利润合计',
             style: LhTypography.sans(
               size: 10,
               color: LhColors.ink2,
@@ -696,7 +696,7 @@ class _EquityPopover extends StatelessWidget {
   Widget _scopeNote() => Padding(
     padding: const EdgeInsets.fromLTRB(16, 5, 16, 10),
     child: Text(
-      '同省权益线索 · 合计不与标签二交易毛利相加 · 点击项目直达详情',
+      '同省权益线索 · 合计不与标签二交易利润相加 · 点击项目直达详情',
       style: LhTypography.sans(size: 9, color: LhColors.mute2),
     ),
   );

@@ -7,16 +7,16 @@
 //
 // ── 第一原则：差额型指标不能比百分比 ─────────────────────────────────────────
 //
-//   净利 = 收入 − 成本合计       毛利 = 收入 − 项目成本
-//   ⟹ 毛利 − 净利 = 成本合计 − 项目成本 ≡ W（项目成本以外那块成本）
-//   ⟹ ΔW = 毛利₀ × g毛利 − 净利₀ × g净利
+//   净利 = 收入 − 成本合计       利润 = 收入 − 项目成本
+//   ⟹ 利润 − 净利 = 成本合计 − 项目成本 ≡ W（项目成本以外那块成本）
+//   ⟹ ΔW = 利润₀ × g利润 − 净利₀ × g净利
 //
-//   所以「毛利涨 2.4%、净利涨 5.5%」这两个数**不足以**判断成本涨还是跌：
-//     净利₀/毛利₀ > 43.6% → W 缩小（成本降了）
-//     净利₀/毛利₀ < 43.6% → W 扩大（成本涨了）
+//   所以「利润涨 2.4%、净利涨 5.5%」这两个数**不足以**判断成本涨还是跌：
+//     净利₀/利润₀ > 43.6% → W 缩小（成本降了）
+//     净利₀/利润₀ < 43.6% → W 扩大（成本涨了）
 //   同样两个百分比，结论可以完全相反。分母不一样，百分比就不可比。
 //
-//   规则：**凡是相减关系（毛利/净利/利差/现金流），推论跑在增量金额 Δ 上；
+//   规则：**凡是相减关系（利润/净利/利差/现金流），推论跑在增量金额 Δ 上；
 //   只有相除关系（毛利率/ROI/变现率/核销率）才可以拿百分比相减。**
 //   这条被 test/lighthouse_readout_test.dart 的第一组用例钉死。
 //
@@ -74,8 +74,8 @@ abstract final class LhReadoutGate {
 
   /// 利润类指标的基数门槛。
   ///
-  /// 利润天生比规模小一到两个数量级：销售 1810 万对应的毛利可能只有 24 万，
-  /// 这是正常利润率，不是小基数噪声。拿规模的门槛去卡它，「毛利 24 万上多了
+  /// 利润天生比规模小一到两个数量级：销售 1810 万对应的利润可能只有 24 万，
+  /// 这是正常利润率，不是小基数噪声。拿规模的门槛去卡它，「利润 24 万上多了
   /// 3.6 万成本」这种最该说的话会被整条吞掉 —— 样本日报就是这么发现的。
   /// 所以利润 / 现金流 / 成本这一族单独走 1/10 的门槛。
   static double minProfitBase(LhReadoutPeriod p) => minBase(p) / 10;
@@ -125,18 +125,18 @@ class LhReadoutTotals {
   final double? projectCost; // 项目成本
   final double? businessCost; // 业务成本
   final double? costTotal; // 成本合计（≠ 项目 + 业务，见下方 note）
-  final double? profit; // 毛利润 = 收入 − 项目成本
+  final double? profit; // 利润 = 收入 − 项目成本
   final double? netProfit; // 净利润 = 收入 − 成本合计
   final double? prepaid; // 经营性净现金流
   final double? spread; // 利差
 
-  /// 毛利率 = 毛利 ÷ 核销额。
+  /// 毛利率 = 利润 ÷ 核销额。
   double? get grossMargin =>
       (profit == null || verifiedSales == null || verifiedSales!.abs() < 1e-9)
       ? null
       : profit! / verifiedSales! * 100;
 
-  /// ROI = 毛利 ÷ 成本合计。
+  /// ROI = 利润 ÷ 成本合计。
   double? get roi =>
       (profit == null || costTotal == null || costTotal!.abs() < 1e-9)
       ? null
@@ -333,13 +333,13 @@ double? lhGrowth(double? cur, double? prev) {
 //   它们是这套简报的地基，也是唯一必须逐位回归的部分。
 
 /// W = 成本合计 − 项目成本，即「项目成本以外那块成本」。
-/// 由 毛利 − 净利 恒等推出，不需要拿到 costTotal / projectCost 也算得出来。
+/// 由 利润 − 净利 恒等推出，不需要拿到 costTotal / projectCost 也算得出来。
 double? lhWedge(double? profit, double? netProfit) =>
     (profit == null || netProfit == null) ? null : profit - netProfit;
 
-/// ΔW = Δ毛利 − Δ净利。**正数 = 成本涨了**，负数 = 成本降了。
+/// ΔW = Δ利润 − Δ净利。**正数 = 成本涨了**，负数 = 成本降了。
 ///
-/// 这就是「毛利涨 2.4%、净利涨 5.5%」的正解：不能比百分比，要比增量。
+/// 这就是「利润涨 2.4%、净利涨 5.5%」的正解：不能比百分比，要比增量。
 double? lhWedgeDelta({
   required double? profitCur,
   required double? profitPrev,
@@ -353,11 +353,11 @@ double? lhWedgeDelta({
 
 /// 结论翻转的临界基数比。
 ///
-/// ΔW = 毛利₀·g毛利 − 净利₀·g净利 = 0  ⟹  净利₀/毛利₀ = g毛利 / g净利
+/// ΔW = 利润₀·g利润 − 净利₀·g净利 = 0  ⟹  净利₀/利润₀ = g利润 / g净利
 ///
-/// 即：只给两个环比百分比，结论取决于「净利占毛利多少」。
-/// 例：g毛利 = 2.4%、g净利 = 5.5% ⟹ 临界比 43.6%。
-/// 净利占毛利超过 43.6% → 成本降了；不到 → 成本涨了。**同样两个百分比，
+/// 即：只给两个环比百分比，结论取决于「净利占利润多少」。
+/// 例：g利润 = 2.4%、g净利 = 5.5% ⟹ 临界比 43.6%。
+/// 净利占利润超过 43.6% → 成本降了；不到 → 成本涨了。**同样两个百分比，
 /// 结论完全相反** —— 这是简报里最容易说反的一句，所以单独钉一个函数。
 /// 两个环比同号才有意义；异号时结论由符号本身决定，返回 null。
 double? lhWedgeCrossoverRatio(double? gProfit, double? gNet) {
@@ -428,15 +428,15 @@ LhFact? _r2CashQuality(LhReadoutInput i, LhMoneyFormat m) {
     id: 'R2-cash-quality',
     kind: LhFactKind.fact,
     level: LhFactLevel.critical,
-    text: '毛利 ${_pct(gp * 100)} 但经营性净现金流 ${_pct(gc * 100)}，'
+    text: '利润 ${_pct(gp * 100)} 但经营性净现金流 ${_pct(gc * 100)}，'
         '利润没变成现金，现金净流出 ${m(cash.delta.abs())}',
-    derivation: '毛利 ${m(pf.p)} → ${m(pf.c)}；'
+    derivation: '利润 ${m(pf.p)} → ${m(pf.c)}；'
         '经营性净现金流 ${m(cash.p)} → ${m(cash.c)}',
     amount: cash.delta,
   );
 }
 
-/// R3 · 核销进度：销售跑在前面、核销没跟上 = 待核销在积压，下期毛利有补涨。
+/// R3 · 核销进度：销售跑在前面、核销没跟上 = 待核销在积压，下期利润有补涨。
 /// 这条是比值口径，日报就能说，不用等月底。
 LhFact? _r3Settlement(LhReadoutInput i, LhMoneyFormat m) {
   final s = _pair(i, 'sales');
@@ -457,7 +457,7 @@ LhFact? _r3Settlement(LhReadoutInput i, LhMoneyFormat m) {
     level: gapPp < 0 ? LhFactLevel.warning : LhFactLevel.info,
     text: gapPp < 0
         ? '销售 ${_pct(gs * 100)} 但核销只 ${_pct(gv * 100)}，'
-            '待核销在积压，下期毛利有补涨空间'
+            '待核销在积压，下期利润有补涨空间'
         : '核销 ${_pct(gv * 100)} 跑赢销售 ${_pct(gs * 100)}，往期待核销在回补',
     derivation: '核销率 = 核销额 ÷ 销售额；$rateNote'
         '（差 ${_pp(gapPp)}）',
@@ -487,8 +487,8 @@ LhFact? _r4Overdue(LhReadoutInput i, LhMoneyFormat m) {
 LhFact? _r5Outlier(LhReadoutInput i, LhMoneyFormat m) {
   if (!LhReadoutGate.allowsOutlier(i.period)) return null;
   if (i.entities.isEmpty) return null;
-  // 同样走利润类门槛：一个省一天的毛利本来就是几万量级，
-  // 拿销售额的门槛去卡，毛利腰斩的省会被整条漏掉。
+  // 同样走利润类门槛：一个省一天的利润本来就是几万量级，
+  // 拿销售额的门槛去卡，利润腰斩的省会被整条漏掉。
   final gate = LhReadoutGate.minProfitBase(i.period);
   LhReadoutEntity? worst;
   double worstG = 0;
@@ -508,16 +508,16 @@ LhFact? _r5Outlier(LhReadoutInput i, LhMoneyFormat m) {
     id: 'R5-outlier',
     kind: LhFactKind.fact,
     level: LhFactLevel.warning,
-    text: '${worst.name} 毛利 ${_pct(worstG * 100)}，'
+    text: '${worst.name} 利润 ${_pct(worstG * 100)}，'
         '${m(p.p)} 掉到 ${m(p.c)}，是本期最大的单${i.entityWord}跌幅',
-    derivation: '按${i.entityWord}毛利${i.period.compareWord}降序取首位，'
+    derivation: '按${i.entityWord}利润${i.period.compareWord}降序取首位，'
         '基数下限 ${m(gate)}',
     amount: p.delta,
   );
 }
 
 /// R6 · 项目成本变动。**用 Δ 不用百分比**。
-/// 毛利 = 收入 − 项目成本 ⟹ Δ项目成本 = Δ收入 − Δ毛利
+/// 利润 = 收入 − 项目成本 ⟹ Δ项目成本 = Δ收入 − Δ利润
 LhFact? _r6ProjectCost(LhReadoutInput i, LhMoneyFormat m) {
   if (!LhReadoutGate.allowsConclusion(i.period)) return null;
   final rev = _pair(i, 'revenue');
@@ -536,18 +536,18 @@ LhFact? _r6ProjectCost(LhReadoutInput i, LhMoneyFormat m) {
     kind: LhFactKind.conclusion,
     level: up ? LhFactLevel.warning : LhFactLevel.info,
     text: '收入${rev.delta >= 0 ? '增' : '减'} ${m(rev.delta.abs())}、'
-        '毛利${pf.delta >= 0 ? '增' : '减'} ${m(pf.delta.abs())}，'
+        '利润${pf.delta >= 0 ? '增' : '减'} ${m(pf.delta.abs())}，'
         '项目成本净${up ? '增' : '减'} ${m(delta.abs())}',
     derivation: direct.ok
         ? '项目成本 ${m(direct.p)} → ${m(direct.c)}'
-        : 'Δ项目成本 = Δ收入 − Δ毛利 = ${m(rev.delta)} − ${m(pf.delta)}'
-            '（毛利 = 收入 − 项目成本）',
+        : 'Δ项目成本 = Δ收入 − Δ利润 = ${m(rev.delta)} − ${m(pf.delta)}'
+            '（利润 = 收入 − 项目成本）',
     amount: delta,
   );
 }
 
-/// R7 · 项目成本以外那块成本。这条就是「毛利涨 2.4%、净利涨 5.5%」的正解。
-/// 毛利 − 净利 = 成本合计 − 项目成本 ≡ W ⟹ ΔW = Δ毛利 − Δ净利
+/// R7 · 项目成本以外那块成本。这条就是「利润涨 2.4%、净利涨 5.5%」的正解。
+/// 利润 − 净利 = 成本合计 − 项目成本 ≡ W ⟹ ΔW = Δ利润 − Δ净利
 LhFact? _r7WedgeCost(LhReadoutInput i, LhMoneyFormat m) {
   if (!LhReadoutGate.allowsConclusion(i.period)) return null;
   final pf = _pair(i, 'profit');
@@ -557,13 +557,13 @@ LhFact? _r7WedgeCost(LhReadoutInput i, LhMoneyFormat m) {
   final delta = pf.delta - np.delta;
   final floor = i.noiseFloor(pf.c, pf.p);
   if (delta.abs() < floor) return null;
-  // 1% 是「值得说」与「噪声」的分界：毛利 100 万上 1 万的成本摆动，
+  // 1% 是「值得说」与「噪声」的分界：利润 100 万上 1 万的成本摆动，
   // 业务能感知；再低就是账期错位和四舍五入的合成物。
   if (delta.abs() < pf.base * 0.01) return null;
   final up = delta > 0;
   final gp = pf.growth, gn = np.growth;
   final pctNote = (gp != null && gn != null)
-      ? '毛利 ${_pct(gp * 100)}、净利 ${_pct(gn * 100)}，'
+      ? '利润 ${_pct(gp * 100)}、净利 ${_pct(gn * 100)}，'
             '但这两个百分比的分母不同，结论看 Δ：'
       : '';
   return LhFact(
@@ -571,9 +571,9 @@ LhFact? _r7WedgeCost(LhReadoutInput i, LhMoneyFormat m) {
     kind: LhFactKind.conclusion,
     level: up ? LhFactLevel.warning : LhFactLevel.info,
     text: '项目成本以外的成本净${up ? '增' : '减'} ${m(delta.abs())}'
-        '${up ? '，吃掉了这部分毛利' : '，多留下这部分利润'}',
+        '${up ? '，吃掉了这部分利润' : '，多留下这部分利润'}',
     derivation: '$pctNote'
-        'ΔW = Δ毛利 − Δ净利 = ${m(pf.delta)} − ${m(np.delta)} = ${m(delta)}'
+        'ΔW = Δ利润 − Δ净利 = ${m(pf.delta)} − ${m(np.delta)} = ${m(delta)}'
         '（W = 成本合计 − 项目成本）',
     amount: delta,
   );
@@ -614,7 +614,7 @@ LhFact? _r9Roi(LhReadoutInput i, LhMoneyFormat m) {
   final gp = _pair(i, 'profit').growth;
   final gc = ct.growth;
   final note = (gp != null && gc != null)
-      ? '毛利 ${_pct(gp * 100)}、成本合计 ${_pct(gc * 100)}'
+      ? '利润 ${_pct(gp * 100)}、成本合计 ${_pct(gc * 100)}'
       : '';
   return LhFact(
     id: 'R9-roi',
@@ -623,7 +623,7 @@ LhFact? _r9Roi(LhReadoutInput i, LhMoneyFormat m) {
     text: diff < 0
         ? 'ROI ${_pp(diff)}，这一期的利润是花钱换来的'
         : 'ROI ${_pp(diff)}，同样的成本产出更多利润',
-    derivation: 'ROI = 毛利 ÷ 成本合计 = '
+    derivation: 'ROI = 利润 ÷ 成本合计 = '
         '${r0.toStringAsFixed(1)}% → ${r1.toStringAsFixed(1)}%；$note',
     amount: null,
   );
@@ -645,9 +645,9 @@ LhFact? _r10Divergence(LhReadoutInput i, LhMoneyFormat m) {
       id: 'R10-scale-up-profit-down',
       kind: LhFactKind.conclusion,
       level: LhFactLevel.warning,
-      text: '增收不增利：销售 ${_pct(gs * 100)}、毛利 ${_pct(gp * 100)}，'
+      text: '增收不增利：销售 ${_pct(gs * 100)}、利润 ${_pct(gp * 100)}，'
           '多做的量没带来利润',
-      derivation: '销售额 ${m(s.p)} → ${m(s.c)}；毛利 ${m(pf.p)} → ${m(pf.c)}',
+      derivation: '销售额 ${m(s.p)} → ${m(s.c)}；利润 ${m(pf.p)} → ${m(pf.c)}',
       amount: pf.delta,
     );
   }
@@ -656,16 +656,16 @@ LhFact? _r10Divergence(LhReadoutInput i, LhMoneyFormat m) {
       id: 'R10-scale-down-profit-up',
       kind: LhFactKind.conclusion,
       level: LhFactLevel.info,
-      text: '缩量提效：销售 ${_pct(gs * 100)} 但毛利 ${_pct(gp * 100)}，'
+      text: '缩量提效：销售 ${_pct(gs * 100)} 但利润 ${_pct(gp * 100)}，'
           '砍掉的是不赚钱的量',
-      derivation: '销售额 ${m(s.p)} → ${m(s.c)}；毛利 ${m(pf.p)} → ${m(pf.c)}',
+      derivation: '销售额 ${m(s.p)} → ${m(s.c)}；利润 ${m(pf.p)} → ${m(pf.c)}',
       amount: pf.delta,
     );
   }
   return null;
 }
 
-/// R11 · 贡献度：谁在拉、谁在拖。按 Δ毛利 排序，不按百分比。
+/// R11 · 贡献度：谁在拉、谁在拖。按 Δ利润 排序，不按百分比。
 LhFact? _r11Contribution(LhReadoutInput i, LhMoneyFormat m) {
   if (i.entities.length < 2) return null;
   final deltas = <({String name, double d})>[];
@@ -687,8 +687,8 @@ LhFact? _r11Contribution(LhReadoutInput i, LhMoneyFormat m) {
     id: 'R11-contribution',
     kind: LhFactKind.fact,
     level: LhFactLevel.info,
-    text: '毛利增量里，${parts.join('，')}',
-    derivation: '按${i.entityWord} Δ毛利 排序取首尾，共 ${deltas.length} ${i.entityWord}',
+    text: '利润增量里，${parts.join('，')}',
+    derivation: '按${i.entityWord} Δ利润 排序取首尾，共 ${deltas.length} ${i.entityWord}',
     amount: top.d,
   );
 }
@@ -841,6 +841,6 @@ String _headline(LhReadoutInput i, List<LhFact> facts, LhMoneyFormat m) {
   }
   final dir = (double g) => g >= 0 ? '涨' : '跌';
   return '销售额$dir${(gs.abs() * 100).toStringAsFixed(1)}%、'
-      '毛利$dir${(gp.abs() * 100).toStringAsFixed(1)}%'
+      '利润$dir${(gp.abs() * 100).toStringAsFixed(1)}%'
       '${facts.length > 1 ? '，另有 ${facts.length - 1} 条待看' : ''}';
 }

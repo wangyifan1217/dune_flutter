@@ -4,6 +4,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import 'lighthouse_product_rules.dart';
 
 /// Whether [key] should render as a percentage in the Hero masthead.
 bool lighthouseHeroMetricIsRate(String key) =>
@@ -40,7 +41,7 @@ const int lighthouseCompactHeroTrendFlex = 7;
 /// 给左侧 KPI（标签 + 大数 +「↓xx% vs 昨日」）留足高度，避免环比被裁切。
 const double lighthouseCompactHeroSparkHeight = 180;
 
-/// 窄屏仍左右并排：走势图略加高，但不把「本日毛利润」整块挪到图上面。
+/// 窄屏仍左右并排：走势图略加高，但不把「本日利润」整块挪到图上面。
 const double lighthouseCompactHeroSparkHeightNarrow = 216;
 const double lighthouseCompactHeroChartMaxHeightWide = 84;
 const double lighthouseCompactHeroChartMaxHeightNarrow = 132;
@@ -128,8 +129,8 @@ const lighthouseHeroSectionIconKeys = <String, String>{
 /// 「规模」在跨屏时是同一个东西，所以抽成一个常量，别再各写各的字面量。
 const int lighthouseScaleAccentValue = 0xFF7565C7;
 
-/// 走势图毛利线。不能跟规模 accent 同紫族：规模带一铺，毛利就溶进带里，
-/// APP 一级/二级更窄，副行再一截断，毛利数字也会一起消失。
+/// 走势图利润线。不能跟规模 accent 同紫族：规模带一铺，利润就溶进带里，
+/// APP 一级/二级更窄，副行再一截断，利润数字也会一起消失。
 const int lighthouseProfitAccentValue = 0xFFC45C26;
 
 /// 走势图收入线。青 —— 由 #185FA5（冷蓝）换来。
@@ -139,10 +140,10 @@ const int lighthouseProfitAccentValue = 0xFFC45C26;
 /// 一起时收入和规模根本分不开。换成青之后，紫/青/琥珀/橙 四色两两最差色差：
 /// 正常视力 13.0、红绿色觉 8.4，紫青这一对提到 20.0。
 ///
-/// 剩下那个 13.0 是「成本琥珀 ↔ 毛利橙」—— 相邻色相，靠调深浅解决不了。它现在
+/// 剩下那个 13.0 是「成本琥珀 ↔ 利润橙」—— 相邻色相，靠调深浅解决不了。它现在
 /// 可接受，是因为 v16 的三种排版都不再把线叠在一起：每条线自己一格 / 一条带，
 /// 身份由「位置 + 常驻名字和数字」承担，颜色只是辅助。真要把这一对也拉开，
-/// 毛利得挪到朱红 #D63F3F（四色全过线）—— 但中国金融色里红=涨，得先确认。
+/// 利润得挪到朱红 #D63F3F（四色全过线）—— 但中国金融色里红=涨，得先确认。
 const int lighthouseRevenueAccentValue = 0xFF0E9384;
 
 /// 走势图成本线。琥珀，对应利润恒等式「支出」，不能再跟规模同紫。
@@ -152,7 +153,7 @@ const int lighthouseCostAccentValue = 0xFF854F0B;
 const int lighthouseNetTABizCostAccentValue = 0xFF3B6E96;
 
 /// 核销 / 销售几乎同量级，叠同一根 Y 会贴成一条线，所以各占一行、各自归一。
-/// 收入 / 成本 / 毛利量级接近，仍共用一格。
+/// 收入 / 成本 / 利润量级接近，仍共用一格。
 bool lighthouseHeroTrendIsScaleKey(String key) =>
     key == 'verifiedSales' || key == 'sales';
 
@@ -176,7 +177,7 @@ List<List<int>> lighthouseHeroTrendPaneIndexes(List<String> keys) {
 /// 叠线的损益格多留高度；规模单行矮一档。
 int lighthouseHeroTrendPaneFlex(int lineCount) => lineCount >= 3 ? 3 : 2;
 
-/// 格内量级差得开时把下沿收到 0，让收入 / 成本 / 毛利的高低有真实比例。
+/// 格内量级差得开时把下沿收到 0，让收入 / 成本 / 利润的高低有真实比例。
 /// 核销和销售几乎贴在一起，不能收到 0，否则两条都会贴死在格顶。
 bool lighthouseHeroPaneSnapsToZero({required double min, required double max}) {
   if (min < -1e-9 || max <= 1e-9) return false;
@@ -244,8 +245,8 @@ double lighthouseTrendLegendHeightFor({
       (rows - 1) * lighthouseLedgerSummaryRowDividerHeight;
 }
 
-/// 月末预测条（两行：预测数 + 区间说明）。
-const double lighthouseTrendForecastStripHeight = 40;
+/// 月末预测条（三行：金额 / 区间 / 概率与截止日）。
+const double lighthouseTrendForecastStripHeight = 76;
 
 /// 图例 / 预测条与下一块之间的间距，以及图上方的间距。
 const double lighthouseTrendBlockGap = 7;
@@ -518,7 +519,7 @@ List<bool> lighthouseTrendVisibleFlags({
 }
 
 /// 粗线 / 填充 / MAX·MIN 跟哪条走：规模在场时归规模，否则第一条可见的
-/// 规模副线 / 毛利 / 收入 / 成本。银行余额是存量，不当主线。
+/// 规模副线 / 利润 / 收入 / 成本。银行余额是存量，不当主线。
 int lighthouseTrendHeroIndex(List<bool> available) {
   const order = <int>[3, 4, 2, 0, 1, 5, 6];
   for (final i in order) {
@@ -552,14 +553,14 @@ bool lighthouseDeltaIsLoud(double pct) =>
 
 /// 上下文线白名单：主线之外还画哪几条。
 ///
-/// v16 起主 Hero 图不再把上下文线画在主图里（毛利下沉到小柱层，见
+/// v16 起主 Hero 图不再把上下文线画在主图里（利润下沉到小柱层，见
 /// [lighthouseTrendLaneIndex]），这个函数只留作口径说明和回退开关。
 ///
-/// 序列下标同 lighthouseTrendSeriesKeys：0 收入 / 1 成本 / 2 毛利 /
+/// 序列下标同 lighthouseTrendSeriesKeys：0 收入 / 1 成本 / 2 利润 /
 /// 3 规模 / 4 规模族另一条 / 5 成本另一条 / 6 存量。
 ///
 /// 默认只留两条。留 4（规模族另一条）是因为它和主线同族、共用一根 Y，
-/// 在图上是「销售 − 核销」那条差额带的上缘 —— 那是真的可比。留 2（毛利）
+/// 在图上是「销售 − 核销」那条差额带的上缘 —— 那是真的可比。留 2（利润）
 /// 是给规模一个利润侧的参照。其余的各自归一、互不可比、也认不出是哪条，
 /// 画上去只是墨：实测四条灰线的墨量是主线的两倍，背景比主体还响。
 ///
@@ -852,11 +853,14 @@ const bool lighthouseHeroShowsFormulaBar = false;
 /// 底下不再堆每条指标一张图；点格子只改顶部那一张。
 const bool lighthouseHeroShowsAllMetricTrends = false;
 
-/// 顶部总图上的五条线：核销 / 销售 / 收入 / 成本合计 / 毛利。
+/// 顶部总图上的叠线：核销 / 销售 / 收入 / 成本合计 / 利润 / GMV。
+/// 主 Hero 与账本 GMV 走 costAlt 槽；净TA 的 costAlt 是业务成本，
+/// 必须带 [hasGmv] 才把 gmv 映射过去。
 /// 点这些格子 = 总图里只留这一条；点其他格子 = 整张图换成该指标。
 const Set<String> lighthouseHeroOverlayMetricKeys = <String>{
   'sales',
   'verifiedSales',
+  'gmv',
   'revenue',
   'totalCost',
   'costTotal',
@@ -872,13 +876,15 @@ String? lighthouseHeroTrendFocusAfterTap(String? current, String tapped) {
   return current == tapped ? null : tapped;
 }
 
-/// 总图五条线对应 `_TrendChart` 的 slot。不是这五条时返回 null，由调用方换整张图。
+/// 总图叠线对应 `_TrendChart` 的 slot。不是这些线时返回 null，由调用方换整张图。
+/// [hasGmv] 只给主 Hero：GMV 走 costAlt。账本 / 净TA 保持默认 false。
 String? lighthouseHeroOverlaySoloSlot({
   required String? metricKey,
   required String scaleKey,
   required String scaleAltKey,
   bool hasScale = true,
   bool hasScaleAlt = true,
+  bool hasGmv = false,
 }) {
   if (metricKey == null || metricKey.isEmpty) return null;
   switch (metricKey) {
@@ -889,6 +895,8 @@ String? lighthouseHeroOverlaySoloSlot({
     case 'totalCost':
     case 'costTotal':
       return 'cost';
+    case 'gmv':
+      return hasGmv ? 'costAlt' : null;
     case 'sales':
     case 'verifiedSales':
       if (metricKey == scaleKey) return hasScale ? 'scale' : null;
@@ -1253,7 +1261,7 @@ const Set<String> lighthouseLedgerLowerIsBetterKeys = <String>{
 ///
 /// 颜色表达的是**好坏**而不是**涨跌**：方向已经由 ↑↓ 箭头和正负号表达了两遍，
 /// 再用颜色重复编码一次方向没有信息量。旧口径无条件「涨红跌绿」，
-/// 会把销售额 −50%、毛利润 −86% 渲染成一片绿色 —— 崩盘看起来像向好。
+/// 会把销售额 −50%、利润 −86% 渲染成一片绿色 —— 崩盘看起来像向好。
 bool? lighthouseLedgerDeltaIsFavorable(String key, double? delta) {
   if (delta == null || delta.abs() < 0.05) return null;
   return lighthouseLedgerLowerIsBetterKeys.contains(key)
@@ -1479,7 +1487,7 @@ const lighthouseLedgerPrimaryTabLabels = <String, String>{
   'analysis': '分析',
 };
 
-/// 人效也吃分类 chip：行上的板块是「这个人毛利最大的那块」，
+/// 人效也吃分类 chip：行上的板块是「这个人利润最大的那块」，
 /// 与产品维的 product_line_group 同一套取值，筛选语义一致。
 bool lighthouseLedgerTabShowsCategoryChips(String tab) =>
     tab == 'product' || tab == 'supply' || tab == 'channel' || tab == 'people';
@@ -2403,6 +2411,7 @@ double? lighthouseAggregateRowsDeltaPct(
   Iterable<Map<String, dynamic>> rows, {
   required String key,
   bool usesSalesGrossMargin = false,
+  bool usesGmvGrossMargin = false,
 }) {
   final isRate = key == 'rate' || key == 'grossMargin' || key == 'spreadRate';
   if (isRate) {
@@ -2410,6 +2419,7 @@ double? lighthouseAggregateRowsDeltaPct(
     var totalCost = 0.0, prevTotalCost = 0.0;
     var sales = 0.0, prevSales = 0.0;
     var verified = 0.0, prevVerified = 0.0;
+    var gmv = 0.0, prevGmv = 0.0;
     var revenue = 0.0, prevRevenue = 0.0;
     var hasPrev = false;
     for (final row in rows) {
@@ -2417,11 +2427,14 @@ double? lighthouseAggregateRowsDeltaPct(
       totalCost += _lighthouseRowAmount(row, 'totalCost');
       sales += _lighthouseRowAmount(row, 'sales');
       verified += _lighthouseRowAmount(row, 'verifiedSales');
+      gmv += _lighthouseRowAmount(row, 'gmv');
       revenue += _lighthouseRowAmount(row, 'revenue');
       final pProfit = _lighthouseRowPreviousAmount(row, 'profit');
       final pCost = _lighthouseRowPreviousAmount(row, 'totalCost');
       final pSales = _lighthouseRowPreviousAmount(row, 'sales');
       final pVerified = _lighthouseRowPreviousAmount(row, 'verifiedSales');
+      final pGmv = _lighthouseRowPreviousAmount(row, 'gmv');
+      if (usesGmvGrossMargin && pGmv == null) return null;
       final pRevenue = _lighthouseRowPreviousAmount(row, 'revenue');
       if (pProfit != null) {
         prevProfit += pProfit;
@@ -2430,15 +2443,27 @@ double? lighthouseAggregateRowsDeltaPct(
       if (pCost != null) prevTotalCost += pCost;
       if (pSales != null) prevSales += pSales;
       if (pVerified != null) prevVerified += pVerified;
+      if (pGmv != null) prevGmv += pGmv;
       if (pRevenue != null) prevRevenue += pRevenue;
     }
     if (!hasPrev) return null;
-    double rate(double p, double cost, double s, double v, double rev) {
+    double rate(
+      double p,
+      double cost,
+      double s,
+      double v,
+      double rev,
+      double g,
+    ) {
       switch (key) {
         case 'rate':
           return cost.abs() < 50 ? 0 : p / cost * 100;
         case 'grossMargin':
-          final base = usesSalesGrossMargin ? s : v;
+          final base = usesGmvGrossMargin
+              ? g
+              : usesSalesGrossMargin
+              ? s
+              : v;
           return base.abs() < 50 ? 0 : p / base * 100;
         case 'spreadRate':
           final anchor = v > 0 ? v : s;
@@ -2448,13 +2473,14 @@ double? lighthouseAggregateRowsDeltaPct(
       }
     }
 
-    final cur = rate(profit, totalCost, sales, verified, revenue);
+    final cur = rate(profit, totalCost, sales, verified, revenue, gmv);
     final prev = rate(
       prevProfit,
       prevTotalCost,
       prevSales,
       prevVerified,
       prevRevenue,
+      prevGmv,
     );
     final pp = cur - prev;
     if (pp.abs() < 1e-9) return null;
@@ -2488,13 +2514,14 @@ const lighthouseLedgerSummaryMetricKeys = <String>[
   'verifiedSales',
   'prepaid',
   'profit',
+  'gmv',
   'costTotal',
   'revenue',
   'netTa',
 ];
 
-/// 产品 / 供给 / 渠道统一四核心：左列规模，右列经营结果。
-/// 第三行对齐主 Hero 总图：成本合计 / 收入，点开后走同一套 `_TrendChart`。
+/// 产品 / 供给 / 渠道默认金刚位：左列规模，右列经营结果。
+/// 第三行成本合计 / 收入。满减券、中石化、移动点播、会员套餐订阅把核销额换成 GMV。
 const lighthouseLedgerSummaryMetricRows = <List<String>>[
   ['sales', 'prepaid'],
   ['verifiedSales', 'profit'],
@@ -2553,6 +2580,8 @@ String? lighthouseLedgerMetricFromTrendSlot(
       return scaleKey;
     case 'scaleAlt':
       return scaleAltKey.isEmpty ? scaleKey : scaleAltKey;
+    case 'costAlt':
+      return 'gmv';
     default:
       return null;
   }
@@ -2893,7 +2922,7 @@ const lighthouseFundPoolReconSection = LighthouseFundPoolSectionSpec(
 /// 算出来的格子会点亮来源、压暗无关格；取数项只出式子，不压暗别人。
 enum LighthouseHeroFormulaRole { plus, minus, numerator, denominator }
 
-/// 角标文案 —— ROI 和毛利率都点亮「毛利润」，一个当分子一个当分母，
+/// 角标文案 —— ROI 和毛利率都点亮「利润」，一个当分子一个当分母，
 /// 光靠点亮分不出谁除谁。
 String lighthouseHeroFormulaRoleBadge(LighthouseHeroFormulaRole role) =>
     switch (role) {
@@ -2927,7 +2956,7 @@ class LighthouseHeroFormula {
 
   /// 底部那行右边是否把数代进去。
   ///
-  /// 毛利润这条按口径挂上，但代进去是 `收入 − 成本合计 = 147.7`，
+  /// 利润这条按口径挂上，但代进去是 `收入 − 成本合计 = 147.7`，
   /// 而格子里写着 140.5 —— 界面自己打自己。口径确认前只显示式子。
   final bool substitutes;
 }
@@ -2969,7 +2998,7 @@ const lighthouseHeroFormulas = <LighthouseHeroFormula>[
   LighthouseHeroFormula(
     resultKey: 'projectCost',
     result: '项目成本',
-    expression: '毛利润对应成本',
+    expression: '利润对应成本',
     sources: [],
     substitutes: false,
   ),
@@ -3003,7 +3032,7 @@ const lighthouseHeroFormulas = <LighthouseHeroFormula>[
   ),
   LighthouseHeroFormula(
     resultKey: 'profit',
-    result: '毛利润',
+    result: '利润',
     expression: '收入 − 成本合计',
     sources: [
       LighthouseHeroFormulaSource('revenue', LighthouseHeroFormulaRole.plus),
@@ -3014,7 +3043,7 @@ const lighthouseHeroFormulas = <LighthouseHeroFormula>[
   LighthouseHeroFormula(
     resultKey: 'netProfit',
     result: '净利润',
-    expression: '毛利润 − 业务成本',
+    expression: '利润 − 业务成本',
     sources: [
       LighthouseHeroFormulaSource('profit', LighthouseHeroFormulaRole.plus),
       LighthouseHeroFormulaSource('cost', LighthouseHeroFormulaRole.minus),
@@ -3037,7 +3066,7 @@ const lighthouseHeroFormulas = <LighthouseHeroFormula>[
   LighthouseHeroFormula(
     resultKey: 'grossMargin',
     result: '毛利率',
-    expression: '毛利润 ÷ 核销额',
+    expression: '利润 ÷ 核销额',
     sources: [
       LighthouseHeroFormulaSource(
         'profit',
@@ -3052,7 +3081,7 @@ const lighthouseHeroFormulas = <LighthouseHeroFormula>[
   LighthouseHeroFormula(
     resultKey: 'rate',
     result: 'ROI',
-    expression: '毛利润 ÷ 成本合计',
+    expression: '利润 ÷ 成本合计',
     sources: [
       LighthouseHeroFormulaSource(
         'profit',
@@ -3069,7 +3098,7 @@ const lighthouseHeroFormulas = <LighthouseHeroFormula>[
 const lighthouseGrossMarginFormulaSales = LighthouseHeroFormula(
   resultKey: 'grossMargin',
   result: '毛利率',
-  expression: '毛利润 ÷ 销售额',
+  expression: '利润 ÷ 销售额',
   sources: [
     LighthouseHeroFormulaSource('profit', LighthouseHeroFormulaRole.numerator),
     LighthouseHeroFormulaSource('sales', LighthouseHeroFormulaRole.denominator),
@@ -3086,8 +3115,33 @@ String lighthouseHeroFormulaCanonicalKey(String metricKey) =>
 LighthouseHeroFormula? lighthouseHeroFormulaForKey(
   String metricKey, {
   String? group,
+  String? product,
+  String? basis,
 }) {
   final canonical = lighthouseHeroFormulaCanonicalKey(metricKey);
+  if (canonical == 'grossMargin' &&
+      lighthouseGrossMarginDenominatorKey(
+            product: product,
+            basis: basis,
+            group: group,
+          ) ==
+          'gmv') {
+    return const LighthouseHeroFormula(
+      resultKey: 'grossMargin',
+      result: '毛利率',
+      expression: '利润 ÷ GMV',
+      sources: [
+        LighthouseHeroFormulaSource(
+          'profit',
+          LighthouseHeroFormulaRole.numerator,
+        ),
+        LighthouseHeroFormulaSource(
+          'gmv',
+          LighthouseHeroFormulaRole.denominator,
+        ),
+      ],
+    );
+  }
   if (canonical == 'grossMargin' && lighthouseGrossMarginUsesSales(group)) {
     return lighthouseGrossMarginFormulaSales;
   }
@@ -3113,9 +3167,16 @@ LighthouseHeroFormulaRole? lighthouseHeroTraceRole(
   String? traced,
   String metricKey, {
   String? group,
+  String? product,
+  String? basis,
 }) {
   if (traced == null) return null;
-  final formula = lighthouseHeroFormulaForKey(traced, group: group);
+  final formula = lighthouseHeroFormulaForKey(
+    traced,
+    group: group,
+    product: product,
+    basis: basis,
+  );
   if (formula == null) return null;
   for (final source in formula.sources) {
     if (source.key == metricKey) return source.role;
@@ -3129,12 +3190,26 @@ bool lighthouseHeroTraceDims(
   String? traced,
   String metricKey, {
   String? group,
+  String? product,
+  String? basis,
 }) {
   if (traced == null) return false;
   if (traced == metricKey) return false;
-  final formula = lighthouseHeroFormulaForKey(traced, group: group);
+  final formula = lighthouseHeroFormulaForKey(
+    traced,
+    group: group,
+    product: product,
+    basis: basis,
+  );
   if (formula == null || formula.sources.isEmpty) return false;
-  return lighthouseHeroTraceRole(traced, metricKey, group: group) == null;
+  return lighthouseHeroTraceRole(
+        traced,
+        metricKey,
+        group: group,
+        product: product,
+        basis: basis,
+      ) ==
+      null;
 }
 
 /// 点同一格收起；点另一个结果格切过去；点没有公式的键不动。
@@ -4442,12 +4517,12 @@ String lighthouseLedgerSummaryMetricTone(String key) => switch (key) {
   _ => 'neutral',
 };
 
-/// 「结果」指标 —— 经营性净现金流 / 净TA / 毛利润。
+/// 「结果」指标 —— 经营性净现金流 / 净TA / 利润。
 bool lighthouseLedgerIsResultMetric(String key) =>
     lighthouseLedgerSummaryMetricTone(key) != 'neutral';
 
 /// 账本走势的强调色，跟上面那格同一套：
-/// 右列结果格（现金流 / 毛利）用结果蓝，左列规模和成本用主 Hero 的紫。
+/// 右列结果格（现金流 / 利润）用结果蓝，左列规模和成本用主 Hero 的紫。
 Color lighthouseLedgerTrendEmphasisColor(String? metricKey) {
   if (metricKey != null && lighthouseLedgerIsResultMetric(metricKey)) {
     return const Color(lighthouseLedgerResultBlockAccentValue);
@@ -4461,7 +4536,7 @@ Color lighthouseTrendEmphasisInk(Color accent) =>
 
 /// v19 · 结果区分块。
 ///
-/// 旧版靠给单个数字换色相来强调（现金流紫 / 毛利润蓝），但这两个色比左边
+/// 旧版靠给单个数字换色相来强调（现金流紫 / 利润蓝），但这两个色比左边
 /// 规模数字用的近黑更浅、对比度更低 —— 想突出的反而更轻，层级是反的。
 /// 而且 11.5px 下色相只表达「另一类」，不表达「更重要」。
 ///
@@ -4492,6 +4567,36 @@ List<List<String>> lighthouseLedgerSummaryMetricRowsForTab(String tab) {
   return lighthouseLedgerSummaryMetricRows;
 }
 
+/// 满减券 / 中石化 / 移动点播 / 会员套餐订阅：金刚位核销额换成 GMV。
+/// 点播和订阅的毛利率仍走销售额，不跟满减券绑在一起。
+bool lighthouseLedgerSummaryReplacesVerifiedWithGmv({
+  String? product,
+  String? parent,
+  String? basis,
+}) =>
+    lighthouseGrossMarginDenominatorKey(product: product, basis: basis) ==
+        'gmv' ||
+    lighthouseProductReplacesVerifiedHeroWithGmv(product) ||
+    lighthouseProductReplacesVerifiedHeroWithGmv(parent);
+
+List<List<String>> lighthouseLedgerSummaryMetricRowsForEntity({
+  required String tab,
+  String? product,
+  String? basis,
+}) {
+  final rows = lighthouseLedgerSummaryMetricRowsForTab(tab);
+  if (!lighthouseLedgerSummaryReplacesVerifiedWithGmv(
+    product: product,
+    basis: basis,
+  )) {
+    return rows;
+  }
+  return [
+    for (final row in rows)
+      [for (final key in row) key == 'verifiedSales' ? 'gmv' : key],
+  ];
+}
+
 /// Resolve a totals value with key aliases used across L1/L2 payloads.
 double? lighthouseHeroMetricValue(Map<String, double> totals, String key) {
   switch (key) {
@@ -4513,7 +4618,7 @@ String lighthouseHeroMetricLabel(String key) {
     'verifiedSales': '核销额',
     'revenue': '收入',
     'spread': '利差',
-    'profit': '毛利润',
+    'profit': '利润',
     'netProfit': '净利润',
     'totalCost': '成本合计',
     'costTotal': '成本合计',
@@ -4573,7 +4678,7 @@ bool lighthouseHeroMetricDisplaysMagnitude(String key) =>
 double lighthouseHeroMetricDisplayAmount(String key, double value) =>
     lighthouseHeroMetricDisplaysMagnitude(key) ? value.abs() : value;
 
-/// Period-prefixed masthead label, e.g. 本日核销额 / 本月毛利润.
+/// Period-prefixed masthead label, e.g. 本日核销额 / 本月利润.
 String lighthouseHeroMetricPeriodLabel(String period, String metricKey) {
   final metric = lighthouseHeroMetricLabel(metricKey);
   final prefix = switch (period) {
@@ -4587,7 +4692,7 @@ String lighthouseHeroMetricPeriodLabel(String period, String metricKey) {
   return prefix.isEmpty ? metric : '$prefix$metric';
 }
 
-/// Masthead follows the expanded Hero metric; default is 毛利润.
+/// Masthead follows the expanded Hero metric; default is 利润.
 ///
 /// 点底下任意指标格（销售额 / 核销额 / 成本合计 / 收入 / ROI…）时，
 /// 左侧大数标题、数值、环比一起切。
@@ -4644,22 +4749,50 @@ bool lighthouseGrossMarginUsesSales(String? group) =>
 double lighthouseGrossMarginBase({
   required double verifiedSales,
   double sales = 0,
+  double gmv = 0,
+  String? product,
+  String? basis,
   String? group,
   double minimumBase = 50,
 }) {
-  final raw = lighthouseGrossMarginUsesSales(group) ? sales : verifiedSales;
+  final key = lighthouseGrossMarginDenominatorKey(
+    product: product,
+    group: group,
+    basis: basis,
+  );
+  final raw = key == 'gmv'
+      ? gmv
+      : key == 'sales'
+      ? sales
+      : verifiedSales;
   return lighthouseValidRateBase(raw, minimumBase: minimumBase);
 }
 
-String lighthouseGrossMarginFormulaText(String? group) =>
-    lighthouseGrossMarginUsesSales(group) ? '毛利润 ÷ 销售额' : '毛利润 ÷ 核销额';
+String lighthouseGrossMarginFormulaText(
+  String? group, {
+  String? product,
+  String? basis,
+}) =>
+    lighthouseGrossMarginDenominatorKey(
+          product: product,
+          group: group,
+          basis: basis,
+        ) ==
+        'gmv'
+    ? '利润 ÷ GMV'
+    : lighthouseGrossMarginUsesSales(group)
+    ? '利润 ÷ 销售额'
+    : '利润 ÷ 核销额';
 
-/// 列表/Hero 共用的毛利率展示值。默认毛利润 ÷ 核销额；运营商改用销售额。
+/// 列表/Hero 共用的毛利率展示值。默认利润 ÷ 核销额；运营商改用销售额。
 /// 分母过小或结果爆炸时返回 null（UI 显示 —）。
 double? lighthouseGrossMarginDisplayPct({
   required double profit,
   required double verifiedSales,
   double sales = 0,
+  double gmv = 0,
+  String? product,
+  String? basis,
   String? group,
   double minimumVerified = 50,
   double maxAbsPct = lighthouseMaxDisplayRatePct,
@@ -4667,6 +4800,9 @@ double? lighthouseGrossMarginDisplayPct({
   final base = lighthouseGrossMarginBase(
     verifiedSales: verifiedSales,
     sales: sales,
+    gmv: gmv,
+    product: product,
+    basis: basis,
     group: group,
     minimumBase: minimumVerified,
   );
@@ -4679,11 +4815,22 @@ List<double> lighthouseGrossMarginSeries({
   required List<double> profit,
   required List<double> verifiedSales,
   List<double> sales = const [],
+  List<double> gmv = const [],
+  String? product,
+  String? basis,
   String? group,
   double minimumBase = 50,
 }) {
-  final useSales = lighthouseGrossMarginUsesSales(group);
-  final denom = useSales && sales.isNotEmpty ? sales : verifiedSales;
+  final key = lighthouseGrossMarginDenominatorKey(
+    product: product,
+    group: group,
+    basis: basis,
+  );
+  final denom = key == 'gmv'
+      ? gmv
+      : key == 'sales' && sales.isNotEmpty
+      ? sales
+      : verifiedSales;
   final count = profit.length < denom.length ? profit.length : denom.length;
   return List<double>.generate(count, (index) {
     final validBase = lighthouseValidRateBase(
@@ -4732,6 +4879,7 @@ bool lighthouseTrendMapUsable(Map<String, dynamic> t) {
       longEnough(t['revenue']) ||
       longEnough(t['sales']) ||
       longEnough(t['verifiedSales']) ||
+      longEnough(t['gmv']) ||
       longEnough(t['prepaid']) ||
       longEnough(t['totalCost']) ||
       longEnough(t['cost']);
@@ -4765,7 +4913,7 @@ bool lighthouseHeroUseRowAmounts({
   required bool hasRows,
 }) => filterActive && hasRows;
 
-/// summary 是否对应当前 Tab + 分类。切维后上一档的 filterGroup 不能再喂给「本日毛利润」。
+/// summary 是否对应当前 Tab + 分类。切维后上一档的 filterGroup 不能再喂给「本日利润」。
 bool lighthouseHeroSummaryAppliesTo({
   required String tab,
   required String group,
@@ -4794,7 +4942,7 @@ Map<String, dynamic> lighthouseSharedHeroMetricsSnapshot(
 }
 
 /// Hero 金额：分类筛用列表加总；匹配的 summary 优先；切维串档则回退全量快照。
-/// 串档时禁止再用上一维的 metricsValue 冒充「本日毛利润」。
+/// 串档时禁止再用上一维的 metricsValue 冒充「本日利润」。
 double lighthouseHeroMetricAmount({
   required bool useRowAmounts,
   required bool metricsMatch,
@@ -4896,9 +5044,9 @@ String? lighthouseResolveDrillKey({
 // 趋势图 v16 · 视觉降噪（2026-09）
 //
 //   旧图的问题不是颜色，是 100 多 px 里叠了六层：核销线、销售线、差额带、
-//   灰色毛利线、当月竖虚线、MAX/MIN。改成：
+//   灰色利润线、当月竖虚线、MAX/MIN。改成：
 //     · 上层主图只放「同一根真轴」上的线（规模 + 规模族另一条 + 差额带）；
-//     · 毛利这类各自归一的上下文线下沉到底部小柱层，共用横轴、永不交叉，
+//     · 利润这类各自归一的上下文线下沉到底部小柱层，共用横轴、永不交叉，
 //       「各线自归一」那句解释也就不需要了；
 //     · 当月没走完时，最后一列不再连到半个月的实际值（那是一道假断崖），
 //       改成进度胶囊：胶囊顶 = 月末预测，实心部分 = 已发生 / 预测；
@@ -4907,9 +5055,9 @@ String? lighthouseResolveDrillKey({
 
 /// 底部小柱层画哪条序列；-1 = 不画。
 ///
-/// 序列下标同 lighthouseTrendSeriesKeys：0 收入 / 1 成本 / 2 毛利 / 3 规模 /
-/// 4 规模族另一条 / 5 成本另一条 / 6 存量。主线不是毛利时给毛利；主线就是
-/// 毛利（solo）时反过来给规模做参照。
+/// 序列下标同 lighthouseTrendSeriesKeys：0 收入 / 1 成本 / 2 利润 / 3 规模 /
+/// 4 规模族另一条 / 5 成本另一条 / 6 存量。主线不是利润时给利润；主线就是
+/// 利润（solo）时反过来给规模做参照。
 int lighthouseTrendLaneIndex(List<bool> flags, int heroIndex) {
   bool on(int i) => i >= 0 && i < flags.length && flags[i];
   if (heroIndex != 2) return on(2) ? 2 : -1;

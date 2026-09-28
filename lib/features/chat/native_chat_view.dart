@@ -64,6 +64,8 @@ import 'chat_image_utils.dart';
 import 'chat_file_preview_page.dart';
 import 'chat_file_type_icon.dart';
 import 'chat_file_upload_coordinator.dart';
+import 'chat_lighthouse_card.dart';
+import '../lighthouse/lighthouse_shared_card_data.dart';
 import 'chat_markdown_preview.dart';
 import 'chat_pdf_preview.dart';
 import 'chat_media_widgets.dart';
@@ -5667,7 +5669,11 @@ class _NativeChatViewState extends State<NativeChatView>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.keyboard_arrow_up_rounded, size: 16, color: Colors.white),
+              const Icon(
+                Icons.keyboard_arrow_up_rounded,
+                size: 16,
+                color: Colors.white,
+              ),
               const SizedBox(width: 2),
               Text(
                 '去回复上级',
@@ -5692,8 +5698,11 @@ class _NativeChatViewState extends State<NativeChatView>
     final me = widget.session.userId;
     final now = DateTime.now();
     final lines = <Widget>[];
-    TextStyle style(Color c) =>
-        DunesTypography.mono(fontSize: 10.5, fontWeight: FontWeight.w500, color: c);
+    TextStyle style(Color c) => DunesTypography.mono(
+      fontSize: 10.5,
+      fontWeight: FontWeight.w500,
+      color: c,
+    );
 
     ReplySlaItem? myItem;
     for (final i in items) {
@@ -5716,16 +5725,25 @@ class _NativeChatViewState extends State<NativeChatView>
                 borderRadius: BorderRadius.circular(12),
                 onTap: () => _startQuote(m),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: DunesColors.accentSoft,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: DunesColors.accent.withValues(alpha: 0.35)),
+                    border: Border.all(
+                      color: DunesColors.accent.withValues(alpha: 0.35),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.reply_rounded, size: 13, color: DunesColors.accent),
+                      const Icon(
+                        Icons.reply_rounded,
+                        size: 13,
+                        color: DunesColors.accent,
+                      ),
                       const SizedBox(width: 3),
                       Text(
                         '回复此条',
@@ -5739,7 +5757,10 @@ class _NativeChatViewState extends State<NativeChatView>
                   ),
                 ),
               ),
-            Text(_replySlaStatusText(item, now), style: style(_replySlaStatusColor(item))),
+            Text(
+              _replySlaStatusText(item, now),
+              style: style(_replySlaStatusColor(item)),
+            ),
           ],
         ),
       );
@@ -5774,7 +5795,11 @@ class _NativeChatViewState extends State<NativeChatView>
                     ),
                   ),
                 ),
-                const Icon(Icons.chevron_right, size: 14, color: DunesColors.text3),
+                const Icon(
+                  Icons.chevron_right,
+                  size: 14,
+                  color: DunesColors.text3,
+                ),
               ],
             ),
           ),
@@ -5784,7 +5809,9 @@ class _NativeChatViewState extends State<NativeChatView>
     if (lines.isEmpty) return content;
     return Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      crossAxisAlignment: mine
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
       children: [
         content,
         for (final line in lines)
@@ -8185,6 +8212,12 @@ class _NativeChatViewState extends State<NativeChatView>
         k == 'RECALL';
   }
 
+  Widget _wrapLighthouseImage(Map<String, dynamic>? payload, Widget child) {
+    final metadata = payload?['lighthouseCard'];
+    if (metadata is! Map || metadata['version'] != 1) return child;
+    return ChatLighthouseLegacyImageCard(metadata: metadata, child: child);
+  }
+
   Widget _buildMessageWidget(NativeChatMessage m, bool mine) {
     final kind = m.kind.toUpperCase();
     if (_isSystemKind(kind)) {
@@ -8267,6 +8300,37 @@ class _NativeChatViewState extends State<NativeChatView>
     final onQuoteTap = quote.isEmpty
         ? null
         : () => _jumpToQuotedMessage(quote.messageId, quote: quote);
+    final lighthouseCard = LighthouseSharedCardData.fromPayload(m.payload);
+    if (lighthouseCard != null) {
+      return _wrapQuotedContent(
+        m,
+        mine,
+        GestureDetector(
+          onLongPressStart: _messageMultiSelectMode
+              ? null
+              : (details) =>
+                    _onMessageActions(m, mine, anchor: details.globalPosition),
+          onSecondaryTapDown: isDesktopCommOnly && !_messageMultiSelectMode
+              ? (details) =>
+                    _onMessageActions(m, mine, anchor: details.globalPosition)
+              : null,
+          child: Align(
+            alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+            child: LayoutBuilder(
+              builder: (context, constraints) => SizedBox(
+                width: constraints.maxWidth.isFinite
+                    ? constraints.maxWidth.clamp(0.0, 680.0)
+                    : 400,
+                child: ChatLighthouseCard(
+                  session: widget.session,
+                  data: lighthouseCard,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     if (kind == 'IMAGE') {
       final imageName = ConversationService.mediaFileName(
         m.payload,
@@ -8278,17 +8342,24 @@ class _NativeChatViewState extends State<NativeChatView>
         _wrapDesktopFileDrag(
           payload: m.payload,
           fileName: imageName,
-          child: ChatAuthImageBubble(
-            service: _service,
-            payload: m.payload,
-            mine: mine,
-            conversationId: _chatConversationId,
-            onTap: () => unawaited(_openChatImageGallery(m)),
-            onLongPressStart: _messageMultiSelectMode
-                ? null
-                : (details) => unawaited(
-                    _onMessageActions(m, mine, anchor: details.globalPosition),
-                  ),
+          child: _wrapLighthouseImage(
+            m.payload,
+            ChatAuthImageBubble(
+              service: _service,
+              payload: m.payload,
+              mine: mine,
+              conversationId: _chatConversationId,
+              onTap: () => unawaited(_openChatImageGallery(m)),
+              onLongPressStart: _messageMultiSelectMode
+                  ? null
+                  : (details) => unawaited(
+                      _onMessageActions(
+                        m,
+                        mine,
+                        anchor: details.globalPosition,
+                      ),
+                    ),
+            ),
           ),
         ),
       );
@@ -8516,6 +8587,10 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Widget _buildForwardEntryContent(_ForwardEntry e, {required bool mine}) {
+    final lighthouseCard = LighthouseSharedCardData.fromPayload(e.payload);
+    if (lighthouseCard != null) {
+      return ChatLighthouseCard(session: widget.session, data: lighthouseCard);
+    }
     final nested = _forwardBundleFromPayload(e.payload);
     if (nested != null) {
       return _buildForwardRecordCard(nested, mine: false);

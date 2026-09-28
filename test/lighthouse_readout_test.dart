@@ -29,13 +29,13 @@ LhReadoutTotals t({
 
 void main() {
   group('地基 · 差额型指标不能比百分比', () {
-    test('毛利 +2.4% / 净利 +5.5% 的临界基数比是 43.6%', () {
+    test('利润 +2.4% / 净利 +5.5% 的临界基数比是 43.6%', () {
       final ratio = lhWedgeCrossoverRatio(0.024, 0.055)!;
       expect(ratio, closeTo(0.4364, 0.0005));
     });
 
     test('同样两个百分比，净利占比不同 → 成本一涨一跌', () {
-      // 净利是毛利的 60%：ΔW = 2.4万 − 3.3万 = −0.9万，成本降了
+      // 净利是利润的 60%：ΔW = 2.4万 − 3.3万 = −0.9万，成本降了
       final rich = lhWedgeDelta(
         profitPrev: 100 * 万,
         profitCur: 102.4 * 万,
@@ -45,7 +45,7 @@ void main() {
       expect(rich, lessThan(0));
       expect(rich, closeTo(-0.9 * 万, 1));
 
-      // 净利只有毛利的 20%：ΔW = 2.4万 − 1.1万 = +1.3万，成本涨了
+      // 净利只有利润的 20%：ΔW = 2.4万 − 1.1万 = +1.3万，成本涨了
       final thin = lhWedgeDelta(
         profitPrev: 100 * 万,
         profitCur: 102.4 * 万,
@@ -61,7 +61,7 @@ void main() {
     });
 
     test('W 的定义与 成本合计 − 项目成本 一致', () {
-      // 收入 100、项目成本 30、成本合计 45 ⟹ 毛利 70、净利 55、W = 15
+      // 收入 100、项目成本 30、成本合计 45 ⟹ 利润 70、净利 55、W = 15
       final w = lhWedge(70 * 万, 55 * 万)!;
       expect(w, closeTo((45 - 30) * 万, 1));
     });
@@ -121,7 +121,7 @@ void main() {
       final derived = lhBuildReadout(make(LhPrevSource.derivedFromPct));
       // ΔW = 3万 − 1万 = 2万；1000万 的 0.5% 噪声地板是 5万
       expect(measured.facts.any((f) => f.id == 'R7-wedge-cost'), isFalse,
-          reason: '2万 未过 1% 的实质门槛（毛利 303万 × 1% = 3.03万）');
+          reason: '2万 未过 1% 的实质门槛（利润 303万 × 1% = 3.03万）');
       expect(derived.facts.any((f) => f.id == 'R7-wedge-cost'), isFalse);
     });
 
@@ -134,15 +134,15 @@ void main() {
         ),
       );
       final f = r.facts.firstWhere((x) => x.id == 'R6-project-cost');
-      // Δ项目成本 = Δ收入 − Δ毛利 = 200万 − 40万 = 160万
+      // Δ项目成本 = Δ收入 − Δ利润 = 200万 − 40万 = 160万
       expect(f.amount, closeTo(160 * 万, 1));
-      expect(f.derivation.contains('Δ收入 − Δ毛利'), isTrue);
+      expect(f.derivation.contains('Δ收入 − Δ利润'), isTrue);
       expect(f.derivation.contains('业务成本'), isFalse);
     });
 
     test('坑七 · 利润类指标不能用规模的基数门槛卡', () {
-      // 销售 1810万 / 毛利 24.4万 是正常利润率。ΔW = 3.9万 − 0.3万 = 3.6万，
-      // 这条必须说得出来 —— 用 50万 的规模门槛去卡毛利会整条吞掉。
+      // 销售 1810万 / 利润 24.4万 是正常利润率。ΔW = 3.9万 − 0.3万 = 3.6万，
+      // 这条必须说得出来 —— 用 50万 的规模门槛去卡利润会整条吞掉。
       final r = lhBuildReadout(
         LhReadoutInput(
           period: LhReadoutPeriod.month,
@@ -252,7 +252,7 @@ void main() {
           prev: t(profit: 100 * 万, verifiedSales: 1000 * 万),
           cur: t(profit: 144 * 万, verifiedSales: 1200 * 万),
           entities: [
-            // 三个省的毛利率都在跌，整体却涨了 —— 高毛利省份的量变大了
+            // 三个省的毛利率都在跌，整体却涨了 —— 高利润省份的量变大了
             e('甲', 15, 13, 万),
             e('乙', 12, 10, 万),
             e('丙', 8, 6, 万),

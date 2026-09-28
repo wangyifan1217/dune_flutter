@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_data.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_discount_metric.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_hero_metric.dart';
+import 'package:dunes_app/features/lighthouse/lighthouse_product_rules.dart';
 
 void main() {
   group('lighthouseHeroMastheadKey', () {
@@ -73,9 +74,9 @@ void main() {
   });
 
   group('lighthouseHeroMetricPeriodLabel', () {
-    test('builds 本日核销额 / 本日毛利润', () {
+    test('builds 本日核销额 / 本日利润', () {
       expect(lighthouseHeroMetricPeriodLabel('day', 'verifiedSales'), '本日核销额');
-      expect(lighthouseHeroMetricPeriodLabel('day', 'profit'), '本日毛利润');
+      expect(lighthouseHeroMetricPeriodLabel('day', 'profit'), '本日利润');
       expect(lighthouseHeroMetricPeriodLabel('day', 'netTa'), '本日净TA');
       expect(lighthouseHeroMetricPeriodLabel('month', 'sales'), '本月销售额');
     });
@@ -569,7 +570,7 @@ void main() {
     expect(lighthouseHeroMetricIsOverlay('totalCost'), isTrue);
     expect(lighthouseHeroMetricIsOverlay('sales'), isTrue);
     expect(lighthouseHeroMetricIsOverlay('verifiedSales'), isTrue);
-    expect(lighthouseHeroMetricIsOverlay('gmv'), isFalse);
+    expect(lighthouseHeroMetricIsOverlay('gmv'), isTrue);
     expect(lighthouseHeroMetricIsOverlay('projectCost'), isFalse);
     expect(lighthouseHeroMetricIsOverlay('prepaid'), isFalse);
     expect(lighthouseHeroMetricIsOverlay('netTa'), isFalse);
@@ -615,6 +616,15 @@ void main() {
       ),
       isNull,
     );
+    expect(
+      lighthouseHeroOverlaySoloSlot(
+        metricKey: 'gmv',
+        scaleKey: 'verifiedSales',
+        scaleAltKey: 'sales',
+        hasGmv: true,
+      ),
+      'costAlt',
+    );
     expect(lighthouseHeroTrendFocusAfterTap(null, 'profit'), 'profit');
     expect(lighthouseHeroTrendFocusAfterTap('profit', 'profit'), isNull);
     expect(lighthouseHeroTrendFocusAfterTap('profit', 'gmv'), 'gmv');
@@ -640,6 +650,7 @@ void main() {
     expect(lighthouseHeroTrendChartSlot('projectCost'), 'cost');
     expect(lighthouseHeroTrendChartSlot('profit'), 'profit');
     expect(lighthouseHeroTrendChartSlot('spread'), 'profit');
+    expect(lighthouseHeroTrendChartSlot('gmv'), 'scale');
     expect(lighthouseHeroTrendChartIsRate('grossMargin'), isTrue);
     expect(lighthouseHeroTrendChartIsRate('rate'), isTrue);
     expect(lighthouseHeroTrendChartIsRate('sales'), isFalse);
@@ -808,6 +819,101 @@ void main() {
     expect(lighthouseLedgerPinnedWidthFor(200, tab: 'netTa'), 136);
   });
 
+  test('满减券、中石化、移动点播、会员套餐订阅金刚位用 GMV 换核销额', () {
+    expect(lighthouseLedgerSummaryMetricRows, [
+      ['sales', 'prepaid'],
+      ['verifiedSales', 'profit'],
+      ['costTotal', 'revenue'],
+    ]);
+    expect(
+      lighthouseLedgerSummaryMetricRowsForEntity(
+        tab: 'product',
+        product: '满减券（交易）',
+      ),
+      [
+        ['sales', 'prepaid'],
+        ['gmv', 'profit'],
+        ['costTotal', 'revenue'],
+      ],
+    );
+    expect(
+      lighthouseLedgerSummaryMetricRowsForEntity(
+        tab: 'product',
+        product: '中石化满减券（交易）',
+      ),
+      [
+        ['sales', 'prepaid'],
+        ['gmv', 'profit'],
+        ['costTotal', 'revenue'],
+      ],
+    );
+    expect(
+      lighthouseLedgerSummaryMetricRowsForEntity(
+        tab: 'product',
+        product: '中石化普惠现金券（交易）',
+      ),
+      [
+        ['sales', 'prepaid'],
+        ['gmv', 'profit'],
+        ['costTotal', 'revenue'],
+      ],
+    );
+    expect(
+      lighthouseLedgerSummaryMetricRowsForEntity(
+        tab: 'product',
+        product: '中石油普惠现金券（交易）',
+      ),
+      lighthouseLedgerSummaryMetricRows,
+    );
+    expect(
+      lighthouseLedgerSummaryMetricRowsForEntity(
+        tab: 'product',
+        product: '移动点播（积分）',
+      ),
+      [
+        ['sales', 'prepaid'],
+        ['gmv', 'profit'],
+        ['costTotal', 'revenue'],
+      ],
+    );
+    expect(
+      lighthouseLedgerSummaryMetricRowsForEntity(
+        tab: 'product',
+        product: '会员套餐订阅',
+      ),
+      [
+        ['sales', 'prepaid'],
+        ['gmv', 'profit'],
+        ['costTotal', 'revenue'],
+      ],
+    );
+    expect(
+      lighthouseGrossMarginDenominatorKey(
+        product: '移动点播（积分）',
+        group: '运营商',
+      ),
+      'sales',
+    );
+    expect(
+      lighthouseGrossMarginDenominatorKey(
+        product: '会员套餐订阅',
+        group: '运营商',
+      ),
+      'sales',
+    );
+    expect(
+      lighthouseLedgerSummaryMetricRowsForEntity(
+        tab: 'product',
+        basis: 'gmv',
+      ),
+      [
+        ['sales', 'prepaid'],
+        ['gmv', 'profit'],
+        ['costTotal', 'revenue'],
+      ],
+    );
+  });
+
   test('ledger rows show four focused metrics in a neutral 2x2 grid', () {
     expect(lighthouseLedgerSummaryColumns, 2);
     expect(lighthouseLedgerNameFontSize, 12.5);
@@ -864,6 +970,7 @@ void main() {
       'verifiedSales',
       'prepaid',
       'profit',
+      'gmv',
       'costTotal',
       'revenue',
       'netTa',
@@ -873,6 +980,46 @@ void main() {
       ['verifiedSales', 'profit'],
       ['costTotal', 'revenue'],
     ]);
+    expect(
+      lighthouseLedgerSummaryMetricRowsForEntity(
+        tab: 'product',
+        product: '满减券（交易）',
+      ),
+      [
+        ['sales', 'prepaid'],
+        ['gmv', 'profit'],
+        ['costTotal', 'revenue'],
+      ],
+    );
+    expect(
+      lighthouseLedgerSummaryMetricRowsForEntity(
+        tab: 'product',
+        product: '中石化普惠现金券（交易）',
+      ),
+      [
+        ['sales', 'prepaid'],
+        ['gmv', 'profit'],
+        ['costTotal', 'revenue'],
+      ],
+    );
+    expect(
+      lighthouseLedgerSummaryMetricRowsForEntity(
+        tab: 'product',
+        product: '中石油普惠现金券（交易）',
+      ),
+      lighthouseLedgerSummaryMetricRows,
+    );
+    expect(
+      lighthouseLedgerSummaryMetricRowsForEntity(
+        tab: 'product',
+        basis: 'gmv',
+      ),
+      [
+        ['sales', 'prepaid'],
+        ['gmv', 'profit'],
+        ['costTotal', 'revenue'],
+      ],
+    );
     expect(lighthouseLedgerSoloTrendKeys, {
       'sales',
       'verifiedSales',
@@ -921,7 +1068,7 @@ void main() {
     expect(lighthouseHeroMetricIsOverlay('profit'), isTrue);
     expect(lighthouseHeroMetricIsOverlay('costTotal'), isTrue);
     expect(lighthouseHeroMetricIsOverlay('revenue'), isTrue);
-    expect(lighthouseHeroMetricIsOverlay('gmv'), isFalse);
+    expect(lighthouseHeroMetricIsOverlay('gmv'), isTrue);
     expect(lighthouseHeroMetricIsOverlay('projectCost'), isFalse);
     expect(lighthouseLedgerMetricKeysMatch('costTotal', 'totalCost'), isTrue);
     expect(lighthouseLedgerMetricKeysMatch('profit', 'profit'), isTrue);
@@ -933,6 +1080,14 @@ void main() {
         scaleAltKey: 'sales',
       ),
       'costTotal',
+    );
+    expect(
+      lighthouseLedgerMetricFromTrendSlot(
+        'costAlt',
+        scaleKey: 'verifiedSales',
+        scaleAltKey: 'sales',
+      ),
+      'gmv',
     );
     expect(
       lighthouseLedgerMetricFromTrendSlot(
@@ -961,15 +1116,15 @@ void main() {
         ['verifiedSales', '核销张数 × 面值'],
         ['gmv', '撮合交易额'],
         ['totalCost', '项目成本 + 业务成本'],
-        ['projectCost', '毛利润对应成本'],
+        ['projectCost', '利润对应成本'],
         ['cost', '账单三级 BUSINESS_COST'],
         ['prepaid', '系统直出数 · 口径核对中'],
         ['profit', '收入 − 成本合计'],
-        ['netProfit', '毛利润 − 业务成本'],
+        ['netProfit', '利润 − 业务成本'],
         ['revenue', '核销额 × 利差率'],
         ['spread', '已核销利差'],
-        ['grossMargin', '毛利润 ÷ 核销额'],
-        ['rate', '毛利润 ÷ 成本合计'],
+        ['grossMargin', '利润 ÷ 核销额'],
+        ['rate', '利润 ÷ 成本合计'],
       ],
     );
     expect(lighthouseHeroFormulaForKey('profit')?.substitutes, isFalse);
@@ -996,7 +1151,7 @@ void main() {
       focus: 'prepaid',
       trace: 'prepaid',
     ));
-    // 毛利润在 ROI 里是分子、在毛利率里也是分子；成本合计在 ROI 里是分母。
+    // 利润在 ROI 里是分子、在毛利率里也是分子；成本合计在 ROI 里是分母。
     expect(
       lighthouseHeroTraceRole('rate', 'profit'),
       LighthouseHeroFormulaRole.numerator,
@@ -2326,7 +2481,7 @@ void main() {
     });
 
     test('absurd rate pct from tiny denominator is not displayable', () {
-      // 毛利 41.23 万 / 核销 0.01 万 ≈ 515415%，应显示 —
+      // 利润 41.23 万 / 核销 0.01 万 ≈ 515415%，应显示 —
       expect(lighthouseDisplayRatePct(515415.2), isNull);
       expect(lighthouseDisplayRatePct(1000), 1000);
       expect(lighthouseDisplayRatePct(12.5), 12.5);
@@ -2336,8 +2491,8 @@ void main() {
     test('operator gross margin uses sales, not verified', () {
       expect(lighthouseGrossMarginUsesSales('运营商'), isTrue);
       expect(lighthouseGrossMarginUsesSales('能源'), isFalse);
-      expect(lighthouseGrossMarginFormulaText('运营商'), '毛利润 ÷ 销售额');
-      expect(lighthouseGrossMarginFormulaText('能源'), '毛利润 ÷ 核销额');
+      expect(lighthouseGrossMarginFormulaText('运营商'), '利润 ÷ 销售额');
+      expect(lighthouseGrossMarginFormulaText('能源'), '利润 ÷ 核销额');
       expect(
         lighthouseGrossMarginDisplayPct(
           profit: 412300,
@@ -2358,11 +2513,11 @@ void main() {
       );
       expect(
         lighthouseHeroFormulaForKey('grossMargin', group: '运营商')?.expression,
-        '毛利润 ÷ 销售额',
+        '利润 ÷ 销售额',
       );
       expect(
         lighthouseHeroFormulaForKey('grossMargin')?.expression,
-        '毛利润 ÷ 核销额',
+        '利润 ÷ 核销额',
       );
     });
 
@@ -2423,6 +2578,12 @@ void main() {
       expect(
         lighthouseTrendMapUsable({
           'prepaid': [10, 20],
+        }),
+        isTrue,
+      );
+      expect(
+        lighthouseTrendMapUsable({
+          'gmv': [8, 9],
         }),
         isTrue,
       );
@@ -2712,7 +2873,7 @@ void main() {
   });
 
   group('结果区分块', () {
-    test('现金流与毛利润是结果指标，规模与成本不是', () {
+    test('现金流与利润是结果指标，规模与成本不是', () {
       expect(lighthouseLedgerIsResultMetric('prepaid'), isTrue);
       expect(lighthouseLedgerIsResultMetric('netTa'), isTrue);
       expect(lighthouseLedgerIsResultMetric('sharePct'), isTrue);
@@ -2725,6 +2886,7 @@ void main() {
       );
       expect(lighthouseLedgerIsResultMetric('sales'), isFalse);
       expect(lighthouseLedgerIsResultMetric('verifiedSales'), isFalse);
+      expect(lighthouseLedgerIsResultMetric('gmv'), isFalse);
       expect(lighthouseLedgerIsResultMetric('costTotal'), isFalse);
     });
 
@@ -2892,7 +3054,7 @@ void main() {
       );
     });
 
-    test('compact legend keeps 毛利 收入 成本 before optional scaleAlt', () {
+    test('compact legend keeps 利润 收入 成本 before optional scaleAlt', () {
       expect(
         lighthouseTrendPnlLegendKeys(
           hasProfit: true,
@@ -3398,7 +3560,7 @@ void main() {
   });
 
   group('趋势图 v16', () {
-    test('小柱层：主线非毛利给毛利，主线是毛利时给规模', () {
+    test('小柱层：主线非利润给利润，主线是利润时给规模', () {
       const all = [true, true, true, true, true, false, false];
       expect(lighthouseTrendLaneIndex(all, 3), 2);
       expect(lighthouseTrendLaneIndex(all, 0), 2);

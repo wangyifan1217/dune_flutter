@@ -8,6 +8,7 @@ class XflowTemplateCard {
     required this.endpoint,
     required this.tagLabel,
     required this.category,
+    this.icon = '',
     this.enabled = true,
   });
 
@@ -17,6 +18,7 @@ class XflowTemplateCard {
   final String endpoint;
   final String tagLabel;
   final String category;
+  final String icon;
   final bool enabled;
 
   factory XflowTemplateCard.fromJson(Map<String, dynamic> json) {
@@ -31,6 +33,7 @@ class XflowTemplateCard {
       endpoint: (json['endpoint'] ?? '').toString(),
       tagLabel: (json['tagLabel'] ?? '新建').toString(),
       category: (json['category'] ?? 'biz').toString(),
+      icon: (json['icon'] ?? '').toString(),
       enabled: enabled,
     );
   }

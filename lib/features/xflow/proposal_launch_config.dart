@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import 'xflow_category_switcher.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 
@@ -108,6 +109,47 @@ LinearGradient proposalLaunchGradient(ProposalLaunchIconTone tone) {
         colors: [Color(0xFF7E64BD), Color(0xFF4A3580)],
       );
   }
+}
+
+IconData xflowTemplateIcon(XflowTemplateCard template) {
+  switch (template.icon.trim().toLowerCase()) {
+    case 'seal':
+      return Icons.approval_outlined;
+    case 'contract':
+      return Icons.handshake_outlined;
+    case 'receipt-yuan':
+      return Icons.payments_outlined;
+    case 'customer-service':
+      return Icons.support_agent_outlined;
+    case 'plane':
+      return Icons.flight_takeoff_rounded;
+    case 'bank':
+      return Icons.account_balance_outlined;
+    case 'id-card':
+      return Icons.badge_outlined;
+    case 'book':
+      return Icons.menu_book_outlined;
+    case 'gift':
+      return Icons.redeem_outlined;
+    case 'home':
+      return Icons.home_work_outlined;
+    case 'car':
+      return Icons.directions_car_outlined;
+    case 'building':
+      return Icons.corporate_fare_outlined;
+    case 'certificate':
+      return Icons.workspace_premium_outlined;
+  }
+  final key = template.templateKey.toLowerCase();
+  if (key.contains('invoice') || key.contains('receipt')) {
+    return Icons.receipt_long_outlined;
+  }
+  if (key.contains('data')) return Icons.dataset_outlined;
+  if (key.contains('travel')) return Icons.luggage_outlined;
+  if (key.contains('procurement')) return Icons.shopping_bag_outlined;
+  return template.category == 'adm'
+      ? Icons.apartment_outlined
+      : Icons.business_center_outlined;
 }
 
 class ProposalQuickLaunchCell extends StatelessWidget {
@@ -239,54 +281,214 @@ class ProposalQuickLaunchCell extends StatelessWidget {
   }
 }
 
+class ProposalTemplateGroupPanel extends StatelessWidget {
+  const ProposalTemplateGroupPanel({
+    super.key,
+    required this.title,
+    required this.description,
+    required this.templates,
+    required this.isAdm,
+    required this.onOpen,
+    this.eyebrow,
+    this.groupLabelFor,
+  });
+
+  final String title;
+  final String description;
+  final List<XflowTemplateCard> templates;
+  final bool isAdm;
+  final ValueChanged<XflowTemplateCard> onOpen;
+  final String? eyebrow;
+  final String Function(XflowTemplateCard template)? groupLabelFor;
+
+  @override
+  Widget build(BuildContext context) {
+    final eyebrowText = eyebrow?.trim() ?? '';
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: XflowApprovalPalette.line),
+        boxShadow: [
+          BoxShadow(
+            color: XflowApprovalPalette.accentDeep.withValues(alpha: .06),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          DecoratedBox(
+            decoration: const BoxDecoration(
+              color: XflowApprovalPalette.soft,
+              border: Border(
+                bottom: BorderSide(color: XflowApprovalPalette.line),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 3,
+                    height: eyebrowText.isEmpty ? 15 : 26,
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          XflowApprovalPalette.accent,
+                          XflowApprovalPalette.accentDeep,
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (eyebrowText.isNotEmpty) ...[
+                          Text(
+                            eyebrowText,
+                            style: DunesTypography.mono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: XflowApprovalPalette.accent,
+                              letterSpacing: 1.1,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                        ],
+                        Text(
+                          title,
+                          style: DunesTypography.sans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: XflowApprovalPalette.accentDeep,
+                          ),
+                        ),
+                        if (description.trim().isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            description,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: DunesTypography.sans(
+                              fontSize: 11,
+                              color: DunesColors.text2,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${templates.length}',
+                    style: DunesTypography.mono(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: XflowApprovalPalette.accent,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Text(
+                    '项',
+                    style: DunesTypography.sans(
+                      fontSize: 11,
+                      color: DunesColors.text3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          for (var index = 0; index < templates.length; index++) ...[
+            if (index > 0)
+              const Divider(
+                height: 1,
+                indent: 49,
+                endIndent: 12,
+                color: DunesColors.borderSoft,
+              ),
+            ProposalTemplateListTile(
+              template: templates[index],
+              isAdm: isAdm,
+              index: index + 1,
+              groupLabel: groupLabelFor?.call(templates[index]),
+              onTap: templates[index].enabled
+                  ? () => onOpen(templates[index])
+                  : null,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class ProposalTemplateListTile extends StatelessWidget {
   const ProposalTemplateListTile({
     super.key,
     required this.template,
     required this.isAdm,
     required this.onTap,
+    this.index,
+    this.groupLabel,
   });
 
   final XflowTemplateCard template;
   final bool isAdm;
   final VoidCallback? onTap;
+  final int? index;
+  final String? groupLabel;
 
   @override
   Widget build(BuildContext context) {
-    final accent = isAdm ? const Color(0xFF9D5F1A) : DunesColors.accentDeep;
-    final soft = isAdm ? const Color(0xFFFFF4E5) : DunesColors.accentSoft;
     final tappable = template.enabled && onTap != null;
     final subtitle = template.subtitle.trim();
+    final resolvedGroup = groupLabel?.trim() ?? '';
+    final tag = resolvedGroup.isNotEmpty
+        ? resolvedGroup
+        : template.tagLabel.trim();
+    final serial = index == null ? '' : index!.toString().padLeft(2, '0');
 
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(10),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
         onTap: tappable ? onTap : null,
-        child: Container(
+        child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: DunesColors.borderSoft),
-          ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
-                width: 32,
-                height: 32,
+                width: 28,
+                height: 28,
+                alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: soft,
-                  borderRadius: BorderRadius.circular(8),
+                  color: tappable
+                      ? XflowApprovalPalette.soft
+                      : DunesColors.bgSoft,
+                  borderRadius: BorderRadius.circular(7),
+                  border: Border.all(
+                    color: tappable
+                        ? XflowApprovalPalette.line
+                        : DunesColors.borderSoft,
+                  ),
                 ),
                 child: Icon(
-                  isAdm ? Icons.apartment_outlined : Icons.assignment_outlined,
-                  color: accent,
-                  size: 17,
+                  xflowTemplateIcon(template),
+                  color: tappable
+                      ? XflowApprovalPalette.accentDeep
+                      : DunesColors.text3,
+                  size: 15,
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 9),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -296,33 +498,69 @@ class ProposalTemplateListTile extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: DunesTypography.sans(
-                        fontSize: 13,
+                        fontSize: 13.5,
                         fontWeight: FontWeight.w600,
                         color: DunesColors.text,
                       ),
                     ),
-                    if (subtitle.isNotEmpty) ...[
+                    if (subtitle.isNotEmpty ||
+                        tag.isNotEmpty ||
+                        serial.isNotEmpty) ...[
                       const SizedBox(height: 3),
-                      Text(
-                        subtitle,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: DunesTypography.sans(
-                          fontSize: 11,
-                          color: DunesColors.text3,
-                          height: 1.35,
-                        ),
+                      Row(
+                        children: [
+                          if (serial.isNotEmpty) ...[
+                            Text(
+                              serial,
+                              style: DunesTypography.mono(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                color: XflowApprovalPalette.accent.withValues(
+                                  alpha: .72,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              width: 1,
+                              height: 9,
+                              color: XflowApprovalPalette.line,
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          Expanded(
+                            child: Text(
+                              [
+                                if (tag.isNotEmpty) tag,
+                                if (subtitle.isNotEmpty) subtitle,
+                              ].join(' · '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: DunesTypography.sans(
+                                fontSize: 11,
+                                color: DunesColors.text3,
+                                height: 1.3,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
               if (tappable)
-                const Padding(
-                  padding: EdgeInsets.only(left: 4, top: 6),
-                  child: Icon(
-                    Icons.chevron_right_rounded,
-                    size: 18,
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: XflowApprovalPalette.accent.withValues(alpha: .55),
+                )
+              else
+                Text(
+                  '停用',
+                  style: DunesTypography.sans(
+                    fontSize: 11,
                     color: DunesColors.text3,
                   ),
                 ),

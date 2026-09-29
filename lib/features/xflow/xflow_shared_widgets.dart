@@ -170,8 +170,8 @@ class XflowHeroStatCard extends StatelessWidget {
   }
 
   Widget _warmHero() {
-    final urge = badgeUrge ||
-        (badgeText.contains('待') && !badgeText.startsWith('无'));
+    final urge =
+        badgeUrge || (badgeText.contains('待') && !badgeText.startsWith('无'));
     final (title, subtitle) = _splitKicker();
 
     return Container(
@@ -294,8 +294,9 @@ class XflowHeroStatCard extends StatelessWidget {
                               Container(
                                 width: 1,
                                 height: 36,
-                                margin:
-                                    const EdgeInsets.symmetric(horizontal: 2),
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 2,
+                                ),
                                 color: const Color(0xFFE8E4DA),
                               ),
                             Expanded(
@@ -628,22 +629,29 @@ class XflowWfListSearch extends StatelessWidget {
     super.key,
     required this.controller,
     required this.hint,
+    this.fillColor,
+    this.borderColor,
+    this.iconColor,
   });
 
   final TextEditingController controller;
   final String hint;
+  final Color? fillColor;
+  final Color? borderColor;
+  final Color? iconColor;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
+        color: fillColor ?? DunesColors.bgSoft,
         borderRadius: BorderRadius.circular(10),
+        border: borderColor == null ? null : Border.all(color: borderColor!),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       child: Row(
         children: [
-          const Icon(Icons.search, size: 16, color: DunesColors.text3),
+          Icon(Icons.search, size: 16, color: iconColor ?? DunesColors.text3),
           const SizedBox(width: 7),
           Expanded(
             child: TextField(

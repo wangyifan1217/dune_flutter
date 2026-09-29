@@ -5,6 +5,8 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import 'proposal_launch_config.dart';
+import 'xflow_approval_catalog.dart';
+import 'xflow_category_switcher.dart';
 import 'xflow_models.dart';
 import 'xflow_service.dart';
 import 'xflow_shared_widgets.dart';
@@ -39,6 +41,7 @@ class _NativeB3PageState extends State<NativeB3Page> {
   late final XflowService _service;
   late final TextEditingController _search;
   late String _category;
+  final Map<String, String> _selectedGroupIds = <String, String>{};
   bool _loading = true;
   String? _error;
   List<XflowTemplateCard> _bizTemplates = const <XflowTemplateCard>[];
@@ -98,17 +101,28 @@ class _NativeB3PageState extends State<NativeB3Page> {
   List<XflowTemplateCard> get _activeTemplates =>
       _category == 'adm' ? _admTemplates : _bizTemplates;
 
+  List<XflowPopulatedApprovalGroup> get _activeGroups =>
+      xflowPopulatedApprovalGroups(_activeTemplates, category: _category);
+
+  String _resolvedSelectedGroupId(List<XflowPopulatedApprovalGroup> groups) {
+    final selectedGroupId = _selectedGroupIds[_category] ?? '';
+    if (groups.any((group) => group.id == selectedGroupId)) {
+      return selectedGroupId;
+    }
+    return groups.isEmpty ? '' : groups.first.id;
+  }
+
   List<XflowTemplateCard> get _visibleTemplates {
     final query = _search.text.trim().toLowerCase();
-    if (query.isEmpty) return _activeTemplates;
-    return _activeTemplates
-        .where((template) {
-          final text =
-              '${template.title} ${template.subtitle} ${template.tagLabel} ${template.templateKey}'
-                  .toLowerCase();
-          return text.contains(query);
-        })
-        .toList(growable: false);
+    if (query.isEmpty) {
+      final groups = _activeGroups;
+      final selectedId = _resolvedSelectedGroupId(groups);
+      for (final group in groups) {
+        if (group.id == selectedId) return group.templates;
+      }
+      return const <XflowTemplateCard>[];
+    }
+    return xflowSearchApprovalTemplates(_activeTemplates, query);
   }
 
   void _setCategory(String category) {
@@ -117,11 +131,43 @@ class _NativeB3PageState extends State<NativeB3Page> {
     widget.onCategoryChanged?.call(category);
   }
 
+  void _setGroup(String groupId) {
+    if (_selectedGroupIds[_category] == groupId) return;
+    setState(() => _selectedGroupIds[_category] = groupId);
+  }
+
+  void _openTemplate(XflowTemplateCard template) {
+    widget.onCategoryChanged?.call(_category);
+    widget.onOpenForm(template.templateKey);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final groups = _activeGroups;
+    final selectedGroupId = _resolvedSelectedGroupId(groups);
+    XflowPopulatedApprovalGroup? selectedGroup;
+    for (final group in groups) {
+      if (group.id == selectedGroupId) {
+        selectedGroup = group;
+        break;
+      }
+    }
     final visibleTemplates = _visibleTemplates;
-    return ColoredBox(
-      color: DunesColors.bgApp,
+    final searching = _search.text.trim().isNotEmpty;
+    final isAdm = _category == 'adm';
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFFEFE9FB),
+            XflowApprovalPalette.page,
+            Color(0xFFFBFAF6),
+          ],
+          stops: [0, .28, .62],
+        ),
+      ),
       child: SafeArea(
         child: Column(
           children: [
@@ -140,42 +186,52 @@ class _NativeB3PageState extends State<NativeB3Page> {
                   : RefreshIndicator(
                       onRefresh: _load,
                       child: ListView(
-                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
                         children: [
-                          _buildCategoryTabs(),
-                          const SizedBox(height: 10),
+                          XflowApprovalCategorySwitcher(
+                            selectedCategory: _category,
+                            businessCount: _bizTemplates.length,
+                            administrationCount: _admTemplates.length,
+                            onChanged: _setCategory,
+                          ),
+                          const SizedBox(height: 12),
+                          if (groups.isNotEmpty)
+                            XflowApprovalGroupRail(
+                              groups: groups,
+                              selectedGroupId: selectedGroupId,
+                              isAdm: isAdm,
+                              onChanged: _setGroup,
+                            ),
+                          const SizedBox(height: 12),
                           XflowWfListSearch(
                             controller: _search,
-                            hint: '搜索审批类型、说明…',
+                            hint: '搜索审批名称、场景或说明…',
+                            fillColor: Colors.white,
+                            borderColor: XflowApprovalPalette.line,
+                            iconColor: XflowApprovalPalette.accent.withValues(
+                              alpha: .6,
+                            ),
                           ),
-                          const SizedBox(height: 10),
-                          XflowSectionLabel(
-                            accent: _category == 'adm' ? '非业务类' : '业务类',
-                            title: '审批模板',
-                            trailing: '${visibleTemplates.length} 类',
-                          ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 12),
                           if (visibleTemplates.isEmpty)
                             _emptyTemplates()
                           else
-                            ...visibleTemplates.map(
-                              (template) => Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: ProposalTemplateListTile(
-                                  template: template,
-                                  isAdm: _category == 'adm',
-                                  onTap: template.enabled
-                                      ? () {
-                                          widget.onCategoryChanged?.call(
-                                            _category,
-                                          );
-                                          widget.onOpenForm(
-                                            template.templateKey,
-                                          );
-                                        }
-                                      : null,
-                                ),
-                              ),
+                            ProposalTemplateGroupPanel(
+                              eyebrow: isAdm ? '非业务审批' : '业务审批',
+                              title: searching
+                                  ? '搜索结果'
+                                  : selectedGroup?.title ?? '其他',
+                              description: searching
+                                  ? '当前分类共找到 ${visibleTemplates.length} 项'
+                                  : selectedGroup?.group.description ?? '',
+                              templates: visibleTemplates,
+                              isAdm: isAdm,
+                              groupLabelFor: searching
+                                  ? (template) => xflowApprovalGroupForTemplate(
+                                      template.templateKey,
+                                    ).title
+                                  : null,
+                              onOpen: _openTemplate,
                             ),
                         ],
                       ),
@@ -187,94 +243,21 @@ class _NativeB3PageState extends State<NativeB3Page> {
     );
   }
 
-  Widget _buildCategoryTabs() {
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
-        borderRadius: BorderRadius.circular(9),
-      ),
-      child: Row(
-        children: [
-          _categoryTab(
-            label: '业务类 · 审批',
-            count: _bizTemplates.length,
-            selected: _category == 'biz',
-            accent: DunesColors.accentDeep,
-            onTap: () => _setCategory('biz'),
-          ),
-          _categoryTab(
-            label: '非业务类 · 审批',
-            count: _admTemplates.length,
-            selected: _category == 'adm',
-            accent: const Color(0xFF9D5F1A),
-            onTap: () => _setCategory('adm'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _categoryTab({
-    required String label,
-    required int count,
-    required bool selected,
-    required Color accent,
-    required VoidCallback onTap,
-  }) {
-    return Expanded(
-      child: Material(
-        color: selected ? Colors.white : Colors.transparent,
-        borderRadius: BorderRadius.circular(7),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(7),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: DunesTypography.sans(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                      color: selected ? accent : DunesColors.text2,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '$count',
-                  style: DunesTypography.sans(
-                    fontSize: 10,
-                    color: selected ? accent : DunesColors.text3,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _emptyTemplates() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: DunesColors.borderSoft),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: XflowApprovalPalette.line),
       ),
       child: Text(
-        _category == 'adm' ? '暂无非业务类模板' : '暂无业务类模板',
+        _search.text.trim().isNotEmpty
+            ? '没有找到匹配的审批'
+            : (_category == 'adm' ? '当前目录暂无非业务审批' : '当前目录暂无业务审批'),
         textAlign: TextAlign.center,
-        style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+        style: DunesTypography.sans(fontSize: 13, color: DunesColors.text3),
       ),
     );
   }

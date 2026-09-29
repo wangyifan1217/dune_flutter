@@ -120,6 +120,7 @@ import '../qianji/native_qianji_team_perf_page.dart';
 import '../qianji/native_qianji_cash_flow_board_page.dart';
 import '../qianji/native_qianji_monthly_bill_page.dart';
 import '../qianji/travel/native_qianji_travel_page.dart';
+import '../qianji/travel/travel_issue_pages.dart';
 import '../travel_import/native_travel_import_page.dart';
 import '../qianji/qianji_models.dart';
 import '../qianji/qianji_project_models.dart';
@@ -165,6 +166,7 @@ import '../profile/native_work_profile_collaboration_page.dart';
 import '../profile/native_work_profile_detail_pages.dart';
 import '../profile/native_work_profile_perf_page.dart';
 import '../profile/native_my_work_profile_center_page.dart';
+import '../profile/native_work_profile_management_page.dart';
 
 class NativeScreenHost extends StatefulWidget {
   const NativeScreenHost({
@@ -764,7 +766,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     print('[Badge] lifecycle=$state activelyInChat=$_userActivelyInChat');
     UsageAnalytics.instance.onLifecycle(
       foreground: state == AppLifecycleState.resumed,
-      suspended: state == AppLifecycleState.paused ||
+      suspended:
+          state == AppLifecycleState.paused ||
           state == AppLifecycleState.hidden ||
           state == AppLifecycleState.detached,
     );
@@ -946,8 +949,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     }
 
     if (event.type == 'notification') {
-      _notifyAndroidPushForEvent(event);
-      windowsTrayNotifyIncomingMessage();
+      final kind = (event.raw['kind'] ?? '').toString().toUpperCase();
+      if (kind != 'TRAVEL_ISSUE') {
+        _notifyAndroidPushForEvent(event);
+        windowsTrayNotifyIncomingMessage();
+      }
     }
 
     _scheduleCommBadgeRefresh();
@@ -1773,8 +1779,9 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   NativeConversation? _conversationById(int id) {
     if (id <= 0) return null;
-    final rows =
-        ConversationInboxCache.instance.peek(widget.session.userId)?.conversations;
+    final rows = ConversationInboxCache.instance
+        .peek(widget.session.userId)
+        ?.conversations;
     if (rows == null) return null;
     for (final c in rows) {
       if (c.id == id) return c;
@@ -2232,6 +2239,19 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     _scheduleCommBadgeRefresh();
   }
 
+  void _applyConvertedGroupType(NativeGroupInfo info) {
+    final current = _selectedGroup;
+    if (current == null || current.id != info.id) return;
+    setState(() {
+      _selectedGroup = ConversationInboxRealtime.copyConversation(
+        current,
+        kind: info.kind,
+        replySla: info.replySla,
+        muted: info.muted,
+      );
+    });
+  }
+
   void _handleExitedGroup(int conversationId) {
     if (conversationId > 0) {
       _conversationRemovedSignal.notifyRemoved(conversationId);
@@ -2275,6 +2295,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       onOpenApproval: () => _goB14(),
       onExitedGroup: _handleExitedGroup,
       onChatSettingsChanged: _onPrivateChatSettingsChanged,
+      onGroupTypeChanged: _applyConvertedGroupType,
     );
   }
 
@@ -3620,7 +3641,10 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     );
   }
 
-  Widget _buildCommDualKeepAlive({required bool active, bool ignoring = false}) {
+  Widget _buildCommDualKeepAlive({
+    required bool active,
+    bool ignoring = false,
+  }) {
     return Offstage(
       offstage: !active,
       child: TickerMode(
@@ -3701,65 +3725,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     required String kind,
     required String title,
   }) {
-    return ColoredBox(
-      color: const Color(0xFFF5F6F8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 10, 16, 4),
-              child: Row(
-                children: [
-                  InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: widget.navigation.back,
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.arrow_back_ios_new,
-                            size: 14,
-                            color: DunesColors.text2,
-                          ),
-                          SizedBox(width: 2),
-                          Text(
-                            '我的',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: DunesColors.text2,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF7B5CD8),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            child: NativeProposalIntakePage(
-              session: widget.session,
-              kind: kind,
-            ),
-          ),
-        ],
-      ),
+    return ProposalIntakeMyEntryPage(
+      session: widget.session,
+      navigation: widget.navigation,
+      kind: kind,
+      title: title,
     );
   }
 
@@ -3873,6 +3843,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenMonthlyOpinion: () => widget.navigation.go('QJMO'),
           onOpenProposalReview: () => widget.navigation.go('QJPA'),
           onOpenEfficiencyAnalysis: () => widget.navigation.go('QJEA'),
+          // 员工画像先隐藏，页面 QJWP 仍保留。
+          onOpenWorkProfileManagement: null,
           onOpenEfficiencyBossPreview: () {
             setState(() {
               _workSituationMonth = null;
@@ -4118,6 +4090,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           initialMonth: _workSituationMonth,
           initialFilter: _workSituationFilter,
         );
+      case 'QJWP':
+        return NativeWorkProfileManagementPage(
+          session: widget.session,
+          onBack: widget.navigation.back,
+        );
       case 'QJUH':
         return NativeQianjiAppUsagePage(
           session: widget.session,
@@ -4152,6 +4129,21 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                   widget.session.effectiveTravelImportAccess
               ? () => widget.navigation.go('QJTI')
               : null,
+        );
+      case 'QJTRI':
+        if (!widget.session.effectiveQianjiAccess ||
+            !widget.session.travelViewAll) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.navigation.popTo('QJ');
+          });
+          return const Scaffold(
+            backgroundColor: DunesColors.bgApp,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return TravelIssuesPage(
+          session: widget.session,
+          onBack: widget.navigation.back,
         );
       case 'QJTI':
         if (widget.session.isExternalUser ||
@@ -4613,6 +4605,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           session: widget.session,
           onBack: widget.navigation.back,
           onNotificationsRead: _handleNotificationsRead,
+          onOpenNotificationAction: (action) {
+            if (action == 'QJTRI' &&
+                widget.session.effectiveQianjiAccess &&
+                widget.session.travelViewAll) {
+              widget.navigation.go('QJTRI');
+            }
+          },
           onBroadcastRead: _handleConversationRead,
           initialTab: _messageCenterInitialTab,
           markAllReadOnEnter: _messageCenterMarkAllOnEnter,
@@ -4696,6 +4695,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenApproval: () => _goB14(),
           onExitedGroup: _handleExitedGroup,
           onChatSettingsChanged: _onPrivateChatSettingsChanged,
+          onGroupTypeChanged: _applyConvertedGroupType,
         );
       case 'C3':
         // 普通浏览由 keep-alive 层承载；此处仅构建建群多选实例。
@@ -5242,9 +5242,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
     final wide = isWideChatLayout(context);
     final isSearch = screen == 'Z4';
-    if (isSearch &&
-        previousScreen != null &&
-        previousScreen != 'Z4') {
+    if (isSearch && previousScreen != null && previousScreen != 'Z4') {
       _searchUnderlayScreen = previousScreen;
       if (previousScreen == 'C1' ||
           previousScreen == 'C3' ||
@@ -5303,18 +5301,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
                 enabled: false,
                 child: IgnorePointer(
                   ignoring: true,
-                  child: Opacity(
-                    opacity: 0,
-                    child: _buildMyCenterPage(),
-                  ),
+                  child: Opacity(opacity: 0, child: _buildMyCenterPage()),
                 ),
               ),
             ),
           if (_searchMounted)
-            SearchSlideLayer(
-              open: false,
-              child: _buildGlobalSearchPage(),
-            ),
+            SearchSlideLayer(open: false, child: _buildGlobalSearchPage()),
         ],
       );
     }
@@ -5367,7 +5359,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
     final switcherIsInbox = switcherScreenId == 'C1';
     final switcherIsContacts =
         switcherScreenId == 'C3' && !_contactsGroupPickMode;
-    final switcherIsMyHub = switcherScreenId == 'B2' || switcherScreenId == 'B2P';
+    final switcherIsMyHub =
+        switcherScreenId == 'B2' || switcherScreenId == 'B2P';
     final currentScreen = dualNow
         ? const SizedBox.shrink()
         : (isLighthouse ||
@@ -5506,14 +5499,12 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           Positioned.fill(
             child: TickerMode(
               enabled:
-                  isContacts ||
-                  (isSearch && _searchUnderlayScreen == 'C3'),
+                  isContacts || (isSearch && _searchUnderlayScreen == 'C3'),
               child: IgnorePointer(
                 ignoring: !isContacts,
                 child: Opacity(
                   opacity:
-                      isContacts ||
-                          (isSearch && _searchUnderlayScreen == 'C3')
+                      isContacts || (isSearch && _searchUnderlayScreen == 'C3')
                       ? 1
                       : 0,
                   child: _buildContactsBrowsePage(useKeepAliveKey: true),
@@ -5553,10 +5544,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       fit: StackFit.expand,
       children: [
         Positioned.fill(child: framed),
-        SearchSlideLayer(
-          open: isSearch,
-          child: _buildGlobalSearchPage(),
-        ),
+        SearchSlideLayer(open: isSearch, child: _buildGlobalSearchPage()),
       ],
     );
   }
@@ -5661,11 +5649,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJPA',
       'QJEA',
       'QJEAB',
+      'QJWP',
       'QJUH',
       'QJUHD',
       'QJFS',
       'QJFSD',
       'QJTR',
+      'QJTRI',
       'QJTI',
       'QJCF',
       'QJMB',
@@ -5680,7 +5670,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
   Widget _wrapWithMainNavigation(Widget content, {required String screen}) {
     final tabBar = DunesMainTabBar(
       navigation: widget.navigation,
-      activeScreen: _desktopSettingsOpen ||
+      activeScreen:
+          _desktopSettingsOpen ||
               (_desktopReleaseHistoryOpen && _desktopReleaseHistoryFromSettings)
           ? '__desktop_settings__'
           : _mainTabScreenFor(screen),
@@ -5763,11 +5754,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
         screen == 'QJPA' ||
         screen == 'QJEA' ||
         screen == 'QJEAB' ||
+        screen == 'QJWP' ||
         screen == 'QJUH' ||
         screen == 'QJUHD' ||
         screen == 'QJFS' ||
         screen == 'QJFSD' ||
         screen == 'QJTR' ||
+        screen == 'QJTRI' ||
         screen == 'QJTI' ||
         screen == 'QJCF' ||
         screen == 'QJMB' ||
@@ -5875,11 +5868,13 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJPA',
       'QJEA',
       'QJEAB',
+      'QJWP',
       'QJUH',
       'QJUHD',
       'QJFS',
       'QJFSD',
       'QJTR',
+      'QJTRI',
       'QJTI',
       'QJCF',
       'QJMB',
@@ -5900,6 +5895,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
 
   bool _isRestrictedForExternalUser(String? screen) {
     return _isNovaRestrictedScreen(screen) ||
+        screen == 'QJTRI' ||
         screen == 'Z2' ||
         screen == 'C10' ||
         screen == 'AS1' ||
@@ -5933,9 +5929,11 @@ class _NativeScreenHostState extends State<NativeScreenHost>
       'QJPA' => const ['QJ', 'QJPA'],
       'QJEA' => const ['QJ', 'QJEA'],
       'QJEAB' => const ['QJ', 'QJEAB'],
+      'QJWP' => const ['QJ', 'QJWP'],
       'QJUH' => const ['QJ', 'QJUH'],
       'QJUHD' => const ['QJ', 'QJUH', 'QJUHD'],
       'QJTR' => const ['QJ', 'QJTR'],
+      'QJTRI' => const ['QJ', 'QJTRI'],
       'QJTI' => const ['QJ', 'QJTR', 'QJTI'],
       'QJCF' => const ['QJ', 'QJCF'],
       'QJMB' => const ['QJ', 'QJMB'],

@@ -146,6 +146,38 @@ String tag3DailyStatDateDay(String raw) {
   return value;
 }
 
+List<Tag3DailyComment> tag3DailyOpinionComments(
+  List<Tag3DailyComment> comments,
+) {
+  final out = [
+    for (final item in comments)
+      if (item.isOpinion) item,
+  ];
+  out.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  return out;
+}
+
+/// 意见本身只带项目名。渠道优先取同一 rowKey 的日行，否则从 `渠道|项目` 的 rowKey 拆开。
+({String channel, String project}) tag3DailyCommentPlace(
+  Tag3DailyComment comment,
+  List<Tag3DailyRow> rows,
+) {
+  var channel = '';
+  var project = comment.projectName.trim();
+  for (final row in rows) {
+    if (row.rowKey != comment.rowKey) continue;
+    if (channel.isEmpty) channel = row.channelCategoryL1Name.trim();
+    if (project.isEmpty) project = row.projectName.trim();
+    if (channel.isNotEmpty && project.isNotEmpty) break;
+  }
+  final parts = comment.rowKey.split('|');
+  if (parts.length >= 2) {
+    if (channel.isEmpty) channel = parts.first.trim();
+    if (project.isEmpty) project = parts.sublist(1).join('|').trim();
+  }
+  return (channel: channel, project: project);
+}
+
 String tag3DailyCommentTime(String raw) {
   final dt = DateTime.tryParse(raw.trim());
   if (dt == null) return raw.trim();
@@ -192,6 +224,8 @@ class Tag3DailyComment {
     if (text.isNotEmpty) return text;
     return isConfirm ? '已确认，未填写意见' : '';
   }
+
+  bool get isOpinion => !isConfirm && body.trim().isNotEmpty;
 
   bool matchesRow(Tag3DailyRow row) {
     return rowKey == row.rowKey &&
@@ -295,11 +329,16 @@ class Tag3DailyRow {
       cashPaidAmount: tag3DailyNum(json['cashPaidAmount']),
       cashReceivableDiff: tag3DailyNum(json['cashReceivableDiff']),
       subsidyReceivableAmount: tag3DailyNum(json['subsidyReceivableAmount']),
-      confirmationStatus: '${json['confirmationStatus'] ?? ''}'.trim().toUpperCase(),
-      confirmationStatusLabel: '${json['confirmationStatusLabel'] ?? ''}'.trim(),
+      confirmationStatus: '${json['confirmationStatus'] ?? ''}'
+          .trim()
+          .toUpperCase(),
+      confirmationStatusLabel: '${json['confirmationStatusLabel'] ?? ''}'
+          .trim(),
       canConfirm: json['canConfirm'] == true && period != 'MONTH',
       canComment: period != 'MONTH' && canCommentRaw != false,
-      canConfirmStage: stage.isEmpty || period == 'MONTH' ? null : stage.toUpperCase(),
+      canConfirmStage: stage.isEmpty || period == 'MONTH'
+          ? null
+          : stage.toUpperCase(),
       sourceTab: '${json['sourceTab'] ?? ''}'.trim(),
     );
   }
@@ -349,7 +388,10 @@ class Tag3DailySnapshot {
   }
 
   List<Tag3DailyComment> commentsFor(Tag3DailyRow row) {
-    return [for (final item in comments) if (item.matchesRow(row)) item];
+    return [
+      for (final item in comments)
+        if (item.matchesRow(row)) item,
+    ];
   }
 
   Tag3DailyAssignee? assigneeFor(String rowKey) {
@@ -434,7 +476,9 @@ class Tag3DailyDrilldown {
       items: raw is List
           ? [
               for (final item in raw.whereType<Map>())
-                Tag3DailyDrilldownItem.fromJson(Map<String, dynamic>.from(item)),
+                Tag3DailyDrilldownItem.fromJson(
+                  Map<String, dynamic>.from(item),
+                ),
             ]
           : const [],
       totalSales: tag3DailyNum(json['totalSales']),
@@ -481,7 +525,10 @@ String tag3DailySnapshotStatusLine(
   List<Tag3DailyRow> rows, {
   String snapshotHint = '',
 }) {
-  final day = [for (final row in rows) if (!row.isMonthCumulative) row];
+  final day = [
+    for (final row in rows)
+      if (!row.isMonthCumulative) row,
+  ];
   if (day.isEmpty) {
     return _withTag3DailySnapshotHint(
       rows.isEmpty ? '暂无日清月结明细' : '本月累计只展示，暂无日行',
@@ -528,7 +575,9 @@ List<Tag3DailyRow> sortTag3DailyRows(List<Tag3DailyRow> rows) {
     if (c != 0) return c;
     final p = a.projectName.compareTo(b.projectName);
     if (p != 0) return p;
-    final pr = tag3DailyPeriodRank(a.period).compareTo(tag3DailyPeriodRank(b.period));
+    final pr = tag3DailyPeriodRank(
+      a.period,
+    ).compareTo(tag3DailyPeriodRank(b.period));
     if (pr != 0) return pr;
     return a.statDateDay.compareTo(b.statDateDay);
   });

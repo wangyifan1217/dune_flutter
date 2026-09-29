@@ -41,6 +41,7 @@ class TaskItem {
     this.assessmentIncluded = false,
     this.assessmentWeight = 1,
     this.openItemCount = 0,
+    this.completedSubtaskCount = 0,
     this.itemsReadyToClose = false,
     this.displayStatus = '',
     this.hasPendingChange = false,
@@ -91,6 +92,7 @@ class TaskItem {
   final bool assessmentIncluded;
   final double assessmentWeight;
   final int openItemCount;
+  final int completedSubtaskCount;
   final bool itemsReadyToClose;
   final String displayStatus;
   final bool hasPendingChange;
@@ -162,6 +164,8 @@ class TaskItem {
       assessmentIncluded: json['assessmentIncluded'] == true,
       assessmentWeight: (json['assessmentWeight'] as num?)?.toDouble() ?? 1,
       openItemCount: (json['openItemCount'] as num?)?.toInt() ?? 0,
+      completedSubtaskCount:
+          (json['completedSubtaskCount'] as num?)?.toInt() ?? 0,
       itemsReadyToClose: json['itemsReadyToClose'] == true,
       displayStatus: '${json['displayStatus'] ?? ''}',
       hasPendingChange: json['hasPendingChange'] == true,
@@ -452,6 +456,36 @@ class TaskEvalLog {
   }
 }
 
+class TaskRdIntake {
+  const TaskRdIntake({
+    required this.canCreate,
+    required this.canAssignTeam,
+    required this.inRd,
+    required this.owners,
+  });
+
+  final bool canCreate;
+  final bool canAssignTeam;
+  final bool inRd;
+  final List<TaskAssignee> owners;
+
+  factory TaskRdIntake.fromJson(Map<String, dynamic> json) {
+    final raw = json['owners'];
+    final owners = raw is List
+        ? raw
+              .whereType<Map>()
+              .map((e) => TaskAssignee.fromJson(Map<String, dynamic>.from(e)))
+              .toList(growable: false)
+        : const <TaskAssignee>[];
+    return TaskRdIntake(
+      canCreate: json['canCreate'] != false,
+      canAssignTeam: json['canAssignTeam'] == true,
+      inRd: json['inRd'] == true,
+      owners: owners,
+    );
+  }
+}
+
 class TaskAssignee {
   const TaskAssignee({
     required this.id,
@@ -694,6 +728,21 @@ String taskChangeStatusLabel(String status) {
 }
 
 String taskKindLabel(TaskItem task) => task.isMain ? '主目标' : '子目标';
+
+/// 主任务交给科技研发中心的项目经理、产品经理或总监时，创建页不拆子任务。
+bool taskCreateHandsOffToRd({
+  required int ownerUserId,
+  required int selfUserId,
+  required Iterable<int> rdOwnerIds,
+}) {
+  return ownerUserId != selfUserId && rdOwnerIds.contains(ownerUserId);
+}
+
+String taskSubtaskProgressLabel(TaskItem task) {
+  if (task.subtaskCount <= 0) return '—';
+  final done = task.completedSubtaskCount.clamp(0, task.subtaskCount);
+  return '$done/${task.subtaskCount}';
+}
 
 String taskDisplayStatusLabel(TaskItem task) {
   final raw = task.displayStatus.trim();

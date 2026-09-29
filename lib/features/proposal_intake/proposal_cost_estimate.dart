@@ -289,13 +289,14 @@ ProposalSkuSettleMoney proposalSkuSettleMoney(
     }
   }
   final scale = proposalSkuFaceShareScale(sku, form: form);
+  final scaleIsRevenue = proposalSectorScaleIsRevenue(form) && scale > 0;
   return ProposalSkuSettleMoney(
-    income: proposalRoundWan(scale * incomeShare),
+    income: proposalRoundWan(scaleIsRevenue ? scale : scale * incomeShare),
     cost: proposalRoundWan(scale * costShare),
-    incomeShare: incomeShare,
+    incomeShare: scaleIsRevenue ? 1 : incomeShare,
     costShare: costShare,
     scale: scale,
-    hasIncome: hasIncome,
+    hasIncome: scaleIsRevenue || hasIncome,
     hasCost: hasCost,
   );
 }
@@ -405,6 +406,10 @@ ProposalProductScaleRollup? proposalProductScaleRollup(
   final hydrated = proposalIntakeHydrateMarketSalesScale(form);
   final scale = proposalFinanceAmount(hydrated, kProposalSalesScaleKey);
   if (scale <= 0) return null;
+  if (proposalSectorScaleIsRevenue(hydrated)) {
+    final rounded = proposalRoundWan(scale);
+    return ProposalProductScaleRollup(salesScale: rounded, revenue: rounded);
+  }
   var ownedRevenue = 0.0;
   var anyOwned = false;
   var anyUnowned = false;
@@ -840,6 +845,15 @@ Map<String, dynamic> proposalMarkCostAmountManual(
   if (manualKey == null || id.trim().isEmpty) return form;
   final ids = proposalCostManualIdSet(form[manualKey])..add(id.trim());
   return Map<String, dynamic>.from(form)..[manualKey] = ids.toList();
+}
+
+/// 运营商的规模按收入填写，不再把规模当成面值销售额去乘单价或比例。
+bool proposalSectorScaleIsRevenue(Map<String, dynamic> form) {
+  final sector = [
+    '${form['sector'] ?? ''}',
+    proposalIntakeFormRef(form, 'sectorRef')?.name ?? '',
+  ].join(' ');
+  return sector.contains('运营商');
 }
 
 /// 增值税税种按业务板块判定：运营商 / 公共出行走「运营商+公共出行」，其余走「能源」。

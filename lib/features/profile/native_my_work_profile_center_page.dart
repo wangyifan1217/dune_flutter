@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -36,7 +35,7 @@ import 'work_profile_controls.dart';
 /// 全新高奢个人工作画像与办公中心主页
 ///
 /// 彻底摆脱原本单调普通的列表 UI，将「工作画像」作为主页首重视角，
-/// 结合奢华深紫星空流光名片、六维能力雷达看板、月度下钻穿透，
+/// 结合月度工作记录、来源说明与趋势回顾，
 /// 并以 Bento Grid 现代化网格将原本的「我的事项」（审批中心、会议纪要、知识库等）
 /// 优雅深度融合于其中，支持平滑双模视图切换与快捷看板。
 class NativeMyWorkProfileCenterPage extends StatefulWidget {
@@ -166,18 +165,18 @@ class _CenterAffairsStats {
   });
 
   const _CenterAffairsStats.empty()
-      : pendingForMe = 0,
-        initiatedByMe = 0,
-        approvalPending = 0,
-        handledThisMonth = 0,
-        outstandingInvoices = 0,
-        approvalRejected = 0,
-        ccProposalCount = 0,
-        ccProposalPending = 0,
-        pendingInitiateForMe = 0,
-        pendingTodoForMe = 0,
-        handledTodoThisMonth = 0,
-        postApprovalTodoEnabled = false;
+    : pendingForMe = 0,
+      initiatedByMe = 0,
+      approvalPending = 0,
+      handledThisMonth = 0,
+      outstandingInvoices = 0,
+      approvalRejected = 0,
+      ccProposalCount = 0,
+      ccProposalPending = 0,
+      pendingInitiateForMe = 0,
+      pendingTodoForMe = 0,
+      handledTodoThisMonth = 0,
+      postApprovalTodoEnabled = false;
 
   final int pendingForMe;
   final int initiatedByMe;
@@ -299,7 +298,8 @@ class _NativeMyWorkProfileCenterPageState
     return DateTime(now.year, now.month);
   }
 
-  DateTime get _earliestMonth => DateTime(_currentMonth.year - 3, 1);
+  DateTime get _earliestMonth =>
+      DateTime(_currentMonth.year, _currentMonth.month - 11);
 
   @override
   void initState() {
@@ -394,7 +394,10 @@ class _NativeMyWorkProfileCenterPageState
       setState(() => _portraitLoading = true);
     }
     try {
-      final snapshot = await loadUserWorkProfileSnapshot(widget.session, _month);
+      final snapshot = await loadUserWorkProfileSnapshot(
+        widget.session,
+        _month,
+      );
       if (!mounted || generation != _portraitLoadGeneration) return;
       setState(() {
         _workProfileSnapshot = snapshot;
@@ -443,10 +446,13 @@ class _NativeMyWorkProfileCenterPageState
                 : body)
           : const <String, dynamic>{};
       final profile = _ProfileUserInfo(
-        displayName: (data['name'] ?? data['displayName'] ?? '').toString().trim(),
+        displayName: (data['name'] ?? data['displayName'] ?? '')
+            .toString()
+            .trim(),
         phone: (data['phone'] ?? '').toString().trim(),
-        departmentName:
-            (data['departmentName'] ?? data['department'] ?? '').toString().trim(),
+        departmentName: (data['departmentName'] ?? data['department'] ?? '')
+            .toString()
+            .trim(),
         title: (data['title'] ?? data['jobTitle'] ?? '').toString().trim(),
         avatarPreset: (data['avatarPreset'] ?? '').toString().trim(),
         avatarObjectKey: (data['avatarObjectKey'] ?? '').toString().trim(),
@@ -557,8 +563,7 @@ class _NativeMyWorkProfileCenterPageState
   }
 
   Future<void> _openAvatarEditor() async {
-    final profile =
-        _profile ?? _ProfileUserInfo.fromSession(widget.session);
+    final profile = _profile ?? _ProfileUserInfo.fromSession(widget.session);
     final oldObjectKey = profile.avatarObjectKey;
     final oldAvatarUrl = profile.avatarUrl;
     setState(() => _avatarSheetOpen = true);
@@ -572,9 +577,10 @@ class _NativeMyWorkProfileCenterPageState
       );
       if (updated == null || !mounted) return;
       final optimistic = profile.copyWith(
-        avatarPreset: (updated['avatarPreset'] ?? profile.avatarPreset).toString(),
-        avatarObjectKey:
-            (updated['avatarObjectKey'] ?? profile.avatarObjectKey).toString(),
+        avatarPreset: (updated['avatarPreset'] ?? profile.avatarPreset)
+            .toString(),
+        avatarObjectKey: (updated['avatarObjectKey'] ?? profile.avatarObjectKey)
+            .toString(),
         avatarUrl: (updated['avatarUrl'] ?? profile.avatarUrl).toString(),
       );
       setState(() {
@@ -784,7 +790,11 @@ class _NativeMyWorkProfileCenterPageState
                   const Spacer(),
                   IconButton(
                     onPressed: () => Navigator.of(ctx).pop(),
-                    icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF8A7A9E)),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      size: 20,
+                      color: Color(0xFF8A7A9E),
+                    ),
                   ),
                 ],
               ),
@@ -793,7 +803,8 @@ class _NativeMyWorkProfileCenterPageState
                 icon: Icons.format_size_rounded,
                 iconColor: const Color(0xFF7045B2),
                 title: '字号调节',
-                subtitle: '当前：${AppTextScaleController.labels[AppTextScaleController.instance.presetIndex]}',
+                subtitle:
+                    '当前：${AppTextScaleController.labels[AppTextScaleController.instance.presetIndex]}',
                 onTap: () {
                   Navigator.of(ctx).pop();
                   _openTextScalePicker();
@@ -877,7 +888,9 @@ class _NativeMyWorkProfileCenterPageState
                       style: TextStyle(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w600,
-                        color: isDanger ? DunesColors.coral : const Color(0xFF2C1E3F),
+                        color: isDanger
+                            ? DunesColors.coral
+                            : const Color(0xFF2C1E3F),
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -930,10 +943,11 @@ class _NativeMyWorkProfileCenterPageState
   @override
   Widget build(BuildContext context) {
     final stats = _affairsStats ?? const _CenterAffairsStats.empty();
-    final profile =
-        _profile ?? _ProfileUserInfo.fromSession(widget.session);
+    final profile = _profile ?? _ProfileUserInfo.fromSession(widget.session);
     final name = profile.displayName.trim().isEmpty
-        ? (widget.session.phone.trim().isEmpty ? '未命名用户' : widget.session.phone.trim())
+        ? (widget.session.phone.trim().isEmpty
+              ? '未命名用户'
+              : widget.session.phone.trim())
         : profile.displayName.trim();
     final identityLine = profile.subtitleLine.isNotEmpty
         ? profile.subtitleLine
@@ -948,7 +962,8 @@ class _NativeMyWorkProfileCenterPageState
     final portraitSnapshot =
         _workProfileSnapshot ?? UserWorkProfileSnapshot.connecting();
 
-    final unreadPendingAffairs = stats.pendingForMe +
+    final unreadPendingAffairs =
+        stats.pendingForMe +
         stats.approvalRejected +
         stats.pendingInitiateForMe;
 
@@ -990,7 +1005,9 @@ class _NativeMyWorkProfileCenterPageState
                         const SizedBox(height: 14),
 
                         // 2. 高定双模 Segmented 切换胶囊
-                        _buildViewSegmentedControl(unreadBadge: unreadPendingAffairs),
+                        _buildViewSegmentedControl(
+                          unreadBadge: unreadPendingAffairs,
+                        ),
                         const SizedBox(height: 14),
 
                         // 3. 视图内容分发 (双模丝滑 CrossFade 渐变切换，保留状态不卡顿)
@@ -1122,7 +1139,8 @@ class _NativeMyWorkProfileCenterPageState
         }
       },
       itemBuilder: (ctx) => [
-        if (widget.onOpenWorkbench != null || (!isDesktopCommOnly && !widget.session.isExternalUser))
+        if (widget.onOpenWorkbench != null ||
+            (!isDesktopCommOnly && !widget.session.isExternalUser))
           const PopupMenuItem(
             value: 'workbench',
             child: Row(
@@ -1138,7 +1156,11 @@ class _NativeMyWorkProfileCenterPageState
             value: 'scan',
             child: Row(
               children: [
-                Icon(Icons.qr_code_scanner_rounded, size: 19, color: Color(0xFF7045B2)),
+                Icon(
+                  Icons.qr_code_scanner_rounded,
+                  size: 19,
+                  color: Color(0xFF7045B2),
+                ),
                 SizedBox(width: 10),
                 Text('扫一扫'),
               ],
@@ -1148,7 +1170,11 @@ class _NativeMyWorkProfileCenterPageState
           value: 'font_scale',
           child: Row(
             children: [
-              Icon(Icons.format_size_rounded, size: 19, color: Color(0xFF6B5882)),
+              Icon(
+                Icons.format_size_rounded,
+                size: 19,
+                color: Color(0xFF6B5882),
+              ),
               SizedBox(width: 10),
               Text('字号调节'),
             ],
@@ -1168,7 +1194,11 @@ class _NativeMyWorkProfileCenterPageState
           value: 'clear_cache',
           child: Row(
             children: [
-              Icon(Icons.cleaning_services_rounded, size: 19, color: Color(0xFF6B5882)),
+              Icon(
+                Icons.cleaning_services_rounded,
+                size: 19,
+                color: Color(0xFF6B5882),
+              ),
               SizedBox(width: 10),
               Text('清理缓存'),
             ],
@@ -1207,14 +1237,9 @@ class _NativeMyWorkProfileCenterPageState
     final avatarText = name.characters.first;
 
     // 计算当月综合活跃度百分比
-    final int activityPct;
-    if (snapshot != null && snapshot.modules.isNotEmpty) {
-      final total = snapshot.modules.fold<double>(0, (sum, m) => sum + m.radarValue);
-      final raw = (total / snapshot.modules.length * 100).round();
-      activityPct = raw > 0 ? raw : 92;
-    } else {
-      activityPct = 88;
-    }
+    final taskCompleted = snapshot?.trend.isNotEmpty == true
+        ? snapshot!.trend.last.taskCompleted
+        : 0;
 
     Widget metricTile({
       required String label,
@@ -1259,7 +1284,11 @@ class _NativeMyWorkProfileCenterPageState
                   width: 0.6,
                 ),
               ),
-              child: Icon(icon, size: 13, color: Colors.white.withValues(alpha: .95)),
+              child: Icon(
+                icon,
+                size: 13,
+                color: Colors.white.withValues(alpha: .95),
+              ),
             ),
             const SizedBox(width: 8),
             Column(
@@ -1364,7 +1393,10 @@ class _NativeMyWorkProfileCenterPageState
 
               // 3. 内容主体
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 16,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -1391,7 +1423,9 @@ class _NativeMyWorkProfileCenterPageState
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: const Color(0xFF8855DF).withValues(alpha: .28),
+                                      color: const Color(
+                                        0xFF8855DF,
+                                      ).withValues(alpha: .28),
                                       blurRadius: 10,
                                       offset: const Offset(0, 3),
                                     ),
@@ -1418,14 +1452,18 @@ class _NativeMyWorkProfileCenterPageState
                                     shape: BoxShape.circle,
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withValues(alpha: .25),
+                                        color: Colors.black.withValues(
+                                          alpha: .25,
+                                        ),
                                         blurRadius: 4,
                                         offset: const Offset(0, 1),
                                       ),
                                     ],
                                   ),
                                   child: Icon(
-                                    _avatarSheetOpen ? Icons.more_horiz : Icons.edit_rounded,
+                                    _avatarSheetOpen
+                                        ? Icons.more_horiz
+                                        : Icons.edit_rounded,
                                     size: 12,
                                     color: const Color(0xFF65399E),
                                   ),
@@ -1443,7 +1481,10 @@ class _NativeMyWorkProfileCenterPageState
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2.5,
+                                ),
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     colors: [
@@ -1498,9 +1539,9 @@ class _NativeMyWorkProfileCenterPageState
                         if (isWide) ...[
                           const SizedBox(width: 16),
                           metricTile(
-                            label: '相对活跃度',
-                            value: '$activityPct%',
-                            icon: Icons.trending_up_rounded,
+                            label: '已完成任务',
+                            value: '$taskCompleted',
+                            icon: Icons.task_alt_rounded,
                           ),
                           const SizedBox(width: 8),
                           metricTile(
@@ -1516,62 +1557,6 @@ class _NativeMyWorkProfileCenterPageState
                           ),
                           const SizedBox(width: 14),
                         ],
-
-                        // 右侧能力维度全景触发入口（直接移至右上角高光晶体按钮）
-                        InkWell(
-                          onTap: () {
-                            if (snapshot != null) {
-                              _openRadarFullscreenDialog(snapshot);
-                            } else {
-                              showDunesToast(context, '画像分析加载中…');
-                            }
-                          },
-                          borderRadius: BorderRadius.circular(14),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  Colors.white.withValues(alpha: .22),
-                                  Colors.white.withValues(alpha: .08),
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: .32),
-                                width: 0.8,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: .16),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.insights_rounded,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  '能力维度',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: .95),
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
                       ],
                     ),
 
@@ -1582,9 +1567,9 @@ class _NativeMyWorkProfileCenterPageState
                         children: [
                           Expanded(
                             child: metricTile(
-                              label: '相对活跃度',
-                              value: '$activityPct%',
-                              icon: Icons.trending_up_rounded,
+                              label: '已完成任务',
+                              value: '$taskCompleted',
+                              icon: Icons.task_alt_rounded,
                             ),
                           ),
                           const SizedBox(width: 6),
@@ -1790,7 +1775,7 @@ class _NativeMyWorkProfileCenterPageState
         ),
         const SizedBox(height: 12),
 
-        // 2. 引导说明胶囊与能力维度快捷入口
+        // 2. 说明画像口径，不将不同业务数据折算成能力分
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
@@ -1827,7 +1812,7 @@ class _NativeMyWorkProfileCenterPageState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '六维能力维度诊断',
+                      '工作记录回顾',
                       style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w700,
@@ -1836,32 +1821,9 @@ class _NativeMyWorkProfileCenterPageState
                     ),
                     SizedBox(height: 2),
                     Text(
-                      '点击名片右上角「能力维度」或右侧按钮查看全景多维全息图',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Color(0xFF7A688F),
-                      ),
+                      '展示已有业务记录与阶段趋势，不计算综合能力分或员工排名',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF7A688F)),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.tonal(
-                onPressed: () => _openRadarFullscreenDialog(snapshot),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFFF1E9FA),
-                  foregroundColor: const Color(0xFF683CA3),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('查看全景', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                    SizedBox(width: 2),
-                    Icon(Icons.chevron_right_rounded, size: 16),
                   ],
                 ),
               ),
@@ -1874,11 +1836,19 @@ class _NativeMyWorkProfileCenterPageState
         _buildQuickAffairsDock(stats: stats, kbDocCount: kbDocCount),
         const SizedBox(height: 16),
 
-        // 5. 能力维度深入展开与月度下钻
+        if (snapshot.trend.isNotEmpty) ...[
+          WorkProfileTrendCard(
+            points: snapshot.trend,
+            updatedAt: snapshot.updatedAt,
+          ),
+          const SizedBox(height: 16),
+        ],
+
+        // 5. 工作分类与明细入口
         Row(
           children: [
             const Text(
-              '维度成长沉淀',
+              '工作记录与成果',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
@@ -1926,11 +1896,14 @@ class _NativeMyWorkProfileCenterPageState
                             : null,
                       UserWorkProfileModuleType.performance =>
                         widget.onOpenPerformanceMonth != null
-                            ? () => widget.onOpenPerformanceMonth!(_month)
+                            ? () => widget.onOpenPerformanceMonth!(
+                                workProfilePerformanceMonth(module),
+                              )
                             : null,
                       _ => null,
                     },
-                    onRetry: module.status == UserWorkProfileModuleStatus.unavailable
+                    onRetry:
+                        module.status == UserWorkProfileModuleStatus.unavailable
                         ? () => unawaited(_loadWorkProfileData())
                         : null,
                   ),
@@ -1956,260 +1929,6 @@ class _NativeMyWorkProfileCenterPageState
     );
   }
 
-  /// 弹出沉浸式大尺寸全景画像分析模态弹窗 (满足放大查看全景需求)
-  void _openRadarFullscreenDialog(UserWorkProfileSnapshot snapshot) {
-    showDialog<void>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: .6),
-      builder: (dialogCtx) {
-        return BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Dialog(
-            backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 620, maxHeight: 720),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x40140728),
-                    blurRadius: 36,
-                    offset: Offset(0, 16),
-                  ),
-                ],
-                border: Border.all(color: const Color(0xFFE4DAEE)),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 弹窗标题栏
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFFBF8FE),
-                        border: Border(bottom: BorderSide(color: Color(0xFFEFE8F5))),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF7651B8).withValues(alpha: .12),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.insights_rounded,
-                              size: 18,
-                              color: Color(0xFF7651B8),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '六维能力全景分析',
-                                style: DunesTypography.sans(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: const Color(0xFF2C1E3F),
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${formatWorkProfileMonthLabel(_month)} · 相对活跃度多维全息图',
-                                style: const TextStyle(
-                                  fontSize: 11.5,
-                                  color: Color(0xFF817589),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Spacer(),
-                          IconButton(
-                            onPressed: () => Navigator.of(dialogCtx).pop(),
-                            icon: const Icon(Icons.close_rounded, size: 20, color: Color(0xFF7A688F)),
-                            tooltip: '关闭',
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // 弹窗内容区域
-                    Flexible(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // 放大版大尺寸高清雷达
-                            ConnectingRadarCard(
-                              modules: snapshot.modules,
-                              compact: false,
-                            ),
-                            const SizedBox(height: 18),
-
-                            // 六维指标明细诊断与复盘入口
-                            const Row(
-                              children: [
-                                Text(
-                                  '维度诊断明细',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFF37274C),
-                                  ),
-                                ),
-                                Spacer(),
-                                Text(
-                                  '点击卡片可直接月度下钻',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Color(0xFF817589),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-
-                            for (final module in snapshot.modules)
-                              _buildDialogModuleTile(module, dialogCtx),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildDialogModuleTile(UserWorkProfileModule module, BuildContext dialogCtx) {
-    final activityPct = (module.radarValue * 100).clamp(0, 100).round();
-    final hasCallback = switch (module.type) {
-      UserWorkProfileModuleType.workRhythm => widget.onOpenWorkRhythmMonth != null,
-      UserWorkProfileModuleType.collaboration => widget.onOpenCollaborationMonth != null,
-      UserWorkProfileModuleType.knowledge => widget.onOpenKnowledgeMonth != null,
-      UserWorkProfileModuleType.business => widget.onOpenBusinessMonth != null,
-      UserWorkProfileModuleType.performance => widget.onOpenPerformanceMonth != null,
-      _ => false,
-    };
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFAF7FC),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFEDE4F4)),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: hasCallback
-              ? () {
-                  Navigator.of(dialogCtx).pop();
-                  switch (module.type) {
-                    case UserWorkProfileModuleType.workRhythm:
-                      widget.onOpenWorkRhythmMonth?.call(_month);
-                    case UserWorkProfileModuleType.collaboration:
-                      widget.onOpenCollaborationMonth?.call(_month);
-                    case UserWorkProfileModuleType.knowledge:
-                      widget.onOpenKnowledgeMonth?.call(_month);
-                    case UserWorkProfileModuleType.business:
-                      widget.onOpenBusinessMonth?.call(_month);
-                    case UserWorkProfileModuleType.performance:
-                      widget.onOpenPerformanceMonth?.call(_month);
-                    default:
-                      break;
-                  }
-                }
-              : null,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: module.status == UserWorkProfileModuleStatus.ready
-                        ? const Color(0xFF7651B8)
-                        : const Color(0xFFB0A5BD),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            module.type.label,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF2E1F42),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF7651B8).withValues(alpha: .1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              '活跃度 $activityPct%',
-                              style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF7651B8),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        module.summary.trim(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          color: Color(0xFF7A6B8A),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (hasCallback) ...[
-                  const SizedBox(width: 6),
-                  const Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    size: 12,
-                    color: Color(0xFF9E8DB3),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 融合进画像主页的常用事项微看台 (精致微缩版)
   Widget _buildQuickAffairsDock({
     required _CenterAffairsStats stats,
     required int kbDocCount,
@@ -2305,7 +2024,11 @@ class _NativeMyWorkProfileCenterPageState
         children: [
           Row(
             children: [
-              const Icon(Icons.flash_on_rounded, size: 17, color: Color(0xFF8A5AB8)),
+              const Icon(
+                Icons.flash_on_rounded,
+                size: 17,
+                color: Color(0xFF8A5AB8),
+              ),
               const SizedBox(width: 5),
               const Text(
                 '我的事项快捷通道',
@@ -2442,7 +2165,8 @@ class _NativeMyWorkProfileCenterPageState
         ),
         const SizedBox(height: 10),
 
-        if (widget.onOpenWorkbench != null || (!isDesktopCommOnly && !widget.session.isExternalUser)) ...[
+        if (widget.onOpenWorkbench != null ||
+            (!isDesktopCommOnly && !widget.session.isExternalUser)) ...[
           _buildActionBentoCard(
             icon: Icons.apps_rounded,
             iconGradient: const [Color(0xFF6366F1), Color(0xFF4338CA)],
@@ -2874,7 +2598,10 @@ class _NativeMyWorkProfileCenterPageState
               ),
               if (trailingText != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFF7C5CE6),
                     borderRadius: BorderRadius.circular(8),

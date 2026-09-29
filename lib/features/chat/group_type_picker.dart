@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-/// 建群类型：创建后不可修改。
+/// 建群类型。创建后群主可在群资料里转换。
 enum NewGroupType {
   /// 普通群：kind=GROUP，无已读不回。
   normal,
 
-  /// 工作群：kind=WORKGROUP + replySla=true，上级 @ 你需「回复此条」。
+  /// 工作群：kind=WORKGROUP + replySla=true，更高沙丘职级 @ 你需「回复此条」。
   work,
 }
 
@@ -103,7 +103,7 @@ class _CreateGroupTypeDialogState extends State<_CreateGroupTypeDialog> {
           Text(widget.membersText),
           const SizedBox(height: 14),
           const Text(
-            '群类型（创建后不可修改）',
+            '群类型（创建后群主可转换）',
             style: TextStyle(fontSize: 13, color: Color(0xFF6B7078)),
           ),
           const SizedBox(height: 8),
@@ -112,7 +112,7 @@ class _CreateGroupTypeDialogState extends State<_CreateGroupTypeDialog> {
           _option(
             NewGroupType.work,
             '工作群',
-            '直属上级、隔级上级或总裁办 @ 你时，需要点「回复此条」引用回复，系统会记录已读未回复时长。',
+            '沙丘职级高于你的人 @ 你时，需要点「回复此条」引用回复，系统会记录已读未回复时长。M 高于 P，同一序列数字越大越高；同级或不设职级不要求回复。',
           ),
         ],
       ),

@@ -110,7 +110,7 @@ class _NativeWorkProfileRhythmPageState
               .toList(growable: false);
 
     return _ProfileDetailScaffold(
-      title: '工作节奏',
+      title: '任务进展',
       onBack: widget.onBack,
       onRefresh: _load,
       children: [
@@ -268,7 +268,7 @@ class _NativeWorkProfileKnowledgePageState
   Widget build(BuildContext context) {
     final summary = _summary;
     return _ProfileDetailScaffold(
-      title: '知识成长',
+      title: '知识沉淀',
       onBack: widget.onBack,
       onRefresh: _load,
       children: [
@@ -432,7 +432,7 @@ class _NativeWorkProfileBusinessPageState
     final proposals = _proposals;
 
     return _ProfileDetailScaffold(
-      title: '业务投入',
+      title: '审批与提案',
       onBack: widget.onBack,
       onRefresh: _load,
       children: [

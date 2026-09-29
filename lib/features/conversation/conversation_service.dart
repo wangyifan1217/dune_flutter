@@ -2431,6 +2431,24 @@ class ConversationService {
     }
   }
 
+  /// 群主把普通群与已读不回工作群互转。work 为 true 时服务端会在群里发通知。
+  Future<void> convertGroupType(int conversationId, {required bool work}) async {
+    final resp = await _client.post(
+      _uri('/conversations/$conversationId/group-type'),
+      headers: _headers,
+      body: jsonEncode(<String, dynamic>{'kind': work ? 'WORKGROUP' : 'GROUP'}),
+    );
+    Map<String, dynamic> body = const <String, dynamic>{};
+    try {
+      final decoded = _decode(resp.body);
+      if (decoded.isNotEmpty) body = decoded;
+    } catch (_) {}
+    if (resp.statusCode < 200 || resp.statusCode >= 300 || body['success'] == false) {
+      final message = (body['message'] ?? '').toString().trim();
+      throw Exception(message.isEmpty ? '转换群类型失败' : message);
+    }
+  }
+
   Future<void> dissolveGroup(int conversationId) async {
     final resp = await _client.post(
       _uri('/conversations/$conversationId/dissolve'),

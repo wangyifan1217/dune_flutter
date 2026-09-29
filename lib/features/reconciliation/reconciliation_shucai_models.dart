@@ -1160,7 +1160,9 @@ String reconCardTitle(String cardType) {
     case 'TRAVEL':
       return '标签三-出行金';
     case 'TAG3_DAILY':
-      return '业财一体-日清月结';
+      return '标签三 · 业财一体-日清月结';
+    case 'TAG2_ENTITY':
+      return '标签二 · 业财一体-日清月结';
     default:
       return cardType;
   }
@@ -1612,6 +1614,11 @@ class ReconDateItem {
     this.tag3OperationConfirmRows = 0,
     this.tag3CommentCount = 0,
     this.tag3MyConfirmed = false,
+    this.tag2ConfirmRows = 0,
+    this.tag2BusinessConfirmRows = 0,
+    this.tag2OperationConfirmRows = 0,
+    this.tag2CommentCount = 0,
+    this.tag2MyConfirmed = false,
   });
 
   final String asOfDate;
@@ -1625,6 +1632,11 @@ class ReconDateItem {
   final int tag3OperationConfirmRows;
   final int tag3CommentCount;
   final bool tag3MyConfirmed;
+  final int tag2ConfirmRows;
+  final int tag2BusinessConfirmRows;
+  final int tag2OperationConfirmRows;
+  final int tag2CommentCount;
+  final bool tag2MyConfirmed;
 
   bool get fullyConfirmed => expectedCount > 0 && pendingCount <= 0;
 
@@ -1643,6 +1655,13 @@ class ReconDateItem {
           (json['tag3OperationConfirmRows'] as num?)?.toInt() ?? 0,
       tag3CommentCount: (json['tag3CommentCount'] as num?)?.toInt() ?? 0,
       tag3MyConfirmed: json['tag3MyConfirmed'] == true,
+      tag2ConfirmRows: (json['tag2ConfirmRows'] as num?)?.toInt() ?? 0,
+      tag2BusinessConfirmRows:
+          (json['tag2BusinessConfirmRows'] as num?)?.toInt() ?? 0,
+      tag2OperationConfirmRows:
+          (json['tag2OperationConfirmRows'] as num?)?.toInt() ?? 0,
+      tag2CommentCount: (json['tag2CommentCount'] as num?)?.toInt() ?? 0,
+      tag2MyConfirmed: json['tag2MyConfirmed'] == true,
     );
   }
 }

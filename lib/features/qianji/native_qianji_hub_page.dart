@@ -35,6 +35,7 @@ class NativeQianjiHubPage extends StatefulWidget {
     this.onOpenProposalReview,
     this.onOpenEfficiencyAnalysis,
     this.onOpenEfficiencyBossPreview,
+    this.onOpenWorkProfileManagement,
     this.onOpenAppUsage,
     this.onOpenFundSecondment,
     this.onOpenCashFlow,
@@ -57,6 +58,7 @@ class NativeQianjiHubPage extends StatefulWidget {
   final VoidCallback? onOpenProposalReview;
   final VoidCallback? onOpenEfficiencyAnalysis;
   final VoidCallback? onOpenEfficiencyBossPreview;
+  final VoidCallback? onOpenWorkProfileManagement;
   final VoidCallback? onOpenAppUsage;
   final VoidCallback? onOpenFundSecondment;
   final VoidCallback? onOpenCashFlow;
@@ -142,10 +144,7 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
   }
 
   Future<void> _refreshAll() async {
-    await Future.wait([
-      _loadRobots(),
-      _loadDigitalEmployees(),
-    ]);
+    await Future.wait([_loadRobots(), _loadDigitalEmployees()]);
   }
 
   VoidCallback? _mergedWorkSituationTap() {
@@ -155,35 +154,32 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
     if (preview != null && analysis == null) return preview;
     if (preview == null && analysis != null) return analysis;
     return () => _openHubChoices(
-          title: '选择查看入口',
-          items: [
-            (
-              title: '工作情况',
-              subtitle: widget.session?.workSituationViewAll == true
-                  ? '全部部门'
-                  : '本人及下级',
-              icon: Icons.groups_outlined,
-              onTap: preview!,
-            ),
-            (
-              title: 'AI效能分析',
-              subtitle: '个人与部门',
-              icon: Icons.insights_outlined,
-              onTap: analysis!,
-            ),
-          ],
-        );
+      title: '选择查看入口',
+      items: [
+        (
+          title: '工作情况',
+          subtitle: widget.session?.workSituationViewAll == true
+              ? '全部部门'
+              : '本人及下级',
+          icon: Icons.groups_outlined,
+          onTap: preview!,
+        ),
+        (
+          title: 'AI效能分析',
+          subtitle: '个人与部门',
+          icon: Icons.insights_outlined,
+          onTap: analysis!,
+        ),
+      ],
+    );
   }
 
   void _openHubChoices({
     required String title,
     required List<
-        ({
-          String title,
-          String subtitle,
-          IconData icon,
-          VoidCallback onTap,
-        })> items,
+      ({String title, String subtitle, IconData icon, VoidCallback onTap})
+    >
+    items,
   }) {
     unawaited(
       showDunesChoicePanel(
@@ -345,21 +341,26 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
     final summaryItems = <_SuperviseItemData>[
       _SuperviseItemData(
         title: '工作情况',
-        subtitle: widget.onOpenEfficiencyAnalysis != null &&
+        subtitle:
+            widget.onOpenEfficiencyAnalysis != null &&
                 widget.onOpenEfficiencyBossPreview != null
             ? '态势 · 能效'
-            : (widget.session?.workSituationViewAll == true
-                ? '全部部门'
-                : '本人及下级'),
+            : (widget.session?.workSituationViewAll == true ? '全部部门' : '本人及下级'),
         icon: Icons.groups_outlined,
         gradientColors: const [Color(0xFF8B6BE8), Color(0xFF6743D3)],
         onTap: workSituationTap,
       ),
+      if (widget.onOpenWorkProfileManagement != null)
+        _SuperviseItemData(
+          title: '员工画像',
+          subtitle: '团队概览 · 工作成果',
+          icon: Icons.person_search_rounded,
+          gradientColors: const [Color(0xFF9A75D4), Color(0xFF6743A0)],
+          onTap: widget.onOpenWorkProfileManagement,
+        ),
       _SuperviseItemData(
         title: '使用热力',
-        subtitle: widget.session?.appUsageViewAll == true
-            ? '全部人员'
-            : '本人及下级',
+        subtitle: widget.session?.appUsageViewAll == true ? '全部人员' : '本人及下级',
         icon: Icons.grid_view_rounded,
         gradientColors: const [Color(0xFF6B5CE8), Color(0xFF4A3BC7)],
         onTap: widget.onOpenAppUsage,
@@ -483,10 +484,7 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                           children: [
                             // 1. 资金看板（PC 全宽上下结构，宽屏内 2 列铺开）
                             if (assetRows.isNotEmpty) ...[
-                              _buildFinanceAssetCard(
-                                assetRows,
-                                isWide: isWide,
-                              ),
+                              _buildFinanceAssetCard(assetRows, isWide: isWide),
                               SizedBox(height: isWide ? 18 : 14),
                             ],
 
@@ -543,10 +541,7 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
   }
 
   /// 1. 资金与财务看板
-  Widget _buildFinanceAssetCard(
-    List<Widget> assetRows, {
-    bool isWide = false,
-  }) {
+  Widget _buildFinanceAssetCard(List<Widget> assetRows, {bool isWide = false}) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -590,10 +585,7 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                     '账户流向 · 月结 · 差旅',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: _subText,
-                    ),
+                    style: TextStyle(fontSize: 11.5, color: _subText),
                   ),
                 ),
               ],
@@ -620,7 +612,8 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
               }
 
               const columns = 2;
-              final itemWidth = (constraints.maxWidth / columns).floorToDouble();
+              final itemWidth = (constraints.maxWidth / columns)
+                  .floorToDouble();
               return Wrap(
                 children: [
                   for (var i = 0; i < assetRows.length; i++)
@@ -632,7 +625,8 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                             right: i.isEven
                                 ? const BorderSide(color: Color(0xFFF3F0F7))
                                 : BorderSide.none,
-                            bottom: i <
+                            bottom:
+                                i <
                                     assetRows.length -
                                         (assetRows.length.isOdd ? 1 : 2)
                                 ? const BorderSide(color: Color(0xFFF3F0F7))
@@ -704,10 +698,7 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                         subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          color: _subText,
-                        ),
+                        style: const TextStyle(fontSize: 11.5, color: _subText),
                       ),
                     ),
                   ],
@@ -718,8 +709,8 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
             builder: (context, constraints) {
               final columns = isWide
                   ? (constraints.maxWidth >= 960
-                      ? 6
-                      : (constraints.maxWidth >= 480 ? 4 : 3))
+                        ? 6
+                        : (constraints.maxWidth >= 480 ? 4 : 3))
                   : 4;
               const gap = 8.0;
               final itemWidth =
@@ -821,8 +812,8 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           builder: (context, constraints) {
             final columns = isWide
                 ? (constraints.maxWidth >= 1050
-                    ? 4
-                    : (constraints.maxWidth >= 680 ? 3 : 2))
+                      ? 4
+                      : (constraints.maxWidth >= 680 ? 3 : 2))
                 : (constraints.maxWidth >= 360 ? 2 : 1);
             const gap = 8.0;
             final itemWidth =
@@ -850,10 +841,7 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
   }
 
   /// 4. 智能机器人矩阵
-  Widget _buildRobotSection(
-    List<RobotRole> robots, {
-    bool isWide = false,
-  }) {
+  Widget _buildRobotSection(List<RobotRole> robots, {bool isWide = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -942,7 +930,9 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                           border: Border.all(color: _cardBorder),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF331E54).withValues(alpha: 0.04),
+                              color: const Color(
+                                0xFF331E54,
+                              ).withValues(alpha: 0.04),
                               blurRadius: 14,
                               offset: const Offset(0, 4),
                             ),
@@ -1408,7 +1398,8 @@ class _RobotListTile extends StatelessWidget {
       builder: (context, _) {
         final store = RobotConsultStore.instance;
         final status = store.hubStatus;
-        final isBusy = status == RobotConsultStatus.running ||
+        final isBusy =
+            status == RobotConsultStatus.running ||
             status == RobotConsultStatus.queued;
 
         return Material(

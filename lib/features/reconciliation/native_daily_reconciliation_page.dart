@@ -8,6 +8,8 @@ import '../auth/auth_session.dart';
 import '../tasks/native_task_home_pane.dart';
 import 'reconciliation_shucai_models.dart';
 import 'reconciliation_shucai_service.dart';
+import 'tag2_entity_models.dart';
+import 'tag2_entity_table.dart';
 import 'tag3_daily_models.dart';
 import 'tag3_daily_preview.dart';
 import 'tag3_daily_table.dart';
@@ -41,8 +43,12 @@ class _NativeDailyReconciliationPageState
   late final ReconciliationShucaiService _api;
   _ReconLevel _level = _ReconLevel.dates;
   List<ReconDateItem> _dates = const [];
+  String _selectedDate = '';
   String _asOfDate = '';
+  String _cardKind = 'TAG3_DAILY';
   Tag3DailySnapshot? _tag3Daily;
+  Tag2EntitySnapshot? _tag2;
+  final Set<String> _tag2Busy = {};
   bool _tag3DailyPreview = false;
   final Set<String> _tag3ConfirmingKeys = {};
   bool _loading = true;
@@ -62,7 +68,7 @@ class _NativeDailyReconciliationPageState
     if (widget.openToken != oldWidget.openToken && widget.openToken > 0) {
       final date = widget.initialAsOfDate.trim();
       if (date.isNotEmpty) {
-        unawaited(_openDate(date));
+        unawaited(_openCard(date, widget.initialCardType));
       } else {
         setState(() => _level = _ReconLevel.dates);
         _publishChrome();
@@ -81,7 +87,7 @@ class _NativeDailyReconciliationPageState
     await _loadDates();
     final date = widget.initialAsOfDate.trim();
     if (date.isNotEmpty) {
-      await _openDate(date);
+      await _openCard(date, widget.initialCardType);
     } else {
       _publishChrome();
     }
@@ -102,8 +108,10 @@ class _NativeDailyReconciliationPageState
       setState(() {
         _level = _ReconLevel.dates;
         _tag3Daily = null;
+        _tag2 = null;
         _tag3DailyPreview = false;
         _tag3ConfirmingKeys.clear();
+        _tag2Busy.clear();
       });
       _publishChrome();
     }
@@ -133,17 +141,73 @@ class _NativeDailyReconciliationPageState
     }
   }
 
-  Future<void> _openDate(String asOfDate) async {
+  List<ReconDateItem> get _visibleDates {
+    final picked = _selectedDate.trim();
+    if (picked.isEmpty) return _dates;
+    for (final item in _dates) {
+      if (item.asOfDate == picked) return [item];
+    }
+    return [ReconDateItem(asOfDate: picked)];
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final current = DateTime.tryParse(
+      _selectedDate.isEmpty ? tag3DailyYmd(yesterday) : _selectedDate,
+    );
+    var initial = current == null ? yesterday : tag3DailyCalendarDay(current);
+    if (initial.isAfter(yesterday)) initial = yesterday;
+    if (initial.isBefore(DateTime(2024, 1, 1))) initial = DateTime(2024, 1, 1);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2024, 1, 1),
+      lastDate: yesterday,
+      helpText: '选择对账日',
+      cancelText: '取消',
+      confirmText: '确定',
+    );
+    if (picked == null || !mounted) return;
+    final day = tag3DailyCalendarDay(picked);
+    if (!day.isBefore(today)) return;
+    setState(() => _selectedDate = tag3DailyYmd(day));
+  }
+
+  Future<void> _openCard(String asOfDate, String cardType) async {
+    final card = cardType.trim().toUpperCase() == 'TAG2_ENTITY'
+        ? 'TAG2_ENTITY'
+        : 'TAG3_DAILY';
     final gen = ++_loadGen;
     setState(() {
       _asOfDate = asOfDate;
+      _cardKind = card;
       _level = _ReconLevel.table;
       _loading = true;
       _error = null;
       _tag3Daily = null;
+      _tag2 = null;
       _tag3DailyPreview = false;
     });
     _publishChrome();
+    if (card == 'TAG2_ENTITY') {
+      try {
+        final snap = await _api.fetchTag2Entity(asOfDate: asOfDate);
+        if (!mounted || gen != _loadGen) return;
+        setState(() {
+          _tag2 = snap;
+          _loading = false;
+        });
+      } catch (e) {
+        if (!mounted || gen != _loadGen) return;
+        setState(() {
+          _error = friendlyErrorText(e);
+          _loading = false;
+        });
+      }
+      return;
+    }
     try {
       final snap = await _api.fetchTag3Daily(asOfDate: asOfDate);
       if (!mounted || gen != _loadGen) return;
@@ -174,6 +238,82 @@ class _NativeDailyReconciliationPageState
         _error = friendlyErrorText(e);
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _openTag2Drilldown(Tag2EntityRow row, Tag2EntityAmount amount) async {
+    if (!amount.drill || row.isTotal) return;
+    try {
+      final data = await _api.fetchTag2EntityDrilldown(
+        asOfDate: _asOfDate,
+        rowKey: row.rowKey,
+        kind: amount.key,
+      );
+      if (!mounted) return;
+      await showTag2EntityDrilldown(
+        context: context,
+        title: '${row.title} · ${amount.label}',
+        data: data,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyErrorText(e)),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _submitTag2Action(Tag2EntityRow row, {required bool confirm}) async {
+    if (confirm && !row.showConfirm) return;
+    if (!confirm && !row.showComment) return;
+    if (_tag2Busy.contains(row.rowKey)) return;
+    final remark = await showTag2EntityActionDialog(
+      context: context,
+      row: row,
+      confirm: confirm,
+    );
+    if (remark == null || !mounted) return;
+    setState(() => _tag2Busy.add(row.rowKey));
+    try {
+      if (confirm) {
+        await _api.confirmTag2Entity(
+          asOfDate: _asOfDate,
+          rowKey: row.rowKey,
+          stage: row.canConfirmStage,
+          expectedStatus: row.confirmationStatus,
+          remark: remark,
+          projectName: row.title,
+        );
+      } else {
+        await _api.commentTag2Entity(
+          asOfDate: _asOfDate,
+          rowKey: row.rowKey,
+          body: remark,
+          projectName: row.title,
+        );
+      }
+      final snap = await _api.fetchTag2Entity(asOfDate: _asOfDate);
+      if (!mounted) return;
+      setState(() => _tag2 = snap);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(confirm ? '已确认 ${row.title}' : '已记录 ${row.title} 的意见'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyErrorText(e)),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _tag2Busy.remove(row.rowKey));
     }
   }
 
@@ -345,9 +485,12 @@ class _NativeDailyReconciliationPageState
     if (_loading && _level == _ReconLevel.dates && _dates.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
+    final tableEmpty = _cardKind == 'TAG2_ENTITY'
+        ? _tag2 == null
+        : _tag3Daily == null;
     if (_error != null &&
         ((_level == _ReconLevel.dates && _dates.isEmpty) ||
-            (_level == _ReconLevel.table && _tag3Daily == null))) {
+            (_level == _ReconLevel.table && tableEmpty))) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(24, 48, 24, 40),
@@ -368,113 +511,131 @@ class _NativeDailyReconciliationPageState
     }
   }
 
-  Widget _buildDateList() {
-    if (_dates.isEmpty) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(24, 48, 24, 40),
-        children: [
-          Text(
-            '还没有日清月结。到达每日推送时间后会出现在这里。',
-            textAlign: TextAlign.center,
-            style: DunesTypography.sans(fontSize: 14, color: DunesColors.text3),
-          ),
-        ],
-      );
+  String _tag2DateProgress(ReconDateItem item) {
+    final line = tag3DailyDateProgressLine(
+      businessConfirmRows: item.tag2BusinessConfirmRows,
+      operationConfirmRows: item.tag2OperationConfirmRows,
+      commentCount: item.tag2CommentCount,
+    );
+    if (item.tag2BusinessConfirmRows == 0 &&
+        item.tag2OperationConfirmRows == 0 &&
+        item.tag2CommentCount == 0) {
+      return '业务、运营各自确认，合计行只展示';
     }
-    return ListView.separated(
+    return line;
+  }
+
+  Widget _buildDateList() {
+    final dates = _visibleDates;
+    return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-      itemCount: _dates.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final item = _dates[index];
-        return Material(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () => unawaited(_openDate(item.asOfDate)),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
-              child: Row(
+      children: [
+        _buildDatePicker(),
+        if (dates.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 40, 8, 0),
+            child: Text(
+              '还没有日清月结。到达每日推送时间后会出现在这里。',
+              textAlign: TextAlign.center,
+              style: DunesTypography.sans(fontSize: 14, color: DunesColors.text3),
+            ),
+          )
+        else
+          for (final item in dates) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 14, bottom: 8),
+              child: Text(
+                shucaiDisplayDate(item.asOfDate),
+                style: DunesTypography.sans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: DunesColors.text,
+                ),
+              ),
+            ),
+            _DailyCard(
+              title: reconCardTitle('TAG3_DAILY'),
+              subtitle: tag3DailyDispatchBody(item.asOfDate),
+              progress: tag3DailyDateProgressLine(
+                businessConfirmRows: item.tag3BusinessConfirmRows,
+                operationConfirmRows: item.tag3OperationConfirmRows,
+                commentCount: item.tag3CommentCount,
+              ),
+              pill: tag3DailyDateStatusPill(
+                myConfirmed: item.tag3MyConfirmed,
+                confirmRows: item.tag3ConfirmRows,
+              ),
+              done: item.tag3MyConfirmed,
+              highlighted:
+                  item.tag3ConfirmRows > 0 || item.tag3CommentCount > 0,
+              onTap: () => unawaited(_openCard(item.asOfDate, 'TAG3_DAILY')),
+            ),
+            const SizedBox(height: 8),
+            _DailyCard(
+              title: reconCardTitle('TAG2_ENTITY'),
+              subtitle: '${item.asOfDate} 按主体核对，业务/运营请各自确认',
+              progress: _tag2DateProgress(item),
+              pill: tag3DailyDateStatusPill(
+                myConfirmed: item.tag2MyConfirmed,
+                confirmRows: item.tag2ConfirmRows,
+              ),
+              done: item.tag2MyConfirmed,
+              highlighted:
+                  item.tag2ConfirmRows > 0 || item.tag2CommentCount > 0,
+              onTap: () => unawaited(_openCard(item.asOfDate, 'TAG2_ENTITY')),
+            ),
+          ],
+      ],
+    );
+  }
+
+  Widget _buildDatePicker() {
+    final picked = _selectedDate.trim();
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                shucaiDisplayDate(item.asOfDate),
-                                style: DunesTypography.sans(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: DunesColors.text,
-                                ),
-                              ),
-                            ),
-                            _Tag3DailyDateStatusPill(
-                              label: tag3DailyDateStatusPill(
-                                myConfirmed: item.tag3MyConfirmed,
-                                confirmRows: item.tag3ConfirmRows,
-                              ),
-                              done: item.tag3MyConfirmed,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          reconCardTitle('TAG3_DAILY'),
-                          style: DunesTypography.sans(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w600,
-                            color: DunesColors.text,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          tag3DailyDispatchBody(item.asOfDate),
-                          style: DunesTypography.sans(
-                            fontSize: 13,
-                            color: DunesColors.text2,
-                            height: 1.35,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          tag3DailyDateProgressLine(
-                            businessConfirmRows: item.tag3BusinessConfirmRows,
-                            operationConfirmRows: item.tag3OperationConfirmRows,
-                            commentCount: item.tag3CommentCount,
-                          ),
-                          style: DunesTypography.sans(
-                            fontSize: 12,
-                            color:
-                                item.tag3ConfirmRows > 0 ||
-                                    item.tag3CommentCount > 0
-                                ? DunesColors.accent
-                                : DunesColors.text3,
-                          ),
-                        ),
-                      ],
+                  Text(
+                    '对账日',
+                    style: DunesTypography.sans(
+                      fontSize: 12,
+                      color: DunesColors.text3,
                     ),
                   ),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    color: DunesColors.text3,
+                  const SizedBox(height: 2),
+                  Text(
+                    picked.isEmpty ? '最近日期' : shucaiDisplayDate(picked),
+                    style: DunesTypography.sans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: DunesColors.text,
+                    ),
                   ),
                 ],
               ),
             ),
-          ),
-        );
-      },
+            TextButton(onPressed: _pickDate, child: const Text('选择日期')),
+            if (picked.isNotEmpty)
+              TextButton(
+                onPressed: () => setState(() => _selectedDate = ''),
+                child: const Text('全部'),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildTable() {
+    if (_cardKind == 'TAG2_ENTITY') return _buildTag2Table();
     final snap = _tag3Daily;
     if (_loading && snap == null) {
       return const Center(child: CircularProgressIndicator());
@@ -488,32 +649,54 @@ class _NativeDailyReconciliationPageState
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+              child: Row(
                 children: [
-                  Text(
-                    '${shucaiDisplayDate(_asOfDate)} · 日清月结',
-                    style: DunesTypography.sans(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    snap == null
-                        ? '右侧可直接确认，意见选填。'
-                        : tag3DailySnapshotStatusLine(
-                            snap.rows,
-                            snapshotHint: snap.snapshotHint,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${shucaiDisplayDate(_asOfDate)} · ${reconCardTitle('TAG3_DAILY')}',
+                          style: DunesTypography.sans(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: DunesColors.text,
                           ),
-                    style: DunesTypography.sans(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: DunesColors.accent,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          snap == null
+                              ? '右侧可直接确认，意见选填。'
+                              : tag3DailySnapshotStatusLine(
+                                  snap.rows,
+                                  snapshotHint: snap.snapshotHint,
+                                ),
+                          style: DunesTypography.sans(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: DunesColors.accent,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  if (snap != null) ...[
+                    const SizedBox(width: 8),
+                    Tag3DailyOpinionEntry(
+                      count: tag3DailyOpinionComments(snap.comments).length,
+                      onTap: () {
+                        unawaited(
+                          showTag3DailyOpinionList(
+                            context: context,
+                            title: shucaiDisplayDate(_asOfDate),
+                            comments: snap.comments,
+                            rows: snap.rows,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -570,6 +753,157 @@ class _NativeDailyReconciliationPageState
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _buildTag2Table() {
+    final snap = _tag2;
+    if (_loading && snap == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final hint = (snap?.snapshotHint ?? '').trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${shucaiDisplayDate(_asOfDate)} · ${reconCardTitle('TAG2_ENTITY')}',
+                    style: DunesTypography.sans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: DunesColors.text,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    hint.isEmpty
+                        ? '按主体核对。业务、运营各自确认，也可以提意见。合计行只展示。'
+                        : hint,
+                    style: DunesTypography.sans(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: DunesColors.accent,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              _error!,
+              style: DunesTypography.sans(fontSize: 13, color: DunesColors.coral),
+            ),
+          ),
+        Expanded(
+          child: snap == null
+              ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+              : Tag2EntityTable(
+                  rows: snap.rows,
+                  comments: snap.comments,
+                  busyKeys: _tag2Busy,
+                  onDrill: (row, amount) =>
+                      unawaited(_openTag2Drilldown(row, amount)),
+                  onConfirm: (row) =>
+                      unawaited(_submitTag2Action(row, confirm: true)),
+                  onComment: (row) =>
+                      unawaited(_submitTag2Action(row, confirm: false)),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DailyCard extends StatelessWidget {
+  const _DailyCard({
+    required this.title,
+    required this.subtitle,
+    required this.progress,
+    required this.pill,
+    required this.done,
+    required this.highlighted,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final String progress;
+  final String pill;
+  final bool done;
+  final bool highlighted;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: DunesTypography.sans(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w700,
+                              color: DunesColors.text,
+                            ),
+                          ),
+                        ),
+                        _Tag3DailyDateStatusPill(label: pill, done: done),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: DunesTypography.sans(
+                        fontSize: 13,
+                        color: DunesColors.text2,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      progress,
+                      style: DunesTypography.sans(
+                        fontSize: 12,
+                        color: highlighted
+                            ? DunesColors.accent
+                            : DunesColors.text3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: DunesColors.text3),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

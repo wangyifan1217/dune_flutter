@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import '../../core/http/session_http.dart';
 import '../auth/auth_session.dart';
 import 'task_models.dart';
 
@@ -442,6 +443,47 @@ class TaskApi {
       throw Exception('下载失败: HTTP ${resp.statusCode}');
     }
     return resp.bodyBytes;
+  }
+
+  Future<TaskRdIntake> rdIntake() async {
+    final resp = await http.get(_uri('rd-intake'), headers: _headers);
+    final data = _unwrap(resp);
+    if (data is! Map) {
+      return const TaskRdIntake(
+        canCreate: true,
+        canAssignTeam: false,
+        inRd: false,
+        owners: [],
+      );
+    }
+    return TaskRdIntake.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  Future<List<TaskAssignee>> searchColleagues(String q) async {
+    final needle = q.trim();
+    final path = needle.isEmpty
+        ? '/org/users'
+        : '/org/users?q=${Uri.encodeQueryComponent(needle)}';
+    final data = _unwrap(await dunesHttpGet(session, path));
+    final rows = data is List ? data : const [];
+    return rows.whereType<Map>().map((raw) {
+      final json = Map<String, dynamic>.from(raw);
+      if (json['enabled'] == false) return null;
+      final id =
+          (json['userId'] as num?)?.toInt() ?? (json['id'] as num?)?.toInt() ?? 0;
+      final name =
+          '${json['displayName'] ?? json['name'] ?? json['username'] ?? ''}'
+              .trim();
+      if (id <= 0 || name.isEmpty) return null;
+      return TaskAssignee(
+        id: id,
+        displayName: name,
+        departmentName: '${json['departmentName'] ?? ''}',
+        avatarPreset: '${json['avatarPreset'] ?? ''}',
+        avatarObjectKey: '${json['avatarObjectKey'] ?? ''}',
+        avatarUrl: '${json['avatarUrl'] ?? ''}',
+      );
+    }).whereType<TaskAssignee>().toList();
   }
 
   Future<List<TaskAssignee>> listAssignees({String? q, String? scope}) async {

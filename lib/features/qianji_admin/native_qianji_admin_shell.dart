@@ -37,7 +37,6 @@ import 'qianji_admin_api.dart';
 import 'qianji_req_pool_pane.dart';
 
 const _themePurple = Color(0xFF7045B2);
-const _hrbpAccent = Color(0xFF3D7A8C);
 const _ssoTileColors = <Color>[
   Color(0xFFB45309),
   Color(0xFF5B6FC4),
@@ -751,6 +750,9 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           session: _session,
           embedded: true,
           onChromeChanged: _onTaskChrome,
+          onOpenSummary: _canSeeTaskSummary == true
+              ? () => _open(_WorkbenchView.hrbp)
+              : null,
         );
       case _WorkbenchView.hrbp:
         return NativeTaskHrbpPane(
@@ -839,44 +841,14 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
 
   Widget _buildOverviewPage() {
     final collabTiles = <_WorkbenchTile>[
-      if (_canSeeTaskSummary == true)
-        _WorkbenchTile(
-          title: '任务',
-          subtitle: '待我处理 · 部门汇总',
-          icon: Icons.task_alt_outlined,
-          color: _themePurple,
-          enabled: true,
-          onTap: () => _openMergedChoices(
-            title: '选择任务入口',
-            choices: [
-              _WorkbenchTile(
-                title: '任务',
-                subtitle: '待我处理 · 我发起的',
-                icon: Icons.task_alt_outlined,
-                color: _themePurple,
-                enabled: true,
-                onTap: () => _open(_WorkbenchView.tasks),
-              ),
-              _WorkbenchTile(
-                title: '任务汇总',
-                subtitle: '部门进度',
-                icon: Icons.insights_outlined,
-                color: _hrbpAccent,
-                enabled: true,
-                onTap: () => _open(_WorkbenchView.hrbp),
-              ),
-            ],
-          ),
-        )
-      else
-        _WorkbenchTile(
-          title: '任务',
-          subtitle: '待我处理 · 我发起的',
-          icon: Icons.task_alt_outlined,
-          color: _themePurple,
-          enabled: true,
-          onTap: () => _open(_WorkbenchView.tasks),
-        ),
+      _WorkbenchTile(
+        title: '任务',
+        subtitle: '主目标列表',
+        icon: Icons.task_alt_outlined,
+        color: _themePurple,
+        enabled: true,
+        onTap: () => _open(_WorkbenchView.tasks),
+      ),
       if (!_session.isExternalUser)
         _WorkbenchTile(
           title: '企业微盘',

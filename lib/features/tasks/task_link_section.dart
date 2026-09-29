@@ -260,7 +260,7 @@ class _TaskLinkSectionState extends State<TaskLinkSection> {
       if (!mounted) return;
       showDunesCenterToast(
         context,
-        updated.hasPendingChange ? '已提交修改，待直属上级审批' : '已保存，AI 开始匹配相关会议',
+        updated.hasPendingChange ? '已提交修改，待任务流上级审批' : '已保存，AI 开始匹配相关会议',
       );
       if (!updated.hasPendingChange) {
         _markRunningLocally();

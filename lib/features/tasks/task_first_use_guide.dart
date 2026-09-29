@@ -63,19 +63,20 @@ TaskGuideSpec taskGuideSpec(TaskGuidePage page) {
         steps: [
           TaskGuideStepData(
             icon: Icons.view_agenda_outlined,
-            title: '先看待办',
-            body: '打开任务模块先看到需要你处理的事，不是主目标总览。',
+            title: '先看主目标',
+            body: '打开任务模块直接进入主目标列表。待办和今日仍可从上方切换。',
             actions: [
+              '「主目标」：完整目标，点进去才看到子目标',
               '「待办」：待接收、待审批、逾期和今日执行',
               '「今日」：今天要做的子目标',
-              '「主目标」：完整目标，点进去才看到子目标',
+              '有汇总权限时，右上角可进入任务汇总',
             ],
           ),
           TaskGuideStepData(
             icon: Icons.add_box_outlined,
             title: '从右上角新建',
-            body: '本页只能新建主目标，不能直接在列表里建子目标。',
-            actions: ['点「新建主目标」', '填周期和验收标准后保存', '进入详情再拆子目标'],
+            body: '完整创建可以同时填写主目标和多条子任务。交给科技研发中心时只建主任务，等对方接收后再拆。',
+            actions: ['点「完整创建」或「快速新建」', '填周期和验收标准后保存'],
           ),
           TaskGuideStepData(
             icon: Icons.edit_calendar_outlined,
@@ -177,7 +178,7 @@ TaskGuideSpec taskGuideSpec(TaskGuidePage page) {
             icon: Icons.subdirectory_arrow_right,
             title: '这是挂在主目标下的事项',
             body: '不要写成另一个主目标。名称要能直接执行。',
-            actions: ['填写子目标名称', '选择执行人（自己或下级）'],
+            actions: ['填写子目标名称', '选择执行人（自己或任务流下级）'],
           ),
           TaskGuideStepData(
             icon: Icons.event_repeat_outlined,

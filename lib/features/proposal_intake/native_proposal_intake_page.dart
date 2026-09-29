@@ -9,7 +9,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/navigation/navigation_controller.dart';
 import '../../core/platform/desktop_features.dart';
+import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../auth/auth_session.dart';
 import '../tasks/native_task_home_pane.dart';
@@ -34,6 +36,132 @@ import 'proposal_intake_ui.dart';
 import 'settlement_catalog.dart';
 
 enum _ProposalPage { list, form }
+
+/// 「我的」里的销售/采购提案。列表返回「我的」；填写中的返回先回到列表。
+class ProposalIntakeMyEntryPage extends StatefulWidget {
+  const ProposalIntakeMyEntryPage({
+    super.key,
+    required this.session,
+    required this.navigation,
+    required this.kind,
+    required this.title,
+  });
+
+  final AuthSession session;
+  final DunesNavigationController navigation;
+  final String kind;
+  final String title;
+
+  @override
+  State<ProposalIntakeMyEntryPage> createState() =>
+      _ProposalIntakeMyEntryPageState();
+}
+
+class _ProposalIntakeMyEntryPageState extends State<ProposalIntakeMyEntryPage> {
+  TaskShellChrome _chrome = const TaskShellChrome();
+
+  @override
+  void dispose() {
+    if (widget.navigation.backInterceptor == _consumeFormBack) {
+      widget.navigation.backInterceptor = null;
+    }
+    super.dispose();
+  }
+
+  bool _consumeFormBack() {
+    final back = _chrome.onBack;
+    if (back == null) return false;
+    back();
+    return true;
+  }
+
+  void _syncFormBack(TaskShellChrome chrome) {
+    final nav = widget.navigation;
+    if (chrome.onBack != null) {
+      nav.backInterceptor = _consumeFormBack;
+    } else if (nav.backInterceptor == _consumeFormBack) {
+      nav.backInterceptor = null;
+    }
+  }
+
+  void _onChrome(TaskShellChrome chrome) {
+    _chrome = chrome;
+    _syncFormBack(chrome);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {});
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final inForm = _chrome.onBack != null;
+    return ColoredBox(
+      color: const Color(0xFFF5F6F8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 10, 16, 4),
+              child: Row(
+                children: [
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: inForm ? _chrome.onBack : widget.navigation.back,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.arrow_back_ios_new,
+                            size: 14,
+                            color: DunesColors.text2,
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            inForm ? '列表' : '我的',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: DunesColors.text2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF7B5CD8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: NativeProposalIntakePage(
+              session: widget.session,
+              kind: widget.kind,
+              onChromeChanged: _onChrome,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 const _proposalStatusFilters = <(String, String)>[
   ('', '全部'),
@@ -347,6 +475,47 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         ],
       ),
     );
+  }
+
+  Future<void> _duplicateRow(ProposalIntakeRow row) async {
+    if (row.id <= 0 || _saving) return;
+    final name = row.title.trim().isEmpty
+        ? (row.code.trim().isEmpty ? '这份提案' : row.code.trim())
+        : row.title.trim();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('负责新建'),
+        content: Text('将按「$name」生成一份内容相同的新提案。编号和审核进度会重新开始。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: ProposalPalette.purple,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('确认新建'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _saving = true);
+    try {
+      final created = await _service.duplicate(row.id);
+      if (!mounted) return;
+      _toast('已生成新提案${created.code.isEmpty ? '' : ' ${created.code}'}');
+      await _load();
+      if (!mounted) return;
+      _openForm(created);
+    } catch (error) {
+      _toast(friendlyErrorText(error), error: true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Future<void> _confirmDelete(ProposalIntakeRow row) async {
@@ -1050,11 +1219,13 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
           people: _people,
           initiatorName: row.initiatorDisplayName(_people),
           canDelete: row.canDeleteBy(widget.session.userId),
+          canDuplicate: widget.showCreate,
           compact: compact,
           onTap: () => unawaited(_openExisting(row)),
           onPeople: () => unawaited(_showStakeholders(row)),
           onForward: () => unawaited(_forwardRow(row)),
           onDelete: () => unawaited(_confirmDelete(row)),
+          onDuplicate: () => unawaited(_duplicateRow(row)),
         );
       },
     );
@@ -1094,22 +1265,26 @@ class _ProposalListTile extends StatelessWidget {
     required this.people,
     required this.initiatorName,
     required this.canDelete,
+    required this.canDuplicate,
     required this.compact,
     required this.onTap,
     required this.onPeople,
     required this.onForward,
     required this.onDelete,
+    required this.onDuplicate,
   });
 
   final ProposalIntakeRow row;
   final List<ProposalPerson> people;
   final String initiatorName;
   final bool canDelete;
+  final bool canDuplicate;
   final bool compact;
   final VoidCallback onTap;
   final VoidCallback onPeople;
   final VoidCallback onForward;
   final VoidCallback onDelete;
+  final VoidCallback onDuplicate;
 
   @override
   Widget build(BuildContext context) {
@@ -1270,6 +1445,17 @@ class _ProposalListTile extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (canDuplicate)
+                        IconButton(
+                          tooltip: '负责新建',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: onDuplicate,
+                          icon: const Icon(
+                            Icons.file_copy_outlined,
+                            color: ProposalPalette.purpleDeep,
+                            size: 20,
+                          ),
+                        ),
                       IconButton(
                         tooltip: '相关人员',
                         visualDensity: VisualDensity.compact,
@@ -1427,6 +1613,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
   bool _financeReviewMode = false;
   ProposalIntakeNavSection _visibleSection = ProposalIntakeNavSection.market;
   bool _progressOpen = false;
+  static const _productFoldPreview = 3;
+  static const _productFoldStep = 10;
+  int _businessProductVisible = _productFoldPreview;
+  int _financeSettleVisible = _productFoldPreview;
+  bool _productMultiSelect = false;
+  final Set<String> _selectedProductIds = {};
   bool _jumping = false;
   List<String> _issues = const [];
   bool _dirty = false;
@@ -6367,10 +6559,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 _multiField(
                   _isPurchase ? '能力输入形式' : '能力输出形式',
                   'outputForms',
-                  proposalIntakeOutputFormOptions(
-                    widget.options.outputForms,
-                    purchase: _isPurchase,
-                  ),
+                  proposalIntakeOutputFormOptions(widget.options.outputForms),
                   _isPurchase ? '新增形式' : null,
                   required: true,
                   writable: _canEditTech,
@@ -6610,10 +6799,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     _multiField(
                       '能力输出形式',
                       'outputForms',
-                      proposalIntakeOutputFormOptions(
-                        widget.options.outputForms,
-                        purchase: false,
-                      ),
+                      proposalIntakeOutputFormOptions(widget.options.outputForms),
                       null,
                       required: true,
                       writable: _canEditTech,
@@ -9078,6 +9264,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         : row.displayName.trim();
     if (!await _confirmRemove(name)) return;
     _removeChildProduct(row.id);
+    _selectedProductIds.remove(row.id);
   }
 
   Future<void> _confirmRemoveProduct(ProposalSkuDetailRow row) async {
@@ -9086,6 +9273,123 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         : row.displayName.trim();
     if (!await _confirmRemove(name)) return;
     _removeSkuDetail(row.id);
+    _selectedProductIds.remove(row.id);
+  }
+
+  Set<String> get _liveSelectedProductIds {
+    final ids = {
+      for (final row in proposalIntakeSkuDetails(_form)) row.id,
+      for (final row in proposalIntakeChildProducts(_form)) row.id,
+    };
+    return _selectedProductIds.intersection(ids);
+  }
+
+  void _toggleProductSelected(String id, bool selected) {
+    setState(() {
+      if (selected) {
+        _selectedProductIds.add(id);
+      } else {
+        _selectedProductIds.remove(id);
+      }
+    });
+  }
+
+  void _toggleSelectAllProducts() {
+    final mains = [
+      for (final row in proposalIntakeSkuDetails(_form)) row.id,
+    ];
+    final selected = _liveSelectedProductIds;
+    final allMainsSelected =
+        mains.isNotEmpty && mains.every(selected.contains);
+    setState(() {
+      if (allMainsSelected) {
+        _selectedProductIds.removeAll(mains);
+      } else {
+        _selectedProductIds.addAll(mains);
+      }
+    });
+  }
+
+  Future<void> _confirmRemoveSelectedProducts() async {
+    final ids = _liveSelectedProductIds;
+    if (ids.isEmpty) return;
+    final mainCount = proposalIntakeSkuDetails(
+      _form,
+    ).where((row) => ids.contains(row.id)).length;
+    final childCount = ids.length - mainCount;
+    final parts = <String>[
+      if (mainCount > 0) '$mainCount 个业务产品',
+      if (childCount > 0) '$childCount 个关联产品',
+    ];
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除所选产品'),
+        content: Text(
+          '确定删除已选的 ${parts.join('、')}吗？业务产品下的关联产品会一并删除，删除后不可恢复。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: ProposalPalette.coral),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    _removeSelectedProducts(ids);
+    setState(() => _selectedProductIds.removeAll(ids));
+  }
+
+  void _removeSelectedProducts(Set<String> ids) {
+    if (!_canEditProducts || ids.isEmpty) return;
+    final mains = proposalIntakeSkuDetails(_form);
+    final mainIds = {
+      for (final row in mains)
+        if (ids.contains(row.id)) row.id,
+    };
+    if (mainIds.isNotEmpty) {
+      _writeSkuDetails([
+        for (final row in mains)
+          if (!mainIds.contains(row.id)) row,
+      ], rebuild: false);
+    }
+    final quantities = Map<String, int>.from(
+      proposalIntakeBenefitProduct(_form).skuQuantities,
+    );
+    final kept = <ProposalSkuDetailRow>[];
+    for (final row in proposalIntakeChildProducts(_form)) {
+      if (mainIds.contains(row.parentSkuId) || ids.contains(row.id)) {
+        quantities.remove(row.id);
+      } else {
+        kept.add(row);
+      }
+    }
+    _writeChildProducts(kept, childQuantities: quantities);
+    if (_activeChildProductId.isNotEmpty &&
+        !kept.any((row) => row.id == _activeChildProductId)) {
+      _activeChildProductId = '';
+    }
+  }
+
+  Widget? _productSelectBox(String id) {
+    if (!_productMultiSelect || !_canEditProducts) return null;
+    return SizedBox(
+      width: 28,
+      height: 28,
+      child: Checkbox(
+        value: _selectedProductIds.contains(id),
+        activeColor: ProposalPalette.purple,
+        visualDensity: VisualDensity.compact,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        onChanged: (value) => _toggleProductSelected(id, value == true),
+      ),
+    );
   }
 
   void _removeChildProduct(String id) {
@@ -9251,8 +9555,15 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       _jumpToKey(_techKey, ProposalIntakeNavSection.tech);
     }
 
-    if (child && _activeChildProductId != sku.id) {
-      setState(() => _activeChildProductId = sku.id);
+    final productIndex = proposalIntakeSkuDetails(
+      _form,
+    ).indexWhere((item) => item.id == sku.id);
+    final hidden = !child && productIndex >= _businessProductVisible;
+    if ((child && _activeChildProductId != sku.id) || hidden) {
+      setState(() {
+        if (child) _activeChildProductId = sku.id;
+        if (hidden) _businessProductVisible = productIndex + 1;
+      });
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) jump();
       });
@@ -9356,6 +9667,94 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     await _openSkuProductDialog(child: false);
   }
 
+  Future<void> _duplicateBusinessProduct(ProposalSkuDetailRow source) async {
+    if (!_canEditProducts) return;
+    final count = await _promptProductCopyCount(source);
+    if (count == null || !mounted || !_canEditProducts) return;
+    final copied = proposalIntakeCopyBusinessProducts(
+      source: source,
+      count: count,
+      mains: proposalIntakeSkuDetails(_form),
+      children: proposalIntakeChildProducts(_form),
+      quantities: proposalIntakeBenefitProduct(_form).skuQuantities,
+      idSeed: DateTime.now().microsecondsSinceEpoch,
+    );
+    var form = Map<String, dynamic>.from(_form)
+      ..['skuDetails'] = [for (final row in copied.mains) row.toJson()]
+      ..['childProducts'] = [for (final row in copied.children) row.toJson()]
+      ..['rollback'] = copied.mains.isEmpty
+          ? kProposalDefaultRollback
+          : proposalIntakeSkuRollbackValue(copied.mains.first, form: _form);
+    final benefit = form['benefitProduct'] is Map
+        ? Map<String, dynamic>.from(form['benefitProduct'] as Map)
+        : <String, dynamic>{};
+    benefit['skuQuantities'] = copied.quantities;
+    form['benefitProduct'] = benefit;
+    form = proposalIntakeSyncChildProductMeta(form);
+    form = _withEstimatedFinanceCosts(form);
+    final review = _reviewAfterProductEdit('technologyCompleted');
+    setState(() {
+      _markFormDirty();
+      _businessProductVisible = copied.mains.length;
+      _financeSettleVisible = copied.mains.length;
+      _row = _row.copyWith(status: _statusAfterEdit, form: form, review: review);
+    });
+    widget.onChanged(_row);
+    if (!mounted) return;
+    showProposalCenterToast(context, '已复制新增 $count 条业务产品');
+  }
+
+  Future<int?> _promptProductCopyCount(ProposalSkuDetailRow source) async {
+    final controller = TextEditingController(text: '1');
+    final name = source.displayName.trim().isEmpty
+        ? '当前业务产品'
+        : source.displayName.trim();
+    final raw = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('复制新增'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('将复制「$name」，关联产品和结算会一起新增。'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+              decoration: proposalInputDecoration(hint: '新增数量'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (raw == null) return null;
+    final count = int.tryParse(raw) ?? 0;
+    if (count < 1) {
+      widget.onError('请填写大于 0 的数量');
+      return null;
+    }
+    if (count > 50) {
+      widget.onError('一次最多复制 50 条');
+      return null;
+    }
+    return count;
+  }
+
   Future<void> _openSkuProductDialog({
     required bool child,
     ProposalSkuDetailRow? existing,
@@ -9428,6 +9827,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     }
     final rows = proposalIntakeSkuDetails(_form);
     if (existing == null) {
+      if (rows.length >= _productFoldPreview) {
+        _businessProductVisible = rows.length + 1;
+        _financeSettleVisible = rows.length + 1;
+      }
       _writeSkuDetails([...rows, result.row], rebuild: false);
     } else {
       _patchSkuDetail(existing.id, (_) => result.row, rebuild: false);
@@ -9703,8 +10106,54 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     );
   }
 
+  int _foldedCount(int total, int visible) {
+    if (total <= _productFoldPreview) return total;
+    if (visible < _productFoldPreview) return _productFoldPreview;
+    if (visible > total) return total;
+    return visible;
+  }
+
+  Widget _foldedListActions({
+    required int total,
+    required int visible,
+    required ValueChanged<int> onVisible,
+  }) {
+    if (total <= _productFoldPreview) return const SizedBox.shrink();
+    final shown = _foldedCount(total, visible);
+    final expanded = shown > _productFoldPreview;
+    final rest = total - shown;
+    final more = shown + _productFoldStep;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Wrap(
+        spacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          if (shown < total)
+            TextButton.icon(
+              onPressed: () => onVisible(more > total ? total : more),
+              icon: const Icon(Icons.expand_more, size: 16),
+              label: const Text('显示更多'),
+            ),
+          if (shown < total)
+            TextButton(
+              onPressed: () => onVisible(total),
+              child: Text('显示全部（还有 $rest 个）'),
+            ),
+          if (expanded)
+            TextButton.icon(
+              onPressed: () => onVisible(_productFoldPreview),
+              icon: const Icon(Icons.expand_less, size: 16),
+              label: const Text('收起'),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _skuDetailsBlock(bool wide) {
     final rows = proposalIntakeSkuDetails(_form);
+    final visibleCount = _foldedCount(rows.length, _businessProductVisible);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -9747,10 +10196,51 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         if (_canEditProducts)
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: _addSkuDetail,
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('新增'),
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 4,
+              children: [
+                TextButton.icon(
+                  onPressed: _addSkuDetail,
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('新增'),
+                ),
+                TextButton(
+                  onPressed: () => setState(() {
+                    _productMultiSelect = !_productMultiSelect;
+                    if (!_productMultiSelect) _selectedProductIds.clear();
+                  }),
+                  child: Text(_productMultiSelect ? '取消多选' : '多选'),
+                ),
+                if (_productMultiSelect) ...[
+                  TextButton(
+                    onPressed: proposalIntakeSkuDetails(_form).isEmpty
+                        ? null
+                        : _toggleSelectAllProducts,
+                    child: Text(
+                      proposalIntakeSkuDetails(_form).isNotEmpty &&
+                              proposalIntakeSkuDetails(_form).every(
+                                (row) => _selectedProductIds.contains(row.id),
+                              )
+                          ? '取消全选'
+                          : '全选',
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _liveSelectedProductIds.isEmpty
+                        ? null
+                        : () => unawaited(_confirmRemoveSelectedProducts()),
+                    style: TextButton.styleFrom(
+                      foregroundColor: ProposalPalette.coral,
+                    ),
+                    child: Text(
+                      _liveSelectedProductIds.isEmpty
+                          ? '删除所选'
+                          : '删除所选（${_liveSelectedProductIds.length}）',
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         if (rows.isNotEmpty) ...[
@@ -9761,13 +10251,18 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ),
           ],
           const SizedBox(height: 10),
-          for (var i = 0; i < rows.length; i++) ...[
+          for (var i = 0; i < visibleCount; i++) ...[
             if (i > 0) const SizedBox(height: 8),
             _anchor(
               'skuDetail:${rows[i].id}',
               _skuProductSummaryRow(rows[i], i + 1, child: false),
             ),
           ],
+          _foldedListActions(
+            total: rows.length,
+            visible: _businessProductVisible,
+            onVisible: (next) => setState(() => _businessProductVisible = next),
+          ),
         ],
       ],
     );
@@ -9828,13 +10323,24 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: ProposalPalette.text,
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_productSelectBox(row.id) case final box?) ...[
+                box,
+                const SizedBox(width: 4),
+              ],
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: ProposalPalette.text,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 2),
           Text(
@@ -9907,6 +10413,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (_productSelectBox(row.id) case final box?) ...[
+                box,
+                const SizedBox(width: 4),
+              ],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -9979,6 +10489,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           ),
           child: Text(_canEditProducts ? '编辑' : '查看'),
         ),
+        if (_canEditProducts && !child)
+          TextButton(
+            style: style,
+            onPressed: () => unawaited(_duplicateBusinessProduct(row)),
+            child: const Text('复制新增'),
+          ),
         if (_canEditProducts)
           TextButton(
             style: style,
@@ -11184,39 +11700,52 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               _sharedSettleCard(group, wide: wide, enabled: enabled),
             ],
           ],
-          for (final sku in channelRows) ...[
+          for (
+            var i = 0;
+            i < _foldedCount(channelRows.length, _financeSettleVisible);
+            i++
+          ) ...[
             const SizedBox(height: 8),
             _skuSettleProductCard(
-              skuId: sku.id,
+              skuId: channelRows[i].id,
               childProduct: false,
-              product: sku,
+              product: channelRows[i],
               title: [
-                if (sku.productName.trim().isNotEmpty) sku.productName.trim(),
-                if (sku.faceValue.trim().isNotEmpty)
-                  '面值 ${sku.faceValue.trim()}',
+                if (channelRows[i].productName.trim().isNotEmpty)
+                  channelRows[i].productName.trim(),
+                if (channelRows[i].faceValue.trim().isNotEmpty)
+                  '面值 ${channelRows[i].faceValue.trim()}',
               ].join(' · '),
               emptyTitle: '未填写产品名称',
               reviewPrefix: 'skuSettle',
-              settlements: proposalIntakeSkuSettlements(sku),
+              settlements: proposalIntakeSkuSettlements(channelRows[i]),
               wide: wide,
               enabled: enabled,
-              syncSource: _skuSyncSource(sku),
+              syncSource: _skuSyncSource(channelRows[i]),
               productSource: 'CHANNEL',
-              onAdd: () => _addSkuSettle(sku.id),
-              onAddKind: (kind) => _addSkuSettle(sku.id, kind: kind),
-              onRemove: (settleId) => _removeSkuSettle(sku.id, settleId),
+              onAdd: () => _addSkuSettle(channelRows[i].id),
+              onAddKind: (kind) => _addSkuSettle(channelRows[i].id, kind: kind),
+              onRemove: (settleId) =>
+                  _removeSkuSettle(channelRows[i].id, settleId),
               onPatch: (settleId, terms) =>
-                  _patchSkuSettle(sku.id, settleId, terms),
+                  _patchSkuSettle(channelRows[i].id, settleId, terms),
               onReplace: (settlements) =>
-                  _writeSkuSettlements(sku.id, settlements),
-              onJumpToProduct: () => _jumpToSkuProduct(sku, child: false),
+                  _writeSkuSettlements(channelRows[i].id, settlements),
+              onJumpToProduct: () =>
+                  _jumpToSkuProduct(channelRows[i], child: false),
               includeScale: false,
               compact: true,
-              onOpenEditor: () =>
-                  unawaited(_openSkuSettleDialog(sku: sku, child: false)),
+              onOpenEditor: () => unawaited(
+                _openSkuSettleDialog(sku: channelRows[i], child: false),
+              ),
               scaleOnly: false,
             ),
           ],
+          _foldedListActions(
+            total: channelRows.length,
+            visible: _financeSettleVisible,
+            onVisible: (next) => setState(() => _financeSettleVisible = next),
+          ),
         ],
       ),
     );

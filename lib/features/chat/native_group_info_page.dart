@@ -36,6 +36,7 @@ class NativeGroupInfoPage extends StatefulWidget {
     this.onOpenApproval,
     this.onExitedGroup,
     this.onChatSettingsChanged,
+    this.onGroupTypeChanged,
   });
 
   final AuthSession session;
@@ -48,6 +49,7 @@ class NativeGroupInfoPage extends StatefulWidget {
   final ValueChanged<int>? onExitedGroup;
   final void Function({required int conversationId, bool? muted, bool? pinned})?
       onChatSettingsChanged;
+  final ValueChanged<NativeGroupInfo>? onGroupTypeChanged;
 
   @override
   State<NativeGroupInfoPage> createState() => _NativeGroupInfoPageState();
@@ -207,6 +209,93 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
       if (!mounted) return;
       _toast(context, '群名称已更新');
       await _load();
+    } catch (e) {
+      if (!mounted) return;
+      _toast(context, friendlyErrorText(e));
+    }
+  }
+
+  bool _isReplySlaWork(NativeGroupInfo info) =>
+      info.replySla && info.kind.toUpperCase() == 'WORKGROUP';
+
+  bool _canConvertGroupType(NativeGroupInfo info) {
+    final kind = info.kind.toUpperCase();
+    return kind == 'GROUP' || kind == 'WORKGROUP';
+  }
+
+  Widget _groupTypeButton(NativeGroupInfo info) {
+    final work = _isReplySlaWork(info);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: DunesColors.brandPurpleSoft,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: DunesColors.brandPurpleLine),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            work ? '工作群' : '普通群',
+            style: DunesTypography.sans(
+              fontSize: 13,
+              color: const Color(0xFF6B7078),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            work ? '转为普通群' : '转为工作群',
+            style: DunesTypography.sans(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: DunesColors.brandPurple,
+            ),
+          ),
+          const Icon(
+            Icons.chevron_right_rounded,
+            size: 16,
+            color: DunesColors.brandPurple,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmConvertGroupType() async {
+    final info = _detail;
+    if (info == null || !info.isOwner || info.dissolved || !_canConvertGroupType(info)) {
+      _toast(context, '只有群主可以转换群类型');
+      return;
+    }
+    final toWork = !_isReplySlaWork(info);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(toWork ? '转为工作群' : '转为普通群'),
+        content: Text(
+          toWork
+              ? '确定把这个群转为工作群？转换后，沙丘职级更高的人 @ 你时需要回复此条。群里会发一条通知。转换前的消息不追溯。'
+              : '确定把这个工作群转为普通群？之后不再启用已读不回。转换前的聊天记录保持原样。',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('确定转换'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await _service.convertGroupType(info.id, work: toWork);
+      if (!mounted) return;
+      _toast(context, toWork ? '已转为工作群' : '已转为普通群');
+      await _load();
+      final next = _detail;
+      if (next != null && _error == null) {
+        widget.onGroupTypeChanged?.call(next);
+      }
     } catch (e) {
       if (!mounted) return;
       _toast(context, friendlyErrorText(e));
@@ -454,6 +543,13 @@ class _NativeGroupInfoPageState extends State<NativeGroupInfoPage> {
           ),
           onTap: _renameGroup,
         ),
+        if (showOwnerActions && _canConvertGroupType(info))
+          GroupInfoRow(
+            icon: Icons.swap_horiz_outlined,
+            title: '群类型',
+            trailing: _groupTypeButton(info),
+            onTap: _confirmConvertGroupType,
+          ),
         if (!wide)
           GroupInfoRow(
             icon: Icons.qr_code_2_outlined,

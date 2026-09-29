@@ -365,7 +365,7 @@ class Tag3DailyTable extends StatelessWidget {
 
   double _actionHeight(Tag3DailyRow row) {
     if (row.isMonthCumulative) return _kTag3DailyRowMin;
-    return _commentsFor(row).isEmpty ? 68.0 : 88.0;
+    return _commentsFor(row).isEmpty ? 68.0 : 108.0;
   }
 
   double _auditHeight(Tag3DailyRow row) {
@@ -471,11 +471,15 @@ class Tag3DailyTable extends StatelessWidget {
     final showConfirm = row.showConfirmAction && !mineConfirmed;
     final showComment = row.showCommentAction;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          if (history.isNotEmpty) ...[
+            _commentEntry(row, history),
+            const SizedBox(height: 6),
+          ],
           Row(
             children: [
               if (showComment)
@@ -514,22 +518,58 @@ class Tag3DailyTable extends StatelessWidget {
                 ),
             ],
           ),
-          if (history.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            InkWell(
-              onTap: onViewComments == null ? null : () => onViewComments!(row),
-              child: Text(
-                '${history.length}条记录',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: DunesTypography.sans(
-                  fontSize: 11.5,
-                  color: DunesColors.accent,
+        ],
+      ),
+    );
+  }
+
+  Widget _commentEntry(Tag3DailyRow row, List<Tag3DailyComment> history) {
+    final ordered = [...history]
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    final latest = ordered.last;
+    final name = latest.userName.trim().isEmpty ? '同事' : latest.userName.trim();
+    final preview = latest.displayBody.trim();
+    final count = history.length;
+    final text = preview.isEmpty
+        ? '$count条意见'
+        : (count == 1 ? '$name：$preview' : '$name：$preview');
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onViewComments == null ? null : () => onViewComments!(row),
+        borderRadius: BorderRadius.circular(6),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  text,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: DunesTypography.sans(
+                    fontSize: 11.5,
+                    height: 1.25,
+                    fontWeight: FontWeight.w600,
+                    color: DunesColors.accent,
+                  ),
                 ),
               ),
-            ),
-          ],
-        ],
+              if (count > 1) ...[
+                const SizedBox(width: 4),
+                Text(
+                  '$count条',
+                  style: DunesTypography.sans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: DunesColors.accent,
+                  ),
+                ),
+              ],
+              Icon(Icons.chevron_right, size: 14, color: DunesColors.accent),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -912,6 +952,157 @@ class _Tag3DailyCommentDialogState extends State<Tag3DailyCommentDialog> {
       ],
     );
   }
+}
+
+class Tag3DailyOpinionEntry extends StatelessWidget {
+  const Tag3DailyOpinionEntry({
+    super.key,
+    required this.count,
+    required this.onTap,
+  });
+
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: DunesColors.accent.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: DunesColors.accent.withValues(alpha: 0.35),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '意见 $count',
+                style: DunesTypography.sans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: DunesColors.accent,
+                ),
+              ),
+              Icon(Icons.chevron_right, size: 16, color: DunesColors.accent),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> showTag3DailyOpinionList({
+  required BuildContext context,
+  required String title,
+  required List<Tag3DailyComment> comments,
+  List<Tag3DailyRow> rows = const [],
+}) {
+  final opinions = tag3DailyOpinionComments(comments);
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (ctx) {
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$title · 意见',
+                style: DunesTypography.sans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: DunesColors.text,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '只显示填写了意见的内容，确认记录不在这里。',
+                style: DunesTypography.sans(
+                  fontSize: 12,
+                  color: DunesColors.text3,
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (opinions.isEmpty)
+                Text(
+                  '暂无意见',
+                  style: DunesTypography.sans(
+                    fontSize: 13,
+                    color: DunesColors.text3,
+                  ),
+                )
+              else
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(ctx).size.height * 0.55,
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: opinions.length,
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 16),
+                    itemBuilder: (_, i) {
+                      final item = opinions[i];
+                      final name = item.userName.trim().isEmpty
+                          ? '同事'
+                          : item.userName.trim();
+                      final place = tag3DailyCommentPlace(item, rows);
+                      final where = [
+                        if (place.channel.isNotEmpty) '渠道 ${place.channel}',
+                        if (place.project.isNotEmpty) '项目 ${place.project}',
+                        if (item.periodLabel.trim().isNotEmpty)
+                          item.periodLabel.trim(),
+                      ].join(' · ');
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            where.isEmpty ? name : where,
+                            style: DunesTypography.sans(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: DunesColors.text,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$name · ${tag3DailyCommentTime(item.createdAt)}',
+                            style: DunesTypography.sans(
+                              fontSize: 12,
+                              color: DunesColors.text3,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            item.body.trim(),
+                            style: DunesTypography.sans(
+                              fontSize: 13,
+                              color: DunesColors.text2,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }
 
 Future<void> showTag3DailyCommentHistory({

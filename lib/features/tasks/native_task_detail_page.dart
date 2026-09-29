@@ -15,6 +15,7 @@ import 'task_attachment_tile.dart';
 import 'task_avatar.dart';
 import 'task_change_dialog.dart';
 import 'task_first_use_guide.dart';
+import 'task_helper_picker.dart';
 import 'task_link_section.dart';
 import 'task_models.dart';
 import 'task_postpone_dialog.dart';
@@ -67,12 +68,22 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
   bool _busy = false;
   bool _analysisRunning = false;
   bool _guideAutoStarted = false;
+  bool _canAssignTeam = false;
   Timer? _analysisTimer;
 
   @override
   void initState() {
     super.initState();
     _reload();
+    unawaited(_loadAssignAccess());
+  }
+
+  Future<void> _loadAssignAccess() async {
+    try {
+      final intake = await _api.rdIntake();
+      if (!mounted) return;
+      setState(() => _canAssignTeam = intake.canAssignTeam);
+    } catch (_) {}
   }
 
   @override
@@ -188,7 +199,12 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
     if (_viewOnly || _pendingChangeLocked) return false;
     final t = _detail?.task;
     if (t == null || !t.isMain) return false;
-    if (t.status == 'completed' || t.status == 'cancelled') return false;
+    if (t.status == 'completed' ||
+        t.status == 'cancelled' ||
+        t.status == 'pending_assignment' ||
+        t.status == 'rejected') {
+      return false;
+    }
     final uid = widget.session.userId;
     return t.ownerUserId == uid ||
         t.creatorUserId == uid ||
@@ -454,7 +470,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
       if (mounted) {
         showDunesCenterToast(
           context,
-          updated.hasPendingChange ? '已提交延期，待直属上级审批' : '已延期',
+          updated.hasPendingChange ? '已提交延期，待任务流上级审批' : '已延期',
         );
       }
     } catch (e) {
@@ -488,7 +504,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
       if (mounted) {
         showDunesCenterToast(
           context,
-          updated.hasPendingChange ? '已提交修改，待直属上级审批' : '已保存',
+          updated.hasPendingChange ? '已提交修改，待任务流上级审批' : '已保存',
         );
       }
     } catch (e) {
@@ -518,9 +534,35 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
       if (mounted) {
         showDunesCenterToast(
           context,
-          updated.hasPendingChange ? '已提交指派，待直属上级审批' : '已指派',
+          updated.hasPendingChange ? '已提交指派，待任务流上级审批' : '已指派',
         );
       }
+    } catch (e) {
+      if (mounted) showDunesCenterToast(context, '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _assist() async {
+    final task = _detail?.task;
+    if (task == null || _busy) return;
+    final picked = await showTaskHelperPicker(
+      context,
+      api: _api,
+      title: '分派协助',
+      selectedIds: task.coOwnerUserIds.toSet(),
+      excludeUserId: task.ownerUserId,
+    );
+    if (picked == null || !mounted) return;
+    final saved = picked.map((e) => e.id).toList();
+    setState(() => _busy = true);
+    try {
+      await _api.patchTask(task.id, {
+        'coOwnerUserIds': saved.where((id) => id != task.ownerUserId).toList(),
+      });
+      await _reload();
+      if (mounted) showDunesCenterToast(context, '协助人已更新');
     } catch (e) {
       if (mounted) showDunesCenterToast(context, '$e');
     } finally {
@@ -723,7 +765,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
 
   Widget _pendingChangeBanner(TaskChangeRequest req) {
     final title = req.isAssignment ? '指派待审批' : '修改待审批';
-    final who = req.approverName.trim().isEmpty ? '直属上级' : req.approverName;
+    final who = req.approverName.trim().isEmpty ? '任务流上级' : req.approverName;
     final lines = <String>[
       '当前页面仍显示原内容，待 $who 审批后生效。',
       if (req.overdueAtSubmit) '本单提交时任务已逾期。',
@@ -830,7 +872,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '${req.requesterName.isEmpty ? '发起人' : req.requesterName} → ${req.approverName.isEmpty ? '直属上级' : req.approverName}',
+                    '${req.requesterName.isEmpty ? '发起人' : req.requesterName} → ${req.approverName.isEmpty ? '任务流上级' : req.approverName}',
                     style: const TextStyle(
                       fontSize: 12,
                       color: DunesColors.text3,
@@ -1003,7 +1045,16 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
           ),
         );
       }
-      if (_canAssign) {
+      if (_canPostpone) {
+        actions.add(
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _assist,
+            icon: const Icon(Icons.group_add_outlined, size: 17),
+            label: const Text('协助'),
+          ),
+        );
+      }
+      if (_canAssign && _canAssignTeam) {
         actions.add(
           OutlinedButton.icon(
             onPressed: _busy ? null : _assign,

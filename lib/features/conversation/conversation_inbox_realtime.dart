@@ -136,6 +136,7 @@ abstract final class ConversationInboxRealtime {
     if (items.every((c) => c.id != convId)) return true;
     if (event.type == 'conversation_updated') {
       final raw = event.raw;
+      if (raw['groupTypeChanged'] == true) return true;
       if (raw['dissolved'] == true || raw['isDissolved'] == true) return true;
       if (raw['avatarMembers'] != null) return true;
       if (raw['peerAvatarUrl'] != null ||
@@ -329,6 +330,8 @@ abstract final class ConversationInboxRealtime {
     DateTime? updatedAt,
     int? unreadCount,
     String? title,
+    String? kind,
+    bool? replySla,
     bool? muted,
     bool? pinned,
     bool? hasUnreadMention,
@@ -340,7 +343,7 @@ abstract final class ConversationInboxRealtime {
   }) {
     return NativeConversation(
       id: c.id,
-      kind: c.kind,
+      kind: kind ?? c.kind,
       title: title ?? c.title,
       unreadCount: unreadCount ?? c.unreadCount,
       preview: preview ?? c.preview,
@@ -359,7 +362,7 @@ abstract final class ConversationInboxRealtime {
       peerAvatarUrl: c.peerAvatarUrl,
       avatarMembers: c.avatarMembers,
       dissolved: c.dissolved,
-      replySla: c.replySla,
+      replySla: replySla ?? c.replySla,
       membershipStatus: c.membershipStatus,
       assistantGenerating: c.assistantGenerating,
       assistantGeneratingStatus: c.assistantGeneratingStatus,

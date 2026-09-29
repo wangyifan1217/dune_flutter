@@ -263,7 +263,7 @@ class _Header extends StatelessWidget {
           ),
           const SizedBox(width: 2),
           Text(
-            '协作沉淀',
+            '会议协作',
             style: DunesTypography.sans(
               fontSize: 17,
               fontWeight: FontWeight.w700,

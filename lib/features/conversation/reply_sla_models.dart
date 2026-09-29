@@ -122,7 +122,7 @@ class ReplySlaSnapshot {
   bool get hasPending =>
       byMessage.values.any((list) => list.any((i) => i.isTicking));
 
-  /// 我作为被 @ 人、还没关掉的最早一条义务（「去回复上级」的定位目标）。
+  /// 我作为被 @ 人、还没关掉的最早一条义务（「去回复」的定位目标）。
   int earliestOpenForReceiver(int userId) {
     var best = 0;
     byMessage.forEach((msgId, list) {

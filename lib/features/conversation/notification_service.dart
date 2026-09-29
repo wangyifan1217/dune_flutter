@@ -40,11 +40,9 @@ class NativeNotificationSummary {
 }
 
 class NotificationService {
-  NotificationService({
-    required AuthSession session,
-    http.Client? client,
-  }) : _session = session,
-       _client = client ?? http.Client();
+  NotificationService({required AuthSession session, http.Client? client})
+    : _session = session,
+      _client = client ?? http.Client();
 
   final AuthSession _session;
   final http.Client _client;
@@ -102,6 +100,11 @@ class NotificationService {
     return items
         .whereType<Map<String, dynamic>>()
         .map(_mapItem)
+        .where(
+          (item) =>
+              (_session.effectiveQianjiAccess && _session.travelViewAll) ||
+              item.kind.toUpperCase() != 'TRAVEL_ISSUE',
+        )
         .toList(growable: false);
   }
 

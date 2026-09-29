@@ -147,7 +147,7 @@ class _TaskChangeDialogState extends State<_TaskChangeDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                '标题、内容和截止日提交后由直属上级审批，通过前页面仍显示原文。',
+                '标题、内容和截止日提交后由任务流上级审批，通过前页面仍显示原文。',
                 style: TextStyle(
                   fontSize: 13,
                   color: DunesColors.text2,

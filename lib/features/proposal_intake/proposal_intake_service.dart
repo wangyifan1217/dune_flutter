@@ -193,6 +193,16 @@ class ProposalIntakeService {
     return ProposalIntakeRow.fromJson(_asMap(data));
   }
 
+  Future<ProposalIntakeRow> duplicate(int id) async {
+    final data = _unwrap(
+      await http.post(
+        _uri('/proposal-intakes/$id/duplicate'),
+        headers: _headers,
+      ),
+    );
+    return ProposalIntakeRow.fromJson(_asMap(data));
+  }
+
   Future<ProposalIntakeRow> fetchDetail(int id) async {
     final data = _unwrap(
       await http.get(_uri('/proposal-intakes/$id'), headers: _headers),

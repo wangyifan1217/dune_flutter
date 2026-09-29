@@ -9,6 +9,7 @@ import '../../../core/theme/dunes_theme.dart';
 import '../../../core/widgets/horizontal_drag_scroll_view.dart';
 import '../../auth/auth_session.dart';
 import 'china_provinces.dart';
+import 'travel_issue_pages.dart';
 import 'travel_mock_data.dart';
 import 'travel_service.dart';
 
@@ -166,7 +167,10 @@ void _showTravelKindCosts(BuildContext context, List<TravelEmployee> people) {
   );
 }
 
-void _showTravelFeeBreakdown(BuildContext context, List<TravelEmployee> people) {
+void _showTravelFeeBreakdown(
+  BuildContext context,
+  List<TravelEmployee> people,
+) {
   final fees = travelRebookFeeByKind(people);
   final total = travelRebookFeeTotal(people);
   showDialog<void>(
@@ -190,7 +194,11 @@ void _showTravelFeeBreakdown(BuildContext context, List<TravelEmployee> people) 
             const SizedBox(height: 8),
             const Text(
               '目前只统计改签手续费。同一订单多人出行只计一次整单金额，不拆到人，也不计入出行成本。',
-              style: TextStyle(fontSize: 12, color: DunesColors.text3, height: 1.4),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.text3,
+                height: 1.4,
+              ),
             ),
             const SizedBox(height: 12),
             for (final kind in TravelKind.values)
@@ -580,11 +588,26 @@ class _NativeQianjiTravelPageState extends State<NativeQianjiTravelPage> {
                   (value: _TravelView.map, label: '中国地图'),
                   (value: _TravelView.list, label: '行程'),
                 ],
-                onChanged: (v) => setState(() {
-                  _view = v;
-                  if (v == _TravelView.list) _personId = 'all';
-                }),
+                onChanged: (v) {
+                  setState(() {
+                    _view = v;
+                    if (v == _TravelView.list) _personId = 'all';
+                  });
+                },
               ),
+              if (widget.session.travelViewAll)
+                TextButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => TravelIssuesPage(session: widget.session),
+                      ),
+                    );
+                  },
+                  style: TextButton.styleFrom(foregroundColor: _themePurple),
+                  icon: const Icon(Icons.fact_check_outlined, size: 16),
+                  label: const Text('问题分析'),
+                ),
               if (_view == _TravelView.map)
                 _Segmented(
                   value: _mapMode,

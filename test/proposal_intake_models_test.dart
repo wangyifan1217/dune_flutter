@@ -6,6 +6,37 @@ import 'package:dunes_app/features/xflow/approval_chat_share.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('duplicate form keeps content and clears platform sync', () {
+    final copy = proposalIntakeDuplicateForm({
+      'proposalName': '能源卡',
+      'sector': '能源',
+      'skuDetails': [
+        {
+          'id': 'sku-1',
+          'productName': '加油卡',
+          'platformStatus': 'created',
+          'partnerProductCode': 'P001',
+          'platformMessage': '已建品',
+        },
+      ],
+      'childProducts': [
+        {'id': 'child-1', 'productName': '子卡', 'platformStatus': 'created'},
+      ],
+    });
+
+    expect(copy['proposalName'], '能源卡');
+    expect(copy['sector'], '能源');
+    final sku = (copy['skuDetails'] as List).first as Map;
+    expect(sku['productName'], '加油卡');
+    expect(sku['platformStatus'], '');
+    expect(sku['partnerProductCode'], '');
+    expect(sku['platformMessage'], '');
+    final child = (copy['childProducts'] as List).first as Map;
+    expect(child['productName'], '子卡');
+    expect(child['platformStatus'], '');
+    expect(identical(copy['skuDetails'], copy), isFalse);
+  });
+
   test('list library stats parse total week month and sectors', () {
     final result = ProposalIntakeListResult.fromJson({
       'items': [],
@@ -308,18 +339,16 @@ void main() {
     expect(options.ratingFor(499), 'C');
   });
 
-  test('output form options always include 业务平台', () {
+  test('output form options follow admin config without extras', () {
+    expect(proposalIntakeOutputFormOptions(['API接口', 'H5', '运营商券包']), [
+      'API接口',
+      'H5',
+      '运营商券包',
+    ]);
+    expect(proposalIntakeOutputFormOptions(const []), isEmpty);
     expect(
       proposalIntakeOutputFormOptions(['API接口', 'H5']),
-      contains(kProposalOutputFormBusinessPlatform),
-    );
-    expect(proposalIntakeOutputFormOptions(['API接口', '业务平台']), [
-      'API接口',
-      '业务平台',
-    ]);
-    expect(
-      proposalIntakeOutputFormOptions(const [], purchase: true),
-      containsAll(kPurchaseCapabilityInputForms),
+      isNot(contains('业务平台')),
     );
   });
 
@@ -2561,6 +2590,39 @@ void main() {
     ]);
   });
 
+  test('operator sector uses scale itself as revenue', () {
+    final sku = {
+      'id': 'sku-1',
+      'faceValue': '100',
+      'settlements': [
+        {'id': 'st-in', 'kind': 'income', 'settleUnitPrice': '12.2'},
+        {'id': 'st-cost', 'kind': 'cost', 'settleRatio': '0.7'},
+      ],
+    };
+    final form = {
+      'sector': '运营商',
+      'salesScale': 1200,
+      'skuDetails': [sku],
+    };
+    final money = proposalSkuSettleMoney(
+      ProposalSkuDetailRow.fromJson(sku),
+      form: form,
+    );
+    expect(money.income, 1200);
+    expect(money.cost, 840);
+    expect(money.profit, 360);
+    expect(proposalProductScaleRollup(form)?.revenue, 1200);
+
+    final energy = {...form, 'sector': '能源'};
+    expect(
+      proposalSkuSettleMoney(
+        ProposalSkuDetailRow.fromJson(sku),
+        form: energy,
+      ).income,
+      146.4,
+    );
+  });
+
   test('unit price revenue uses scale times unit price over face', () {
     final form = {
       'salesScale': 100,
@@ -3408,6 +3470,74 @@ void main() {
     expect(row.isTechReviewing, isFalse);
     expect(proposalIntakeTechnologyRecords(row.form).single.title, '对接程序1');
     expect(proposalIntakeTechnologyHistory(row.form).single.platform, '旧平台');
+  });
+
+  test('copying a business product also copies linked products and settlements', () {
+    const source = ProposalSkuDetailRow(
+      id: 'sku-1',
+      productName: '湖北中石油50元加油券包',
+      couponKind: '权益',
+      platformStatus: 'created',
+      partnerProductCode: 'OLD-1',
+      settlements: [
+        ProposalSkuSettleRow(
+          id: 'st-main',
+          terms: ProposalFinanceSettleTerms(settleRatio: '0.9'),
+        ),
+      ],
+    );
+    const child = ProposalSkuDetailRow(
+      id: 'child-1',
+      productName: '满200减20',
+      parentSkuId: 'sku-1',
+      faceValue: '20',
+      settlements: [
+        ProposalSkuSettleRow(
+          id: 'st-child',
+          kind: 'cost',
+          terms: ProposalFinanceSettleTerms(settleUnitPrice: '12.2'),
+        ),
+      ],
+    );
+    final copied = proposalIntakeCopyBusinessProducts(
+      source: source,
+      count: 2,
+      mains: const [source],
+      children: const [child],
+      quantities: const {'child-1': 2},
+      idSeed: 10,
+    );
+
+    expect(copied.mains, hasLength(3));
+    expect(copied.mains[1].id, isNot(source.id));
+    expect(copied.mains[2].id, isNot(copied.mains[1].id));
+    expect(copied.mains[1].productName, '湖北中石油50元加油券包（副本）');
+    expect(copied.mains[2].productName, '湖北中石油50元加油券包（副本2）');
+    expect(copied.mains[1].platformStatus, isEmpty);
+    expect(copied.mains[1].partnerProductCode, isEmpty);
+    expect(copied.mains[1].settlements.single.id, isNot('st-main'));
+    expect(copied.mains[1].settlements.single.terms.settleRatio, '0.9');
+    expect(copied.mains[2].settlements.single.id, isNot(copied.mains[1].settlements.single.id));
+
+    final firstChildren = copied.children
+        .where((row) => row.parentSkuId == copied.mains[1].id)
+        .toList();
+    final secondChildren = copied.children
+        .where((row) => row.parentSkuId == copied.mains[2].id)
+        .toList();
+    expect(firstChildren, hasLength(1));
+    expect(secondChildren, hasLength(1));
+    expect(firstChildren.single.productName, '满200减20');
+    expect(firstChildren.single.faceValue, '20');
+    expect(firstChildren.single.settlements.single.terms.settleUnitPrice, '12.2');
+    expect(firstChildren.single.settlements.single.id, isNot('st-child'));
+    expect(
+      secondChildren.single.settlements.single.id,
+      isNot(firstChildren.single.settlements.single.id),
+    );
+    expect(copied.quantities[firstChildren.single.id], 2);
+    expect(copied.quantities[secondChildren.single.id], 2);
+    expect(copied.children.where((row) => row.id == 'child-1'), hasLength(1));
   });
 
   test('append technology record copies the live tech snapshot', () {

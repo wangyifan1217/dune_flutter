@@ -24,6 +24,7 @@ import 'recon_markdown_table.dart';
 import 'reconciliation_shucai_models.dart';
 import 'reconciliation_shucai_service.dart';
 import 'shucai_report_table.dart';
+import 'tag2_entity_models.dart';
 import 'tag3_daily_models.dart';
 import 'tag3_daily_preview.dart';
 import 'tag3_daily_table.dart';
@@ -175,7 +176,8 @@ class _NativeReconciliationAssistantPageState
       final card = _cardFromMessage(msg);
       if (card != null &&
           card.asOfDate.isNotEmpty &&
-          !isTag3DailyCard(card.cardType)) {
+          !isTag3DailyCard(card.cardType) &&
+          !isTag2EntityCard(card.cardType)) {
         dates.add(card.asOfDate);
       }
     }
@@ -452,6 +454,13 @@ class _NativeReconciliationAssistantPageState
   }) async {
     if (isTag3DailyCard(card.cardType)) {
       await _openTag3Daily(card, refresh: refresh);
+      return;
+    }
+    if (isTag2EntityCard(card.cardType)) {
+      final jump = widget.onOpenWorkbenchDailyRecon;
+      if (jump != null && card.asOfDate.trim().isNotEmpty) {
+        jump(card.asOfDate.trim(), cardType: 'TAG2_ENTITY');
+      }
       return;
     }
     final jump = widget.onOpenWorkbenchDailyRecon;
@@ -733,7 +742,7 @@ class _NativeReconciliationAssistantPageState
         ),
         titleSpacing: 0,
         title: Text(
-          '业财一体-日清月结',
+          reconCardTitle('TAG3_DAILY'),
           style: DunesTypography.sans(
             fontSize: 17,
             fontWeight: FontWeight.w600,
@@ -777,31 +786,53 @@ class _NativeReconciliationAssistantPageState
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
               child: _CardSurface(
                 padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Text(
-                      '$_dateLabel · 日清月结',
-                      style: DunesTypography.sans(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: DunesColors.text,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '$_dateLabel · 日清月结',
+                            style: DunesTypography.sans(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: DunesColors.text,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            [
+                              confirmable.isEmpty
+                                  ? '没有待你确认的日行，仍可填意见。'
+                                  : '右侧可直接确认，意见选填。',
+                              if ((snap?.snapshotHint ?? '').trim().isNotEmpty)
+                                snap!.snapshotHint.trim(),
+                            ].join(' · '),
+                            style: DunesTypography.sans(
+                              fontSize: 12.5,
+                              color: DunesColors.text2,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      [
-                        confirmable.isEmpty
-                            ? '没有待你确认的日行，仍可填意见。'
-                            : '右侧可直接确认，意见选填。',
-                        if ((snap?.snapshotHint ?? '').trim().isNotEmpty)
-                          snap!.snapshotHint.trim(),
-                      ].join(' · '),
-                      style: DunesTypography.sans(
-                        fontSize: 12.5,
-                        color: DunesColors.text2,
+                    if (snap != null) ...[
+                      const SizedBox(width: 8),
+                      Tag3DailyOpinionEntry(
+                        count: tag3DailyOpinionComments(snap.comments).length,
+                        onTap: () {
+                          unawaited(
+                            showTag3DailyOpinionList(
+                              context: context,
+                              title: _dateLabel,
+                              comments: snap.comments,
+                              rows: snap.rows,
+                            ),
+                          );
+                        },
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -1573,7 +1604,7 @@ class _NativeReconciliationAssistantPageState
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('对账助手'),
-        content: const Text('对账助手只推送日清月结。点卡片打开同一张表：日行可确认和填意见，本月累计只展示。没有驳回。'),
+        content: const Text('对账助手推送标签三和标签二日清月结。点卡片打开对应的表：业务、运营各自确认，也可以提意见。没有驳回。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),

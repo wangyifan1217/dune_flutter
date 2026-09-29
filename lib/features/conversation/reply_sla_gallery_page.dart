@@ -4,7 +4,7 @@ import '../../core/theme/dunes_theme.dart';
 import '../chat/group_type_picker.dart';
 import 'reply_sla_models.dart';
 
-/// 工作群已读不回：不连接口的补丁演示（禁打扰 / 禁退 / @所有人名单 / 去回复上级）。
+/// 工作群已读不回：不连接口的补丁演示（禁打扰 / 禁退 / @所有人名单 / 去回复）。
 class ReplySlaGalleryPage extends StatefulWidget {
   const ReplySlaGalleryPage({super.key});
 
@@ -46,14 +46,14 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
           Text(
-            '只出现在上线后新建的工作群。点「回复此条」不算回复，发出引用才算。「去回复上级」只定位。',
+            '只出现在上线后新建的工作群。沙丘职级更高的人 @ 你才产生义务。点「回复此条」不算回复，发出引用才算。「去回复」只定位。',
             style: DunesTypography.sans(fontSize: 13, color: DunesColors.text2, height: 1.45),
           ),
           const SizedBox(height: 16),
           _section('群资料', '新工作群：免打扰不可开，未解散不能主动退'),
           _settingsMock(),
           const SizedBox(height: 18),
-          _section('去回复上级', '义务被新消息冲走后，输入框上方出现定位钮，不发送、不关义务'),
+          _section('去回复', '义务被新消息冲走后，输入框上方出现定位钮，不发送、不关义务'),
           _jumpMock(),
           const SizedBox(height: 18),
           _section('@所有人 · 发送人', '3 人及以内逐行列；超过 3 人点摘要看名单。接收人只看自己。'),
@@ -73,37 +73,37 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
           _section('被 @ 的人', '有按钮；回了或失效后按钮消失'),
           _bubble(
             mine: false,
-            name: '直属上级',
+            name: '更高职级',
             text: '@我 这份对账今天下班前给一下',
             item: _item(id: 1, status: ReplySlaStatus.unread, seconds: 25 * 60, receiver: true),
           ),
           _bubble(
             mine: false,
-            name: '直属上级',
+            name: '更高职级',
             text: '@我 已读但还没回',
             item: _item(id: 2, status: ReplySlaStatus.pending, seconds: 40, receiver: true),
           ),
           _bubble(
             mine: false,
-            name: '隔级上级',
+            name: '更高职级',
             text: '@我 已读未回 1 小时 20 分',
             item: _item(id: 3, status: ReplySlaStatus.pending, seconds: 80 * 60, receiver: true),
           ),
           _bubble(
             mine: false,
-            name: '总裁办',
+            name: '更高职级',
             text: '@我 已用引用回复关掉义务',
             item: _item(id: 4, status: ReplySlaStatus.replied, seconds: 8 * 60, receiver: true),
           ),
           _bubble(
             mine: false,
-            name: '直属上级',
+            name: '更高职级',
             text: '@我 原消息撤回 / 离群 / 解散',
             item: _item(id: 5, status: ReplySlaStatus.voided, seconds: 2 * 3600, receiver: true),
           ),
           _bubble(
             mine: false,
-            name: '直属上级',
+            name: '更高职级',
             text: '@我 未读时群已解散',
             item: _item(id: 6, status: ReplySlaStatus.voided, seconds: 0, receiver: true),
             dissolved: true,
@@ -135,7 +135,7 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
             item: _item(id: 10, status: ReplySlaStatus.voided, seconds: 36 * 60, receiver: false),
           ),
           const SizedBox(height: 18),
-          _section('建群选择', '默认普通群，创建后不可改'),
+          _section('建群选择', '默认普通群，创建后群主可转换'),
           const SizedBox(height: 8),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: DunesColors.brandPurple),
@@ -148,7 +148,7 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
           const SizedBox(height: 18),
           _section('不算、不出现', '同事互 @、普通群 / 旧群：气泡下什么都没有。@所有人只落在发送人的下级上。'),
           _bubble(mine: false, name: '同事', text: '@我 同事互 @ · 不产生义务'),
-          _bubble(mine: false, name: '上级 · 普通群', text: '@我 普通群没有标记'),
+          _bubble(mine: false, name: '更高职级 · 普通群', text: '@我 普通群没有标记'),
         ],
       ),
     );
@@ -335,7 +335,7 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
             right: 12,
             bottom: 48,
             child: Text(
-              '林先敏：那我先下班了…\n上级：最新消息把上面那条冲走了。',
+              '林先敏：那我先下班了…\n更高职级：最新消息把上面那条冲走了。',
               style: DunesTypography.sans(fontSize: 13, color: DunesColors.text2, height: 1.45),
             ),
           ),
@@ -349,7 +349,7 @@ class _ReplySlaGalleryPageState extends State<ReplySlaGalleryPage> {
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
-                '↑ 去回复上级',
+                '↑ 去回复',
                 style: DunesTypography.sans(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
               ),
             ),

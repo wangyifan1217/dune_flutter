@@ -19,6 +19,7 @@ class NativeMessageCenterPage extends StatefulWidget {
     required this.session,
     required this.onBack,
     this.onNotificationsRead,
+    this.onOpenNotificationAction,
     this.onBroadcastRead,
     this.initialTab,
     this.markAllReadOnEnter = false,
@@ -27,6 +28,7 @@ class NativeMessageCenterPage extends StatefulWidget {
   final AuthSession session;
   final VoidCallback onBack;
   final VoidCallback? onNotificationsRead;
+  final ValueChanged<String?>? onOpenNotificationAction;
   final ValueChanged<int>? onBroadcastRead;
 
   /// `notice` 打开系统通告，`broadcast` 打开公司广播。
@@ -67,8 +69,9 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
   @override
   void initState() {
     super.initState();
-    final initialIndex =
-        widget.initialTab?.trim().toLowerCase() == 'broadcast' ? 1 : 0;
+    final initialIndex = widget.initialTab?.trim().toLowerCase() == 'broadcast'
+        ? 1
+        : 0;
     _tabController = TabController(
       length: 2,
       vsync: this,
@@ -116,15 +119,17 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
       _notificationsError = null;
     });
     try {
-      final results = await Future.wait([
-        _notificationService.fetchSummary(),
-        _notificationService.fetchAll(),
-      ]);
+      final rows = await _notificationService.fetchAll();
       if (!mounted) return;
-      final summary = results[0] as NativeNotificationSummary;
+      final allRows = rows;
+      final visibleRows = widget.session.travelViewAll
+          ? allRows
+          : allRows
+                .where((item) => item.kind != 'TRAVEL_ISSUE')
+                .toList(growable: false);
       setState(() {
-        _notificationUnread = summary.unreadCount;
-        _notifications = results[1] as List<NativeNotificationItem>;
+        _notificationUnread = visibleRows.where((item) => item.unread).length;
+        _notifications = visibleRows;
         _notificationsLoading = false;
       });
       if (_pendingNoticeMarkRead) {
@@ -299,6 +304,9 @@ class _NativeMessageCenterPageState extends State<NativeMessageCenterPage>
             timeLabel: InboxFormat.formatTime(item.createdAt, withClock: true),
             tag: item.kind.isEmpty ? null : item.kind,
             unread: item.unread && _notificationUnread > 0,
+            onTap: item.clickAction == null
+                ? null
+                : () => widget.onOpenNotificationAction?.call(item.clickAction),
           );
         },
       ),

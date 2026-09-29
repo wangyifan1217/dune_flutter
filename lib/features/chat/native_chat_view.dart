@@ -472,7 +472,7 @@ class _NativeChatViewState extends State<NativeChatView>
   Timer? _replySlaReloadDebounce;
   Timer? _replySlaTicker;
   int _replySlaLoadSeq = 0;
-  // 「去回复上级」：最早一条未关义务是否在视口内（在则隐藏按钮）。
+  // 「去回复」：最早一条未关义务是否在视口内（在则隐藏按钮）。
   // 默认按「已在屏内」藏住，视口量准且确认离开后才出现，避免和 @ 消息同屏时先闪出来。
   bool _replySlaTargetVisible = true;
   bool _replySlaVisibilityCheckPending = false;
@@ -825,6 +825,22 @@ class _NativeChatViewState extends State<NativeChatView>
       unawaited(_load(silent: hasCache));
       _focusDesktopComposerIfActive();
       return;
+    }
+    final hint = widget.conversationHint;
+    final current = _conversation;
+    if (hint != null &&
+        current != null &&
+        hint.id == current.id &&
+        (hint.kind != current.kind || hint.replySla != current.replySla)) {
+      setState(() {
+        _conversation = ConversationInboxRealtime.copyConversation(
+          current,
+          kind: hint.kind,
+          replySla: hint.replySla,
+          muted: hint.muted,
+        );
+      });
+      _scheduleReplySlaReload();
     }
     if (newFocus > 0 && newFocus != oldFocus) {
       _forceLatestMode = false;
@@ -1354,6 +1370,11 @@ class _NativeChatViewState extends State<NativeChatView>
       _scheduleReplySlaReload();
       return;
     }
+    if (event.type == 'conversation_updated' &&
+        event.raw['groupTypeChanged'] == true) {
+      unawaited(_refreshConversationKind());
+      return;
+    }
 
     final isNew = _realtimeDedup.consume(event);
     var handled = false;
@@ -1376,6 +1397,26 @@ class _NativeChatViewState extends State<NativeChatView>
     if (!handled) {
       _scheduleRealtimeRefresh();
     }
+  }
+
+  Future<void> _refreshConversationKind() async {
+    final id = _conversation?.id ?? 0;
+    if (id <= 0) return;
+    try {
+      final fresh = await _service.fetchConversation(id);
+      if (fresh == null || !mounted || (_conversation?.id ?? 0) != id) return;
+      setState(() {
+        final current = _conversation;
+        if (current == null) return;
+        _conversation = ConversationInboxRealtime.copyConversation(
+          current,
+          kind: fresh.kind,
+          replySla: fresh.replySla,
+          muted: fresh.muted,
+        );
+      });
+      _scheduleReplySlaReload();
+    } catch (_) {}
   }
 
   void _applyPeerImStatusEvent(ConversationRealtimeEvent event) {
@@ -5592,7 +5633,7 @@ class _NativeChatViewState extends State<NativeChatView>
     );
   }
 
-  /// 「去回复上级」目标：我作为被 @ 人最早一条未关义务；工作群已解散则无。
+  /// 「去回复」目标：我作为被 @ 人最早一条未关义务；工作群已解散则无。
   int get _replySlaJumpTargetId {
     if (!_replySla.enabled || _conversation?.dissolved == true) return 0;
     return _replySla.earliestOpenForReceiver(widget.session.userId);
@@ -5676,7 +5717,7 @@ class _NativeChatViewState extends State<NativeChatView>
               ),
               const SizedBox(width: 2),
               Text(
-                '去回复上级',
+                '去回复',
                 style: DunesTypography.sans(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,

@@ -5,7 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('reconCardTitle names tag3 daily', () {
-    expect(reconCardTitle('TAG3_DAILY'), '业财一体-日清月结');
+    expect(reconCardTitle('TAG3_DAILY'), '标签三 · 业财一体-日清月结');
+    expect(reconCardTitle('TAG2_ENTITY'), '标签二 · 业财一体-日清月结');
     expect(isTag3DailyCard('tag3_daily'), isTrue);
   });
 
@@ -79,12 +80,36 @@ void main() {
     expect(snap.rows.length, 3);
     expect(snap.snapshotHint, '该日快照未跑完');
     expect(snap.confirmableRows.length, 2);
-    expect(snap.rows.where((r) => r.isMonthCumulative).first.showConfirmAction, isFalse);
-    expect(snap.rows.where((r) => r.isMonthCumulative).first.showCommentAction, isFalse);
+    expect(
+      snap.rows.where((r) => r.isMonthCumulative).first.showConfirmAction,
+      isFalse,
+    );
+    expect(
+      snap.rows.where((r) => r.isMonthCumulative).first.showCommentAction,
+      isFalse,
+    );
     expect(snap.confirmableRows.every((r) => r.period == 'DAY'), isTrue);
-    expect(snap.rows.where((r) => r.period == 'DAY').every((r) => r.showCommentAction), isTrue);
-    expect(snap.commentsFor(snap.rows.firstWhere((r) => r.periodLabel == '2026-09-14')).single.userName, '张三');
-    expect(snap.commentsFor(snap.rows.firstWhere((r) => r.periodLabel == '2026-09-15')), isEmpty);
+    expect(
+      snap.rows
+          .where((r) => r.period == 'DAY')
+          .every((r) => r.showCommentAction),
+      isTrue,
+    );
+    expect(
+      snap
+          .commentsFor(
+            snap.rows.firstWhere((r) => r.periodLabel == '2026-09-14'),
+          )
+          .single
+          .userName,
+      '张三',
+    );
+    expect(
+      snap.commentsFor(
+        snap.rows.firstWhere((r) => r.periodLabel == '2026-09-15'),
+      ),
+      isEmpty,
+    );
     final sorted = sortTag3DailyRows(snap.rows);
     expect(sorted.first.period, 'DAY');
     expect(sorted.last.period, 'MONTH');
@@ -92,9 +117,7 @@ void main() {
     expect(tag3DailyMoney(15), '15.00');
     expect(tag3DailyConfirmButtonLabel('BUSINESS'), '确认');
     expect(tag3DailyConfirmButtonLabel('OPERATION'), '确认');
-    final empty = tag3DailyAuditLanes(
-      assignee: snap.assigneeFor('多渠道|亿科景信'),
-    );
+    final empty = tag3DailyAuditLanes(assignee: snap.assigneeFor('多渠道|亿科景信'));
     expect(empty[0].done, isFalse);
     expect(empty[0].names, '张三');
     expect(empty[1].done, isFalse);
@@ -102,7 +125,9 @@ void main() {
     expect(empty[0].statusLabel, '未确认');
     final withBiz = tag3DailyAuditLanes(
       assignee: snap.assigneeFor('多渠道|亿科景信'),
-      comments: snap.commentsFor(snap.rows.firstWhere((r) => r.periodLabel == '2026-09-14')),
+      comments: snap.commentsFor(
+        snap.rows.firstWhere((r) => r.periodLabel == '2026-09-14'),
+      ),
     );
     expect(withBiz[0].done, isFalse);
     final confirmed = tag3DailyAuditLanes(
@@ -195,7 +220,12 @@ void main() {
     expect(snap.asOfDate, '2026-09-17');
     expect(snap.rows.where((r) => r.period == 'DAY'), hasLength(4));
     expect(snap.rows.where((r) => r.isMonthCumulative), hasLength(2));
-    expect(snap.rows.where((r) => r.isMonthCumulative).every((r) => !r.showConfirmAction), isTrue);
+    expect(
+      snap.rows
+          .where((r) => r.isMonthCumulative)
+          .every((r) => !r.showConfirmAction),
+      isTrue,
+    );
     final injected = withTag3DailyPreview(const [], asOfDate: asOf);
     if (kTag3DailyStaticPreview) {
       expect(injected, hasLength(1));
@@ -211,18 +241,9 @@ void main() {
       tag3DailyDispatchBody('2026-09-06'),
       '2026-09-06 业财一体-日清月结已生成，业务/运营请各自核对并确认',
     );
-    expect(
-      tag3DailyDateStatusPill(myConfirmed: true, confirmRows: 0),
-      '你已确认',
-    );
-    expect(
-      tag3DailyDateStatusPill(myConfirmed: false, confirmRows: 2),
-      '已有确认',
-    );
-    expect(
-      tag3DailyDateStatusPill(myConfirmed: false, confirmRows: 0),
-      '待确认',
-    );
+    expect(tag3DailyDateStatusPill(myConfirmed: true, confirmRows: 0), '你已确认');
+    expect(tag3DailyDateStatusPill(myConfirmed: false, confirmRows: 2), '已有确认');
+    expect(tag3DailyDateStatusPill(myConfirmed: false, confirmRows: 0), '待确认');
     expect(
       tag3DailyDateProgressLine(
         businessConfirmRows: 2,
@@ -257,16 +278,13 @@ void main() {
       '3 条日行 · 待业务确认 1 · 待运营确认 1 · 已完成 1',
     );
     expect(
-      tag3DailySnapshotStatusLine(
-        [
-          Tag3DailyRow.fromJson({
-            'rowKey': 'a',
-            'period': 'DAY',
-            'confirmationStatus': 'WAIT_BUSINESS',
-          }),
-        ],
-        snapshotHint: '该日快照未跑完',
-      ),
+      tag3DailySnapshotStatusLine([
+        Tag3DailyRow.fromJson({
+          'rowKey': 'a',
+          'period': 'DAY',
+          'confirmationStatus': 'WAIT_BUSINESS',
+        }),
+      ], snapshotHint: '该日快照未跑完'),
       '1 条日行 · 待业务确认 1 · 该日快照未跑完',
     );
     expect(
@@ -283,13 +301,79 @@ void main() {
   });
 
   test('date list pads through yesterday when snapshots stopped', () {
-    final padded = padTag3DailyDateItems(
-      const [
-        ReconDateItem(asOfDate: '2026-09-06'),
-        ReconDateItem(asOfDate: '2026-09-05'),
-      ],
-      now: DateTime(2026, 9, 18, 9, 44),
+    final padded = padTag3DailyDateItems(const [
+      ReconDateItem(asOfDate: '2026-09-06'),
+      ReconDateItem(asOfDate: '2026-09-05'),
+    ], now: DateTime(2026, 9, 18, 9, 44));
+    expect(
+      tag3DailyOpinionComments(const [
+        Tag3DailyComment(
+          id: 1,
+          rowKey: 'a',
+          period: 'DAY',
+          statDate: '2026-09-28',
+          periodLabel: '2026-09-28',
+          projectName: '大连极豆',
+          userId: 1,
+          userName: '甲',
+          kind: 'CONFIRM',
+          body: '确认时带的备注',
+          createdAt: '2026-09-28T08:00:00Z',
+        ),
+        Tag3DailyComment(
+          id: 2,
+          rowKey: 'b',
+          period: 'DAY',
+          statDate: '2026-09-28',
+          periodLabel: '2026-09-28',
+          projectName: '天津发改委',
+          userId: 2,
+          userName: '乙',
+          kind: 'COMMENT',
+          body: '核销偏少',
+          createdAt: '2026-09-28T09:00:00Z',
+        ),
+        Tag3DailyComment(
+          id: 3,
+          rowKey: 'c',
+          period: 'DAY',
+          statDate: '2026-09-27',
+          periodLabel: '2026-09-27',
+          projectName: '天虹商超',
+          userId: 3,
+          userName: '丙',
+          kind: 'comment',
+          body: '   ',
+          createdAt: '2026-09-28T10:00:00Z',
+        ),
+      ]).map((item) => item.id),
+      [2],
     );
+    final place = tag3DailyCommentPlace(
+      const Tag3DailyComment(
+        id: 2,
+        rowKey: '运营商|上海移动',
+        period: 'DAY',
+        statDate: '2026-06',
+        periodLabel: '2026-06',
+        projectName: '上海移动',
+        userId: 2,
+        userName: '李同池',
+        kind: 'COMMENT',
+        body: '无数据',
+        createdAt: '2026-09-29T01:12:00Z',
+      ),
+      [
+        Tag3DailyRow.fromJson({
+          'rowKey': '运营商|上海移动',
+          'channelCategoryL1Name': '运营商',
+          'projectName': '上海移动',
+          'period': 'DAY',
+        }),
+      ],
+    );
+    expect(place.channel, '运营商');
+    expect(place.project, '上海移动');
     expect(padded.first.asOfDate, '2026-09-17');
     expect(
       padded.map((e) => e.asOfDate),

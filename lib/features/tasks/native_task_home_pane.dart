@@ -9,6 +9,7 @@ import 'native_task_action_page.dart';
 import 'native_task_daily_report_page.dart';
 import 'native_task_detail_page.dart';
 import 'native_task_form.dart';
+import 'native_task_goal_table.dart';
 import 'native_task_management_pane.dart';
 import 'native_task_quick_create.dart';
 import 'task_api.dart';
@@ -47,11 +48,13 @@ class NativeTaskHomePane extends StatefulWidget {
     required this.session,
     this.embedded = false,
     this.onChromeChanged,
+    this.onOpenSummary,
   });
 
   final AuthSession session;
   final bool embedded;
   final ValueChanged<TaskShellChrome>? onChromeChanged;
+  final VoidCallback? onOpenSummary;
 
   @override
   State<NativeTaskHomePane> createState() => _NativeTaskHomePaneState();
@@ -81,8 +84,9 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   String? _error;
   static const int _pageSize = 20;
 
-  /// inbox | actionable | goals。进入任务板块默认展示待办行动中心。
-  String _scope = 'inbox';
+  /// inbox | actionable | goals。进入任务板块直接打开主任务列表。
+  String _scope = 'goals';
+  bool _canCreateTasks = true;
   TaskInboxSnapshot? _inbox;
   TaskInboxBucket? _inboxFocus;
   String? _inboxWarning;
@@ -106,6 +110,24 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       unawaited(_showGuide());
     });
     unawaited(_reload());
+    unawaited(_loadCreateAccess());
+  }
+
+  @override
+  void didUpdateWidget(NativeTaskHomePane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.onOpenSummary != widget.onOpenSummary) {
+      _publishChrome();
+    }
+  }
+
+  Future<void> _loadCreateAccess() async {
+    try {
+      final intake = await _api.rdIntake();
+      if (!mounted) return;
+      setState(() => _canCreateTasks = intake.canCreate);
+      _publishChrome();
+    } catch (_) {}
   }
 
   Future<void> _showGuide({bool force = false}) async {
@@ -195,12 +217,19 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
           icon: const Icon(Icons.help_outline, color: DunesColors.text2),
         ),
         const SizedBox(width: 4),
-        TextButton(
-          onPressed: () => _openCreate(),
-          child: const Text('完整创建'),
-        ),
-        const SizedBox(width: 4),
-        _quickCreateButton(label: '快速新建'),
+        if (widget.onOpenSummary != null)
+          TextButton(
+            onPressed: widget.onOpenSummary,
+            child: const Text('任务汇总'),
+          ),
+        if (_canCreateTasks) ...[
+          TextButton(
+            onPressed: _openQuickCreate,
+            child: const Text('快速新建'),
+          ),
+          const SizedBox(width: 4),
+          _primaryCreateButton(),
+        ],
       ],
     );
   }
@@ -209,22 +238,35 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        OutlinedButton(
-          onPressed: () => _openCreate(),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: kTaskPurple,
-            visualDensity: VisualDensity.compact,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-            side: const BorderSide(color: Color(0xFFD9D0EA)),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+        if (widget.onOpenSummary != null) ...[
+          TextButton(
+            onPressed: widget.onOpenSummary,
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
             ),
+            child: const Text('汇总'),
           ),
-          child: const Text('完整创建'),
-        ),
-        const SizedBox(width: 6),
-        _quickCreateButton(label: '新建'),
+          const SizedBox(width: 4),
+        ],
+        if (_canCreateTasks) ...[
+          OutlinedButton(
+            onPressed: _openQuickCreate,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: kTaskPurple,
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              side: const BorderSide(color: Color(0xFFD9D0EA)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: const Text('快速新建'),
+          ),
+          const SizedBox(width: 6),
+          _primaryCreateButton(compact: true),
+        ],
       ],
     );
   }
@@ -244,16 +286,19 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     );
   }
 
-  Widget _quickCreateButton({required String label}) {
+  Widget _primaryCreateButton({bool compact = false}) {
     return FilledButton.icon(
-      onPressed: _openQuickCreate,
+      onPressed: () => _openCreate(),
       icon: const Icon(Icons.add, size: 18),
-      label: Text(label),
+      label: const Text('完整创建'),
       style: FilledButton.styleFrom(
         backgroundColor: kTaskPurple,
         visualDensity: VisualDensity.compact,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 10 : 12,
+          vertical: 10,
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
@@ -784,11 +829,11 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                   children: [
                     Row(
                       children: [
+                        _tabChip('goals', '主目标'),
+                        const SizedBox(width: 8),
                         _tabChip('inbox', '待办'),
                         const SizedBox(width: 8),
                         _tabChip('actionable', '今日'),
-                        const SizedBox(width: 8),
-                        _tabChip('goals', '主目标'),
                         if (MediaQuery.sizeOf(context).width < 720) ...[
                           const SizedBox(width: 4),
                           _toolIcon(
@@ -808,7 +853,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                     Text(
                       switch (_scope) {
                         'goals' => switch (_goalRole) {
-                          'reports' => '直属下级和事业部下级负责的主目标。进入详情后再看子目标。',
+                          'reports' => '任务流下级负责的主目标。进入详情后再看子目标。',
                           'owned' => '本人负责的主目标。进入详情后再看子目标。',
                           'assigned' => '本人分派的主目标。进入详情后再看子目标。',
                           _ => '本人负责、分派，以及下级负责的主目标。进入详情后再看子目标。',
@@ -1228,7 +1273,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                   const SizedBox(height: 8),
                   Text(
                     _scope == 'goals'
-                        ? '点右上角新建主目标，再在详情里添加子目标'
+                        ? '点右上角完整创建，可以同时填写主目标和子任务'
                         : '今天要做的子目标会列在这里',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
@@ -1237,22 +1282,24 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                       height: 1.4,
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: () => _openQuickCreate(),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('快速新建'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: kTaskPurple,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                  if (_canCreateTasks) ...[
+                    const SizedBox(height: 20),
+                    FilledButton.icon(
+                      onPressed: () => _openCreate(),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('完整创建'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: kTaskPurple,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -1261,6 +1308,29 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       ];
     }
 
+    final wideGoals =
+        _scope == 'goals' && MediaQuery.sizeOf(context).width >= 720;
+    if (wideGoals) {
+      return [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          sliver: SliverToBoxAdapter(
+            child: Material(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              clipBehavior: Clip.antiAlias,
+              child: TaskGoalTable(
+                tasks: items,
+                onOpen: (task) => _openDetail(task.id),
+                canComplete: _canCompleteFromList,
+                onComplete: (task) => unawaited(_completeFromList(task)),
+                completeHint: _completeHint,
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
     return [
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),

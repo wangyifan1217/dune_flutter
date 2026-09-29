@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../auth/auth_session.dart';
 import '../xflow/proposal_import_template.dart';
 import 'reconciliation_shucai_models.dart';
+import 'tag2_entity_models.dart';
 import 'tag3_daily_models.dart';
 
 const _assetBaseOverride = String.fromEnvironment(
@@ -412,6 +413,92 @@ class ReconciliationShucaiService {
             'statDate': row.statDateDay,
             'periodLabel': row.periodLabel,
             'projectName': row.projectName,
+            'body': body.trim(),
+          }),
+        )
+        .timeout(const Duration(seconds: 25));
+    _decodeEnvelope(resp, fallback: '提交意见失败');
+  }
+
+  Future<Tag2EntitySnapshot> fetchTag2Entity({required String asOfDate}) async {
+    final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
+    final uri = Uri.parse('$base/reconciliation/tag2-entity').replace(
+      queryParameters: {'asOfDate': asOfDate.trim()},
+    );
+    final resp = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 30));
+    final data = _decodeEnvelope(resp, fallback: '标签二加载失败');
+    return Tag2EntitySnapshot.fromJson(data);
+  }
+
+  Future<Tag2EntityDrilldown> fetchTag2EntityDrilldown({
+    required String asOfDate,
+    required String rowKey,
+    required String kind,
+  }) async {
+    final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
+    final uri = Uri.parse('$base/reconciliation/tag2-entity/drilldown').replace(
+      queryParameters: {
+        'asOfDate': asOfDate.trim(),
+        'rowKey': rowKey.trim(),
+        'kind': kind.trim(),
+      },
+    );
+    final resp = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 25));
+    final data = _decodeEnvelope(resp, fallback: '下钻加载失败');
+    return Tag2EntityDrilldown.fromJson(data);
+  }
+
+  Future<void> confirmTag2Entity({
+    required String asOfDate,
+    required String rowKey,
+    required String stage,
+    String expectedStatus = '',
+    String remark = '',
+    String projectName = '',
+  }) async {
+    final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
+    final uri = Uri.parse('$base/reconciliation/tag2-entity/operate');
+    final body = <String, dynamic>{
+      'asOfDate': asOfDate.trim(),
+      'rowKeys': [rowKey.trim()],
+      'action': 'CONFIRM',
+      'stage': stage.trim().toUpperCase(),
+    };
+    if (expectedStatus.trim().isNotEmpty) {
+      body['expectedStatus'] = expectedStatus.trim().toUpperCase();
+    }
+    if (remark.trim().isNotEmpty) body['remark'] = remark.trim();
+    if (projectName.trim().isNotEmpty) body['projectName'] = projectName.trim();
+    final resp = await _client
+        .post(
+          uri,
+          headers: {..._headers, 'Content-Type': 'application/json'},
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 25));
+    _decodeEnvelope(resp, fallback: '确认失败');
+  }
+
+  Future<void> commentTag2Entity({
+    required String asOfDate,
+    required String rowKey,
+    required String body,
+    String projectName = '',
+  }) async {
+    final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
+    final uri = Uri.parse('$base/reconciliation/tag2-entity/comments');
+    final resp = await _client
+        .post(
+          uri,
+          headers: {..._headers, 'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'asOfDate': asOfDate.trim(),
+            'rowKey': rowKey.trim(),
+            'projectName': projectName.trim(),
             'body': body.trim(),
           }),
         )

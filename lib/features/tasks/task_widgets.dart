@@ -637,6 +637,7 @@ class TaskNameCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final subtitle = [
+      if (task.source == 'assist') '分派协助',
       if (task.ownerName.isNotEmpty) task.ownerName,
       ?_dateRange,
       if (task.subtaskCount > 0) '${task.subtaskCount} 子目标',

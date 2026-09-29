@@ -6163,6 +6163,40 @@ List<T> _preferFilledCatalogRows<T>({
   ];
 }
 
+const _proposalIntakePlatformKeys = {
+  'platformStatus',
+  'partnerProductCode',
+  'platformMessage',
+};
+
+/// 复制提案正文。渠道产品的平台同步结果清空，避免新提案沿用旧的建品状态。
+Map<String, dynamic> proposalIntakeDuplicateForm(Map<String, dynamic> form) {
+  final decoded = jsonDecode(jsonEncode(form));
+  if (decoded is! Map) return {};
+  final copy = Map<String, dynamic>.from(decoded);
+  for (final key in ['skuDetails', 'childProducts', 'channelSkus', 'products']) {
+    final raw = copy[key];
+    if (raw is! List) continue;
+    copy[key] = [
+      for (final item in raw)
+        if (item is Map)
+          _proposalIntakeClearPlatformFields(Map<String, dynamic>.from(item))
+        else
+          item,
+    ];
+  }
+  return copy;
+}
+
+Map<String, dynamic> _proposalIntakeClearPlatformFields(
+  Map<String, dynamic> row,
+) {
+  for (final key in _proposalIntakePlatformKeys) {
+    if (row.containsKey(key)) row[key] = '';
+  }
+  return row;
+}
+
 ProposalSkuDetailRow proposalIntakeCloneSkuProduct(
   ProposalSkuDetailRow source, {
   required String id,
@@ -6201,6 +6235,97 @@ String proposalIntakeCopiedProductName(
     i++;
   }
   return '$base（副本$i）';
+}
+
+class ProposalIntakeProductCopy {
+  const ProposalIntakeProductCopy({
+    required this.mains,
+    required this.children,
+    required this.quantities,
+  });
+
+  final List<ProposalSkuDetailRow> mains;
+  final List<ProposalSkuDetailRow> children;
+  final Map<String, int> quantities;
+}
+
+/// 按数量复制一条业务产品。关联产品和双方结算一并复制，并换成新 id。
+ProposalIntakeProductCopy proposalIntakeCopyBusinessProducts({
+  required ProposalSkuDetailRow source,
+  required int count,
+  required List<ProposalSkuDetailRow> mains,
+  required List<ProposalSkuDetailRow> children,
+  required Map<String, int> quantities,
+  int idSeed = 0,
+}) {
+  final nextMains = [...mains];
+  final nextChildren = [...children];
+  final nextQuantities = Map<String, int>.from(quantities);
+  if (count < 1) {
+    return ProposalIntakeProductCopy(
+      mains: nextMains,
+      children: nextChildren,
+      quantities: nextQuantities,
+    );
+  }
+  final linked = [
+    for (final row in children)
+      if (row.parentSkuId == source.id) row,
+  ];
+  var seq = idSeed;
+  String nid(String prefix) {
+    seq += 1;
+    return '$prefix-copy-$seq';
+  }
+
+  ProposalSkuDetailRow retagSettlements(ProposalSkuDetailRow row) {
+    return row.copyWith(
+      settlements: [
+        for (final item in proposalIntakeSkuSettlements(row))
+          ProposalSkuSettleRow(
+            id: nid('st'),
+            kind: item.kind,
+            terms: item.terms,
+          ),
+      ],
+    );
+  }
+
+  for (var i = 0; i < count; i++) {
+    final mainId = nid('sku');
+    nextMains.add(
+      retagSettlements(
+        proposalIntakeCloneSkuProduct(
+          source,
+          id: mainId,
+          productName: proposalIntakeCopiedProductName(
+            source.productName,
+            nextMains,
+          ),
+          parentSkuId: '',
+        ),
+      ),
+    );
+    for (final child in linked) {
+      final childId = nid('child');
+      nextChildren.add(
+        retagSettlements(
+          proposalIntakeCloneSkuProduct(
+            child,
+            id: childId,
+            parentSkuId: mainId,
+          ),
+        ),
+      );
+      final qty = quantities[child.id];
+      nextQuantities[childId] = qty == null || qty < 1 ? 1 : qty;
+    }
+  }
+  return ProposalIntakeProductCopy(
+    mains: nextMains,
+    children: nextChildren,
+    quantities: nextQuantities,
+  );
 }
 
 bool proposalIntakeSkuHasManualDetails(ProposalSkuDetailRow sku) {
@@ -6450,28 +6575,9 @@ List<String> proposalIntakeLaunchModuleReviewKeys(Map<String, dynamic> form) {
 
 const kPurchaseProposalTypes = ['新增', '变更', '延续'];
 
-const kProposalOutputFormBusinessPlatform = '业务平台';
-
-const kPurchaseCapabilityInputForms = [
-  'API接口',
-  'H5',
-  'SDK',
-  '小程序',
-  'APP',
-  'MCP',
-  kProposalOutputFormBusinessPlatform,
-];
-
-/// 能力输出/输入形式始终带上「业务平台」，否则产品结算字典无法选。
-List<String> proposalIntakeOutputFormOptions(
-  List<String> configured, {
-  bool purchase = false,
-}) {
-  final out = purchase ? [...kPurchaseCapabilityInputForms] : [...configured];
-  if (!out.contains(kProposalOutputFormBusinessPlatform)) {
-    out.add(kProposalOutputFormBusinessPlatform);
-  }
-  return out;
+/// 能力输出/输入形式只使用后台配置，客户端不再追加选项。
+List<String> proposalIntakeOutputFormOptions(List<String> configured) {
+  return [...configured];
 }
 
 const kPurchaseDevelopmentTypes = ['运营配置', '标准接口对接', '涉及改造', '新增产品'];

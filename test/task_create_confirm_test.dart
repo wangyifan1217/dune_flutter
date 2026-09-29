@@ -16,6 +16,49 @@ const _session = AuthSession(
 );
 
 void main() {
+  test('handoff to rd hides subtasks and progress label counts completed', () {
+    expect(
+      taskCreateHandsOffToRd(
+        ownerUserId: 9,
+        selfUserId: 1,
+        rdOwnerIds: const [9, 10],
+      ),
+      isTrue,
+    );
+    expect(
+      taskCreateHandsOffToRd(
+        ownerUserId: 1,
+        selfUserId: 1,
+        rdOwnerIds: const [9],
+      ),
+      isFalse,
+    );
+    expect(
+      taskSubtaskProgressLabel(
+        TaskItem(
+          id: 1,
+          title: '主任务',
+          ownerUserId: 1,
+          creatorUserId: 1,
+          subtaskCount: 8,
+          completedSubtaskCount: 4,
+        ),
+      ),
+      '4/8',
+    );
+    expect(
+      taskSubtaskProgressLabel(
+        TaskItem(
+          id: 2,
+          title: '没有子任务',
+          ownerUserId: 1,
+          creatorUserId: 1,
+        ),
+      ),
+      '—',
+    );
+  });
+
   test('create range requires both dates and due after start', () {
     expect(taskCreateRangeError(null, null), '请选择开始时间和结束时间');
     expect(taskCreateRangeError(DateTime(2026, 9, 10), null), '请选择开始时间和结束时间');

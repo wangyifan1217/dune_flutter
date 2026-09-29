@@ -1087,7 +1087,7 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
                 contentPadding: EdgeInsets.zero,
                 title: const Text('启用任务变更审批'),
                 subtitle: const Text(
-                  '修改标题、内容、截止日或负责人时，由发起人直属上级一级审批；无直属上级则当场生效',
+                  '修改标题、内容、截止日或负责人时，由发起人任务流上级一级审批；没有任务流上级，或任务流上级是自己时当场生效',
                 ),
                 value: _taskApprovalEnabled,
                 onChanged: (value) =>
@@ -1096,7 +1096,7 @@ class _NativeTaskManagementPaneState extends State<NativeTaskManagementPane> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('指派需要接收确认'),
-                subtitle: const Text('仅新建子目标指派他人时生效；运行中转派走直属上级审批'),
+                subtitle: const Text('仅新建子目标指派他人时生效；运行中转派走任务流上级审批'),
                 value: _assignmentConfirmationEnabled,
                 onChanged: (value) =>
                     setState(() => _assignmentConfirmationEnabled = value),

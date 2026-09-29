@@ -45,8 +45,12 @@ void main() {
       template('new-biz-template', 'biz'),
     ], category: 'biz');
 
-    expect(groups.map((group) => group.group.title), ['业务立项', '客户与回款', '其他']);
-    expect(groups.map((group) => group.templates.length), [1, 1, 1]);
+    expect(groups.map((group) => group.group.title), ['客户与回款', '其他']);
+    expect(groups.map((group) => group.templates.length), [1, 1]);
+    expect(
+      groups.expand((group) => group.templates).map((item) => item.templateKey),
+      isNot(contains('sales-proposal')),
+    );
   });
 
   test('搜索可按二级目录名称命中模板', () {

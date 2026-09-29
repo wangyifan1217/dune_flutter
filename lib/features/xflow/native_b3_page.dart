@@ -98,8 +98,9 @@ class _NativeB3PageState extends State<NativeB3Page> {
     }
   }
 
-  List<XflowTemplateCard> get _activeTemplates =>
-      _category == 'adm' ? _admTemplates : _bizTemplates;
+  List<XflowTemplateCard> get _activeTemplates => xflowVisibleApprovalTemplates(
+    _category == 'adm' ? _admTemplates : _bizTemplates,
+  );
 
   List<XflowPopulatedApprovalGroup> get _activeGroups =>
       xflowPopulatedApprovalGroups(_activeTemplates, category: _category);
@@ -190,8 +191,12 @@ class _NativeB3PageState extends State<NativeB3Page> {
                         children: [
                           XflowApprovalCategorySwitcher(
                             selectedCategory: _category,
-                            businessCount: _bizTemplates.length,
-                            administrationCount: _admTemplates.length,
+                            businessCount: xflowVisibleApprovalTemplates(
+                              _bizTemplates,
+                            ).length,
+                            administrationCount: xflowVisibleApprovalTemplates(
+                              _admTemplates,
+                            ).length,
                             onChanged: _setCategory,
                           ),
                           const SizedBox(height: 12),

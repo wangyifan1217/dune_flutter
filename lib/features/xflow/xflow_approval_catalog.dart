@@ -184,6 +184,18 @@ const List<XflowApprovalGroup> _xflowApprovalGroups = [
   ),
 ];
 
+/// 销售提案改从「我的」进入，审批发起页不再展示。
+const Set<String> _hiddenApprovalTemplateKeys = {'sales-proposal'};
+
+bool xflowApprovalTemplateVisible(String templateKey) =>
+    !_hiddenApprovalTemplateKeys.contains(templateKey);
+
+List<XflowTemplateCard> xflowVisibleApprovalTemplates(
+  List<XflowTemplateCard> templates,
+) => templates
+    .where((template) => xflowApprovalTemplateVisible(template.templateKey))
+    .toList(growable: false);
+
 const XflowApprovalGroup _otherApprovalGroup = XflowApprovalGroup(
   id: 'other',
   category: '',
@@ -214,8 +226,9 @@ List<XflowTemplateCard> xflowSearchApprovalTemplates(
   String query,
 ) {
   final normalized = query.trim().toLowerCase();
-  if (normalized.isEmpty) return templates;
-  return templates
+  final visible = xflowVisibleApprovalTemplates(templates);
+  if (normalized.isEmpty) return visible;
+  return visible
       .where((template) {
         final group = xflowApprovalGroupForTemplate(template.templateKey);
         final text =
@@ -233,9 +246,10 @@ List<XflowPopulatedApprovalGroup> xflowPopulatedApprovalGroups(
 }) {
   final groups = <XflowPopulatedApprovalGroup>[];
   final knownKeys = <String>{};
+  final visible = xflowVisibleApprovalTemplates(templates);
 
   for (final group in xflowApprovalGroupsForCategory(category)) {
-    final rows = templates
+    final rows = visible
         .where((template) => group.templateKeys.contains(template.templateKey))
         .toList(growable: false);
     if (rows.isEmpty) continue;
@@ -243,7 +257,7 @@ List<XflowPopulatedApprovalGroup> xflowPopulatedApprovalGroups(
     groups.add(XflowPopulatedApprovalGroup(group: group, templates: rows));
   }
 
-  final otherTemplates = templates
+  final otherTemplates = visible
       .where((template) => !knownKeys.contains(template.templateKey))
       .toList(growable: false);
   if (otherTemplates.isNotEmpty) {

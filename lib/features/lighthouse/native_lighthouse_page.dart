@@ -10809,6 +10809,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   /// 可点集合与主 Hero 格子对齐（利润 / 成本合计 / 收入等）。
   final Map<String, String> _expandedLedgerSolo = {};
 
+  /// 行级历史按实体分别缓存；不能复用主 Hero 的整页摘要历史。
+  final Map<String, LighthouseRowTrendHistory> _rowTrendHistories = {};
+
   /// 点「银行余额」标题/金额：右边走势位换成按公司明细。
   /// 点标题下的迷你趋势：关掉公司面板，切到主 Hero 里本来就有的银行余额线。
   bool _netTaBalanceOpen = false;
@@ -15079,126 +15082,119 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           resizeToAvoidBottomInset: false,
           body: SafeArea(
             bottom: false,
-            // 根页的主 Tab 是悬浮在内容上的。只给 ListView 末尾塞空白，滚动过程
-            // 中的行仍会从 Tab 下穿过去；手机上看起来像最后一张卡被遮住。
-            // 这里直接把灯塔可视区收到 Tab 上沿，一级、二级和 BI 都不会被盖住。
-            child: Padding(
-              padding: EdgeInsets.only(
-                bottom: dunesAppBottomNavOverlayExtent(context),
-              ),
-              child: _wrapWithUiZoom(
-                Column(
-                  children: [
-                    // L2/L3 详情自带 sticky header（返回·灯塔·缩放/更新），
-                    // 若再挂一级 AppBar 会叠出双份标题与右侧按钮。
-                    if (_detailKey == null && !_biViewOpen) _buildAppBar(),
-                    Expanded(
-                      child: !_hasAccess
-                          ? _buildNoAccessView()
-                          : Stack(
-                              children: [
-                                // 撑满整块区域 —— 别删。
-                                //
-                                //   Stack 默认 StackFit.loose：自身尺寸取「非
-                                //   Positioned 子节点里最大的那个」。这里 Expanded
-                                //   只给了紧高度，宽度是松的（Column 默认 center，
-                                //   不 stretch）。
-                                //   BI 打开时，唯一的非 Positioned 子节点是那个
-                                //   offstage 的主列表，而 offstage 的 RenderBox 尺寸
-                                //   是 0 —— Stack 宽度于是塌成 0，Positioned.fill
-                                //   跟着填了个 0 宽的框，BI 整页存在但没有一个像素。
-                                //   表现正是「点了没反应 / 白屏」。
-                                //   进 L2 不出问题，只是因为详情那层是有尺寸的非
-                                //   Positioned 子节点，替 Stack 把宽度撑住了。
-                                const SizedBox.expand(),
-                                // 一级主列表始终保活（Offstage），进 L2 不销毁，
-                                // 右滑/返回可回到原先滚动浏览位置。
-                                Offstage(
-                                  offstage: _detailKey != null || _biViewOpen,
-                                  child: TickerMode(
-                                    enabled: _detailKey == null && !_biViewOpen,
-                                    child: KeyedSubtree(
-                                      key: const ValueKey('main'),
-                                      child: _buildMainView(),
+            // 跟通讯 / 我的一样：内容铺到屏幕底，四个 Tab 浮在灯塔上面。
+            // 末行不被挡住靠 ListView 底部 padding，不在这里垫白板。
+            child: _wrapWithUiZoom(
+              Column(
+                children: [
+                  // L2/L3 详情自带 sticky header（返回·灯塔·缩放/更新），
+                  // 若再挂一级 AppBar 会叠出双份标题与右侧按钮。
+                  if (_detailKey == null && !_biViewOpen) _buildAppBar(),
+                  Expanded(
+                    child: !_hasAccess
+                        ? _buildNoAccessView()
+                        : Stack(
+                            children: [
+                              // 撑满整块区域 —— 别删。
+                              //
+                              //   Stack 默认 StackFit.loose：自身尺寸取「非
+                              //   Positioned 子节点里最大的那个」。这里 Expanded
+                              //   只给了紧高度，宽度是松的（Column 默认 center，
+                              //   不 stretch）。
+                              //   BI 打开时，唯一的非 Positioned 子节点是那个
+                              //   offstage 的主列表，而 offstage 的 RenderBox 尺寸
+                              //   是 0 —— Stack 宽度于是塌成 0，Positioned.fill
+                              //   跟着填了个 0 宽的框，BI 整页存在但没有一个像素。
+                              //   表现正是「点了没反应 / 白屏」。
+                              //   进 L2 不出问题，只是因为详情那层是有尺寸的非
+                              //   Positioned 子节点，替 Stack 把宽度撑住了。
+                              const SizedBox.expand(),
+                              // 一级主列表始终保活（Offstage），进 L2 不销毁，
+                              // 右滑/返回可回到原先滚动浏览位置。
+                              Offstage(
+                                offstage: _detailKey != null || _biViewOpen,
+                                child: TickerMode(
+                                  enabled: _detailKey == null && !_biViewOpen,
+                                  child: KeyedSubtree(
+                                    key: const ValueKey('main'),
+                                    child: _buildMainView(),
+                                  ),
+                                ),
+                              ),
+                              if (_detailKey != null)
+                                AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 220),
+                                  switchInCurve: Curves.easeOut,
+                                  switchOutCurve: Curves.easeIn,
+                                  transitionBuilder: (child, animation) {
+                                    final slide = Tween<Offset>(
+                                      begin: const Offset(0.035, 0),
+                                      end: Offset.zero,
+                                    ).animate(animation);
+                                    return FadeTransition(
+                                      opacity: animation,
+                                      child: SlideTransition(
+                                        position: slide,
+                                        child: child,
+                                      ),
+                                    );
+                                  },
+                                  child: KeyedSubtree(
+                                    key: ValueKey(_detailRouteKey()),
+                                    child: _buildDetailView(),
+                                  ),
+                                ),
+                              if (_showPageBusyOverlay) _buildLoadingOverlay(),
+                              if (_biViewOpen)
+                                Positioned.fill(
+                                  child: Material(
+                                    color: LhColors.mist,
+                                    child: LhBiViewPage(
+                                      initialDim: _biInitialDim(),
+                                      dims: _biDims(),
+                                      initialMetric: _sortField,
+                                      rangeLabel: _selectedRangeLabel,
+                                      periodLabel: _periodLabelFor(_period),
+                                      rowsFor: (d) =>
+                                          _bundle?.rowsOf(d) ??
+                                          const <Map<String, dynamic>>[],
+                                      metricsFor: _biMetricsFor,
+                                      metricValue: _rowMetricValue,
+                                      dimLabel: _biDimLabel,
+                                      categoriesFor: _biCategoriesFor,
+                                      metricDelta: _deltaFromEntityRow,
+                                      breakdownFor: _biBreakdownFor,
+                                      requestBreakdown: _biRequestBreakdown,
+                                      seriesFor: _biSeriesFor,
+                                      loading: _biDimLoading,
+                                      windowRowsFor: _biWindowRowsFor,
+                                      reportFor: _biReportFor,
+                                      reportBusy: _biReportBusyFor,
+                                      requestReport: _biRequestReport,
+                                      forecastFor: _biForecastCard,
+                                      onDimChanged: (d) {
+                                        if (!_kBiDims.contains(d)) return;
+                                        _biDim = d;
+                                        unawaited(_loadTab(d));
+                                        unawaited(_loadBiWindowRows(d));
+                                      },
+                                      onClose: _closeBiView,
+                                      topChrome: _buildBiTopChrome(),
+                                      periodBar: _buildPeriodBar(),
                                     ),
                                   ),
                                 ),
-                                if (_detailKey != null)
-                                  AnimatedSwitcher(
-                                    duration: const Duration(milliseconds: 220),
-                                    switchInCurve: Curves.easeOut,
-                                    switchOutCurve: Curves.easeIn,
-                                    transitionBuilder: (child, animation) {
-                                      final slide = Tween<Offset>(
-                                        begin: const Offset(0.035, 0),
-                                        end: Offset.zero,
-                                      ).animate(animation);
-                                      return FadeTransition(
-                                        opacity: animation,
-                                        child: SlideTransition(
-                                          position: slide,
-                                          child: child,
-                                        ),
-                                      );
-                                    },
-                                    child: KeyedSubtree(
-                                      key: ValueKey(_detailRouteKey()),
-                                      child: _buildDetailView(),
-                                    ),
-                                  ),
-                                if (_showPageBusyOverlay)
-                                  _buildLoadingOverlay(),
-                                if (_biViewOpen)
-                                  Positioned.fill(
-                                    child: Material(
-                                      color: LhColors.mist,
-                                      child: LhBiViewPage(
-                                        initialDim: _biInitialDim(),
-                                        dims: _biDims(),
-                                        initialMetric: _sortField,
-                                        rangeLabel: _selectedRangeLabel,
-                                        periodLabel: _periodLabelFor(_period),
-                                        rowsFor: (d) =>
-                                            _bundle?.rowsOf(d) ??
-                                            const <Map<String, dynamic>>[],
-                                        metricsFor: _biMetricsFor,
-                                        metricValue: _rowMetricValue,
-                                        dimLabel: _biDimLabel,
-                                        categoriesFor: _biCategoriesFor,
-                                        metricDelta: _deltaFromEntityRow,
-                                        breakdownFor: _biBreakdownFor,
-                                        requestBreakdown: _biRequestBreakdown,
-                                        seriesFor: _biSeriesFor,
-                                        loading: _biDimLoading,
-                                        windowRowsFor: _biWindowRowsFor,
-                                        reportFor: _biReportFor,
-                                        reportBusy: _biReportBusyFor,
-                                        requestReport: _biRequestReport,
-                                        forecastFor: _biForecastCard,
-                                        onDimChanged: (d) {
-                                          if (!_kBiDims.contains(d)) return;
-                                          _biDim = d;
-                                          unawaited(_loadTab(d));
-                                          unawaited(_loadBiWindowRows(d));
-                                        },
-                                        onClose: _closeBiView,
-                                        topChrome: _buildBiTopChrome(),
-                                        periodBar: _buildPeriodBar(),
-                                      ),
-                                    ),
-                                  ),
-                                if (_biViewOpen && _biError != null)
-                                  Positioned(
-                                    left: 0,
-                                    right: 0,
-                                    top: 0,
-                                    child: _buildBiErrorBanner(),
-                                  ),
-                              ],
-                            ),
-                    ),
-                  ],
-                ),
+                              if (_biViewOpen && _biError != null)
+                                Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  top: 0,
+                                  child: _buildBiErrorBanner(),
+                                ),
+                            ],
+                          ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -15206,6 +15202,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       ),
     );
   }
+
+  /// 与通讯 / 我的一致：内容铺满，滚动到最底再让出悬浮 Tab。
+  double _bottomNavScrollPadding(BuildContext context) =>
+      dunesAppBottomNavContentPadding(context, fallback: 16);
 
   // ───── AppBar ─────────────────────────────────────────────────────────────
   // 标题、日期、同步状态、工具同一行。
@@ -15328,8 +15328,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       },
       child: ListView(
         controller: _mainListScrollCtrl,
-        // 可视区已在 build() 处避开悬浮 Tab；这里只留常规收尾间距。
-        padding: const EdgeInsets.only(bottom: 16),
+        padding: EdgeInsets.only(bottom: _bottomNavScrollPadding(context)),
         children: [
           _buildPanel(),
           if (_tab == 'analysis') _buildAnalysisView(),
@@ -25057,7 +25056,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final delta = _deltaForMetric(key);
     final deltaUnit = lighthouseHeroMetricIsRate(key) ? 'pp' : '%';
     return ListView(
-      padding: EdgeInsets.zero,
+      padding: EdgeInsets.only(bottom: _bottomNavScrollPadding(context)),
       children: [
         _metricPageMasthead(key, accent, delta, deltaUnit),
         Container(
@@ -31740,8 +31739,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     //   390 宽的屏上冻结列 = clamp(390×0.35, 112, 164) = 136.5pt，
     //   扣掉 padding 17 + 序号 28 + 间隔 6 只剩 85.5pt；再被展开圆钮 27
     //   和「›」那个 24+4 的固定列各切一刀，留给名字的净宽只有 24.5pt ——
-    //   两个汉字。所以「›」不再独占一列：名字整块变成进详情的热区，箭头
-    //   改成跟在最后一个字后面的内联字符，跟着文字走。名字 24.5 → 52.5pt。
+    //   两个汉字。这个紧凑 nameRow 只供净 TA 等旧版冻结列继续使用；产品、
+    //   供给、渠道在下面改成「整块冻结列开走势 + 独立方钮进详情」。
     // 标签二省份先在原位打开气泡，用户再选具体标签一项目。
     final nameTap = canOpenDetail ? onOpenDetail : null;
     // 名字后面跟的符号：'›' 进详情，'\u2197' 表示旁边有跨板块关联。
@@ -31879,11 +31878,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     //  改法不是继续在横向抠像素，是换个方向：这格高 150pt，两行名字加一行
     //  毛利率才 60pt —— 横向在为三个汉字打架，竖向却空着一半。
     //    · 序号 26pt 圆徽 → 名字前的 mono 小号（序号是坐标，不是内容）  +20pt
-    //    · 展开钮下沉到毛利率那一行（那行只有「23.4%」，空得很）       +31pt
     //    · 名字独占第一行，允许换到两行                    34 → 82pt × 2 行
     //    · 「进二级」= 第二行右端一颗实心紫方钮。位置固定，长名字推不走它；
-    //      实心 = 主动作，空心圆 = 就地展开，两颗长得不一样，不会点错。
-    //      整条名字仍然可点进二级 —— 紫钮只是那块热区看得见的把手。
+    //      方钮只进详情；名字 + 毛利率所在的其余冻结列区域切换整行走势。
     //
     //  毛利率不写标签：表头冻结列已经是「产品 / 毛利率」两行，这里再写三个字
     //  会连同两颗钮一起超出 97.8pt 的可用宽。
@@ -32006,17 +32003,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       );
 
       final nameBlock = Semantics(
-        button: showsEquityPopover || canOpenDetail,
+        button: true,
         label: showsEquityPopover
             ? '查看$name关联的${equityLinks.length}项权益'
-            : (canOpenDetail ? '进入$name详情' : null),
-        child: showsEquityPopover
-            ? nameRowContent
-            : GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: canOpenDetail ? onOpenDetail : null,
-                child: nameRowContent,
-              ),
+            : (isExpanded ? '收起$name整行走势' : '展开$name整行走势'),
+        child: nameRowContent,
       );
 
       final detailButton = canOpenDetail
@@ -32024,13 +32015,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               button: true,
               label: '进入$name详情',
               child: GestureDetector(
+                key: ValueKey('ledger-detail-$trendKey'),
                 behavior: HitTestBehavior.opaque,
                 onTap: onOpenDetail,
                 // v23 · 实心紫方钮每张卡一颗，一屏五颗全卡最亮 —— 眼睛先落在按钮上
                 // 而不是数字上。改淡紫底 + 紫箭头：仍是方形（进二级），跟圆形的
                 // 展开钮靠形状区分，不靠亮度抢。
                 // 图形仍是 24pt，热区扩到 32pt；窄冻结列里更容易点中，
-                // 也不会把“名称下划线”和“进入二级”合成同一个动作。
+                // 也不会把“展开走势”和“进入二级”合成同一个动作。
                 child: SizedBox(
                   width: _fs(32),
                   height: _fs(32),
@@ -32059,159 +32051,176 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             )
           : null;
 
-      final rowExpandButton = GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onToggle,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          width: _fs(24),
-          height: _fs(24),
-          decoration: BoxDecoration(
-            color: isExpanded
-                ? _LhPlum.primary.withAlpha(30)
-                : const Color(0xFFF4F1FA),
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: _LhPlum.primary.withAlpha(isExpanded ? 70 : 30),
-              width: 0.7,
-            ),
-          ),
-          child: Icon(
-            isExpanded
-                ? Icons.keyboard_arrow_up_rounded
-                : Icons.keyboard_arrow_down_rounded,
-            size: _fs(16),
-            color: isExpanded ? _LhPlum.deep : _LhPlum.primary.withAlpha(185),
-          ),
-        ),
-      );
-
       // 左边那条品牌色带撤掉：品牌标已经在名字前面把「这是谁」说完了，
       // 再在行首铺一条同色的竖条是把同一件事说两遍，而且它顶着卡的圆角，
       // 一列下来像给每行都描了个边。
       // v23 · 冻结列不再整体竖向居中（上下各空一大块）：名字贴右侧面板的上沿，
       // 毛利率 + 两颗钮贴面板的下沿，左右两边的「顶」和「底」对齐成一张卡。
       final pinnedPadV = _ledgerGridPadV + _fs(4);
-      return SizedBox(
-        height: double.infinity,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(11, pinnedPadV, 6, pinnedPadV - _fs(1)),
-          child: Column(
-            mainAxisSize: MainAxisSize.max,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  nameBlock,
-                  // 对账状态单独占一行 —— 塞进毛利率那行会跟两颗钮抢宽度。
-                  if (reconStatus != null) ...[
-                    SizedBox(height: _fs(6)),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: _buildReconChip(reconStatus, name),
-                    ),
-                  ],
-                ],
+      return Semantics(
+        button: true,
+        container: true,
+        explicitChildNodes: true,
+        toggled: isExpanded,
+        label: isExpanded ? '收起$name整行走势' : '展开$name整行走势',
+        child: GestureDetector(
+          key: ValueKey('ledger-row-toggle-$trendKey'),
+          behavior: HitTestBehavior.opaque,
+          onTap: onToggle,
+          child: SizedBox(
+            height: double.infinity,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                11,
+                pinnedPadV,
+                6,
+                pinnedPadV - _fs(1),
               ),
-              SizedBox(height: _fs(6)),
-              Column(
-                mainAxisSize: MainAxisSize.min,
+              child: Column(
+                mainAxisSize: MainAxisSize.max,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // 毛利率补上一行小标签：光秃秃一个「1.0%」读不出是什么率。
-                  if (lighthouseLedgerCollapsedShowsGrossMargin) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: LighthouseGrossMarginLabel(
-                            formula: _grossMarginFormula(r),
-                            labelStyle: LhTypography.sans(
-                              size: _fs(9),
-                              color: LhColors.mute2,
-                              weight: FontWeight.w500,
-                              letterSpacing: 0.4,
-                              height: 1.0,
-                            ),
-                          ),
-                        ),
-                        if (shareIcon != null) shareIcon,
-                      ],
-                    ),
-                    SizedBox(height: _fs(4)),
-                  ],
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // 序号已经搬到名字那一行的排位牌里，这一行只剩「毛利率 + 环比」。
-                      Expanded(
-                        child: lighthouseLedgerCollapsedShowsGrossMargin
-                            ? Row(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      lighthouseLedgerPinnedGrossMarginText(
-                                        grossMargin,
-                                      ),
-                                      maxLines: 1,
-                                      softWrap: false,
-                                      overflow: TextOverflow.clip,
-                                      style: _tabular(
-                                        LhTypography.mono(
-                                          size: _fs(
-                                            lighthouseLedgerPinnedGrossMarginValueSize,
-                                          ),
-                                          color:
-                                              grossMargin != null &&
-                                                  grossMargin < 0
-                                              ? LhColors.pos
-                                              : LhColors.ink,
-                                          weight: FontWeight.w700,
-                                          height: 1.0,
-                                          letterSpacing: -0.2,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  if (gmDelta != null) ...[
-                                    SizedBox(width: _fs(4)),
-                                    Text(
-                                      _ledgerFmtDelta(gmDelta, isRate: true),
-                                      maxLines: 1,
-                                      softWrap: false,
-                                      overflow: TextOverflow.visible,
-                                      style: _tabular(
-                                        LhTypography.mono(
-                                          size: _fs(9.5),
-                                          color: gmUp == null
-                                              ? LhColors.mute
-                                              : (gmUp
-                                                    ? LhColors.neg
-                                                    : LhColors.pos),
-                                          weight: FontWeight.w600,
-                                          height: 1.0,
-                                          letterSpacing: -0.2,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                      if (detailButton != null) ...[detailButton],
-                      rowExpandButton,
+                      nameBlock,
+                      // 对账状态单独占一行 —— 塞进毛利率那行会跟两颗钮抢宽度。
+                      if (reconStatus != null) ...[
+                        SizedBox(height: _fs(6)),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: _buildReconChip(reconStatus, name),
+                        ),
+                      ],
                     ],
                   ),
-                  // 折扣进度：只有供给一级行才有。
-                  if (discountStrip != null) discountStrip,
+                  SizedBox(height: _fs(6)),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // 毛利率补上一行小标签：光秃秃一个「1.0%」读不出是什么率。
+                      if (lighthouseLedgerCollapsedShowsGrossMargin) ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: LighthouseGrossMarginLabel(
+                                formula: _grossMarginFormula(r),
+                                labelStyle: LhTypography.sans(
+                                  size: _fs(9),
+                                  color: LhColors.mute2,
+                                  weight: FontWeight.w500,
+                                  letterSpacing: 0.4,
+                                  height: 1.0,
+                                ),
+                              ),
+                            ),
+                            if (shareIcon != null) shareIcon,
+                          ],
+                        ),
+                        SizedBox(height: _fs(4)),
+                      ],
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // 序号已经搬到名字那一行的排位牌里，这一行只剩「毛利率 + 环比」。
+                          Expanded(
+                            child: lighthouseLedgerCollapsedShowsGrossMargin
+                                ? Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          lighthouseLedgerPinnedGrossMarginText(
+                                            grossMargin,
+                                          ),
+                                          maxLines: 1,
+                                          softWrap: false,
+                                          overflow: TextOverflow.clip,
+                                          style: _tabular(
+                                            LhTypography.mono(
+                                              size: _fs(
+                                                lighthouseLedgerPinnedGrossMarginValueSize,
+                                              ),
+                                              color:
+                                                  grossMargin != null &&
+                                                      grossMargin < 0
+                                                  ? LhColors.pos
+                                                  : LhColors.ink,
+                                              weight: FontWeight.w700,
+                                              height: 1.0,
+                                              letterSpacing: -0.2,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      if (gmDelta != null) ...[
+                                        SizedBox(width: _fs(4)),
+                                        Text(
+                                          _ledgerFmtDelta(
+                                            gmDelta,
+                                            isRate: true,
+                                          ),
+                                          maxLines: 1,
+                                          softWrap: false,
+                                          overflow: TextOverflow.visible,
+                                          style: _tabular(
+                                            LhTypography.mono(
+                                              size: _fs(9.5),
+                                              color: gmUp == null
+                                                  ? LhColors.mute
+                                                  : (gmUp
+                                                        ? LhColors.neg
+                                                        : LhColors.pos),
+                                              weight: FontWeight.w600,
+                                              height: 1.0,
+                                              letterSpacing: -0.2,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                          if (isExpanded) ...[
+                            Container(
+                              margin: EdgeInsets.only(right: _fs(4)),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: _fs(5),
+                                vertical: _fs(2.5),
+                              ),
+                              decoration: BoxDecoration(
+                                color: _LhPlum.primary.withAlpha(22),
+                                borderRadius: BorderRadius.circular(_fs(5)),
+                              ),
+                              child: Text(
+                                _expandedLedgerSolo[trendKey] == null
+                                    ? '整行'
+                                    : '单项',
+                                style: LhTypography.sans(
+                                  size: _fs(8.5),
+                                  color: _LhPlum.deep,
+                                  weight: FontWeight.w700,
+                                  height: 1,
+                                ),
+                              ),
+                            ),
+                          ],
+                          if (detailButton != null) detailButton,
+                        ],
+                      ),
+                      // 折扣进度：只有供给一级行才有。
+                      if (discountStrip != null) discountStrip,
+                    ],
+                  ),
                 ],
               ),
-            ],
+            ),
           ),
         ),
       );
@@ -33101,7 +33110,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final color = _discountTypeColor(d);
     final strip = _discountStripOf(d);
 
-    // 27 圆钮 + 6 间距：右边让开展开按钮那一列，条子不钻到按钮底下。
+    // 给右侧详情方钮留出空间，条子不钻到按钮底下。
     final buttonGutter = _fs(33);
     // 固定折扣没有阶梯，但仍要能点开说明卡。其余只要父级给了 onTap
     // 就可点 —— 热区不能再绑 `ladder != null`，老接口缺 tiers 时
@@ -34082,7 +34091,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }) {
     final tab = metricsTab ?? _tab;
     final rawName = r['name']?.toString().trim() ?? '';
-    final rowCols = lighthouseLedgerSummaryReplacesVerifiedWithGmv(
+    final rowCols =
+        lighthouseLedgerSummaryReplacesVerifiedWithGmv(
           product: rawName,
           parent: r['parent']?.toString(),
           basis: _rowMarginBasis(r),
@@ -34297,6 +34307,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             _expandedLedgerSolo.remove(trendKey);
                             _expandedTrends.remove(trendKey);
                             if (!wasOpen) {
+                              _expandedProductL3.remove(l3Key);
                               _expandedTrends.add(trendKey);
                             }
                           });
@@ -34353,6 +34364,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                               trendKey,
                                             );
                                           } else {
+                                            _expandedProductL3.remove(l3Key);
                                             _expandedLedgerSolo[trendKey] =
                                                 next;
                                           }
@@ -34412,6 +34424,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                           }
                           setState(() {
                             if (opening) {
+                              _expandedTrends.remove(trendKey);
+                              _expandedLedgerSolo.remove(trendKey);
                               _productL3VisibleCount[l3Key] =
                                   _productL3BatchSize;
                             }
@@ -34456,6 +34470,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                         r,
                         soloMetricKey: soloMetricKey,
                         trendKey: trendKey,
+                        metricsTab: tab,
+                        allowHistory:
+                            trendKeyPrefix == null &&
+                            _detailKey == null &&
+                            widget.sharedCard == null,
                       ),
                   ],
                 ),
@@ -35121,6 +35140,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     String? soloMetricKey,
     ValueChanged<String?>? onSoloOverlayChanged,
     bool showClearSolo = false,
+    int viewportCount = 0,
+    int historyCount = 0,
+    bool historyLoading = false,
+    bool historyHasMore = false,
+    VoidCallback? onNeedHistory,
   }) {
     final t = _resolvedRowTrend(r);
     if (t == null) return null;
@@ -35177,7 +35201,18 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       hasGmv: showGmv,
     );
     if (soloMetricKey != null && overlaySlot == null) {
-      return _soloTrendChartFor(r, t, soloMetricKey, labels, showHeader);
+      return _soloTrendChartFor(
+        r,
+        t,
+        soloMetricKey,
+        labels,
+        showHeader,
+        viewportCount: viewportCount,
+        historyCount: historyCount,
+        historyLoading: historyLoading,
+        historyHasMore: historyHasMore,
+        onNeedHistory: onNeedHistory,
+      );
     }
     if (profit.length < 2 &&
         sales.length < 2 &&
@@ -35268,6 +35303,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 ),
               );
             },
+      viewportCount: viewportCount,
+      historyCount: historyCount,
+      historyLoading: historyLoading,
+      historyHasMore: historyHasMore,
+      onNeedHistory: onNeedHistory,
     );
   }
 
@@ -35277,8 +35317,13 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     Map<String, dynamic> t,
     String metricKey,
     List<String> labels,
-    bool showHeader,
-  ) {
+    bool showHeader, {
+    int viewportCount = 0,
+    int historyCount = 0,
+    bool historyLoading = false,
+    bool historyHasMore = false,
+    VoidCallback? onNeedHistory,
+  }) {
     var series = _seriesFromTrendMap(
       t,
       metricKey,
@@ -35338,6 +35383,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       formulaExpression: lighthouseHeroShowsFormulaBar
           ? _rowHeroFormula(r, metricKey)?.expression
           : null,
+      viewportCount: viewportCount,
+      historyCount: historyCount,
+      historyLoading: historyLoading,
+      historyHasMore: historyHasMore,
+      onNeedHistory: onNeedHistory,
     );
   }
 
@@ -36641,10 +36691,83 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     });
   }
 
+  String _rowTrendHistoryRequestKey(
+    String trendKey,
+    String tab,
+    Map<String, dynamic> row,
+  ) =>
+      '$trendKey|$tab|$_period|$_periodOffset|${row['name'] ?? ''}|${row['group'] ?? ''}';
+
+  Future<void> _loadRowTrendHistory(
+    Map<String, dynamic> row, {
+    required String tab,
+    required String trendKey,
+  }) async {
+    if (widget.sharedCard != null ||
+        (tab != 'product' && tab != 'supply' && tab != 'channel')) {
+      return;
+    }
+    final trend = _resolvedRowTrend(row);
+    if (trend == null) return;
+    final baseKeys = (trend['keys'] as List? ?? const [])
+        .map((e) => e.toString())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final requestKey = _rowTrendHistoryRequestKey(trendKey, tab, row);
+    var history = _rowTrendHistories[trendKey];
+    if (history == null || history.requestKey != requestKey) {
+      history = LighthouseRowTrendHistory(requestKey: requestKey);
+    }
+    if (history.loading || !history.hasMore) return;
+    final before = history.keys.isNotEmpty
+        ? history.keys.first
+        : (baseKeys.isEmpty ? '' : baseKeys.first);
+    if (before.isEmpty) return;
+    setState(() {
+      _rowTrendHistories[trendKey] = history!.copyWith(loading: true);
+    });
+    try {
+      final page = await _service.fetchRowTrendHistory(
+        tab: tab,
+        name: row['name']?.toString() ?? '',
+        group: row['group']?.toString(),
+        before: before,
+        period: _period,
+        offset: _periodOffset,
+      );
+      if (!mounted ||
+          requestKey != _rowTrendHistoryRequestKey(trendKey, tab, row)) {
+        return;
+      }
+      setState(() {
+        final current = _rowTrendHistories[trendKey];
+        if (current == null || current.requestKey != requestKey) return;
+        _rowTrendHistories[trendKey] = current.prependPage(page);
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        final current = _rowTrendHistories[trendKey];
+        if (current == null || current.requestKey != requestKey) return;
+        _rowTrendHistories[trendKey] = LighthouseRowTrendHistory(
+          requestKey: current.requestKey,
+          keys: current.keys,
+          labels: current.labels,
+          series: current.series,
+          hasMore: current.hasMore,
+          error: error.toString().replaceFirst('Exception: ', ''),
+          version: current.version,
+        );
+      });
+    }
+  }
+
   Widget _buildInlineExpanded(
     Map<String, dynamic> r, {
     String? soloMetricKey,
     required String trendKey,
+    required String metricsTab,
+    bool allowHistory = false,
   }) {
     if (_tab == 'netTa' && soloMetricKey == null) {
       return _buildNetTAExpanded(r);
@@ -36654,12 +36777,37 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
             lighthouseLedgerMetricOpensSoloTrend(soloMetricKey)
         ? soloMetricKey
         : null;
-    // 线色跟着上面那格：规模紫、结果蓝。不另起「近7日走势」标题。
+    final requestKey = _rowTrendHistoryRequestKey(trendKey, metricsTab, r);
+    final cachedHistory = _rowTrendHistories[trendKey];
+    final history = cachedHistory?.requestKey == requestKey
+        ? cachedHistory
+        : null;
+    final baseTrend = _resolvedRowTrend(r);
+    final mergedTrend = baseTrend == null || history == null
+        ? baseTrend
+        : lighthouseMergeRowTrendHistory(baseTrend, history);
+    final chartRow = mergedTrend == null
+        ? r
+        : (Map<String, dynamic>.from(r)..['trend'] = mergedTrend);
+
+    // 线色跟着上面那格：规模紫、结果蓝。视窗参数与主 Hero 完全复用。
     final trendChart = _trendChartFor(
-      r,
+      chartRow,
       showHeader: false,
       soloMetricKey: focus,
       onSoloOverlayChanged: (next) => _setLedgerRowTrendFocus(trendKey, next),
+      viewportCount: 7,
+      historyCount: history?.length ?? 0,
+      historyLoading: history?.loading ?? false,
+      historyHasMore:
+          allowHistory &&
+          (history?.hasMore ??
+              ((baseTrend?['keys'] as List?)?.isNotEmpty == true)),
+      onNeedHistory: allowHistory
+          ? () => unawaited(
+              _loadRowTrendHistory(r, tab: metricsTab, trendKey: trendKey),
+            )
+          : null,
     );
     final trendTab = _trendLookupTabForListRow();
     final trendFailed = trendTab != null && _trendErrors.containsKey(trendTab);
@@ -36750,6 +36898,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     discountCard,
                     const SizedBox(height: 18),
                   ],
+
+                  sec(
+                    focus == null
+                        ? '整行走势'
+                        : '单指标走势 · ${_ledgerSummaryMetricLabel(focus)}',
+                    focus == null
+                        ? _LhPlum.primary
+                        : lighthouseLedgerTrendEmphasisColor(focus),
+                    trailing: focus == null ? '名称列打开' : '数字格打开',
+                  ),
+                  const SizedBox(height: 10),
 
                   if (trendChart != null)
                     trendChart
@@ -37543,7 +37702,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.only(bottom: 16),
+            padding: EdgeInsets.only(bottom: _bottomNavScrollPadding(context)),
             children: [
               const SizedBox(height: 10),
               // ── Detail 期间条 —— 与一级同款下划线 tab（含实例选择）
@@ -37772,7 +37931,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
 
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.only(bottom: 16),
+            padding: EdgeInsets.only(bottom: _bottomNavScrollPadding(context)),
             children: [
               const SizedBox(height: 14),
 

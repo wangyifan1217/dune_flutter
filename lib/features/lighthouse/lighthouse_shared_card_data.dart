@@ -91,7 +91,7 @@ class LighthouseSharedCardData {
     final trend = raw['trend'];
     if (trend != null) {
       if (trend is! Map) return false;
-      for (final key in const ['labels', 'xLabels']) {
+      for (final key in const ['keys', 'labels', 'xLabels']) {
         if (trend[key] != null && trend[key] is! List) return false;
       }
       for (final key in const [
@@ -119,8 +119,9 @@ class LighthouseSharedCardData {
       if (entry.key is String &&
           (entry.key as String).endsWith('Series') &&
           entry.value != null &&
-          !_validSeries(entry.value))
+          !_validSeries(entry.value)) {
         return false;
+      }
     }
     for (final key in const ['heroSeriesLabels', 'heroSeriesKeys']) {
       if (raw[key] != null && raw[key] is! List) return false;

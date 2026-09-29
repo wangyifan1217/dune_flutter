@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../shell/dunes_main_tab_bar.dart';
 import 'lighthouse_hero_metric.dart';
 import 'lighthouse_theme.dart';
 
@@ -784,11 +785,11 @@ class _LhBiViewPageState extends State<LhBiViewPage>
         _masthead(),
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(
+            padding: EdgeInsets.fromLTRB(
               lhBiCardPad,
               10,
               lhBiCardPad,
-              40,
+              dunesAppBottomNavContentPadding(context, fallback: 40),
             ),
             physics: const BouncingScrollPhysics(),
             children: [

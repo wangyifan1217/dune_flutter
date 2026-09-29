@@ -214,6 +214,27 @@ class LighthouseService {
     }, '灯塔趋势加载失败');
   }
 
+  /// 行内走势图往前翻一页。与 Hero 历史不同，这里必须携带实体身份。
+  Future<Map<String, dynamic>> fetchRowTrendHistory({
+    required String tab,
+    required String name,
+    required String before,
+    String? group,
+    String? period,
+    int? offset,
+    int? count,
+  }) {
+    return _getData('/lighthouse/row-trend-history', {
+      'tab': tab,
+      'name': name,
+      'before': before,
+      if (group != null && group.trim().isNotEmpty) 'group': group.trim(),
+      if (period != null && period.isNotEmpty) 'period': period,
+      if (offset != null && offset != 0) 'offset': '$offset',
+      if (count != null && count > 0) 'count': '$count',
+    }, '行趋势历史加载失败');
+  }
+
   Future<Map<String, dynamic>> fetchDiscounts({
     String? period,
     String? date,

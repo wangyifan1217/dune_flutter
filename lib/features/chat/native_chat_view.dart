@@ -8316,16 +8316,9 @@ class _NativeChatViewState extends State<NativeChatView>
               : null,
           child: Align(
             alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-            child: LayoutBuilder(
-              builder: (context, constraints) => SizedBox(
-                width: constraints.maxWidth.isFinite
-                    ? constraints.maxWidth.clamp(0.0, 680.0)
-                    : 400,
-                child: ChatLighthouseCard(
-                  session: widget.session,
-                  data: lighthouseCard,
-                ),
-              ),
+            child: ChatLighthouseCard(
+              session: widget.session,
+              data: lighthouseCard,
             ),
           ),
         ),

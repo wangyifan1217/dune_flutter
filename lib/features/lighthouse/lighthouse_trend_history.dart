@@ -10,6 +10,128 @@
 
 import 'dart:math' as math;
 
+/// 单个账本实体已经向前加载的历史。series 使用行 trend 的原始键
+///（profit / sales / totalCost ...），与 Hero 的 xxxSeries 命名空间分开。
+class LighthouseRowTrendHistory {
+  const LighthouseRowTrendHistory({
+    required this.requestKey,
+    this.keys = const <String>[],
+    this.labels = const <String>[],
+    this.series = const <String, List<double>>{},
+    this.hasMore = true,
+    this.loading = false,
+    this.error,
+    this.version = 0,
+  });
+
+  final String requestKey;
+  final List<String> keys;
+  final List<String> labels;
+  final Map<String, List<double>> series;
+  final bool hasMore;
+  final bool loading;
+  final String? error;
+  final int version;
+
+  int get length => keys.length;
+
+  LighthouseRowTrendHistory copyWith({
+    bool? loading,
+    bool? hasMore,
+    String? error,
+  }) => LighthouseRowTrendHistory(
+    requestKey: requestKey,
+    keys: keys,
+    labels: labels,
+    series: series,
+    hasMore: hasMore ?? this.hasMore,
+    loading: loading ?? this.loading,
+    error: error,
+    version: version,
+  );
+
+  LighthouseRowTrendHistory prependPage(Map<String, dynamic> page) {
+    final rawKeys = _stringList(page['keys']);
+    final rawLabels = _stringList(page['labels']);
+    final trend = page['trend'] is Map
+        ? Map<String, dynamic>.from(page['trend'] as Map)
+        : const <String, dynamic>{};
+    final more = page['hasMore'] == true;
+    if (rawKeys.isEmpty || rawKeys.length != rawLabels.length) {
+      return LighthouseRowTrendHistory(
+        requestKey: requestKey,
+        keys: keys,
+        labels: labels,
+        series: series,
+        hasMore: false,
+        version: version,
+      );
+    }
+    final existing = keys.toSet();
+    final take = <int>[
+      for (var i = 0; i < rawKeys.length; i++)
+        if (!existing.contains(rawKeys[i])) i,
+    ];
+    final pageLen = take.length;
+    final next = <String, List<double>>{};
+    final names = <String>{
+      ...series.keys,
+      for (final e in trend.entries)
+        if (e.value is List &&
+            e.key != 'keys' &&
+            e.key != 'labels' &&
+            e.key != 'xLabels')
+          e.key,
+    };
+    for (final name in names) {
+      final incoming = _doubleList(trend[name]);
+      final pageValues = <double>[
+        for (final i in take) i < incoming.length ? incoming[i] : 0,
+      ];
+      next[name] = [
+        ...pageValues,
+        ...(series[name] ?? List<double>.filled(length, 0)),
+      ];
+    }
+    return LighthouseRowTrendHistory(
+      requestKey: requestKey,
+      keys: [for (final i in take) rawKeys[i], ...keys],
+      labels: [for (final i in take) rawLabels[i], ...labels],
+      series: next,
+      hasMore: more && pageLen > 0,
+      version: version + 1,
+    );
+  }
+}
+
+Map<String, dynamic> lighthouseMergeRowTrendHistory(
+  Map<String, dynamic> trend,
+  LighthouseRowTrendHistory history,
+) {
+  if (history.length == 0) return trend;
+  final baseKeys = _stringList(trend['keys']);
+  final baseLabels = _stringList(trend['labels'] ?? trend['xLabels']);
+  if (baseKeys.isEmpty || baseKeys.length != baseLabels.length) return trend;
+  final out = Map<String, dynamic>.from(trend);
+  out['keys'] = [...history.keys, ...baseKeys];
+  out['labels'] = [...history.labels, ...baseLabels];
+  out['xLabels'] = out['labels'];
+  for (final entry in trend.entries) {
+    if (entry.value is! List ||
+        entry.key == 'keys' ||
+        entry.key == 'labels' ||
+        entry.key == 'xLabels') {
+      continue;
+    }
+    final base = _doubleList(entry.value);
+    if (base.length != baseKeys.length) continue;
+    final old =
+        history.series[entry.key] ?? List<double>.filled(history.length, 0);
+    out[entry.key] = [...old, ...base];
+  }
+  return out;
+}
+
 /// 已加载的历史（最早的桶在前）。不可变：每拼一页生成一个新对象。
 class LighthouseHeroHistory {
   const LighthouseHeroHistory({
@@ -44,7 +166,11 @@ class LighthouseHeroHistory {
 
   int get length => keys.length;
 
-  LighthouseHeroHistory copyWith({bool? loading, bool? hasMore, String? error}) {
+  LighthouseHeroHistory copyWith({
+    bool? loading,
+    bool? hasMore,
+    String? error,
+  }) {
     return LighthouseHeroHistory(
       requestKey: requestKey,
       keys: keys,

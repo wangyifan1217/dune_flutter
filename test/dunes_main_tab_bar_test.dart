@@ -315,10 +315,11 @@ void main() {
   });
 
   testWidgets(
-    'APP viewport reserve keeps content above stacked nav when viewPadding is 0',
+    'APP overlay leaves the page full-height; lists add extra content padding',
     (tester) async {
       const size = Size(390, 844);
-      late double reserve;
+      late double overlay;
+      late double padding;
       await tester.binding.setSurfaceSize(size);
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
@@ -328,16 +329,15 @@ void main() {
             textDirection: TextDirection.ltr,
             child: Builder(
               builder: (context) {
-                reserve = dunesAppBottomNavViewportReserve(context);
+                overlay = dunesAppBottomNavOverlayExtent(context);
+                padding = dunesAppBottomNavContentPadding(
+                  context,
+                  fallback: 16,
+                );
                 return SizedBox(
                   width: size.width,
                   height: size.height,
-                  child: Padding(
-                    padding: EdgeInsets.only(bottom: reserve),
-                    child: const ClipRect(
-                      child: ColoredBox(color: Color(0xFFFFFFFF)),
-                    ),
-                  ),
+                  child: const ColoredBox(color: Color(0xFFFFFFFF)),
                 );
               },
             ),
@@ -345,11 +345,9 @@ void main() {
         ),
       );
 
-      expect(reserve, kDunesAppBottomNavStackHeight + kDunesAppBottomNavMinGap);
-      expect(
-        tester.getRect(find.byType(ClipRect)).bottom,
-        size.height - reserve,
-      );
+      expect(overlay, kDunesAppBottomNavStackHeight + kDunesAppBottomNavMinGap);
+      expect(padding, overlay + kDunesAppBottomNavContentGap);
+      expect(tester.getRect(find.byType(ColoredBox)).bottom, size.height);
     },
   );
 

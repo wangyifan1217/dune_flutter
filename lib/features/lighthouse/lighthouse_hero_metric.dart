@@ -2521,7 +2521,7 @@ const lighthouseLedgerSummaryMetricKeys = <String>[
 ];
 
 /// 产品 / 供给 / 渠道默认金刚位：左列规模，右列经营结果。
-/// 第三行成本合计 / 收入。满减券、中石化、移动点播、会员套餐订阅把核销额换成 GMV。
+/// 第三行成本合计 / 收入。满减券、中石化、点播（积分）、会员套餐订阅、民营加油把核销额换成 GMV。
 const lighthouseLedgerSummaryMetricRows = <List<String>>[
   ['sales', 'prepaid'],
   ['verifiedSales', 'profit'],
@@ -4567,7 +4567,7 @@ List<List<String>> lighthouseLedgerSummaryMetricRowsForTab(String tab) {
   return lighthouseLedgerSummaryMetricRows;
 }
 
-/// 满减券 / 中石化 / 移动点播 / 会员套餐订阅：金刚位核销额换成 GMV。
+/// 满减券 / 中石化 / 点播（积分）/ 会员套餐订阅 / 民营加油（交易）：金刚位核销额换成 GMV。
 /// 点播和订阅的毛利率仍走销售额，不跟满减券绑在一起。
 bool lighthouseLedgerSummaryReplacesVerifiedWithGmv({
   String? product,

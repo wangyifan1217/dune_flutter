@@ -5,6 +5,7 @@ import '../auth/auth_session.dart';
 import '../conversation/conversation_picker_sheet.dart';
 import '../conversation/conversation_service.dart';
 import 'lighthouse_feedback.dart';
+import 'lighthouse_message_card_layout.dart';
 import 'lighthouse_shared_card_data.dart';
 
 /// Places the forwarding icon in a slot INSIDE the card supplied by its builder.
@@ -52,17 +53,21 @@ class _LighthouseShareableCardState extends State<LighthouseShareableCard> {
           title: const Text('转发灯塔卡片'),
           contentPadding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
           content: SizedBox(
-            width: 620,
+            width: (MediaQuery.sizeOf(context).width - 48)
+                .clamp(240.0, 560.0)
+                .toDouble(),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  LighthouseSharingScope(
-                    enabled: false,
-                    child:
-                        widget.previewBuilder?.call(data) ??
-                        Text(data.fallbackText),
+                  LighthouseMessageCardFrame(
+                    child: LighthouseSharingScope(
+                      enabled: false,
+                      child:
+                          widget.previewBuilder?.call(data) ??
+                          Text(data.fallbackText),
+                    ),
                   ),
                   const Padding(
                     padding: EdgeInsets.fromLTRB(16, 12, 16, 0),

@@ -50,21 +50,16 @@ void main() {
   });
 
   test('空页：hasMore=false，原数据不动', () {
-    final h = const LighthouseHeroHistory(requestKey: 'k').prependPage({
-      'keys': <String>[],
-      'labels': <String>[],
-      'hasMore': false,
-    });
+    final h = const LighthouseHeroHistory(
+      requestKey: 'k',
+    ).prependPage({'keys': <String>[], 'labels': <String>[], 'hasMore': false});
     expect(h.length, 0);
     expect(h.hasMore, isFalse);
     expect(identical(lighthouseMergeHeroHistory(base, h), base), isTrue);
   });
 
   test('视窗夹紧与点选换算', () {
-    expect(
-      lighthouseTrendClampViewEnd(viewEnd: 40, count: 30, visible: 7),
-      29,
-    );
+    expect(lighthouseTrendClampViewEnd(viewEnd: 40, count: 30, visible: 7), 29);
     expect(lighthouseTrendClampViewEnd(viewEnd: 1, count: 30, visible: 7), 6);
     expect(lighthouseTrendClampViewEnd(viewEnd: 3, count: 4, visible: 7), 3);
     // step 10、视窗从 5 开始、一屏 7 个：x=6+20 → 下标 7。
@@ -91,5 +86,44 @@ void main() {
       ),
       11,
     );
+  });
+
+  test('行级历史只拼当前实体的 trend，并按机器键去重', () {
+    var history = const LighthouseRowTrendHistory(requestKey: 'product|A');
+    history = history.prependPage({
+      'keys': ['2026-09-12', '2026-09-13'],
+      'labels': ['09.12', '09.13'],
+      'hasMore': true,
+      'trend': {
+        'profit': [1, 2],
+        'gmv': [10, 20],
+      },
+    });
+    history = history.prependPage({
+      'keys': ['2026-09-11', '2026-09-12'],
+      'labels': ['09.11', '09.12'],
+      'hasMore': false,
+      'trend': {
+        'profit': [0, 1],
+        'gmv': [0, 10],
+      },
+    });
+    final merged = lighthouseMergeRowTrendHistory({
+      'keys': ['2026-09-14', '2026-09-15'],
+      'labels': ['09.14', '09.15'],
+      'profit': [3, 4],
+      'gmv': [30, 40],
+      'rangeLabel': '09.14 — 09.15',
+    }, history);
+    expect(merged['keys'], [
+      '2026-09-11',
+      '2026-09-12',
+      '2026-09-13',
+      '2026-09-14',
+      '2026-09-15',
+    ]);
+    expect(merged['profit'], [0, 1, 2, 3, 4]);
+    expect(merged['gmv'], [0, 10, 20, 30, 40]);
+    expect(history.hasMore, isFalse);
   });
 }

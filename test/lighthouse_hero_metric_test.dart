@@ -879,6 +879,36 @@ void main() {
     expect(
       lighthouseLedgerSummaryMetricRowsForEntity(
         tab: 'product',
+        product: '点播（积分）',
+      ),
+      [
+        ['sales', 'prepaid'],
+        ['gmv', 'profit'],
+        ['costTotal', 'revenue'],
+      ],
+    );
+    expect(
+      lighthouseGrossMarginDenominatorKey(product: '点播（积分）', group: '运营商'),
+      'sales',
+    );
+    expect(
+      lighthouseLedgerSummaryMetricRowsForEntity(
+        tab: 'product',
+        product: '民营加油（交易）',
+      ),
+      [
+        ['sales', 'prepaid'],
+        ['gmv', 'profit'],
+        ['costTotal', 'revenue'],
+      ],
+    );
+    expect(
+      lighthouseGrossMarginDenominatorKey(product: '民营加油（交易）', group: '能源'),
+      'verifiedSales',
+    );
+    expect(
+      lighthouseLedgerSummaryMetricRowsForEntity(
+        tab: 'product',
         product: '会员套餐订阅',
       ),
       [

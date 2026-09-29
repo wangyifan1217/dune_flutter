@@ -84,7 +84,9 @@ Future<void> mountPage(WidgetTester tester, {double width = 390}) async {
         ? {
             'detail': {
               ...rows.first,
-              if ((request.url.queryParameters['key'] ?? '').startsWith('湖北细分::'))
+              if ((request.url.queryParameters['key'] ?? '').startsWith(
+                '湖北细分::',
+              ))
                 ...row('湖北细分', child: true),
               'productL3': (rows.first['children'] as List),
               'product_drill': {'fixture': rows.first},
@@ -124,6 +126,12 @@ Finder label(String text) => find.byWidgetPredicate(
   (widget) =>
       (widget is Text && widget.data == text) ||
       (widget is LhScrollText && widget.data == text),
+);
+
+Finder labelContaining(String text) => find.byWidgetPredicate(
+  (widget) =>
+      (widget is Text && (widget.data?.contains(text) ?? false)) ||
+      (widget is LhScrollText && widget.data.contains(text)),
 );
 
 LighthouseSharedCardData sharedData({String kind = 'entity', String? section}) {
@@ -319,10 +327,7 @@ void main() {
         find.descendant(of: target, matching: label('成本合计')),
         findsOneWidget,
       );
-      expect(
-        find.descendant(of: target, matching: label('核销额')),
-        findsNothing,
-      );
+      expect(find.descendant(of: target, matching: label('核销额')), findsNothing);
       expect(
         find.descendant(
           of: target,
@@ -335,6 +340,7 @@ void main() {
       await tester.pump();
       await tester.tap(gmv);
       await tester.pump(const Duration(milliseconds: 450));
+      expect(find.text('单指标走势 · GMV'), findsOneWidget);
       expect(
         find.descendant(of: target, matching: label('核销额')),
         findsOneWidget,
@@ -383,6 +389,38 @@ void main() {
       await tester.tap(gmv.first);
       await tester.pump(const Duration(milliseconds: 450));
       expect(find.descendant(of: target, matching: label('净利润')), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets(
+    'name and margin column toggle the full row trend; square arrow alone opens detail',
+    (tester) async {
+      await mountPage(tester);
+      const trendKey = 'product::满减券（交易）::能源';
+      final target = card('满减券（交易）');
+      final rowToggle = find.descendant(
+        of: target,
+        matching: find.byKey(const ValueKey('ledger-row-toggle-$trendKey')),
+      );
+      expect(rowToggle, findsOneWidget);
+      await tester.tap(rowToggle);
+      await tester.pump(const Duration(milliseconds: 450));
+      expect(find.text('整行走势'), findsOneWidget);
+      expect(find.text('名称列打开'), findsOneWidget);
+      await tester.tap(rowToggle);
+      await tester.pump(const Duration(milliseconds: 450));
+      expect(find.text('整行走势'), findsNothing);
+
+      final detail = find.descendant(
+        of: target,
+        matching: find.byKey(const ValueKey('ledger-detail-$trendKey')),
+      );
+      await tester.ensureVisible(detail);
+      await tester.pump();
+      await tester.tap(detail);
+      await tester.pump(const Duration(milliseconds: 700));
+      expect(labelContaining('满减券（交易）详情'), findsWidgets);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     },

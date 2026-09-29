@@ -76,7 +76,12 @@ void main() {
         findsOneWidget,
       );
       expect(
-        charts((w) => w.scaleLabel == 'GMV' && w.scale.last == 10000000),
+        charts(
+          (w) =>
+              w.soloKey == 'costAlt' &&
+              w.costAltLabel == 'GMV' &&
+              w.costAlt.last == 10000000,
+        ),
         findsOneWidget,
       );
       await f.mountShared(
@@ -118,12 +123,15 @@ void main() {
       ),
       findsOneWidget,
     );
-    final parentName = find
-        .descendant(of: target, matching: f.label('满减券（交易）'))
-        .first;
-    await tester.ensureVisible(parentName);
+    final detailButton = find.descendant(
+      of: target,
+      matching: find.byKey(
+        const ValueKey('ledger-detail-product::满减券（交易）::能源'),
+      ),
+    );
+    await tester.ensureVisible(detailButton);
     await tester.pump();
-    await tester.tap(parentName);
+    await tester.tap(detailButton);
     await tester.pump(const Duration(milliseconds: 700));
     expect(find.byType(LighthouseGrossMarginLabel), findsWidgets);
     for (final caption in tester.widgetList<LighthouseGrossMarginLabel>(

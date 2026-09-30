@@ -9,6 +9,7 @@ import 'package:dunes_app/features/conversation/conversation_service.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_card_share.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_feedback.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_hero_metric.dart';
+import 'package:dunes_app/features/lighthouse/lighthouse_period_bar.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_product_rules.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_shared_card_data.dart';
 import 'package:dunes_app/features/lighthouse/lighthouse_service.dart';
@@ -56,14 +57,27 @@ Map<String, dynamic> row(String name, {bool child = false}) => {
   if (!child) 'children': [row('湖北细分', child: true)],
 };
 
-Future<void> mountPage(WidgetTester tester, {double width = 390}) async {
+Future<void> mountPage(
+  WidgetTester tester, {
+  double width = 390,
+  List<Map<String, dynamic>> notices = const [],
+  List<Map<String, dynamic>> Function()? noticesProvider,
+  Duration refreshDelay = Duration.zero,
+}) async {
   tester.view.physicalSize = Size(width, 950);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   final rows = [row('满减券（交易）'), row('中石化普惠现金券（交易）'), row('中石油普惠现金券（交易）')];
+  var summaryRequests = 0;
   final client = MockClient((request) async {
     final path = request.url.path;
+    if (path.endsWith('/summary')) {
+      summaryRequests++;
+      if (summaryRequests > 1 && refreshDelay > Duration.zero) {
+        await Future<void>.delayed(refreshDelay);
+      }
+    }
     final data = path.endsWith('/dimension')
         ? {'rows': rows}
         : path.endsWith('/summary')
@@ -75,6 +89,12 @@ Future<void> mountPage(WidgetTester tester, {double width = 390}) async {
             'revenue': 900000,
             'totalCost': 960000,
             'netProfit': 480000,
+            'heroSeriesLabels': ['07月', '08月', '09月'],
+            'verifiedSalesSeries': [12000000, 14000000, 15000000],
+            'salesSeries': [22000000, 25000000, 27000000],
+            'revenueSeries': [700000, 800000, 900000],
+            'totalCostSeries': [780000, 860000, 960000],
+            'profitSeries': [420000, 510000, 600000],
           }
         : path.endsWith('/trend')
         ? {
@@ -93,7 +113,7 @@ Future<void> mountPage(WidgetTester tester, {double width = 390}) async {
             },
           }
         : path.endsWith('/delay-notice')
-        ? {'notices': []}
+        ? {'notices': noticesProvider?.call() ?? notices}
         : <String, dynamic>{};
     return http.Response(
       jsonEncode({'success': true, 'data': data}),
@@ -393,6 +413,45 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+  testWidgets('pull refresh reuses the period-switch soft loading animation', (
+    tester,
+  ) async {
+    await mountPage(tester, refreshDelay: const Duration(milliseconds: 800));
+    final refresh = find.byKey(const ValueKey('lighthouse-pull-refresh'));
+    expect(refresh, findsOneWidget);
+    final indicator = tester.widget<RefreshIndicator>(refresh);
+    final refreshDone = indicator.onRefresh();
+    await tester.pump(const Duration(milliseconds: 120));
+
+    expect(
+      find.byKey(const ValueKey('lighthouse-soft-reload-progress')),
+      findsOneWidget,
+    );
+    expect(find.text('同步中'), findsWidgets);
+
+    await tester.pump(const Duration(milliseconds: 900));
+    await refreshDone;
+    expect(
+      find.byKey(const ValueKey('lighthouse-soft-reload-progress')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets(
+    'current-month forecast report entry does not depend on history readiness',
+    (tester) async {
+      await mountPage(tester);
+      final periodBar = find.byType(LhPeriodBar);
+      await tester.tap(
+        find.descendant(of: periodBar, matching: find.text('月')),
+      );
+      await tester.pump(const Duration(milliseconds: 900));
+
+      expect(tester.widget<LhPeriodBar>(periodBar).selectedIndex, 2);
+      expect(find.text('报告 ›'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets(
     'name and margin column toggle the full row trend; square arrow alone opens detail',
     (tester) async {
@@ -495,6 +554,66 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets('three alerts share one compact panel on a narrow screen', (
+    tester,
+  ) async {
+    await mountPage(
+      tester,
+      width: 360,
+      notices: const [
+        {'sourceCode': 'SINOPEC', 'message': '中石化存量数据同步延迟，当前展示截止 09-30 04:21。'},
+        {
+          'sourceCode': 'SERVER_PROBE',
+          'bizDeptCode': 'CX',
+          'bizDeptName': '出行',
+          'message': '灯塔服务不可用',
+        },
+        {
+          'sourceCode': 'SERVER_PROBE',
+          'bizDeptCode': 'DIGITALG',
+          'bizDeptName': '数商',
+          'message': '数商测活联调，请忽略',
+        },
+      ],
+    );
+
+    expect(find.bySemanticsLabel('3 条运行提醒'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.campaign_rounded));
+    // Hero 的同步绿点有常驻呼吸动画，不能使用 pumpAndSettle。
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.text('运行提醒'), findsOneWidget);
+    expect(find.text('3 条待关注'), findsOneWidget);
+    expect(find.text('数据同步'), findsOneWidget);
+    expect(find.text('出行'), findsOneWidget);
+    expect(find.text('数商'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('grey horn turns active when a new notice arrives', (
+    tester,
+  ) async {
+    var liveNotices = <Map<String, dynamic>>[];
+    await mountPage(tester, noticesProvider: () => liveNotices);
+
+    expect(find.byIcon(Icons.campaign_rounded), findsOneWidget);
+    liveNotices = [
+      {
+        'sourceCode': 'server_probe',
+        'bizDeptCode': 'CX',
+        'bizDeptName': '出行',
+        'message': '灯塔服务不可用',
+      },
+    ];
+
+    await tester.pump(const Duration(seconds: 31));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.bySemanticsLabel('1 条运行提醒'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.campaign_rounded));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('灯塔服务不可用'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('IM snapshot header and image stay readable at narrow width', (
     tester,
   ) async {

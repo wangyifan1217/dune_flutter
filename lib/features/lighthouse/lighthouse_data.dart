@@ -1,13 +1,15 @@
 import 'lighthouse_hero_metric.dart';
 
-/// 数据延迟预警（《灯塔移动端 · 数据查表说明》v1.5 §十一）。
+/// 数据延迟与服务器测活预警。
 ///
 ///   [message] 是资管写好的横幅正文 —— 有记录时原文展示，不改写、不另拼一句。
-///   没有记录不显示。其余字段随接口带回，不进横幅。
+///   没有记录不显示横幅。部门字段只标识测活预警归属。
 class LighthouseDelayNotice {
   const LighthouseDelayNotice({
     required this.sourceCode,
     required this.message,
+    this.bizDeptCode = '',
+    this.bizDeptName = '',
     this.dataAsOf = '',
     this.expectReadyAt = '',
     this.affectedStatDate = '',
@@ -20,6 +22,12 @@ class LighthouseDelayNotice {
       sourceCode: str('sourceCode').isEmpty
           ? str('source_code')
           : str('sourceCode'),
+      bizDeptCode: str('bizDeptCode').isEmpty
+          ? str('biz_dept_code')
+          : str('bizDeptCode'),
+      bizDeptName: str('bizDeptName').isEmpty
+          ? str('biz_dept_name')
+          : str('bizDeptName'),
       message: str('message'),
       dataAsOf: str('dataAsOf').isEmpty ? str('data_as_of') : str('dataAsOf'),
       expectReadyAt: str('expectReadyAt').isEmpty
@@ -33,6 +41,8 @@ class LighthouseDelayNotice {
   }
 
   final String sourceCode;
+  final String bizDeptCode;
+  final String bizDeptName;
   final String message;
   final String dataAsOf;
   final String expectReadyAt;
@@ -40,6 +50,7 @@ class LighthouseDelayNotice {
   final String raisedAt;
 
   bool get isEmpty => message.isEmpty;
+  bool get isServerProbe => sourceCode.toUpperCase() == 'SERVER_PROBE';
 
   /// 本地看皮用。线上没有路由、资管表也还没 OPEN 行时，
   /// `--dart-define=DUNES_DELAY_NOTICE_PREVIEW=true` 才下发这一条。

@@ -10879,13 +10879,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   bool _cubeShowOwnerInitials = true; // owner 质心圆里的首字
   DateTime? _lastSyncedAt;
 
-  // ── 数据延迟预警（§十一）─────────────────────────────────────────
-  //   资管写好的「当前一条」预警。灯塔只在进页和下拉刷新时查一次：
-  //   页面停着不重新查，横幅也就不会自己消失。
+  // ── 数据延迟 / 服务器测活预警 ────────────────────────────────────
+  //   资管写好的当前预警。进页 / 回到灯塔 / 下拉刷新时立即查；页面停留时
+  //   每 30 秒轻量对一次，避免别处新增 OPEN 通知后本机喇叭一直是灰的。
   List<LighthouseDelayNotice> _delayNotices = const <LighthouseDelayNotice>[];
   bool _delayNoticeOpen = false;
   bool _delayNoticeLoading = false;
   _LhNoticeFetch _delayNoticeFetch = _LhNoticeFetch.pending;
+  Timer? _delayNoticeTimer;
+  static const _delayNoticePollEvery = Duration(seconds: 30);
   bool _refreshing = false; // 手动点击「数据同步」刷新中
   // ── 周期实例筛选（哪一天 / 哪个周 / 月 / 季 / 年）──
   // 0 = 当前实例（今日/本周/本月/本季/今年），-1 = 上一个，以此类推。
@@ -11554,6 +11556,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       _load();
       // 与 overview 并行：预警拿不到也不影响主数据。
       unawaited(_loadDelayNotice());
+      _syncDelayNoticePolling();
     } else {
       _loading = false;
     }
@@ -11734,11 +11737,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           if (entry.key.startsWith('netTa')) entry.key: entry.value,
       'grossMarginBasis': row['grossMarginBasis'],
       'heroSeriesLabels': trend['labels'] ?? trend['xLabels'] ?? const [],
-      for (final entry in trend.entries)
-        if (entry.value is List &&
-            entry.key != 'labels' &&
-            entry.key != 'xLabels')
-          '${entry.key}Series': entry.value,
+      ...lighthouseSeriesFieldsFromTrend(trend),
       if (row['deltas'] is Map) 'deltas': row['deltas'],
       'profitSeries': trend['profit'] ?? trend['points'] ?? const [],
       for (final entry in (row['deltas'] as Map? ?? const {}).entries)
@@ -11872,9 +11871,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
-  /// 查一次数据延迟预警。只挂在「进页」和「下拉刷新」两处 —— 切期间、
-  /// 切 tab 都走 `_load()`，挂那里会变成到处在查，也不符合 §十一
-  /// 「页面停着不重新查」。失败一律当 0 行，不弹错、不拦主流程。
+  /// 查一次数据延迟预警。进页、回到灯塔、下拉刷新和 30 秒轮询都走这里；
+  /// 切期间 / 切账本 tab 不额外触发，避免一次交互重复请求。失败不弹错、
+  /// 不拦主流程，但会明确标成「预警未取到」。
   Future<void> _loadDelayNotice() async {
     if (_delayNoticeLoading) return;
     _delayNoticeLoading = true;
@@ -11891,26 +11890,37 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     }
   }
 
-  /// 落款旁只留「查挂了」这一句。有记录时出小喇叭，点开才是 message 原文。
-  ///   查成功 0 行 → 不显示
-  ///   有 OPEN 行 → 小喇叭
+  /// 灯塔是底部导航里的保活页，用户停在别处时不会销毁。通知不能只在第一次
+  /// initState 查一次，否则同事后来发出的 OPEN 预警在本机上会一直显示成灰色。
+  /// 当前页每 30 秒轻量重查一次；切走即停，切回来立即查并恢复轮询。
+  void _syncDelayNoticePolling() {
+    _delayNoticeTimer?.cancel();
+    _delayNoticeTimer = null;
+    if (widget.sharedCard != null ||
+        !widget.active ||
+        !widget.session.effectiveLighthouseAccess) {
+      return;
+    }
+    _delayNoticeTimer = Timer.periodic(_delayNoticePollEvery, (_) {
+      if (!mounted || !widget.active) return;
+      unawaited(_loadDelayNotice());
+    });
+  }
+
+  /// 落款旁只留「查挂了」这一句。小喇叭始终存在，有记录时点开看原文。
+  ///   查成功 0 行 → 小喇叭灰显
+  ///   有 OPEN 行 → 小喇叭高亮
   ///   404 / 表没有 / 查挂了 → 预警未取到
-  /// 净TA 不写（它看的不是经营宽表）。
   String? get _delayNoticeMissNote {
-    if (_tab == 'netTa') return null;
     if (_delayNoticeFetch == _LhNoticeFetch.failed) return '预警未取到';
     return null;
   }
 
-  /// 当前要飘的那一条。净TA 走 bank_flow_mapped_daily，石化同步延迟影响的是
-  /// 经营宽表，所以净TA 不飘（2026-09-24 定）。
-  LighthouseDelayNotice? get _activeDelayNotice {
-    if (_tab == 'netTa') return null;
-    for (final n in _delayNotices) {
-      if (!n.isEmpty) return n;
-    }
-    return null;
-  }
+  /// 小喇叭表达的是全局运行提醒，不属于当前账本页签。只要接口返回 OPEN
+  /// 通知就必须高亮；不能因为用户恰好停在净 TA 等页签把通知过滤成灰色。
+  List<LighthouseDelayNotice> get _activeDelayNotices => _delayNotices
+      .where((n) => !n.isEmpty)
+      .toList(growable: false);
 
   @override
   void didUpdateWidget(covariant NativeLighthousePage oldWidget) {
@@ -11924,9 +11934,12 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     if (widget.active != oldWidget.active) {
       if (widget.active) {
         _installBackInterceptor();
+        // 保活页重新出现时先立即对一次，不能等下一轮 30 秒。
+        unawaited(_loadDelayNotice());
       } else {
         _clearBackInterceptor();
       }
+      _syncDelayNoticePolling();
     }
     _recoverFromUnavailableNetTa();
     _recoverFromUnavailablePeople();
@@ -12012,6 +12025,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   @override
   void dispose() {
     _clearBackInterceptor();
+    _delayNoticeTimer?.cancel();
     _ddEntry?.remove();
     _detailSkuSearchCtrl.dispose();
     _ledgerSearchCtl.dispose();
@@ -13258,11 +13272,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   }
 
   /// 手动刷新 — 点击顶部「数据已同步」胶囊触发，重新拉取概览 + 立方体。
-  /// 不清空当前页面（保留视图），只在胶囊上转小圈，完成后更新同步时间。
+  /// 不清空当前页面（保留视图）。下拉刷新、顶部刷新钮和同步落款都走这里，
+  /// 并复用切换日 / 周 / 月 / 季 / 年时的「旧内容压淡 + 期间条下进度线」。
   Future<void> _refresh() async {
     if (_refreshing || _loading) return;
     setState(() {
       _refreshing = true;
+      _loading = true;
+      _loadError = null;
       _rowsCacheKey = '';
       _rowsCache = null;
       _cubeCacheKey = '';
@@ -15307,35 +15324,40 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Widget _buildMainView() {
     if (_metricPageKey != null)
       return _buildMetricAnalysisPage(_metricPageKey!);
-    return NotificationListener<ScrollNotification>(
-      onNotification: (n) {
-        if (_ddMode != _DdMode.none && n is ScrollStartNotification) {
-          _closeDropdown();
-        }
-        // 产品 / 供给 / 渠道：接近底部（或内容撑不满一屏）自动加载更多
-        if (n is ScrollUpdateNotification ||
-            n is OverscrollNotification ||
-            n is ScrollEndNotification) {
-          final m = n.metrics;
-          final nearBottom = m.pixels >= m.maxScrollExtent - 200;
-          final cantScrollYet =
-              m.maxScrollExtent <= 40 && _listLimit < _currentRows.length;
-          if (nearBottom || cantScrollYet) {
-            _maybeLoadMoreL1();
+    return RefreshIndicator.noSpinner(
+      key: const ValueKey('lighthouse-pull-refresh'),
+      onRefresh: _refresh,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (n) {
+          if (_ddMode != _DdMode.none && n is ScrollStartNotification) {
+            _closeDropdown();
           }
-        }
-        return false;
-      },
-      child: ListView(
-        controller: _mainListScrollCtrl,
-        padding: EdgeInsets.only(bottom: _bottomNavScrollPadding(context)),
-        children: [
-          _buildPanel(),
-          if (_tab == 'analysis') _buildAnalysisView(),
-          if (_tab == 'supply' && lighthouseLedgerShowsDiscountBoard)
-            _buildDiscountSection(),
-          _buildFooter(),
-        ],
+          // 产品 / 供给 / 渠道：接近底部（或内容撑不满一屏）自动加载更多
+          if (n is ScrollUpdateNotification ||
+              n is OverscrollNotification ||
+              n is ScrollEndNotification) {
+            final m = n.metrics;
+            final nearBottom = m.pixels >= m.maxScrollExtent - 200;
+            final cantScrollYet =
+                m.maxScrollExtent <= 40 && _listLimit < _currentRows.length;
+            if (nearBottom || cantScrollYet) {
+              _maybeLoadMoreL1();
+            }
+          }
+          return false;
+        },
+        child: ListView(
+          controller: _mainListScrollCtrl,
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.only(bottom: _bottomNavScrollPadding(context)),
+          children: [
+            _buildPanel(),
+            if (_tab == 'analysis') _buildAnalysisView(),
+            if (_tab == 'supply' && lighthouseLedgerShowsDiscountBoard)
+              _buildDiscountSection(),
+            _buildFooter(),
+          ],
+        ),
       ),
     );
   }
@@ -16594,6 +16616,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 height: 2,
                 child: on
                     ? const LinearProgressIndicator(
+                        key: ValueKey('lighthouse-soft-reload-progress'),
                         minHeight: 2,
                         backgroundColor: _LhPlum.heroEdge,
                         valueColor: AlwaysStoppedAnimation<Color>(
@@ -17904,12 +17927,15 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                   profitSeries.last,
                   linearFallback: false,
                 ),
-          onOpenForecastReport: _paceDaily == null
-              ? null
-              : (profit) => _openForecastReport(
+          // 报告入口属于「月 · 本月」视图本身，不能再跟日历史请求的瞬时状态
+          // 绑定。历史尚未回来时入口也保留，点击后由 _openForecastReport 给出
+          // 明确的“计算中 / 数据不足”反馈；否则网络慢一下入口就像被删掉了。
+          onOpenForecastReport: _isCurrentMonthView
+              ? (profit) => _openForecastReport(
                   profit ? 'profit' : scaleKey,
                   profit ? '利润' : scaleNameOf(scaleKey),
-                ),
+                )
+              : null,
           paceDays: _monthPaceDays,
           partialPeriod: _periodInProgress,
           rangeLabel: _heroTrendRangeLabel(labels),
@@ -18340,18 +18366,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                     ),
                     if (rangeLabel.isNotEmpty) ...[
                       const SizedBox(width: 8),
-                      Text(
-                        rangeLabel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: _tabular(
-                          LhTypography.mono(
-                            size: lighthouseHeroSummaryRangeFontSize,
-                            // 日期是标题的注脚：退到灰、减一档字重，别跟标题抢。
-                            color: LhColors.mute,
-                            weight: FontWeight.w500,
-                            letterSpacing: 0.2,
-                            height: 1.1,
+                      Flexible(
+                        child: Text(
+                          rangeLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _tabular(
+                            LhTypography.mono(
+                              size: lighthouseHeroSummaryRangeFontSize,
+                              // 日期是标题的注脚：退到灰、减一档字重，别跟标题抢。
+                              color: LhColors.mute,
+                              weight: FontWeight.w500,
+                              letterSpacing: 0.2,
+                              height: 1.1,
+                            ),
                           ),
                         ),
                       ),
@@ -18382,8 +18410,8 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           // 有记录时标题下不直接铺横幅。小喇叭点开后，这里才是 message 原文。
           if (totalsOverride == null &&
               _delayNoticeOpen &&
-              _activeDelayNotice != null)
-            _buildDelayNoticeStrip(_activeDelayNotice!),
+              _activeDelayNotices.isNotEmpty)
+            _buildDelayNoticePanel(_activeDelayNotices),
 
           // ── § 02 · 主数与趋势左右并排；窄屏只加高走势图 ─────────
           Padding(
@@ -18925,52 +18953,211 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     );
   }
 
-  /// 小喇叭。有当前预警才出现，点开看下面的详情。没有记录不画。
+  /// 小喇叭固定留在 Hero 顶部：有预警时高亮并可展开，没有时灰显常驻。
   Widget _buildDelayNoticeHorn() {
-    final open = _delayNoticeOpen;
-    return _LhScrollSafeTap(
-      onTap: () {
-        LighthouseFeedback.instance.play(LighthouseFeedbackKind.select);
-        setState(() => _delayNoticeOpen = !_delayNoticeOpen);
-      },
-      child: Icon(
-        Icons.campaign_rounded,
-        size: 13,
-        color: open ? LhColors.copper : LhColors.copper.withAlpha(210),
+    final noticeCount = _activeDelayNotices.length;
+    final hasNotices = noticeCount > 0;
+    final open = _delayNoticeOpen && hasNotices;
+    var color = LhColors.mute2;
+    if (hasNotices) {
+      color = LhColors.copper;
+    }
+    return Semantics(
+      button: hasNotices,
+      enabled: hasNotices,
+      label: hasNotices ? '$noticeCount 条运行提醒' : '暂无运行提醒',
+      child: _LhScrollSafeTap(
+        onTap: () {
+          if (!hasNotices) return;
+          LighthouseFeedback.instance.play(LighthouseFeedbackKind.select);
+          setState(() => _delayNoticeOpen = !_delayNoticeOpen);
+        },
+        child: SizedBox(
+          width: 17,
+          height: 15,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                left: 0,
+                bottom: 0,
+                child: Icon(
+                  Icons.campaign_rounded,
+                  size: 13,
+                  color: color,
+                ),
+              ),
+              if (hasNotices)
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  child: Container(
+                    width: 5,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: open ? _LhPlum.primary : LhColors.copper,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: LhColors.paper, width: 0.8),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  /// 点开小喇叭后的详情。正文是 `message` 原文，不改写。
-  Widget _buildDelayNoticeStrip(LighthouseDelayNotice notice) {
+  /// 点开小喇叭后的提醒面板。多条通知收在同一个容器里，正文仍是
+  /// `message` 原文，不改写、不拼接。
+  Widget _buildDelayNoticePanel(List<LighthouseDelayNotice> notices) {
     return Container(
       margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
       decoration: BoxDecoration(
-        color: LhColors.copper.withAlpha(16),
-        borderRadius: BorderRadius.circular(lighthouseLedgerSummaryPanelRadius),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            LhColors.paper,
+            LhColors.copperSoft.withAlpha(92),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: LhColors.copper.withAlpha(42), width: 0.7),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A2F2418),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(11, 8, 9, 7),
+            child: Row(
+              children: [
+                Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: LhColors.copper.withAlpha(18),
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  child: const Icon(
+                    Icons.notifications_none_rounded,
+                    size: 13,
+                    color: LhColors.copper,
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  '运行提醒',
+                  style: LhTypography.sans(
+                    size: 10.5,
+                    color: LhColors.ink,
+                    weight: FontWeight.w700,
+                    letterSpacing: 0.1,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: LhColors.paper.withAlpha(190),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: LhColors.copper.withAlpha(30),
+                      width: 0.6,
+                    ),
+                  ),
+                  child: Text(
+                    '${notices.length} 条待关注',
+                    style: LhTypography.sans(
+                      size: 8.5,
+                      color: LhColors.copper,
+                      weight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(height: 0.7, color: LhColors.copper.withAlpha(24)),
+          ...List<Widget>.generate(notices.length, (index) {
+            final notice = notices[index];
+            return Column(
+              children: [
+                _buildDelayNoticePanelRow(notice),
+                if (index < notices.length - 1)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 40, right: 11),
+                    child: Container(height: 0.6, color: LhColors.line2),
+                  ),
+              ],
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDelayNoticePanelRow(LighthouseDelayNotice notice) {
+    final label = notice.isServerProbe
+        ? (notice.bizDeptName.isEmpty ? '服务' : notice.bizDeptName)
+        : '数据同步';
+    final icon = notice.isServerProbe
+        ? Icons.dns_outlined
+        : Icons.sync_problem_rounded;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(11, 8, 11, 9),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 2.5,
-            height: 13,
-            margin: const EdgeInsets.only(top: 2, right: 7),
+            width: 21,
+            height: 21,
             decoration: BoxDecoration(
-              color: LhColors.copper,
-              borderRadius: BorderRadius.circular(1.5),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              notice.message,
-              style: LhTypography.sans(
-                size: 11,
-                color: LhColors.ink2,
-                weight: FontWeight.w600,
-                height: 1.35,
+              color: LhColors.paper.withAlpha(205),
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(
+                color: LhColors.copper.withAlpha(32),
+                width: 0.6,
               ),
+            ),
+            child: Icon(icon, size: 12, color: LhColors.copper),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: LhTypography.sans(
+                    size: 8.5,
+                    color: LhColors.copper,
+                    weight: FontWeight.w700,
+                    letterSpacing: 0.15,
+                    height: 1.15,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  notice.message,
+                  style: LhTypography.sans(
+                    size: 10.5,
+                    color: LhColors.ink2,
+                    weight: FontWeight.w500,
+                    height: 1.35,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -19011,7 +19198,6 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     // 绿点带呼吸环会比字高：必须和半句待在同一行里居中，不能先组完印章
     // 再和外面包一层 Flexible —— 两段各算各的中线，字就对不齐。
     final missNote = busy ? null : _delayNoticeMissNote;
-    final showHorn = !busy && _activeDelayNotice != null;
     Widget sep() => Container(width: 0.7, height: 8, color: LhColors.line2);
     Text stampWord(
       String text, {
@@ -19082,12 +19268,10 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               ],
             ),
           ),
-          if (showHorn) ...[
-            const SizedBox(width: 5),
-            sep(),
-            const SizedBox(width: 6),
-            _buildDelayNoticeHorn(),
-          ],
+          const SizedBox(width: 5),
+          sep(),
+          const SizedBox(width: 6),
+          _buildDelayNoticeHorn(),
           if (missNote != null) ...[
             const SizedBox(width: 5),
             sep(),

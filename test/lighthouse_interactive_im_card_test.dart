@@ -311,6 +311,39 @@ void main() {
       },
     );
   }
+  test('trend date keys are not copied into numeric series', () {
+    final trend = {
+      'keys': ['2026-09-26', '2026-09-27', '2026-09-28'],
+      'labels': ['09.26', '09.27', '09.28'],
+      'xLabels': ['09.26', '09.27', '09.28'],
+      'sales': [1, 2, 3],
+      'period': 'month',
+    };
+    final series = lighthouseSeriesFieldsFromTrend(trend);
+    expect(series.containsKey('keysSeries'), isFalse);
+    expect(series.containsKey('labelsSeries'), isFalse);
+    expect(series['salesSeries'], [1, 2, 3]);
+    expect(
+      () => LighthouseSharedCardData.create({
+        'kind': 'entity',
+        'title': '中石油特惠现金券',
+        'range': '09.01–09.28',
+        'period': 'month',
+        'row': {
+          'name': '中石油特惠现金券',
+          'sales': 1,
+          'trend': trend,
+        },
+        'totals': {'sales': 1},
+        'metrics': {
+          'sales': 1,
+          'heroSeriesLabels': trend['labels'],
+          ...series,
+        },
+      }),
+      returnsNormally,
+    );
+  });
   test(
     'structured data round trip freezes share scope and rejects invalid messages',
     () {

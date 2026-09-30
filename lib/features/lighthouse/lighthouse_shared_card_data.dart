@@ -131,8 +131,7 @@ class LighthouseSharedCardData {
         (children is List && children.every((c) => _validRow(c, depth + 1)));
   }
 
-  static bool _validSeries(dynamic raw) =>
-      raw is List && raw.every((v) => v == null || (v is num && v.isFinite));
+  static bool _validSeries(dynamic raw) => _numericSeries(raw);
 
   Map<String, dynamic> toJson() =>
       Map<String, dynamic>.from(jsonDecode(jsonEncode(_json)) as Map);
@@ -169,4 +168,24 @@ class LighthouseSharedCardData {
         entry.key as String: (entry.value as num).toDouble(),
   };
   String get fallbackText => '灯塔 · $title · $range\n可展开指标、查看趋势与细分';
+}
+
+bool _numericSeries(dynamic raw) =>
+    raw is List && raw.every((v) => v == null || (v is num && v.isFinite));
+
+/// 只把数值走势拷成 `${key}Series`。`keys` / `labels` / `xLabels` 是日期和轴文案，
+/// 拷进去会让整张卡片被校验判成格式错误。
+Map<String, dynamic> lighthouseSeriesFieldsFromTrend(Map<dynamic, dynamic> trend) {
+  final out = <String, dynamic>{};
+  for (final entry in trend.entries) {
+    final key = entry.key;
+    if (key is! String ||
+        key == 'labels' ||
+        key == 'xLabels' ||
+        key == 'keys') {
+      continue;
+    }
+    if (_numericSeries(entry.value)) out['${key}Series'] = entry.value;
+  }
+  return out;
 }

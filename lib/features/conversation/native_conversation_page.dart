@@ -255,18 +255,21 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   double? _swipeStartY;
   int _swipeStartTime = 0;
   bool _swipeIsVertical = false;
+  bool _swipeMovedLeft = false;
 
   void _handleSwipePointerDown(PointerDownEvent event) {
     _swipeStartX = event.position.dx;
     _swipeStartY = event.position.dy;
     _swipeStartTime = DateTime.now().millisecondsSinceEpoch;
     _swipeIsVertical = false;
+    _swipeMovedLeft = false;
   }
 
   void _handleSwipePointerMove(PointerMoveEvent event) {
     if (_swipeStartX == null || _swipeStartY == null || _swipeIsVertical) return;
     final dx = event.position.dx - _swipeStartX!;
     final dy = event.position.dy - _swipeStartY!;
+    if (dx < -16) _swipeMovedLeft = true;
     if (dy.abs() > 18 && dy.abs() > dx.abs() * 1.3) {
       _swipeIsVertical = true;
     }
@@ -278,12 +281,23 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     final dy = event.position.dy - _swipeStartY!;
     final elapsed = DateTime.now().millisecondsSinceEpoch - _swipeStartTime;
     final wasVertical = _swipeIsVertical;
+    final movedLeft = _swipeMovedLeft;
+    final startedAtScreenEdge = _swipeStartX! <= 36;
 
     _swipeStartX = null;
     _swipeStartY = null;
     _swipeIsVertical = false;
+    _swipeMovedLeft = false;
 
     if (isDesktopCommOnly || widget.session.isExternalUser) return;
+    // 仅接受从屏幕左边缘开始、方向明确且没有先向左反向滑动的手势，
+    // 避免列表卡片横滑操作结束后误进入小饕。
+    if (!startedAtScreenEdge ||
+        movedLeft ||
+        dx < 90 ||
+        dx.abs() <= dy.abs() * 1.5) {
+      return;
+    }
     if (inboxSwipeOpensNova(
       dx: dx,
       dy: dy,
@@ -298,6 +312,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     _swipeStartX = null;
     _swipeStartY = null;
     _swipeIsVertical = false;
+    _swipeMovedLeft = false;
   }
 
   @override
@@ -631,7 +646,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       items: [
         PopupMenuItem<bool>(
           value: true,
-          child: Text(mark ? '标志未读' : '标为已读'),
+          child: Text(mark ? '标为未读' : '标为已读'),
         ),
       ],
     );
@@ -1804,7 +1819,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
 
     final canMarkUnread = c.id > 0;
     final markLabel =
-        c.unreadCount <= 0 && !_showsMarkedUnreadDot(c) ? '标志未读' : '标为已读';
+        c.unreadCount <= 0 && !_showsMarkedUnreadDot(c) ? '标为未读' : '标为已读';
     Widget inboxChild = dropChild;
     if (canMarkUnread && isDesktopCommOnly) {
       inboxChild = GestureDetector(

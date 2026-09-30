@@ -3848,8 +3848,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenMonthlyOpinion: () => widget.navigation.go('QJMO'),
           onOpenProposalReview: () => widget.navigation.go('QJPA'),
           onOpenEfficiencyAnalysis: () => widget.navigation.go('QJEA'),
-          // 员工画像先隐藏，页面 QJWP 仍保留。
-          onOpenWorkProfileManagement: null,
+          onOpenWorkProfileManagement: () => widget.navigation.go('QJWP'),
           onOpenEfficiencyBossPreview: () {
             setState(() {
               _workSituationMonth = null;

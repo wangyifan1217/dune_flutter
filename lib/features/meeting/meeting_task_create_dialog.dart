@@ -1,8 +1,11 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
 import '../tasks/task_api.dart';
+import '../tasks/task_avatar.dart';
 import '../tasks/task_create_confirm.dart';
 import '../tasks/task_first_use_guide.dart';
 import '../tasks/task_models.dart';
@@ -165,17 +168,37 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
             height: MediaQuery.sizeOf(ctx).height * 0.5,
             child: Column(
               children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      '选择负责人（自己或下级）',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 10),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '选择负责人',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            SizedBox(height: 3),
+                            Text(
+                              '自己或有权限分配的下级',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: DunesColors.text3,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
                   ),
                 ),
                 Expanded(
@@ -191,10 +214,30 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                           itemBuilder: (_, i) {
                             final a = items[i];
                             return ListTile(
-                              title: Text(a.displayName),
+                              leading: buildTaskUserAvatar(
+                                session: widget.session,
+                                name: a.displayName,
+                                userId: a.id,
+                                avatarPreset: a.avatarPreset,
+                                avatarObjectKey: a.avatarObjectKey,
+                                avatarUrl: a.avatarUrl,
+                                size: 40,
+                              ),
+                              title: Text(
+                                a.displayName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                               subtitle: a.departmentName.isEmpty
                                   ? null
                                   : Text(a.departmentName),
+                              trailing: a.id == _ownerId
+                                  ? const Icon(
+                                      Icons.check_circle,
+                                      color: DunesColors.brandPurple,
+                                    )
+                                  : null,
                               onTap: () => Navigator.pop(ctx, a),
                             );
                           },
@@ -301,16 +344,19 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
         decoration: BoxDecoration(
-          color: const Color(0xFFF5F6F8),
-          borderRadius: BorderRadius.circular(10),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE8E5EF)),
         ),
         child: Row(
           children: [
+            Icon(icon, size: 19, color: DunesColors.brandPurple),
+            const SizedBox(width: 11),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -319,6 +365,7 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                     label,
                     style: const TextStyle(
                       fontSize: 11,
+                      fontWeight: FontWeight.w600,
                       color: DunesColors.text3,
                     ),
                   ),
@@ -334,8 +381,176 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
                 ],
               ),
             ),
-            Icon(icon, size: 16, color: DunesColors.text3),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: DunesColors.text3,
+            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionLabel(String label, {bool required = false}) => Padding(
+    padding: const EdgeInsets.only(bottom: 7),
+    child: Row(
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: DunesColors.text,
+          ),
+        ),
+        if (required) ...[
+          const SizedBox(width: 4),
+          const Text(
+            '*',
+            style: TextStyle(
+              color: Color(0xFFE35D6A),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+
+  Widget _ownerTile() {
+    TaskAssignee? selected;
+    for (final assignee in _assignees) {
+      if (assignee.id == _ownerId) {
+        selected = assignee;
+        break;
+      }
+    }
+    return InkWell(
+      onTap: _pickOwner,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE8E5EF)),
+        ),
+        child: Row(
+          children: [
+            buildTaskUserAvatar(
+              session: widget.session,
+              name: _ownerName,
+              userId: _ownerId,
+              avatarPreset: selected?.avatarPreset ?? '',
+              avatarObjectKey: selected?.avatarObjectKey ?? '',
+              avatarUrl: selected?.avatarUrl ?? '',
+              size: 38,
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _ownerName,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: DunesColors.text,
+                    ),
+                  ),
+                  if (selected?.departmentName.isNotEmpty == true)
+                    Text(
+                      selected!.departmentName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: DunesColors.text3,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.swap_horiz_rounded,
+              color: DunesColors.brandPurple,
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _modeCard({
+    required bool selected,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    final color = selected ? DunesColors.brandPurple : DunesColors.text2;
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFFF2EDFF) : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected
+                  ? DunesColors.brandPurple
+                  : const Color(0xFFE8E5EF),
+              width: selected ? 1.4 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: selected
+                            ? DunesColors.brandPurple
+                            : DunesColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        height: 1.25,
+                        color: DunesColors.text3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (selected)
+                const Icon(
+                  Icons.check_circle,
+                  size: 17,
+                  color: DunesColors.brandPurple,
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -344,150 +559,340 @@ class _MeetingTaskCreateDialogState extends State<_MeetingTaskCreateDialog> {
   @override
   Widget build(BuildContext context) {
     final heading = _batch ? '全部创建任务' : '创建任务';
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Row(
-        children: [
-          Expanded(child: Text(heading)),
-          TaskGuideHelpButton(onPressed: () => _showGuide(force: true)),
-        ],
-      ),
-      content: SizedBox(
-        width: 420,
-        child: SingleChildScrollView(
+    final screen = MediaQuery.sizeOf(context);
+    final width = math.min(600.0, screen.width - 28).toDouble();
+    final height = math.min(760.0, screen.height * 0.88).toDouble();
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
+      backgroundColor: Colors.transparent,
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: Material(
+          color: const Color(0xFFFCFBFE),
+          clipBehavior: Clip.antiAlias,
+          borderRadius: BorderRadius.circular(24),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                _batch
-                    ? '将创建 ${widget.batchCount} 个任务，共用负责人、优先级和周期。'
-                    : '补全负责人、周期和验收标准，创建后会同步到负责人的任务列表。',
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: DunesColors.text2,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  ChoiceChip(
-                    label: const Text('新建主目标'),
-                    selected: !_linkExisting,
-                    onSelected: (_) => setState(() {
-                      _linkExisting = false;
-                      _parentTaskId = null;
-                    }),
-                  ),
-                  const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: const Text('关联已有主目标'),
-                    selected: _linkExisting,
-                    onSelected: (_) => setState(() => _linkExisting = true),
-                  ),
-                ],
-              ),
-              if (_linkExisting) ...[
-                const SizedBox(height: 10),
-                DropdownButtonFormField<int>(
-                  initialValue: _parentTaskId,
-                  decoration: _fieldDecoration('选择主目标'),
-                  items: [
-                    for (final g in _goals)
-                      DropdownMenuItem(value: g.id, child: Text(g.title)),
-                  ],
-                  onChanged: (v) => setState(() => _parentTaskId = v),
-                ),
-              ],
-              const SizedBox(height: 12),
-              if (_showCopy) ...[
-                TextField(
-                  controller: _titleCtrl,
-                  decoration: _fieldDecoration('任务标题'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _descCtrl,
-                  maxLines: 3,
-                  decoration: _fieldDecoration('任务描述（背景 / 要做什么）'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _acceptCtrl,
-                  maxLines: 3,
-                  decoration: _fieldDecoration('验收标准（做到什么算完成）'),
-                ),
-                const SizedBox(height: 10),
-              ],
-              _tile(label: '负责人', value: _ownerName, onTap: _pickOwner),
-              const SizedBox(height: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF5F6F8),
-                  borderRadius: BorderRadius.circular(10),
+                padding: const EdgeInsets.fromLTRB(20, 17, 10, 16),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFFF4EFFF), Color(0xFFFCFBFE)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  border: Border(bottom: BorderSide(color: Color(0xFFECE6F5))),
                 ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _priority,
-                    isExpanded: true,
-                    items: const [
-                      DropdownMenuItem(value: 'low', child: Text('优先级 低')),
-                      DropdownMenuItem(value: 'medium', child: Text('优先级 中')),
-                      DropdownMenuItem(value: 'high', child: Text('优先级 高')),
-                      DropdownMenuItem(value: 'urgent', child: Text('优先级 紧急')),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: DunesColors.brandPurple.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(
+                        Icons.event_note_rounded,
+                        color: DunesColors.brandPurple,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            heading,
+                            style: const TextStyle(
+                              fontSize: 19,
+                              fontWeight: FontWeight.w800,
+                              color: DunesColors.text,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            _batch
+                                ? '来自会议纪要 · ${widget.batchCount} 项建议'
+                                : '来自会议纪要的任务建议',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: DunesColors.text2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TaskGuideHelpButton(
+                      onPressed: () => _showGuide(force: true),
+                    ),
+                    IconButton(
+                      tooltip: '关闭',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: DunesColors.text3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _sectionLabel('任务归属'),
+                      Row(
+                        children: [
+                          _modeCard(
+                            selected: !_linkExisting,
+                            title: '新建主目标',
+                            subtitle: '独立创建一项主任务',
+                            icon: Icons.add_task_rounded,
+                            onTap: () => setState(() {
+                              _linkExisting = false;
+                              _parentTaskId = null;
+                            }),
+                          ),
+                          const SizedBox(width: 10),
+                          _modeCard(
+                            selected: _linkExisting,
+                            title: '关联已有主目标',
+                            subtitle: '作为所选主目标的子任务',
+                            icon: Icons.account_tree_outlined,
+                            onTap: () => setState(() => _linkExisting = true),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF3F0FA),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.info_outline_rounded,
+                              size: 17,
+                              color: DunesColors.brandPurple,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _linkExisting
+                                    ? '会议建议会作为子任务挂到主目标下。'
+                                    : '会议建议会创建为新的主目标。',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: DunesColors.text2,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_linkExisting) ...[
+                        const SizedBox(height: 14),
+                        _sectionLabel('选择主目标', required: true),
+                        DropdownButtonFormField<int>(
+                          initialValue: _parentTaskId,
+                          isExpanded: true,
+                          decoration: _fieldDecoration(
+                            _goals.isEmpty ? '正在加载主目标…' : '选择要关联的主目标',
+                          ),
+                          items: [
+                            for (final goal in _goals)
+                              DropdownMenuItem(
+                                value: goal.id,
+                                child: Text(
+                                  goal.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => _parentTaskId = value),
+                        ),
+                      ],
+                      if (_showCopy) ...[
+                        const SizedBox(height: 18),
+                        _sectionLabel('任务标题', required: true),
+                        TextField(
+                          controller: _titleCtrl,
+                          textInputAction: TextInputAction.next,
+                          decoration: _fieldDecoration('写一个清楚、可执行的标题'),
+                        ),
+                        const SizedBox(height: 16),
+                        _sectionLabel('任务描述'),
+                        TextField(
+                          controller: _descCtrl,
+                          minLines: 3,
+                          maxLines: 5,
+                          decoration: _fieldDecoration('补充背景和需要完成的工作'),
+                        ),
+                        const SizedBox(height: 16),
+                        _sectionLabel('验收标准', required: !_linkExisting),
+                        TextField(
+                          controller: _acceptCtrl,
+                          minLines: 2,
+                          maxLines: 4,
+                          decoration: _fieldDecoration('说明做到什么状态算完成'),
+                        ),
+                      ],
+                      const SizedBox(height: 18),
+                      _sectionLabel('负责人', required: true),
+                      _ownerTile(),
+                      const SizedBox(height: 16),
+                      _sectionLabel('优先级'),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFE8E5EF)),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _priority,
+                            isExpanded: true,
+                            icon: const Icon(Icons.expand_more_rounded),
+                            items: const [
+                              DropdownMenuItem(value: 'low', child: Text('低')),
+                              DropdownMenuItem(
+                                value: 'medium',
+                                child: Text('中'),
+                              ),
+                              DropdownMenuItem(value: 'high', child: Text('高')),
+                              DropdownMenuItem(
+                                value: 'urgent',
+                                child: Text('紧急'),
+                              ),
+                            ],
+                            onChanged: (value) {
+                              if (value != null)
+                                setState(() => _priority = value);
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _sectionLabel('任务周期', required: true),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _tile(
+                              label: '开始日期',
+                              value: _fmt(_startAt),
+                              onTap: () => _pick(isStart: true),
+                              placeholder: _startAt == null,
+                              icon: Icons.calendar_today_outlined,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _tile(
+                              label: '截止日期',
+                              value: _fmt(_dueAt),
+                              onTap: () => _pick(isStart: false),
+                              placeholder: _dueAt == null,
+                              icon: Icons.event_available_outlined,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_error != null) ...[
+                        const SizedBox(height: 14),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF1F2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.error_outline_rounded,
+                                size: 17,
+                                color: Color(0xFFE35D6A),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _error!,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFFE35D6A),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setState(() => _priority = v);
-                    },
                   ),
                 ),
               ),
-              const SizedBox(height: 10),
-              _tile(
-                label: '开始时间',
-                value: _fmt(_startAt),
-                onTap: () => _pick(isStart: true),
-                placeholder: _startAt == null,
-                icon: Icons.calendar_today_outlined,
-              ),
-              const SizedBox(height: 10),
-              _tile(
-                label: '结束时间',
-                value: _fmt(_dueAt),
-                onTap: () => _pick(isStart: false),
-                placeholder: _dueAt == null,
-                icon: Icons.calendar_today_outlined,
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _error!,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFFE35D6A),
-                  ),
+              Container(
+                padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
+                decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: Color(0xFFECE8F0))),
                 ),
-              ],
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(46),
+                          foregroundColor: DunesColors.text2,
+                          side: const BorderSide(color: Color(0xFFE2DFE8)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Text('取消'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: FilledButton.icon(
+                        onPressed: _submit,
+                        icon: const Icon(Icons.check_rounded, size: 18),
+                        label: Text(
+                          _batch ? '创建 ${widget.batchCount} 项' : '确认创建',
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: DunesColors.brandPurple,
+                          minimumSize: const Size.fromHeight(46),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          style: FilledButton.styleFrom(
-            backgroundColor: DunesColors.brandPurple,
-          ),
-          onPressed: _submit,
-          child: Text(_batch ? '全部创建' : '确认创建'),
-        ),
-      ],
     );
   }
 }

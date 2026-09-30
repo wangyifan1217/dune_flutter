@@ -30,11 +30,13 @@ class UserWorkProfileSnapshot {
   const UserWorkProfileSnapshot({
     required this.modules,
     this.trend = const [],
+    this.dimensions = const [],
     this.updatedAt = '',
   });
 
   final List<UserWorkProfileModule> modules;
   final List<WorkProfileTrendPoint> trend;
+  final List<UserWorkProfileDimension> dimensions;
   final String updatedAt;
 
   factory UserWorkProfileSnapshot.connecting() {
@@ -45,6 +47,25 @@ class UserWorkProfileSnapshot {
           .toList(growable: false),
     );
   }
+}
+
+class UserWorkProfileDimension {
+  const UserWorkProfileDimension({
+    required this.label,
+    required this.value,
+    required this.cap,
+    required this.unit,
+    required this.period,
+  });
+
+  final String label;
+  final int? value;
+  final int cap;
+  final String unit;
+  final String period;
+
+  double get chartValue =>
+      value == null ? 0 : clampWorkProfileRadarValue(value!, cap: cap);
 }
 
 enum UserWorkProfileModuleType {
@@ -156,7 +177,7 @@ UserWorkProfileModule _unavailableWorkProfileModule(
     UserWorkProfileModuleType.workRhythm => '任务记录',
     UserWorkProfileModuleType.collaboration => '会议记录与纪要',
     UserWorkProfileModuleType.knowledge => '知识库',
-    UserWorkProfileModuleType.business => '提案与绩效规则记录',
+    UserWorkProfileModuleType.business => '审批与提案记录',
     UserWorkProfileModuleType.performance => '已发布绩效记录',
     UserWorkProfileModuleType.benefits => '薪酬服务',
   },
@@ -311,6 +332,7 @@ Future<UserWorkProfileSnapshot> loadUserWorkProfileSnapshot(
     );
   }
 
+  int? monthlyMeetingCount;
   if (meetings == null) {
     modules.add(
       _unavailableWorkProfileModule(UserWorkProfileModuleType.collaboration),
@@ -319,6 +341,7 @@ Future<UserWorkProfileSnapshot> loadUserWorkProfileSnapshot(
     final monthlyMeetings = meetings
         .where((item) => _meetingInWorkProfileMonth(item, month))
         .toList();
+    monthlyMeetingCount = monthlyMeetings.length;
     final minutes = monthlyMeetings
         .where((item) => (item.summary ?? '').trim().isNotEmpty)
         .length;
@@ -360,13 +383,6 @@ Future<UserWorkProfileSnapshot> loadUserWorkProfileSnapshot(
     );
   }
 
-  final person = score?.me;
-  final countedTasks =
-      person?.categories.fold<int>(
-        0,
-        (sum, category) => sum + category.tasks.length,
-      ) ??
-      0;
   int? proposalCount;
   int? approvalCount;
   if (initiated != null) {
@@ -393,7 +409,6 @@ Future<UserWorkProfileSnapshot> loadUserWorkProfileSnapshot(
     final facts = <String>[
       if (proposalCount != null) '发起提案 $proposalCount',
       if (approvalCount != null) '发起审批 $approvalCount',
-      if (score != null) '规则 $countedTasks',
     ];
     const type = UserWorkProfileModuleType.business;
     const status = UserWorkProfileModuleStatus.ready;
@@ -402,12 +417,12 @@ Future<UserWorkProfileSnapshot> loadUserWorkProfileSnapshot(
         type: type,
         status: status,
         summary: '$monthLabel ${facts.join(' · ')}',
-        source: '审批、提案与绩效规则记录',
+        source: '审批与提案记录',
         period: monthLabel,
         radarValue: workProfileRadarValue(
           type: type,
           status: status,
-          count: (proposalCount ?? 0) + (score == null ? 0 : countedTasks),
+          count: (proposalCount ?? 0) + (approvalCount ?? 0),
         ),
       ),
     );
@@ -424,6 +439,43 @@ Future<UserWorkProfileSnapshot> loadUserWorkProfileSnapshot(
   return UserWorkProfileSnapshot(
     modules: modules,
     trend: trend,
+    dimensions: [
+      UserWorkProfileDimension(
+        label: '完成任务',
+        value: tasks?.where((item) => item.status == 'completed').length,
+        cap: 8,
+        unit: '项',
+        period: monthLabel,
+      ),
+      UserWorkProfileDimension(
+        label: '会议协作',
+        value: monthlyMeetingCount,
+        cap: 20,
+        unit: '场',
+        period: monthLabel,
+      ),
+      UserWorkProfileDimension(
+        label: '知识沉淀',
+        value: kb?.documentCount,
+        cap: 20,
+        unit: '篇',
+        period: '当前累计',
+      ),
+      UserWorkProfileDimension(
+        label: '发起审批',
+        value: approvalCount,
+        cap: 6,
+        unit: '项',
+        period: monthLabel,
+      ),
+      UserWorkProfileDimension(
+        label: '发起提案',
+        value: proposalCount,
+        cap: 6,
+        unit: '项',
+        period: monthLabel,
+      ),
+    ],
     updatedAt: '${meta?['updatedAt'] ?? ''}',
   );
 }
@@ -634,6 +686,13 @@ class _NativeUserWorkProfilePageState extends State<NativeUserWorkProfilePage> {
                         points: portrait.trend,
                         updatedAt: portrait.updatedAt,
                       ),
+                      if (portrait.dimensions.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        WorkProfileRadarCard(
+                          dimensions: portrait.dimensions,
+                          monthLabel: _formatMonthLabel(_month),
+                        ),
+                      ],
                       const SizedBox(height: 18),
                       Text(
                         '我的工作画像',
@@ -858,6 +917,189 @@ class _ExplanationCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class WorkProfileRadarCard extends StatelessWidget {
+  const WorkProfileRadarCard({
+    super.key,
+    required this.dimensions,
+    required this.monthLabel,
+  });
+
+  final List<UserWorkProfileDimension> dimensions;
+  final String monthLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE9E2EF)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$monthLabel 工作维度',
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF342740),
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            '按任务、会议、知识、审批与提案记录展示；不是能力评分或排名。',
+            style: TextStyle(fontSize: 11, color: Color(0xFF817589)),
+          ),
+          const SizedBox(height: 8),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final size = math.min(340.0, constraints.maxWidth).toDouble();
+              return Center(
+                child: SizedBox.square(
+                  dimension: size,
+                  child: CustomPaint(
+                    painter: _WorkProfileRadarPainter(dimensions),
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final dimension in dimensions)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8F5FC),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${dimension.label}  ${dimension.value == null ? '暂不可用' : '${dimension.value}/${dimension.cap}${dimension.unit}'}${dimension.period == '当前累计' ? ' · 累计' : ''}',
+                    style: const TextStyle(
+                      color: Color(0xFF62576F),
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '图形采用柔和非线性缩放，提升低频记录的可读性；实际数量见各轴标签，不代表能力评分。',
+            style: TextStyle(fontSize: 10.5, color: Color(0xFF9A8FA3)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WorkProfileRadarPainter extends CustomPainter {
+  _WorkProfileRadarPainter(this.dimensions);
+
+  final List<UserWorkProfileDimension> dimensions;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (dimensions.length < 3) return;
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) / 2 - 48;
+    if (radius <= 0) return;
+    final pointsFor = (double scale) => [
+      for (var index = 0; index < dimensions.length; index++)
+        _radarPoint(center, radius * scale, index, dimensions.length),
+    ];
+
+    final gridPaint = Paint()
+      ..color = const Color(0xFFE8E1F0)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    for (var level = 1; level <= 4; level++) {
+      final path = Path()..addPolygon(pointsFor(level / 4), true);
+      canvas.drawPath(path, gridPaint);
+    }
+
+    final axisPaint = Paint()
+      ..color = const Color(0xFFE8E1F0)
+      ..strokeWidth = 1;
+    for (var index = 0; index < dimensions.length; index++) {
+      final point = _radarPoint(center, radius, index, dimensions.length);
+      canvas.drawLine(center, point, axisPaint);
+      _paintRadarLabel(
+        canvas,
+        dimensions[index].label,
+        _radarPoint(center, radius + 28, index, dimensions.length),
+        size,
+      );
+    }
+
+    if (dimensions.every((dimension) => dimension.value != null)) {
+      final values = [
+        for (var index = 0; index < dimensions.length; index++)
+          _radarPoint(
+            center,
+            radius * math.sqrt(dimensions[index].chartValue),
+            index,
+            dimensions.length,
+          ),
+      ];
+      final fill = Paint()
+        ..color = const Color(0x407B5CD8)
+        ..style = PaintingStyle.fill;
+      final line = Paint()
+        ..color = const Color(0xFF7B5CD8)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2;
+      final path = Path()..addPolygon(values, true);
+      canvas.drawPath(path, fill);
+      canvas.drawPath(path, line);
+      final pointPaint = Paint()..color = const Color(0xFF7B5CD8);
+      for (final point in values) {
+        canvas.drawCircle(point, 3.2, pointPaint);
+      }
+    }
+  }
+
+  Offset _radarPoint(Offset center, double radius, int index, int count) {
+    final angle = -math.pi / 2 + (2 * math.pi * index / count);
+    return Offset(
+      center.dx + math.cos(angle) * radius,
+      center.dy + math.sin(angle) * radius,
+    );
+  }
+
+  void _paintRadarLabel(Canvas canvas, String label, Offset point, Size size) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: const TextStyle(fontSize: 11, color: Color(0xFF6E637A)),
+      ),
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.center,
+      maxLines: 1,
+    )..layout(maxWidth: 78);
+    final dx = (point.dx - painter.width / 2)
+        .clamp(0.0, size.width - painter.width)
+        .toDouble();
+    final dy = (point.dy - painter.height / 2)
+        .clamp(0.0, size.height - painter.height)
+        .toDouble();
+    painter.paint(canvas, Offset(dx, dy));
+  }
+
+  @override
+  bool shouldRepaint(covariant _WorkProfileRadarPainter oldDelegate) =>
+      oldDelegate.dimensions != dimensions;
 }
 
 class WorkProfileTrendCard extends StatefulWidget {

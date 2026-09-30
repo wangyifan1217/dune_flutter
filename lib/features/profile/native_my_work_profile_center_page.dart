@@ -14,6 +14,7 @@ import '../auth/auth_session.dart';
 import '../auth/qr_login_scan_page.dart';
 import '../conversation/comm_unread_notifier.dart';
 import '../conversation/conversation_models.dart';
+import '../conversation/conversation_picker_sheet.dart';
 import '../conversation/conversation_service.dart';
 import '../conversation/inbox_hidden_storage.dart';
 import '../conversation/notification_service.dart';
@@ -30,6 +31,7 @@ import '../workbench/workbench_badge_notifier.dart';
 import '../xflow/xflow_models.dart';
 import '../xflow/xflow_service.dart';
 import 'native_user_work_profile_page.dart';
+import 'work_profile_chat_share.dart';
 import 'work_profile_controls.dart';
 
 /// 全新高奢个人工作画像与办公中心主页
@@ -386,6 +388,42 @@ class _NativeMyWorkProfileCenterPageState
     if (raw.isEmpty) return '';
     final separator = raw.contains('?') ? '&' : '?';
     return '$raw${separator}v=$_avatarRefreshVersion';
+  }
+
+  Future<void> _forwardMyWorkProfile() async {
+    final profile = _profile ?? _ProfileUserInfo.fromSession(widget.session);
+    final conversations = ConversationService(session: widget.session);
+    final conversationId = await showConversationPickerSheet(
+      context: context,
+      service: conversations,
+      title: '转发我的工作画像',
+    );
+    if (conversationId == null || conversationId <= 0 || !mounted) return;
+    final share = WorkProfileChatShare(
+      userId: widget.session.userId,
+      name: profile.displayName,
+      departmentName: profile.departmentName,
+      month: formatWorkProfileMonth(_month),
+      sharedAt: DateTime.now(),
+    );
+    try {
+      final sent = await conversations.sendText(
+        conversationId,
+        '[员工画像] ${profile.displayName} · ${formatWorkProfileMonth(_month)}',
+        payload: share.toMessagePayload(),
+      );
+      if (!mounted) return;
+      if (sent == null || sent.id <= 0) throw Exception('IM 未返回消息记录');
+      showDunesToast(context, '工作画像名片已转发');
+    } catch (error) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          '转发失败：${error.toString().replaceFirst('Exception: ', '')}',
+          kind: DunesToastKind.error,
+        );
+      }
+    }
   }
 
   Future<void> _loadWorkProfileData() async {
@@ -1827,6 +1865,17 @@ class _NativeMyWorkProfileCenterPageState
                   ],
                 ),
               ),
+              IconButton(
+                tooltip: '转发工作画像',
+                onPressed: _portraitLoading
+                    ? null
+                    : () => unawaited(_forwardMyWorkProfile()),
+                icon: const Icon(
+                  Icons.ios_share_rounded,
+                  color: Color(0xFF7651B8),
+                  size: 19,
+                ),
+              ),
             ],
           ),
         ),
@@ -1840,6 +1889,14 @@ class _NativeMyWorkProfileCenterPageState
           WorkProfileTrendCard(
             points: snapshot.trend,
             updatedAt: snapshot.updatedAt,
+          ),
+          const SizedBox(height: 16),
+        ],
+
+        if (snapshot.dimensions.isNotEmpty) ...[
+          WorkProfileRadarCard(
+            dimensions: snapshot.dimensions,
+            monthLabel: formatWorkProfileMonthLabel(_month),
           ),
           const SizedBox(height: 16),
         ],

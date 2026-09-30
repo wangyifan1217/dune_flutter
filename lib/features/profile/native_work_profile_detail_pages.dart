@@ -351,6 +351,7 @@ class NativeWorkProfileBusinessPage extends StatefulWidget {
   final VoidCallback onBack;
   final ValueChanged<XflowProposalItem> onOpenProposal;
   final Future<List<XflowProposalItem>> Function()? loadProposals;
+  @Deprecated('绩效规则归入“已发布绩效”模块')
   final Future<WorkProfileKpiScore> Function()? loadScore;
 
   @override
@@ -361,7 +362,6 @@ class NativeWorkProfileBusinessPage extends StatefulWidget {
 class _NativeWorkProfileBusinessPageState
     extends State<NativeWorkProfileBusinessPage> {
   List<XflowProposalItem>? _proposals;
-  WorkProfileKpiScore? _score;
   bool _loading = true;
   bool _failed = false;
 
@@ -377,24 +377,11 @@ class _NativeWorkProfileBusinessPageState
       _failed = false;
     });
     try {
-      final monthText =
-          '${widget.month.year.toString().padLeft(4, '0')}-${widget.month.month.toString().padLeft(2, '0')}';
-      final results = await Future.wait<Object?>([
-        _profileNullable(
-          widget.loadProposals != null
-              ? widget.loadProposals!()
-              : XflowService(session: widget.session).fetchB14Initiated(),
-        ),
-        _profileNullable(
-          widget.loadScore != null
-              ? widget.loadScore!()
-              : WorkProfileKpiService(
-                  session: widget.session,
-                ).fetchMyScore(month: monthText),
-        ),
-      ]);
-      final all = results[0] as List<XflowProposalItem>?;
-      final score = results[1] as WorkProfileKpiScore?;
+      final all = await _profileNullable(
+        widget.loadProposals != null
+            ? widget.loadProposals!()
+            : XflowService(session: widget.session).fetchB14Initiated(),
+      );
       if (!mounted) return;
       setState(() {
         _proposals = all
@@ -404,9 +391,8 @@ class _NativeWorkProfileBusinessPageState
                   item.createdAt?.month == widget.month.month,
             )
             .toList(growable: false);
-        _score = score;
         _loading = false;
-        _failed = all == null && score == null;
+        _failed = all == null;
       });
     } catch (_) {
       if (!mounted) return;
@@ -419,16 +405,6 @@ class _NativeWorkProfileBusinessPageState
 
   @override
   Widget build(BuildContext context) {
-    final person = _score?.me;
-    final tasks =
-        person?.categories
-            .expand((category) => category.tasks)
-            .toList(growable: false) ??
-        const <WorkProfileKpiTask>[];
-    final provinces = tasks
-        .map((task) => task.province.trim())
-        .where((value) => value.isNotEmpty)
-        .toSet();
     final proposals = _proposals;
 
     return _ProfileDetailScaffold(
@@ -436,7 +412,7 @@ class _NativeWorkProfileBusinessPageState
       onBack: widget.onBack,
       onRefresh: _load,
       children: [
-        _InfoCard(text: '${_profileMonthLabel(widget.month)} · 提案与规则'),
+        _InfoCard(text: '${_profileMonthLabel(widget.month)} · 审批与提案记录'),
         const SizedBox(height: 12),
         if (_loading)
           const _LoadingBlock()
@@ -444,12 +420,7 @@ class _NativeWorkProfileBusinessPageState
           _ErrorBlock(onRetry: _load)
         else ...[
           _StatsWrap(
-            items: [
-              if (proposals != null) ('发起提案', proposals.length),
-              if (_score != null) ('规则', tasks.length),
-              if (_score != null) ('覆盖省份', provinces.length),
-              if (person != null) ('绩效主分', person.mainScore.round()),
-            ],
+            items: [if (proposals != null) ('发起提案', proposals.length)],
           ),
           const SizedBox(height: 20),
           const _SectionTitle(title: '当月提案'),
@@ -471,28 +442,6 @@ class _NativeWorkProfileBusinessPageState
                     proposal.proposalType!.trim(),
                 ].where((item) => item.isNotEmpty).join(' · '),
                 onTap: () => widget.onOpenProposal(proposal),
-              ),
-              const SizedBox(height: 10),
-            ],
-          const SizedBox(height: 10),
-          const _SectionTitle(title: '规则'),
-          const SizedBox(height: 10),
-          if (_score == null)
-            _UnavailableBlock(onRetry: _load)
-          else if (tasks.isEmpty)
-            const _EmptyBlock(text: '该月份暂无对应的规则')
-          else
-            for (final task in tasks) ...[
-              _ListCard(
-                icon: Icons.analytics_outlined,
-                title: kpiLighthouseSliceTitle(task),
-                subtitle: [
-                  kpiLighthouseSliceSubtitle(task),
-                  if (task.bucketLabel.isNotEmpty)
-                    task.bucketLabel.replaceAll('板块', ''),
-                  '权重 ${task.weightPct.toStringAsFixed(1)}%',
-                  '得分 ${task.taskTotal.toStringAsFixed(1)}',
-                ].where((item) => item.isNotEmpty).join(' · '),
               ),
               const SizedBox(height: 10),
             ],

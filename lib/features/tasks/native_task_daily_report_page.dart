@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
@@ -28,7 +30,10 @@ class _CalendarLegend extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontSize: 11, color: DunesColors.text3)),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+        ),
       ],
     );
   }
@@ -81,7 +86,8 @@ class _DraftLine {
   final TextEditingController next;
 }
 
-class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
+class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage>
+    with WidgetsBindingObserver {
   late final TaskApi _api = TaskApi(widget.session);
   late DateTime _date = widget.initialDate ?? DateTime.now();
   TaskDailyReportBundle? _bundle;
@@ -98,7 +104,8 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
   bool _showCalendar = false;
   bool _teamCalendar = false;
   bool _guideAutoStarted = false;
-  bool _showQuiet = false;
+  Timer? _draftSaveTimer;
+  String _draftStatus = '草稿仅保存在本机，提交后同步';
   int? _viewUserId;
   String _viewUserName = '';
   final _comment = TextEditingController();
@@ -106,10 +113,21 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
   Map<int, String> _previousNext = const {};
   final _lineListeners = <TextEditingController, VoidCallback>{};
   String? _error;
+  int _reloadGeneration = 0;
+
+  String _draftKey([DateTime? forDate]) {
+    final date = forDate ?? _date;
+    final day = formatTaskYmd(date);
+    return 'task_daily_report_draft_${widget.session.userId}_$day';
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _blockers.addListener(_queueDraftSave);
+    _otherWork.addListener(_queueDraftSave);
+    _nextPlan.addListener(_queueDraftSave);
     unawaited(_reload());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_showGuide());
@@ -129,12 +147,29 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _draftSaveTimer?.cancel();
+    if (_viewUserId == null || _viewUserId == widget.session.userId) {
+      unawaited(_persistDraft());
+    }
+    _blockers.removeListener(_queueDraftSave);
+    _otherWork.removeListener(_queueDraftSave);
+    _nextPlan.removeListener(_queueDraftSave);
     _blockers.dispose();
     _otherWork.dispose();
     _nextPlan.dispose();
     _comment.dispose();
     _disposeLines(_lines);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      unawaited(_flushDraft());
+    }
   }
 
   void _disposeLines(List<_DraftLine> lines) {
@@ -148,11 +183,145 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
     }
   }
 
+  void _queueDraftSave() {
+    if (!mounted ||
+        _loading ||
+        _saving ||
+        _bundle == null ||
+        _bundle!.canSubmit != true) {
+      return;
+    }
+    if (_viewUserId != null && _viewUserId != widget.session.userId) return;
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = Timer(const Duration(milliseconds: 500), () {
+      unawaited(_persistDraft());
+    });
+  }
+
+  Future<void> _persistDraft() async {
+    if (_bundle == null ||
+        _bundle!.canSubmit != true ||
+        (_viewUserId != null && _viewUserId != widget.session.userId)) {
+      return;
+    }
+    final key = _draftKey();
+    final hasContent =
+        _blockers.text.trim().isNotEmpty ||
+        _otherWork.text.trim().isNotEmpty ||
+        _nextPlan.text.trim().isNotEmpty ||
+        _lines.any(
+          (line) =>
+              line.work.text.trim().isNotEmpty ||
+              line.next.text.trim().isNotEmpty ||
+              line.progress.round() != line.task.progressPct,
+        );
+    final payload = jsonEncode({
+      'savedAt': DateTime.now().toIso8601String(),
+      'blockers': _blockers.text,
+      'summary': _otherWork.text,
+      'nextPlan': _nextPlan.text,
+      'items': [
+        for (final line in _lines)
+          {
+            'taskId': line.task.id,
+            'progressPct': line.progress,
+            'workDone': line.work.text,
+            'nextAction': line.next.text,
+          },
+      ],
+    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (hasContent) {
+        await prefs.setString(key, payload);
+      } else {
+        await prefs.remove(key);
+      }
+      if (mounted) setState(() => _draftStatus = '草稿已自动保存到本机');
+    } catch (_) {
+      if (mounted) setState(() => _draftStatus = '自动保存暂不可用，请勿清理应用数据');
+    }
+  }
+
+  Future<void> _restoreDraft(DateTime date, List<_DraftLine> lines) async {
+    if (_viewUserId != null && _viewUserId != widget.session.userId) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_draftKey(date));
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return;
+      final data = Map<String, dynamic>.from(decoded);
+      _blockers.text = data['blockers']?.toString() ?? '';
+      _otherWork.text = data['summary']?.toString() ?? '';
+      _nextPlan.text = data['nextPlan']?.toString() ?? '';
+      final byTask = <int, Map<String, dynamic>>{};
+      final rawItems = data['items'];
+      if (rawItems is List) {
+        for (final rawItem in rawItems) {
+          if (rawItem is Map) {
+            final item = Map<String, dynamic>.from(rawItem);
+            final id = int.tryParse(item['taskId']?.toString() ?? '') ?? 0;
+            if (id > 0) byTask[id] = item;
+          }
+        }
+      }
+      for (final line in lines) {
+        final item = byTask[line.task.id];
+        if (item == null) continue;
+        line.work.text = item['workDone']?.toString() ?? '';
+        line.next.text = item['nextAction']?.toString() ?? '';
+        final progress = item['progressPct'];
+        if (progress is num) line.progress = progress.toDouble().clamp(0, 100);
+      }
+      if (mounted) setState(() => _draftStatus = '已恢复本机未提交草稿');
+    } catch (_) {
+      // A corrupt or unavailable local draft must never block report entry.
+    }
+  }
+
+  Future<void> _clearDraft([DateTime? date]) async {
+    final key = _draftKey(date);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(key);
+    } catch (_) {}
+  }
+
+  Future<void> _flushDraft() async {
+    _draftSaveTimer?.cancel();
+    await _persistDraft();
+  }
+
+  Future<void> _changeDate(
+    DateTime date, {
+    bool loadCalendar = false,
+    bool teamCalendar = false,
+    bool setViewer = false,
+    int? viewUserId,
+    String viewUserName = '',
+  }) async {
+    await _flushDraft();
+    if (!mounted) return;
+    setState(() {
+      _date = date;
+      if (setViewer) {
+        _viewUserId = viewUserId;
+        _viewUserName = viewUserName;
+      }
+      _showCalendar = false;
+      _comment.clear();
+    });
+    if (loadCalendar) {
+      await _loadCalendar(team: teamCalendar);
+    } else {
+      await _reload();
+    }
+  }
+
   void _watchLine(_DraftLine line) {
     void listen(TextEditingController controller) {
-      void listener() {
-        if (mounted) setState(() {});
-      }
+      void listener() => _queueDraftSave();
 
       _lineListeners[controller] = listener;
       controller.addListener(listener);
@@ -162,27 +331,20 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
     listen(line.next);
   }
 
-  bool _lineNeedsAttention(_DraftLine line) {
-    if (line.work.text.trim().isNotEmpty || line.next.text.trim().isNotEmpty) {
-      return true;
-    }
-    if (line.progress.round() != line.task.progressPct) return true;
-    if (line.task.overdue || taskDueOnDay(line.task, _date)) return true;
-    return false;
-  }
-
   void _markNoProgress() {
     for (final line in _lines) {
       if (line.work.text.trim().isEmpty) line.work.text = '无进展';
     }
-    setState(() => _showQuiet = false);
+    _queueDraftSave();
   }
 
   void _reusePreviousNext() {
     var copied = 0;
     for (final line in _lines) {
       final previous = _previousNext[line.task.id];
-      if (previous == null || previous.isEmpty || line.next.text.trim().isNotEmpty) {
+      if (previous == null ||
+          previous.isEmpty ||
+          line.next.text.trim().isNotEmpty) {
         continue;
       }
       line.next.text = previous;
@@ -196,6 +358,8 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
   }
 
   Future<void> _reload() async {
+    final generation = ++_reloadGeneration;
+    final loadDate = DateTime(_date.year, _date.month, _date.day);
     setState(() {
       _loading = true;
       _error = null;
@@ -204,11 +368,10 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
       final viewingOther =
           _viewUserId != null && _viewUserId != widget.session.userId;
       final bundle = await _api.getDailyReport(
-        date: _date,
+        date: loadDate,
         userId: viewingOther ? _viewUserId : null,
       );
-      if (!mounted) return;
-      _disposeLines(_lines);
+      if (!mounted || generation != _reloadGeneration) return;
       final submitted = bundle.report;
       final lines = <_DraftLine>[];
       if (submitted != null && submitted.items.isNotEmpty) {
@@ -241,15 +404,22 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
       _blockers.text = submitted?.blockers ?? '';
       _otherWork.text = submitted?.summary ?? '';
       _nextPlan.text = submitted?.nextPlan ?? '';
+      if (submitted?.submitted != true && !viewingOther) {
+        await _restoreDraft(loadDate, lines);
+      }
+      if (!mounted || generation != _reloadGeneration) {
+        _disposeLines(lines);
+        return;
+      }
+      _disposeLines(_lines);
       setState(() {
         _bundle = bundle;
         _lines = lines;
-        _showQuiet = false;
         _loading = false;
       });
       if (!viewingOther) unawaited(_loadPreviousNext());
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _reloadGeneration) return;
       setState(() {
         _error = '$e';
         _loading = false;
@@ -322,8 +492,7 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
       lastDate: DateTime.now(),
     );
     if (picked == null || !mounted) return;
-    setState(() => _date = picked);
-    await _reload();
+    await _changeDate(picked);
   }
 
   Future<void> _submit() async {
@@ -376,16 +545,20 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
       ),
     );
     if (ok != true || !mounted) return;
+    await _flushDraft();
+    final submittedDate = _date;
     setState(() => _saving = true);
     try {
       await _api.submitDailyReport({
-        'reportDate': formatTaskYmd(_date),
+        'reportDate': formatTaskYmd(submittedDate),
         'summary': _otherWork.text.trim(),
         'blockers': _blockers.text.trim(),
         'nextPlan': _nextPlan.text.trim(),
         'items': items,
       });
       if (!mounted) return;
+      await _clearDraft(submittedDate);
+      _draftStatus = '日报已提交';
       showDunesCenterToast(context, '日报已提交');
       await _reload();
     } catch (e) {
@@ -399,90 +572,91 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
   Widget build(BuildContext context) {
     return TaskTheme(
       child: Material(
-      color: DunesColors.bgApp,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-            child: Row(
-              children: [
-                InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: widget.onBack,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.arrow_back_ios_new,
-                          size: 14,
-                          color: DunesColors.text2,
-                        ),
-                        SizedBox(width: 2),
-                        Text(
-                          '返回',
-                          style: TextStyle(
-                            fontSize: 13,
+        color: DunesColors.bgApp,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+              child: Row(
+                children: [
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: widget.onBack,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.arrow_back_ios_new,
+                            size: 14,
                             color: DunesColors.text2,
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      reverse: true,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            tooltip: '使用指引',
-                            onPressed: () => unawaited(_showGuide(force: true)),
-                            icon: const Icon(
-                              Icons.help_outline,
+                          SizedBox(width: 2),
+                          Text(
+                            '返回',
+                            style: TextStyle(
+                              fontSize: 13,
                               color: DunesColors.text2,
                             ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                _showHistory = !_showHistory;
-                                _showCalendar = false;
-                              });
-                              if (_showHistory) unawaited(_loadHistory());
-                            },
-                            child: Text(_showHistory ? '返回填写' : '历史日报'),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                _showCalendar = !_showCalendar;
-                                _showHistory = false;
-                              });
-                              if (_showCalendar) unawaited(_loadCalendar());
-                            },
-                            child: Text(_showCalendar ? '返回填写' : '月历'),
                           ),
                         ],
                       ),
                     ),
                   ),
-                ),
-              ],
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        reverse: true,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: '使用指引',
+                              onPressed: () =>
+                                  unawaited(_showGuide(force: true)),
+                              icon: const Icon(
+                                Icons.help_outline,
+                                color: DunesColors.text2,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  _showHistory = !_showHistory;
+                                  _showCalendar = false;
+                                });
+                                if (_showHistory) unawaited(_loadHistory());
+                              },
+                              child: Text(_showHistory ? '返回填写' : '历史日报'),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  _showCalendar = !_showCalendar;
+                                  _showHistory = false;
+                                });
+                                if (_showCalendar) unawaited(_loadCalendar());
+                              },
+                              child: Text(_showCalendar ? '返回填写' : '月历'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: _showCalendar
-                ? _buildCalendar()
-                : (_showHistory ? _buildHistory() : _buildForm()),
-          ),
-        ],
+            Expanded(
+              child: _showCalendar
+                  ? _buildCalendar()
+                  : (_showHistory ? _buildHistory() : _buildForm()),
+            ),
+          ],
+        ),
       ),
-    ),
     );
   }
 
@@ -503,10 +677,13 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
           children: [
             IconButton(
               tooltip: '上月',
-              onPressed: () {
-                setState(() => _date = DateTime(_date.year, _date.month - 1));
-                unawaited(_loadCalendar(team: _teamCalendar));
-              },
+              onPressed: () => unawaited(
+                _changeDate(
+                  DateTime(_date.year, _date.month - 1),
+                  loadCalendar: true,
+                  teamCalendar: _teamCalendar,
+                ),
+              ),
               icon: const Icon(Icons.chevron_left),
             ),
             Expanded(
@@ -518,10 +695,13 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
             ),
             IconButton(
               tooltip: '下月',
-              onPressed: () {
-                setState(() => _date = DateTime(_date.year, _date.month + 1));
-                unawaited(_loadCalendar(team: _teamCalendar));
-              },
+              onPressed: () => unawaited(
+                _changeDate(
+                  DateTime(_date.year, _date.month + 1),
+                  loadCalendar: true,
+                  teamCalendar: _teamCalendar,
+                ),
+              ),
               icon: const Icon(Icons.chevron_right),
             ),
           ],
@@ -531,10 +711,7 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
           child: TaskFilterChipDropdown<bool>(
             value: _teamCalendar,
             label: _teamCalendar ? '团队月历' : '我的月历',
-            items: const [
-              (false, '我的日报月历'),
-              (true, '团队日报月历'),
-            ],
+            items: const [(false, '我的日报月历'), (true, '团队日报月历')],
             onChanged: (team) => unawaited(_loadCalendar(team: team)),
           ),
         ),
@@ -590,8 +767,14 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
         ),
         child: Column(
           children: [
-            Text('$value', style: TextStyle(fontWeight: FontWeight.w800, color: color)),
-            Text(label, style: const TextStyle(fontSize: 11, color: DunesColors.text3)),
+            Text(
+              '$value',
+              style: TextStyle(fontWeight: FontWeight.w800, color: color),
+            ),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+            ),
           ],
         ),
       ),
@@ -620,44 +803,44 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
         ),
         const SizedBox(height: 6),
         GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 7,
-        crossAxisSpacing: 5,
-        mainAxisSpacing: 5,
-      ),
-      itemCount: lead + days.length,
-      itemBuilder: (_, index) {
-        if (index < lead) return const SizedBox.shrink();
-        final day = days[index - lead];
-        final parsed = DateTime.tryParse(day.date);
-        return InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: () {
-            if (parsed == null) return;
-            setState(() {
-              _date = parsed;
-              _showCalendar = false;
-            });
-            unawaited(_reload());
-          },
-          child: Container(
-            decoration: BoxDecoration(
-              color: _calendarColor(day.status).withValues(alpha: 0.13),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _calendarColor(day.status).withValues(alpha: 0.28)),
-            ),
-            child: Center(
-              child: Text(
-                '${parsed?.day ?? ''}',
-                style: TextStyle(fontWeight: FontWeight.w700, color: _calendarColor(day.status)),
-              ),
-            ),
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 7,
+            crossAxisSpacing: 5,
+            mainAxisSpacing: 5,
           ),
-        );
-      },
-    ),
+          itemCount: lead + days.length,
+          itemBuilder: (_, index) {
+            if (index < lead) return const SizedBox.shrink();
+            final day = days[index - lead];
+            final parsed = DateTime.tryParse(day.date);
+            return InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: parsed == null
+                  ? null
+                  : () => unawaited(_changeDate(parsed)),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _calendarColor(day.status).withValues(alpha: 0.13),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _calendarColor(day.status).withValues(alpha: 0.28),
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    '${parsed?.day ?? ''}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: _calendarColor(day.status),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
       ],
     );
   }
@@ -678,22 +861,36 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
         columns: [
           const DataColumn(label: Text('员工')),
           for (var i = 0; i < limit; i++)
-            DataColumn(label: Text('${DateTime.tryParse(calendar.days[i])?.day ?? ''}')),
+            DataColumn(
+              label: Text('${DateTime.tryParse(calendar.days[i])?.day ?? ''}'),
+            ),
         ],
         rows: [
           for (final user in calendar.users)
             DataRow(
               cells: [
-                DataCell(SizedBox(width: 72, child: Text(user.userName.isEmpty ? '员工${user.userId}' : user.userName, overflow: TextOverflow.ellipsis))),
-                for (var i = 0; i < limit; i++)
-                  DataCell(
-                  _statusDot(i < user.days.length ? user.days[i].status : 'rest'),
-                  onTap: () => _openMemberReport(
-                    user.userId,
-                    user.userName,
-                    calendar.days[i],
+                DataCell(
+                  SizedBox(
+                    width: 72,
+                    child: Text(
+                      user.userName.isEmpty
+                          ? '员工${user.userId}'
+                          : user.userName,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
+                for (var i = 0; i < limit; i++)
+                  DataCell(
+                    _statusDot(
+                      i < user.days.length ? user.days[i].status : 'rest',
+                    ),
+                    onTap: () => _openMemberReport(
+                      user.userId,
+                      user.userName,
+                      calendar.days[i],
+                    ),
+                  ),
               ],
             ),
         ],
@@ -704,21 +901,24 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
   void _openMemberReport(int userId, String name, String day) {
     final parsed = DateTime.tryParse(day);
     if (userId <= 0 || parsed == null) return;
-    setState(() {
-      _viewUserId = userId == widget.session.userId ? null : userId;
-      _viewUserName = userId == widget.session.userId ? '' : name;
-      _date = parsed;
-      _showCalendar = false;
-      _comment.clear();
-    });
-    unawaited(_reload());
+    unawaited(
+      _changeDate(
+        parsed,
+        setViewer: true,
+        viewUserId: userId == widget.session.userId ? null : userId,
+        viewUserName: userId == widget.session.userId ? '' : name,
+      ),
+    );
   }
 
   Widget _statusDot(String status) {
     return Container(
       width: 16,
       height: 16,
-      decoration: BoxDecoration(color: _calendarColor(status), shape: BoxShape.circle),
+      decoration: BoxDecoration(
+        color: _calendarColor(status),
+        shape: BoxShape.circle,
+      ),
     );
   }
 
@@ -752,11 +952,14 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
           onTap: () {
             final parsed = DateTime.tryParse(r.reportDate);
             if (parsed == null) return;
-            setState(() {
-              _date = parsed;
-              _showHistory = false;
-            });
-            unawaited(_reload());
+            setState(() => _showHistory = false);
+            unawaited(
+              _changeDate(
+                parsed,
+                viewUserId: _viewUserId,
+                viewUserName: _viewUserName,
+              ),
+            );
           },
         );
       },
@@ -787,7 +990,10 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
               color: const Color(0xFFF3EEFF),
               borderRadius: BorderRadius.circular(12),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 child: Row(
                   children: [
                     Expanded(
@@ -797,14 +1003,8 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
                       ),
                     ),
                     TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _viewUserId = null;
-                          _viewUserName = '';
-                          _comment.clear();
-                        });
-                        unawaited(_reload());
-                      },
+                      onPressed: () =>
+                          unawaited(_changeDate(_date, setViewer: true)),
                       child: const Text('返回我的日报'),
                     ),
                   ],
@@ -917,6 +1117,19 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
               ],
             ),
           ),
+        if (!readOnly)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: SizedBox(
+              height: 16,
+              child: Text(
+                _draftStatus,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+              ),
+            ),
+          ),
         ..._reportLineCards(readOnly: readOnly),
         if (!submitted &&
             bundle?.canSubmit != true &&
@@ -937,6 +1150,7 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
           TextField(
             controller: _blockers,
             readOnly: readOnly,
+            minLines: 3,
             maxLines: 3,
             decoration: _inputDecoration('卡住的事（选填）'),
           ),
@@ -947,6 +1161,7 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
           TextField(
             controller: _otherWork,
             readOnly: readOnly,
+            minLines: 3,
             maxLines: 3,
             decoration: _inputDecoration('未挂在主目标或子目标下的工作（选填）'),
           ),
@@ -957,6 +1172,7 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
           TextField(
             controller: _nextPlan,
             readOnly: readOnly,
+            minLines: 3,
             maxLines: 3,
             decoration: _inputDecoration('明天准备继续推进什么（选填）'),
           ),
@@ -981,54 +1197,11 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
   }
 
   List<Widget> _reportLineCards({required bool readOnly}) {
-    final visible = readOnly
-        ? _lines
-        : _lines.where(_lineNeedsAttention).toList(growable: false);
-    final quiet = readOnly
-        ? const <_DraftLine>[]
-        : _lines.where((line) => !_lineNeedsAttention(line)).toList(growable: false);
     return [
-      for (final line in visible) ...[
+      for (final line in _lines) ...[
         _lineCard(line, readOnly: readOnly),
         const SizedBox(height: 10),
       ],
-      if (quiet.isNotEmpty)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Material(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => setState(() => _showQuiet = !_showQuiet),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '无变化 ${quiet.length} 项',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    Text(
-                      _showQuiet ? '收起' : '展开',
-                      style: const TextStyle(
-                        color: kTaskPurple,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      if (_showQuiet)
-        for (final line in quiet) ...[
-          _lineCard(line, readOnly: readOnly),
-          const SizedBox(height: 10),
-        ],
     ];
   }
 
@@ -1158,8 +1331,8 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
           TextField(
             controller: line.work,
             readOnly: readOnly,
-            minLines: 2,
-            maxLines: 4,
+            minLines: 3,
+            maxLines: 3,
             decoration: _inputDecoration('写清楚今天完成了什么', accent: accent),
           ),
           const SizedBox(height: 10),
@@ -1175,8 +1348,8 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
           TextField(
             controller: line.next,
             readOnly: readOnly,
-            minLines: 1,
-            maxLines: 3,
+            minLines: 2,
+            maxLines: 2,
             decoration: _inputDecoration('下一步准备做什么（选填）', accent: accent),
           ),
           if (!readOnly)
@@ -1185,17 +1358,23 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
               child: Wrap(
                 spacing: 8,
                 children: [
-                  if (line.work.text.trim().isEmpty)
+                  TextButton(
+                    onPressed: () {
+                      if (line.work.text.trim().isEmpty) {
+                        line.work.text = '无进展';
+                        _queueDraftSave();
+                      }
+                    },
+                    child: const Text('无进展'),
+                  ),
+                  if ((_previousNext[line.task.id] ?? '').isNotEmpty)
                     TextButton(
-                      onPressed: () => setState(() => line.work.text = '无进展'),
-                      child: const Text('无进展'),
-                    ),
-                  if ((_previousNext[line.task.id] ?? '').isNotEmpty &&
-                      line.next.text.trim().isEmpty)
-                    TextButton(
-                      onPressed: () => setState(
-                        () => line.next.text = _previousNext[line.task.id]!,
-                      ),
+                      onPressed: () {
+                        if (line.next.text.trim().isEmpty) {
+                          line.next.text = _previousNext[line.task.id]!;
+                          _queueDraftSave();
+                        }
+                      },
                       child: const Text('沿用上次'),
                     ),
                 ],
@@ -1223,8 +1402,13 @@ class _NativeTaskDailyReportPageState extends State<NativeTaskDailyReportPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      comment.userName.isEmpty ? '用户${comment.userId}' : comment.userName,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      comment.userName.isEmpty
+                          ? '用户${comment.userId}'
+                          : comment.userName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(comment.body, style: const TextStyle(height: 1.4)),

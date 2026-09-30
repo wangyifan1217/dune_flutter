@@ -2012,7 +2012,7 @@ class SwipeableChatInboxRow extends StatefulWidget {
     required this.child,
     this.onDelete,
     this.onMarkUnread,
-    this.markUnreadLabel = '标志未读',
+    this.markUnreadLabel = '标为未读',
   });
 
   final Widget child;
@@ -2083,7 +2083,7 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
                     if (widget.onMarkUnread != null)
                       _swipeAction(
                         label: widget.markUnreadLabel,
-                        color: const Color(0xFF8E8E93),
+                        color: const Color(0xFF3478F6),
                         onTap: widget.onMarkUnread!,
                       ),
                     if (widget.onDelete != null)
@@ -2125,7 +2125,6 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
     );
   }
 }
-
 
 /// 已读不回工作群的文字标识（列表 / 顶栏共用）。只给 reply_sla 新工作群用。
 class WorkgroupTag extends StatelessWidget {

@@ -1203,9 +1203,9 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
               children: [
-                Row(
-                  children: [
-                    InkWell(
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final back = InkWell(
                       borderRadius: BorderRadius.circular(8),
                       onTap: widget.onBack,
                       child: Padding(
@@ -1232,62 +1232,105 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                           ],
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        '任务详情',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: _themePurple,
-                        ),
+                    );
+                    final title = const Text(
+                      '任务详情',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: _themePurple,
                       ),
-                    ),
-                    if (d.task.id > 0)
-                      IconButton(
-                        tooltip: '转发到 IM',
-                        onPressed: _sharing
-                            ? null
-                            : () => unawaited(_shareTask()),
-                        icon: _sharing
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(
-                                Icons.ios_share_rounded,
-                                size: 19,
-                                color: _themePurple,
-                              ),
-                      ),
-                    IconButton(
+                    );
+                    final share = IconButton(
+                      tooltip: '转发到 IM',
+                      onPressed: _sharing
+                          ? null
+                          : () => unawaited(_shareTask()),
+                      icon: _sharing
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(
+                              Icons.ios_share_rounded,
+                              size: 19,
+                              color: _themePurple,
+                            ),
+                    );
+                    final guide = IconButton(
                       tooltip: '使用指引',
                       onPressed: () => unawaited(_showGuide(force: true)),
                       icon: const Icon(
                         Icons.help_outline,
                         color: DunesColors.text2,
                       ),
-                    ),
-                    if (_canAddSubtask)
-                      TextButton.icon(
-                        onPressed: _busy ? null : widget.onAddSubtask,
-                        icon: const Icon(Icons.add_task_outlined, size: 18),
-                        label: const Text('添加子目标'),
-                      ),
-                    if (_canDelete)
-                      IconButton(
-                        tooltip: '删除',
-                        onPressed: _busy ? null : _delete,
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          color: DunesColors.text3,
-                        ),
-                      ),
-                  ],
+                    );
+                    final add = _canAddSubtask
+                        ? IconButton(
+                            tooltip: '添加子目标',
+                            onPressed: _busy ? null : widget.onAddSubtask,
+                            icon: const Icon(
+                              Icons.add_task_outlined,
+                              color: _themePurple,
+                            ),
+                          )
+                        : const SizedBox.shrink();
+                    final delete = _canDelete
+                        ? IconButton(
+                            tooltip: '删除',
+                            onPressed: _busy ? null : _delete,
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: DunesColors.text3,
+                            ),
+                          )
+                        : const SizedBox.shrink();
+                    if (constraints.maxWidth < 560) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              back,
+                              const SizedBox(width: 8),
+                              Expanded(child: title),
+                            ],
+                          ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (d.task.id > 0) share,
+                                guide,
+                                if (_canAddSubtask) add,
+                                if (_canDelete) delete,
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        back,
+                        const SizedBox(width: 8),
+                        Expanded(child: title),
+                        if (d.task.id > 0) share,
+                        guide,
+                        if (_canAddSubtask)
+                          TextButton.icon(
+                            onPressed: _busy ? null : widget.onAddSubtask,
+                            icon: const Icon(Icons.add_task_outlined, size: 18),
+                            label: const Text('添加子目标'),
+                          ),
+                        if (_canDelete) delete,
+                      ],
+                    );
+                  },
                 ),
                 if (_viewOnly || _isParticipantOnly) ...[
                   const SizedBox(height: 8),

@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 
 import '../../core/theme/dunes_theme.dart';
 import 'task_models.dart';
 import 'task_widgets.dart';
 
 class TaskChangeDraft {
-  const TaskChangeDraft({
-    this.title,
-    this.description,
-    this.dueAt,
-  });
+  const TaskChangeDraft({this.title, this.description, this.dueAt});
 
   final String? title;
   final String? description;
@@ -93,11 +90,7 @@ class _TaskChangeDialogState extends State<_TaskChangeDialog> {
     }
     if (widget.task.startAt != null &&
         _dueAt != null &&
-        DateTime(
-          _dueAt!.year,
-          _dueAt!.month,
-          _dueAt!.day,
-        ).isBefore(
+        DateTime(_dueAt!.year, _dueAt!.month, _dueAt!.day).isBefore(
           DateTime(
             widget.task.startAt!.year,
             widget.task.startAt!.month,
@@ -136,128 +129,277 @@ class _TaskChangeDialogState extends State<_TaskChangeDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text('修改任务'),
-      content: SizedBox(
-        width: 460,
-        child: SingleChildScrollView(
+    final screen = MediaQuery.sizeOf(context);
+    final width = math.min(520.0, screen.width - 24).toDouble();
+    final height = math.min(680.0, screen.height * 0.84).toDouble();
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+      backgroundColor: Colors.transparent,
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: Material(
+          color: Colors.white,
+          clipBehavior: Clip.antiAlias,
+          borderRadius: BorderRadius.circular(24),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                '标题、内容和截止日提交后由任务流上级审批，通过前页面仍显示原文。',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: DunesColors.text2,
-                  height: 1.4,
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 18, 12, 18),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFFF6F1FF), Color(0xFFFFFFFF)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  border: Border(bottom: BorderSide(color: Color(0xFFEDE8F7))),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _titleCtrl,
-                decoration: InputDecoration(
-                  labelText: '标题',
-                  filled: true,
-                  fillColor: const Color(0xFFF5F6F8),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _descCtrl,
-                maxLines: 4,
-                decoration: InputDecoration(
-                  labelText: '内容',
-                  filled: true,
-                  fillColor: const Color(0xFFF5F6F8),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              InkWell(
-                onTap: _pickDue,
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF5F6F8),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              '截止日',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: DunesColors.text3,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _fmt(_dueAt),
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: _dueAt == null
-                                    ? DunesColors.text3
-                                    : DunesColors.text,
-                              ),
-                            ),
-                          ],
-                        ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF7B5CD8).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(14),
                       ),
-                      const Icon(
-                        Icons.calendar_today_outlined,
-                        size: 16,
+                      child: const Icon(
+                        Icons.edit_note_rounded,
+                        color: Color(0xFF7B5CD8),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '修改任务信息',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: DunesColors.text,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            widget.task.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: DunesColors.text2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '关闭',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(
+                        Icons.close_rounded,
                         color: DunesColors.text3,
                       ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.info_outline_rounded,
+                      size: 17,
+                      color: Color(0xFF7B5CD8),
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        '提交后由任务流上级审批，通过前仍显示原信息。',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: DunesColors.text2,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF4DE),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text(
+                        '需审批',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF986514),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _fieldLabel('任务标题'),
+                      TextField(
+                        controller: _titleCtrl,
+                        textInputAction: TextInputAction.next,
+                        decoration: _inputDecoration('输入清晰、可执行的任务标题'),
+                      ),
+                      const SizedBox(height: 16),
+                      _fieldLabel('任务内容'),
+                      TextField(
+                        controller: _descCtrl,
+                        minLines: 4,
+                        maxLines: 7,
+                        decoration: _inputDecoration('补充背景、目标或交付要求'),
+                      ),
+                      const SizedBox(height: 16),
+                      _fieldLabel('截止日期'),
+                      InkWell(
+                        onTap: _pickDue,
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 14,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF7F7FA),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFFE8E7EE)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.calendar_month_outlined,
+                                color: Color(0xFF7B5CD8),
+                                size: 20,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  _fmt(_dueAt),
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: _dueAt == null
+                                        ? DunesColors.text3
+                                        : DunesColors.text,
+                                  ),
+                                ),
+                              ),
+                              const Icon(
+                                Icons.chevron_right_rounded,
+                                color: DunesColors.text3,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (_error != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          _error!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFFE35D6A),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ),
-              if (_error != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _error!,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFFE35D6A),
-                  ),
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: Color(0xFFF0EEF4))),
                 ),
-              ],
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(46),
+                          foregroundColor: DunesColors.text2,
+                          side: const BorderSide(color: Color(0xFFE3E1E8)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Text('取消'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: FilledButton.icon(
+                        key: const Key('task-change-submit'),
+                        onPressed: _submit,
+                        icon: const Icon(Icons.send_rounded, size: 17),
+                        label: const Text('提交修改'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: DunesColors.brandPurple,
+                          minimumSize: const Size.fromHeight(46),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          key: const Key('task-change-submit'),
-          style: FilledButton.styleFrom(
-            backgroundColor: DunesColors.brandPurple,
-          ),
-          onPressed: _submit,
-          child: const Text('提交审批'),
-        ),
-      ],
     );
   }
+
+  Widget _fieldLabel(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 7),
+    child: Text(
+      text,
+      style: const TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        color: DunesColors.text,
+      ),
+    ),
+  );
+
+  InputDecoration _inputDecoration(String hint) => InputDecoration(
+    hintText: hint,
+    hintStyle: const TextStyle(fontSize: 13, color: DunesColors.text3),
+    filled: true,
+    fillColor: const Color(0xFFF7F7FA),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: Color(0xFFE8E7EE)),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: Color(0xFFE8E7EE)),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: Color(0xFF7B5CD8), width: 1.4),
+    ),
+  );
 }

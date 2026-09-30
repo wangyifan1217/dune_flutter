@@ -44,6 +44,7 @@ import '../kb/native_kb_service.dart';
 import '../meeting/meeting_minutes_chat_share.dart';
 import '../meeting/native_meeting_detail_page.dart';
 import '../payroll/payroll_report_share_card.dart';
+import '../profile/work_profile_chat_share.dart';
 import '../kpi/kpi_score_summary_card.dart';
 import '../kpi/kpi_summary_person_sheet.dart';
 import '../robots/robot_markdown.dart';
@@ -8524,6 +8525,13 @@ class _NativeChatViewState extends State<NativeChatView>
         onTap: () => _openDailyReportPersonShare(m.payload),
       );
     }
+    final workProfileShare = WorkProfileChatShare.fromPayload(m.payload);
+    if (workProfileShare != null) {
+      return WorkProfileChatShareCard(
+        session: widget.session,
+        share: workProfileShare,
+      );
+    }
     final payrollReportShare = PayrollReportShareCardData.fromPayload(
       m.payload,
     );
@@ -8862,7 +8870,8 @@ class _NativeChatViewState extends State<NativeChatView>
           if (k == 'IMAGE' || k == 'FILE' || k == 'AUDIO' || k == 'VIDEO') {
             return e.payload != null;
           }
-          return e.payload?['forward'] is Map;
+          return e.payload?['forward'] is Map ||
+              e.payload?['workProfileShareCard'] is Map;
         })
         .toList(growable: false);
     if (entries.isEmpty) return null;
@@ -8874,6 +8883,13 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Widget _buildForwardEntryContent(_ForwardEntry e, {required bool mine}) {
+    final workProfileShare = WorkProfileChatShare.fromPayload(e.payload);
+    if (workProfileShare != null) {
+      return WorkProfileChatShareCard(
+        session: widget.session,
+        share: workProfileShare,
+      );
+    }
     final payrollReportShare = PayrollReportShareCardData.fromPayload(
       e.payload,
     );

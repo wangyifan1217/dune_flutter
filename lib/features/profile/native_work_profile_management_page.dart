@@ -3,16 +3,20 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import '../../core/widgets/dunes_month_picker.dart';
 import '../../core/widgets/horizontal_drag_scroll_view.dart';
 import '../auth/auth_session.dart';
+import '../conversation/conversation_picker_sheet.dart';
+import '../conversation/conversation_service.dart';
+import '../shell/dunes_toast.dart';
 import 'native_user_work_profile_page.dart';
+import 'work_profile_chat_share.dart';
+import 'work_profile_controls.dart';
 import 'work_profile_service.dart';
 
 const _profilePurple = Color(0xFF7651B8);
 const _profileInk = Color(0xFF342740);
 const _profileMuted = Color(0xFF817589);
-
-enum _ProfileRangePreset { week, d7, d30, custom }
 
 class NativeWorkProfileManagementPage extends StatefulWidget {
   const NativeWorkProfileManagementPage({
@@ -36,49 +40,24 @@ class _NativeWorkProfileManagementPageState
   bool _loading = true;
   String? _error;
   int _generation = 0;
-  _ProfileRangePreset _rangePreset = _ProfileRangePreset.d7;
-  DateTime? _customFrom;
-  DateTime? _customTo;
+  DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
   int? _selectedDepartmentId;
   final TextEditingController _keywordCtrl = TextEditingController();
 
-  DateTime get _today {
+  DateTime get _currentMonth {
     final now = DateTime.now();
-    return DateTime(now.year, now.month, now.day);
+    return DateTime(now.year, now.month);
   }
 
-  (DateTime, DateTime) get _rangeBounds {
-    final today = _today;
-    switch (_rangePreset) {
-      case _ProfileRangePreset.week:
-        return (today.subtract(Duration(days: today.weekday - 1)), today);
-      case _ProfileRangePreset.d7:
-        return (today.subtract(const Duration(days: 6)), today);
-      case _ProfileRangePreset.d30:
-        return (today.subtract(const Duration(days: 29)), today);
-      case _ProfileRangePreset.custom:
-        return (_customFrom ?? today.subtract(const Duration(days: 6)), _customTo ?? today);
-    }
-  }
+  DateTime get _earliestMonth =>
+      DateTime(_currentMonth.year, _currentMonth.month - 11);
 
-  String get _periodLabel {
-    if (_rangePreset == _ProfileRangePreset.custom) return _customRangeLabel;
-    final (from, to) = _rangeBounds;
-    String fmt(DateTime day) =>
-        '${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
-    return '${fmt(from)}~${fmt(to)}';
-  }
-
-  String get _customRangeLabel {
-    final from = _customFrom;
-    final to = _customTo;
-    if (from == null || to == null) return '自定义';
-    String fmt(DateTime day) =>
-        '${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
-    return '${fmt(from)}~${fmt(to)}';
-  }
+  String get _monthKey => formatWorkProfileMonth(_month);
+  String get _periodLabel => formatWorkProfileMonthLabel(_month);
 
   bool get _viewAll => (_team?.scopeLabel ?? '').contains('全部');
+
+  bool get _allowPersonDrilldown => _team?.allowPersonDrilldown == true;
 
   List<(int, String)> get _departments {
     final names = <int, String>{};
@@ -97,16 +76,18 @@ class _NativeWorkProfileManagementPageState
 
   List<WorkProfileSafePerson> get _visiblePeople {
     final query = _keywordCtrl.text.trim().toLowerCase();
-    return (_team?.people ?? const <WorkProfileSafePerson>[]).where((item) {
-      if (_selectedDepartmentId != null &&
-          item.departmentId != _selectedDepartmentId) {
-        return false;
-      }
-      if (query.isEmpty) return true;
-      return item.name.toLowerCase().contains(query) ||
-          item.username.toLowerCase().contains(query) ||
-          item.title.toLowerCase().contains(query);
-    }).toList(growable: false);
+    return (_team?.people ?? const <WorkProfileSafePerson>[])
+        .where((item) {
+          if (_selectedDepartmentId != null &&
+              item.departmentId != _selectedDepartmentId) {
+            return false;
+          }
+          if (query.isEmpty) return true;
+          return item.name.toLowerCase().contains(query) ||
+              item.username.toLowerCase().contains(query) ||
+              item.title.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
   }
 
   @override
@@ -123,7 +104,6 @@ class _NativeWorkProfileManagementPageState
 
   Future<void> _loadTeam() async {
     final generation = ++_generation;
-    final (from, to) = _rangeBounds;
     setState(() {
       _loading = true;
       _error = null;
@@ -132,7 +112,7 @@ class _NativeWorkProfileManagementPageState
     try {
       final result = await WorkProfileService(
         session: widget.session,
-      ).fetchTeam(from: from, to: to);
+      ).fetchTeam(month: _monthKey);
       if (!mounted || generation != _generation) return;
       setState(() {
         _team = result;
@@ -149,7 +129,6 @@ class _NativeWorkProfileManagementPageState
 
   Future<void> _openPerson(WorkProfileSafePerson person) async {
     final generation = ++_generation;
-    final (from, to) = _rangeBounds;
     setState(() {
       _loading = true;
       _error = null;
@@ -157,7 +136,7 @@ class _NativeWorkProfileManagementPageState
     try {
       final result = await WorkProfileService(
         session: widget.session,
-      ).fetchPerson(userId: person.userId, from: from, to: to);
+      ).fetchPerson(userId: person.userId, month: _monthKey);
       if (!mounted || generation != _generation) return;
       setState(() {
         _person = result;
@@ -172,13 +151,45 @@ class _NativeWorkProfileManagementPageState
     }
   }
 
-  void _setRangePreset(_ProfileRangePreset preset) {
-    if (preset == _ProfileRangePreset.custom) {
-      unawaited(_pickCustomRange());
-      return;
+  Future<void> _sharePerson(WorkProfileSafePerson person) async {
+    final conversations = ConversationService(session: widget.session);
+    final conversationId = await showConversationPickerSheet(
+      context: context,
+      service: conversations,
+      title: '转发员工画像',
+    );
+    if (conversationId == null || conversationId <= 0 || !mounted) return;
+    final share = WorkProfileChatShare(
+      userId: person.userId,
+      name: person.name,
+      departmentName: person.departmentName,
+      month: _monthKey,
+      sharedAt: DateTime.now(),
+    );
+    try {
+      final sent = await conversations.sendText(
+        conversationId,
+        '[员工画像] ${person.name} · $_periodLabel',
+        payload: share.toMessagePayload(),
+      );
+      if (!mounted) return;
+      if (sent == null || sent.id <= 0) throw Exception('IM 未返回消息记录');
+      showDunesToast(context, '员工画像名片已转发');
+    } catch (error) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          '转发失败：${error.toString().replaceFirst('Exception: ', '')}',
+          kind: DunesToastKind.error,
+        );
+      }
     }
-    if (_rangePreset == preset) return;
-    setState(() => _rangePreset = preset);
+  }
+
+  void _shiftMonth(int delta) {
+    final next = DateTime(_month.year, _month.month + delta);
+    if (next.isBefore(_earliestMonth) || next.isAfter(_currentMonth)) return;
+    setState(() => _month = next);
     final person = _person;
     if (person == null) {
       unawaited(_loadTeam());
@@ -187,41 +198,17 @@ class _NativeWorkProfileManagementPageState
     }
   }
 
-  Future<void> _pickCustomRange() async {
-    final today = _today;
-    final range = await showDateRangePicker(
+  Future<void> _pickMonth() async {
+    final picked = await showDunesMonthPicker(
       context: context,
-      firstDate: DateTime(today.year - 1),
-      lastDate: today,
-      initialDateRange: DateTimeRange(
-        start: _customFrom ?? today.subtract(const Duration(days: 6)),
-        end: _customTo ?? today,
-      ),
-      helpText: '选择范围',
-      cancelText: '取消',
-      confirmText: '确定',
-      saveText: '确定',
-      builder: (ctx, child) {
-        return Theme(
-          data: ThemeData(
-            useMaterial3: true,
-            colorScheme: const ColorScheme.light(
-              primary: _profilePurple,
-              onPrimary: Colors.white,
-              surface: Colors.white,
-              onSurface: _profileInk,
-            ),
-          ),
-          child: child!,
-        );
-      },
+      initialMonth: _month,
+      firstMonth: _earliestMonth,
+      lastMonth: _currentMonth,
+      title: '选择画像月份',
+      accent: _profilePurple,
     );
-    if (range == null || !mounted) return;
-    setState(() {
-      _rangePreset = _ProfileRangePreset.custom;
-      _customFrom = DateTime(range.start.year, range.start.month, range.start.day);
-      _customTo = DateTime(range.end.year, range.end.month, range.end.day);
-    });
+    if (picked == null || !mounted) return;
+    setState(() => _month = DateTime(picked.year, picked.month));
     final person = _person;
     if (person == null) {
       unawaited(_loadTeam());
@@ -270,7 +257,7 @@ class _NativeWorkProfileManagementPageState
                       _errorCard(_error!)
                     else if (person != null)
                       _personContent(person)
-                    else if (people.isEmpty)
+                    else if (!_allowPersonDrilldown || people.isEmpty)
                       _errorCard('当前筛选下没有可显示的员工')
                     else
                       for (final employee in people) ...[
@@ -328,42 +315,18 @@ class _NativeWorkProfileManagementPageState
     );
   }
 
-  Widget _buildRangeFilter() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      child: HorizontalDragScrollView(
-        child: Row(
-          children: [
-            _ProfileChip(
-              label: '本周',
-              selected: _rangePreset == _ProfileRangePreset.week,
-              onTap: () => _setRangePreset(_ProfileRangePreset.week),
-            ),
-            const SizedBox(width: 8),
-            _ProfileChip(
-              label: '近7天',
-              selected: _rangePreset == _ProfileRangePreset.d7,
-              onTap: () => _setRangePreset(_ProfileRangePreset.d7),
-            ),
-            const SizedBox(width: 8),
-            _ProfileChip(
-              label: '近30天',
-              selected: _rangePreset == _ProfileRangePreset.d30,
-              onTap: () => _setRangePreset(_ProfileRangePreset.d30),
-            ),
-            const SizedBox(width: 8),
-            _ProfileChip(
-              label: _rangePreset == _ProfileRangePreset.custom
-                  ? _customRangeLabel
-                  : '自定义',
-              selected: _rangePreset == _ProfileRangePreset.custom,
-              onTap: () => _setRangePreset(_ProfileRangePreset.custom),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _buildRangeFilter() => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+    child: WorkProfileMonthBar(
+      label: _periodLabel,
+      canPrev: !_month.isAtSameMomentAs(_earliestMonth),
+      canNext: !_month.isAtSameMomentAs(_currentMonth),
+      onPrev: () => _shiftMonth(-1),
+      onNext: () => _shiftMonth(1),
+      onPick: () => unawaited(_pickMonth()),
+      loading: _loading,
+    ),
+  );
 
   Widget _buildDeptFilter() {
     final depts = _departments;
@@ -448,6 +411,18 @@ class _NativeWorkProfileManagementPageState
           ),
         ),
         if (viewingPerson)
+          IconButton(
+            tooltip: '转发员工画像',
+            onPressed: _loading || _person == null
+                ? null
+                : () => unawaited(_sharePerson(_person!)),
+            icon: const Icon(
+              Icons.ios_share_rounded,
+              color: _profilePurple,
+              size: 20,
+            ),
+          ),
+        if (viewingPerson)
           const Padding(
             padding: EdgeInsets.only(right: 12),
             child: Text(
@@ -488,6 +463,11 @@ class _NativeWorkProfileManagementPageState
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       _managementNotice(),
+      const SizedBox(height: 12),
+      WorkProfileRadarCard(
+        dimensions: _personDimensions(person),
+        monthLabel: _periodLabel,
+      ),
       const SizedBox(height: 12),
       if (person.trend.isNotEmpty) ...[
         WorkProfileTrendCard(points: person.trend, updatedAt: person.updatedAt),
@@ -591,6 +571,46 @@ class _NativeWorkProfileManagementPageState
     ),
   );
 
+  List<UserWorkProfileDimension> _personDimensions(
+    WorkProfileSafePerson person,
+  ) => [
+    UserWorkProfileDimension(
+      label: '完成任务',
+      value: person.taskCompleted,
+      cap: 8,
+      unit: '项',
+      period: _periodLabel,
+    ),
+    UserWorkProfileDimension(
+      label: '会议协作',
+      value: person.meetings,
+      cap: 20,
+      unit: '场',
+      period: _periodLabel,
+    ),
+    UserWorkProfileDimension(
+      label: '知识沉淀',
+      value: person.knowledgeDocuments,
+      cap: 20,
+      unit: '篇',
+      period: '当前累计',
+    ),
+    UserWorkProfileDimension(
+      label: '发起审批',
+      value: person.approvalTotal,
+      cap: 6,
+      unit: '项',
+      period: _periodLabel,
+    ),
+    UserWorkProfileDimension(
+      label: '发起提案',
+      value: person.proposalTotal,
+      cap: 6,
+      unit: '项',
+      period: _periodLabel,
+    ),
+  ];
+
   Widget _employeeRow(WorkProfileSafePerson person) => Material(
     color: Colors.white,
     borderRadius: BorderRadius.circular(16),
@@ -603,57 +623,103 @@ class _NativeWorkProfileManagementPageState
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: const Color(0xFFE9E2EF)),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: const Color(0xFFF0EAF8),
-              child: Text(
-                person.name.isEmpty ? '员' : person.name.characters.first,
-                style: const TextStyle(
-                  color: _profilePurple,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const SizedBox(width: 11),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    person.name,
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: const Color(0xFFF0EAF8),
+                  child: Text(
+                    person.name.isEmpty ? '员' : person.name.characters.first,
                     style: const TextStyle(
-                      fontSize: 13,
+                      color: _profilePurple,
                       fontWeight: FontWeight.w700,
-                      color: _profileInk,
                     ),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    [
-                      person.departmentName,
-                      person.title,
-                    ].where((part) => part.trim().isNotEmpty).join(' · '),
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      color: _profileMuted,
-                    ),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        person.name,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: _profileInk,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        [
+                          person.departmentName,
+                          person.title,
+                        ].where((part) => part.trim().isNotEmpty).join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          color: _profileMuted,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                IconButton(
+                  tooltip: '转发员工画像',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _loading
+                      ? null
+                      : () => unawaited(_sharePerson(person)),
+                  icon: const Icon(
+                    Icons.ios_share_rounded,
+                    size: 19,
+                    color: _profilePurple,
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: _profileMuted,
+                ),
+              ],
             ),
-            Text(
-              '完成 ${person.taskCompleted}',
-              style: const TextStyle(fontSize: 11, color: _profileMuted),
-            ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              size: 18,
-              color: _profileMuted,
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                _employeeMetric('任务 ${person.taskTotal}', primary: true),
+                _employeeMetric('完成 ${person.taskCompleted}'),
+                _employeeMetric('进行中 ${person.taskDoing}'),
+                _employeeMetric('逾期 ${person.taskOverdue}'),
+                _employeeMetric('审批 ${person.approvalTotal}'),
+                _employeeMetric('提案 ${person.proposalTotal}'),
+                _employeeMetric('会议 ${person.meetings}'),
+                _employeeMetric('知识 ${person.knowledgeDocuments}'),
+              ],
             ),
           ],
         ),
+      ),
+    ),
+  );
+
+  Widget _employeeMetric(String label, {bool primary = false}) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+    decoration: BoxDecoration(
+      color: primary ? const Color(0xFFF0EAF8) : const Color(0xFFF7F5F9),
+      borderRadius: BorderRadius.circular(9),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(
+        fontSize: 10.5,
+        color: primary ? _profilePurple : _profileMuted,
+        fontWeight: primary ? FontWeight.w600 : FontWeight.w400,
       ),
     ),
   );

@@ -12,6 +12,7 @@ class TaskGoalTable extends StatelessWidget {
     required this.canComplete,
     required this.onComplete,
     required this.completeHint,
+    this.onShare,
   });
 
   final List<TaskItem> tasks;
@@ -19,6 +20,7 @@ class TaskGoalTable extends StatelessWidget {
   final bool Function(TaskItem task) canComplete;
   final ValueChanged<TaskItem> onComplete;
   final String? Function(TaskItem task) completeHint;
+  final ValueChanged<TaskItem>? onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -56,14 +58,39 @@ class TaskGoalTable extends StatelessWidget {
                 ),
                 DataCell(Text(taskSubtaskProgressLabel(task))),
                 DataCell(Text(taskDisplayStatusLabel(task))),
-                DataCell(Text(task.creatorName.isEmpty ? '—' : task.creatorName)),
+                DataCell(
+                  Text(task.creatorName.isEmpty ? '—' : task.creatorName),
+                ),
                 DataCell(Text(formatTaskYmd(task.startAt?.toLocal()))),
                 DataCell(Text(formatTaskYmd(task.dueAt?.toLocal()))),
-                DataCell(_completeCell(task)),
+                DataCell(_actionCell(task)),
               ],
             ),
         ],
       ),
+    );
+  }
+
+  Widget _actionCell(TaskItem task) {
+    final share = onShare;
+    if (share == null) return _completeCell(task);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: '转发到 IM',
+          visualDensity: VisualDensity.compact,
+          constraints: const BoxConstraints.tightFor(width: 38, height: 38),
+          padding: EdgeInsets.zero,
+          onPressed: () => share(task),
+          icon: const Icon(
+            Icons.ios_share_rounded,
+            size: 18,
+            color: Color(0xFF7054D8),
+          ),
+        ),
+        _completeCell(task),
+      ],
     );
   }
 

@@ -217,7 +217,13 @@ class Tag3DailyComment {
 
   bool get isConfirm => kind.toUpperCase() == 'CONFIRM';
 
-  String get kindLabel => isConfirm ? '确认' : '意见';
+  bool get isReject => kind.toUpperCase() == 'REJECT';
+
+  String get kindLabel => isConfirm
+      ? '确认'
+      : isReject
+      ? '驳回'
+      : '意见';
 
   String get displayBody {
     final text = body.trim();
@@ -225,7 +231,8 @@ class Tag3DailyComment {
     return isConfirm ? '已确认，未填写意见' : '';
   }
 
-  bool get isOpinion => !isConfirm && body.trim().isNotEmpty;
+  bool get isOpinion =>
+      kind.toUpperCase() == 'COMMENT' && body.trim().isNotEmpty;
 
   bool matchesRow(Tag3DailyRow row) {
     return rowKey == row.rowKey &&

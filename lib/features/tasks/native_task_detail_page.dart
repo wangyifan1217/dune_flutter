@@ -7,6 +7,7 @@ import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'task_ai_analysis.dart';
 import 'task_api.dart';
+import 'task_chat_forward.dart';
 import 'task_inbox.dart';
 import 'native_task_action_page.dart';
 import 'task_approval_confirm.dart';
@@ -38,6 +39,8 @@ class NativeTaskDetailView extends StatefulWidget {
     this.onOpenProgress,
     this.onOpenEvaluate,
     this.onTaskLoaded,
+    this.sharedShareRef,
+    this.forceReadOnly = false,
   });
 
   final AuthSession session;
@@ -55,6 +58,8 @@ class NativeTaskDetailView extends StatefulWidget {
   final ValueChanged<TaskItem>? onOpenProgress;
   final ValueChanged<TaskItem>? onOpenEvaluate;
   final ValueChanged<TaskItem>? onTaskLoaded;
+  final String? sharedShareRef;
+  final bool forceReadOnly;
 
   @override
   State<NativeTaskDetailView> createState() => _NativeTaskDetailViewState();
@@ -69,6 +74,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
   bool _analysisRunning = false;
   bool _guideAutoStarted = false;
   bool _canAssignTeam = false;
+  bool _sharing = false;
   Timer? _analysisTimer;
 
   @override
@@ -90,6 +96,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
   void didUpdateWidget(covariant NativeTaskDetailView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.taskId != widget.taskId ||
+        oldWidget.sharedShareRef != widget.sharedShareRef ||
         oldWidget.reloadToken != widget.reloadToken) {
       _reload();
     }
@@ -107,7 +114,10 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
       _error = null;
     });
     try {
-      final d = await _api.getDetail(widget.taskId);
+      final shareRef = widget.sharedShareRef?.trim() ?? '';
+      final d = shareRef.isNotEmpty
+          ? await _api.getSharedDetail(shareRef, taskId: widget.taskId)
+          : await _api.getDetail(widget.taskId);
       if (!mounted) return;
       setState(() {
         _detail = d;
@@ -168,10 +178,21 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
         t.creatorUserId == uid ||
         t.approverUserId == uid ||
         t.coOwnerUserIds.contains(uid) ||
+        t.participantUserIds.contains(uid) ||
         _detail?.pendingChangeRequest?.approverUserId == uid;
   }
 
-  bool get _viewOnly => !_isStakeholder;
+  bool get _isParticipantOnly {
+    final t = _detail?.task;
+    if (t == null) return false;
+    final uid = widget.session.userId;
+    return t.participantUserIds.contains(uid) &&
+        t.ownerUserId != uid &&
+        t.creatorUserId != uid &&
+        !t.coOwnerUserIds.contains(uid);
+  }
+
+  bool get _viewOnly => widget.forceReadOnly || !_isStakeholder;
 
   bool get _canEditProgress {
     if (_viewOnly) return false;
@@ -208,11 +229,13 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
     final uid = widget.session.userId;
     return t.ownerUserId == uid ||
         t.creatorUserId == uid ||
-        t.coOwnerUserIds.contains(uid);
+        t.coOwnerUserIds.contains(uid) ||
+        t.participantUserIds.contains(uid);
   }
 
   /// 关联的增删只放给能编辑任务的人（负责人/创建人/协同），与后端一致；审核人仅可查看。
   bool get _canEditLinks {
+    if (_viewOnly) return false;
     final t = _detail?.task;
     if (t == null) return false;
     final uid = widget.session.userId;
@@ -222,7 +245,10 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
   }
 
   bool get _canEvaluate {
-    if (widget.viewerHint != null || _pendingChangeLocked) return false;
+    if (widget.forceReadOnly ||
+        widget.viewerHint != null ||
+        _pendingChangeLocked)
+      return false;
     final t = _detail?.task;
     if (t == null) return false;
     if (t.status != 'completed' && !t.hasEval) return false;
@@ -241,6 +267,22 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
       return;
     }
     await _openProgressFor(task);
+  }
+
+  Future<void> _shareTask() async {
+    final task = _detail?.task;
+    if (task == null || _sharing) return;
+    setState(() => _sharing = true);
+    try {
+      await forwardTaskToConversation(
+        context: context,
+        session: widget.session,
+        task: task,
+        sourceShareRef: widget.sharedShareRef,
+      );
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
   }
 
   Future<void> _openProgressFor(TaskItem task) async {
@@ -319,10 +361,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
   Future<void> _withdrawAssignment() async {
     final task = _detail?.task;
     if (task == null) return;
-    final ok = await _confirmWithdraw(
-      '撤回指派',
-      '撤回后对方不用再接收，这条子目标会取消。',
-    );
+    final ok = await _confirmWithdraw('撤回指派', '撤回后对方不用再接收，这条子目标会取消。');
     if (!ok || !mounted) return;
     setState(() => _busy = true);
     try {
@@ -339,10 +378,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
   Future<void> _withdrawChange() async {
     final task = _detail?.task;
     if (task == null) return;
-    final ok = await _confirmWithdraw(
-      '撤回变更',
-      '撤回后审批人不用再处理，任务保持原来的内容。',
-    );
+    final ok = await _confirmWithdraw('撤回变更', '撤回后审批人不用再处理，任务保持原来的内容。');
     if (!ok || !mounted) return;
     setState(() => _busy = true);
     try {
@@ -910,6 +946,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
   }
 
   Widget _buildActionPanel(TaskDetail d) {
+    if (widget.forceReadOnly) return const SizedBox.shrink();
     final actions = <Widget>[];
     if (d.task.status == 'pending_assignment' &&
         d.task.creatorUserId == widget.session.userId &&
@@ -938,9 +975,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
         d.task.ownerUserId == widget.session.userId) {
       actions.add(
         OutlinedButton.icon(
-          onPressed: _busy
-              ? null
-              : () => _respondAssignment(accept: false),
+          onPressed: _busy ? null : () => _respondAssignment(accept: false),
           icon: const Icon(Icons.close, size: 17),
           label: const Text('拒绝接收'),
         ),
@@ -948,9 +983,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
       actions.add(
         FilledButton.icon(
           style: FilledButton.styleFrom(backgroundColor: _themePurple),
-          onPressed: _busy
-              ? null
-              : () => _respondAssignment(accept: true),
+          onPressed: _busy ? null : () => _respondAssignment(accept: true),
           icon: const Icon(Icons.check, size: 17),
           label: const Text('接受任务'),
         ),
@@ -1137,14 +1170,14 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
     final d = _detail;
     return TaskTheme(
       child: ColoredBox(
-      color: const Color(0xFFF5F6F8),
-      // 点击输入框外的空白处收起软键盘（详情页含描述内联编辑）
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-        child: _buildContent(d),
+        color: const Color(0xFFF5F6F8),
+        // 点击输入框外的空白处收起软键盘（详情页含描述内联编辑）
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+          child: _buildContent(d),
+        ),
       ),
-    ),
     );
   }
 
@@ -1211,6 +1244,26 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                         ),
                       ),
                     ),
+                    if (d.task.id > 0)
+                      IconButton(
+                        tooltip: '转发到 IM',
+                        onPressed: _sharing
+                            ? null
+                            : () => unawaited(_shareTask()),
+                        icon: _sharing
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.ios_share_rounded,
+                                size: 19,
+                                color: _themePurple,
+                              ),
+                      ),
                     IconButton(
                       tooltip: '使用指引',
                       onPressed: () => unawaited(_showGuide(force: true)),
@@ -1236,7 +1289,7 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                       ),
                   ],
                 ),
-                if (_viewOnly) ...[
+                if (_viewOnly || _isParticipantOnly) ...[
                   const SizedBox(height: 8),
                   Container(
                     width: double.infinity,
@@ -1250,7 +1303,9 @@ class _NativeTaskDetailViewState extends State<NativeTaskDetailView> {
                     ),
                     child: Text(
                       widget.viewerHint ??
-                          (_canEvaluate
+                          (_isParticipantOnly
+                              ? '你是主任务参与人，可以在此创建子任务；子任务需主任务负责人审核后生效。'
+                              : _canEvaluate
                               ? '只读查看。任务完成后可以填写评价。'
                               : '只读：可查看任务信息，不可编辑或操作'),
                       style: const TextStyle(

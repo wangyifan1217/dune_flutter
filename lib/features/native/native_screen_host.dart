@@ -37,6 +37,8 @@ import '../search/global_search_models.dart';
 import '../search/native_global_search_page.dart';
 import '../tasks/native_task_daily_report_page.dart';
 import '../tasks/native_task_detail_page.dart';
+import '../tasks/task_chat_share.dart';
+import '../tasks/task_shared_detail_dialog.dart';
 import '../chat/native_favorites_page.dart';
 import '../chat/native_group_chat_page.dart';
 import '../chat/native_group_info_page.dart';
@@ -109,6 +111,7 @@ import '../qianji/digital_auto/digital_employee_service.dart';
 import '../qianji/digital_auto/native_digital_auto_chat_page.dart';
 import '../qianji/native_qianji_meeting_supervise_page.dart';
 import '../qianji/native_qianji_record_supervise_page.dart';
+import '../qianji/native_qianji_daily_report_supervise_page.dart';
 import '../qianji/native_qianji_task_people_page.dart';
 import '../qianji/qianji_record_supervise_service.dart';
 import '../qianji/native_qianji_my_perf_page.dart';
@@ -3532,6 +3535,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenAiSummary: _onOpenAiSummaryFromChat,
           onOpenApprovalShare: (share) =>
               _openApprovalFromChat(share, from: 'C5'),
+          onOpenTaskShare: (share) => unawaited(_openTaskShareFromChat(share)),
           onConversationRead: _handleConversationRead,
           onClearFocusMessage: _clearChatFocusMessage,
         );
@@ -3567,6 +3571,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenAiSummary: _onOpenAiSummaryFromChat,
           onOpenApprovalShare: (share) =>
               _openApprovalFromChat(share, from: 'C2'),
+          onOpenTaskShare: (share) => unawaited(_openTaskShareFromChat(share)),
           onConversationRead: _handleConversationRead,
           onClearFocusMessage: _clearChatFocusMessage,
         );
@@ -4048,9 +4053,8 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onBack: widget.navigation.back,
         );
       case 'QJDR':
-        return NativeQianjiRecordSupervisePage(
+        return NativeQianjiDailyReportSupervisePage(
           session: widget.session,
-          kind: QianjiRecordSuperviseKind.dailyReport,
           onBack: widget.navigation.back,
         );
       case 'QJGR':
@@ -5064,6 +5068,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenAiSummary: _onOpenAiSummaryFromChat,
           onOpenApprovalShare: (share) =>
               _openApprovalFromChat(share, from: 'C2'),
+          onOpenTaskShare: (share) => unawaited(_openTaskShareFromChat(share)),
           onConversationRead: _handleConversationRead,
           onClearFocusMessage: _clearChatFocusMessage,
         );
@@ -5106,6 +5111,7 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           onOpenAiSummary: _onOpenAiSummaryFromChat,
           onOpenApprovalShare: (share) =>
               _openApprovalFromChat(share, from: 'C5'),
+          onOpenTaskShare: (share) => unawaited(_openTaskShareFromChat(share)),
           onConversationRead: _handleConversationRead,
           onClearFocusMessage: _clearChatFocusMessage,
         );
@@ -6069,6 +6075,14 @@ class _NativeScreenHostState extends State<NativeScreenHost>
           editProposalId: proposalId,
         );
       },
+    );
+  }
+
+  Future<void> _openTaskShareFromChat(TaskChatShare share) {
+    return showTaskSharedDetailDialog(
+      context: context,
+      session: widget.session,
+      share: share,
     );
   }
 

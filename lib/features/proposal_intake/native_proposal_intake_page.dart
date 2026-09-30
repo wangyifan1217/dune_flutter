@@ -284,15 +284,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     }
     try {
       final result = await Future.wait([
-        _service.fetchList(
-          keyword: widget.assistantMode ? '' : _search.text,
-          status: widget.assistantMode ? '' : _statusFilter,
-          kind: widget.kind,
-          sector: widget.assistantMode ? '' : _sectorFilter,
-          period: widget.assistantMode ? '' : _periodFilter,
-          actionable: widget.assistantMode,
-          pageSize: widget.assistantMode ? 100 : 20,
-        ),
+        _fetchListPages(),
         _service.fetchOptions(),
         _service.fetchPeople(),
       ]);
@@ -323,6 +315,45 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       if (mounted) setState(() => _loading = false);
     }
     await _openInitialIfNeeded();
+  }
+
+  /// 服务端单页最多 50 条。库内总数更大时继续翻页，避免列表只停在第一页。
+  Future<ProposalIntakeListResult> _fetchListPages() async {
+    const pageSize = 50;
+    Future<ProposalIntakeListResult> pageOf(int page) {
+      return _service.fetchList(
+        page: page,
+        pageSize: pageSize,
+        keyword: widget.assistantMode ? '' : _search.text,
+        status: widget.assistantMode ? '' : _statusFilter,
+        kind: widget.kind,
+        sector: widget.assistantMode ? '' : _sectorFilter,
+        period: widget.assistantMode ? '' : _periodFilter,
+        actionable: widget.assistantMode,
+      );
+    }
+
+    final first = await pageOf(0);
+    final items = [...first.items];
+    final seen = {for (final row in items) row.id};
+    var page = 1;
+    while (items.length < first.total && page < 20) {
+      final batch = await pageOf(page);
+      var added = 0;
+      for (final row in batch.items) {
+        if (seen.add(row.id)) {
+          items.add(row);
+          added++;
+        }
+      }
+      if (added == 0) break;
+      page++;
+    }
+    return ProposalIntakeListResult(
+      items: items,
+      total: first.total,
+      stats: first.stats,
+    );
   }
 
   Future<void> _openInitialIfNeeded() async {
@@ -485,7 +516,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('负责新建'),
+        title: const Text('复制新建'),
         content: Text('将按「$name」生成一份内容相同的新提案。编号和审核进度会重新开始。'),
         actions: [
           TextButton(
@@ -1192,6 +1223,7 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       controller: _listScroll,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.only(bottom: 20),
       itemCount: entries.length,
       separatorBuilder: (_, index) {
         final next = index + 1 < entries.length ? entries[index + 1] : null;
@@ -1229,10 +1261,15 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
         );
       },
     );
-    if (!_loading) return list;
+    final scrollable = Scrollbar(
+      controller: _listScroll,
+      thumbVisibility: true,
+      child: list,
+    );
+    if (!_loading) return scrollable;
     return Stack(
       children: [
-        list,
+        scrollable,
         const Positioned(
           top: 0,
           left: 0,
@@ -1447,7 +1484,7 @@ class _ProposalListTile extends StatelessWidget {
                     children: [
                       if (canDuplicate)
                         IconButton(
-                          tooltip: '负责新建',
+                          tooltip: '复制新建',
                           visualDensity: VisualDensity.compact,
                           onPressed: onDuplicate,
                           icon: const Icon(
@@ -2801,6 +2838,12 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
 
   int _reviewedCount(String prefix, List<String> keys) =>
       keys.where((key) => _itemReviewed('$prefix:$key')).length;
+
+  int _technologyReviewedCount() => _technologyReviewFields
+      .where(
+        (key) => proposalIntakeTechnologyItemReviewed(_review, key, form: _form),
+      )
+      .length;
 
   void _advanceChildSettleReview(String section) {
     final parts = section.split(':');
@@ -6738,7 +6781,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               : '科技部字段全部复核',
           locked: false,
           progress:
-              '逐条复核 ${_reviewedCount('technologyItem', _technologyReviewFields)}/${_technologyReviewFields.length}',
+              '逐条复核 ${_technologyReviewedCount()}/${_technologyReviewFields.length}',
           omissions: proposalIntakeTechnologyReviewGaps(_review, form: _form),
           onCheckOmissions: _showTechnologyOmissions,
         ),
@@ -6910,7 +6953,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               : '科技部字段全部复核',
           locked: false,
           progress:
-              '逐条复核 ${_reviewedCount('technologyItem', _technologyReviewFields)}/${_technologyReviewFields.length}',
+              '逐条复核 ${_technologyReviewedCount()}/${_technologyReviewFields.length}',
           omissions: proposalIntakeTechnologyReviewGaps(_review, form: _form),
           onCheckOmissions: _showTechnologyOmissions,
           plain: true,
@@ -10393,7 +10436,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
       proposalIntakeSkuRollbackValue(row, form: _form),
       if (child && parentName.isNotEmpty) '关联 $parentName',
       if (child) '数量 ${proposalIntakeChildProductQuantity(_form, row.id)}',
-      ...proposalSkuSettleMoneyBits(proposalSkuSettleMoney(row, form: _form)),
     ];
     return Container(
       width: double.infinity,
@@ -11806,26 +11848,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     VoidCallback? onClipboardChanged,
     ProposalSkuDetailRow? product,
   }) {
-    final money = product == null
-        ? null
-        : proposalSkuSettleMoney(product, form: _form);
-    final moneyBits = money == null
-        ? const <String>[]
-        : proposalSkuSettleMoneyBits(money);
     final summaryBits = <String>[
-      if (moneyBits.isEmpty && settlements.isEmpty) '尚未填写',
-      if (moneyBits.isEmpty && settlements.isNotEmpty)
-        '结算 ${settlements.length} 条',
-      if (moneyBits.isEmpty &&
-          settlements.isNotEmpty &&
+      if (settlements.isEmpty) '尚未填写',
+      if (settlements.isNotEmpty) '结算 ${settlements.length} 条',
+      if (settlements.isNotEmpty &&
           settlements.first.terms.scale.trim().isNotEmpty)
         '规模 ${settlements.first.terms.scale.trim()}',
-      if (moneyBits.isEmpty &&
-          settlements.isNotEmpty &&
+      if (settlements.isNotEmpty &&
           settlements.first.terms.displayRatio.trim().isNotEmpty)
         '比例 ${settlements.first.terms.displayRatio.trim()}',
-      if (moneyBits.isEmpty &&
-          settlements.isNotEmpty &&
+      if (settlements.isNotEmpty &&
           settlements.first.terms.displayUnitPrice.trim().isNotEmpty)
         '单价 ${settlements.first.terms.displayUnitPrice.trim()}',
     ];
@@ -11980,24 +12012,6 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 ),
             ],
           ),
-          if (compact && moneyBits.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 16,
-              runSpacing: 4,
-              children: [
-                for (final bit in moneyBits)
-                  Text(
-                    bit,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: ProposalPalette.text,
-                    ),
-                  ),
-              ],
-            ),
-          ],
           if (!compact && scaleOnly)
             const Padding(
               padding: EdgeInsets.only(top: 4),
@@ -13811,6 +13825,9 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
     bool plain = false,
   }) {
     final done = _review[keyName] == true;
+    // 复制或新建的提案在填写阶段复核项全是空的，列出来会被误读成字段没填。
+    final showOmissions =
+        !done && _isReviewing && omissions.isNotEmpty && onCheckOmissions != null;
     return Container(
       key: key,
       width: double.infinity,
@@ -13867,7 +13884,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             runSpacing: 8,
             children: [
               approveButton,
-              if (!done && omissions.isNotEmpty && onCheckOmissions != null)
+              if (showOmissions)
                 OutlinedButton(
                   key: ValueKey('proposal-module-omissions-$keyName'),
                   onPressed: () => unawaited(onCheckOmissions(omissions)),
@@ -13890,15 +13907,13 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             children: [
               Text(title, style: kProposalBlockTitleStyle),
               Text(description, style: kProposalCaptionStyle),
-              if (!done && omissions.isNotEmpty)
+              if (showOmissions)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: GestureDetector(
-                    onTap: onCheckOmissions == null
-                        ? null
-                        : () => unawaited(onCheckOmissions(omissions)),
+                    onTap: () => unawaited(onCheckOmissions(omissions)),
                     child: Text(
-                      '检查遗漏：还差${omissions.join('、')}',
+                      '检查遗漏：还有 ${omissions.length} 项未复核（${omissions.join('、')}）',
                       style: kProposalCaptionStyle.copyWith(
                         color: ProposalPalette.coral,
                         fontWeight: FontWeight.w600,
@@ -13906,7 +13921,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                     ),
                   ),
                 )
-              else if (!done && !locked && progress != null)
+              else if (!done && !locked && progress != null && omissions.isEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(

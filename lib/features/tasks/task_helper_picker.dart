@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
+import 'task_avatar.dart';
 import 'task_api.dart';
 import 'task_models.dart';
 
@@ -14,6 +15,7 @@ Future<List<TaskAssignee>?> showTaskHelperPicker(
   List<TaskAssignee> known = const [],
   String title = '选择协助人',
   bool single = false,
+  String? scope,
 }) {
   return showModalBottomSheet<List<TaskAssignee>>(
     context: context,
@@ -29,6 +31,7 @@ Future<List<TaskAssignee>?> showTaskHelperPicker(
       excludeUserId: excludeUserId,
       title: title,
       single: single,
+      scope: scope,
     ),
   );
 }
@@ -59,6 +62,7 @@ class _TaskHelperPicker extends StatefulWidget {
     required this.excludeUserId,
     required this.title,
     required this.single,
+    this.scope,
   });
 
   final TaskApi api;
@@ -67,6 +71,7 @@ class _TaskHelperPicker extends StatefulWidget {
   final int excludeUserId;
   final String title;
   final bool single;
+  final String? scope;
 
   @override
   State<_TaskHelperPicker> createState() => _TaskHelperPickerState();
@@ -106,7 +111,9 @@ class _TaskHelperPickerState extends State<_TaskHelperPicker> {
       _error = null;
     });
     try {
-      final list = await widget.api.searchColleagues(q);
+      final list = widget.scope == null
+          ? await widget.api.searchColleagues(q)
+          : await widget.api.listAssignees(q: q, scope: widget.scope);
       if (!mounted || gen != _loadGen) return;
       setState(() {
         for (final person in list) {
@@ -145,7 +152,10 @@ class _TaskHelperPickerState extends State<_TaskHelperPicker> {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   widget.title,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),
@@ -165,38 +175,51 @@ class _TaskHelperPickerState extends State<_TaskHelperPicker> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _error != null
-                  ? Center(child: Text(_error!, style: const TextStyle(color: DunesColors.text3)))
+                  ? Center(
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(color: DunesColors.text3),
+                      ),
+                    )
                   : _people.isEmpty
                   ? const Center(
-                      child: Text('没有匹配的同事', style: TextStyle(color: DunesColors.text3)),
+                      child: Text(
+                        '没有匹配的同事',
+                        style: TextStyle(color: DunesColors.text3),
+                      ),
                     )
                   : ListView.builder(
                       itemCount: _people.length,
                       itemBuilder: (_, i) {
                         final person = _people[i];
-                        if (widget.single) {
-                          return ListTile(
-                            title: Text(person.displayName),
-                            subtitle: person.departmentName.isEmpty
-                                ? null
-                                : Text(person.departmentName),
-                            onTap: () => Navigator.pop(context, [person]),
-                          );
-                        }
-                        return CheckboxListTile(
-                          value: _selected.contains(person.id),
+                        final selected = _selected.contains(person.id);
+                        return ListTile(
+                          leading: buildTaskUserAvatar(
+                            session: widget.api.session,
+                            name: person.displayName,
+                            userId: person.id,
+                            avatarPreset: person.avatarPreset,
+                            avatarObjectKey: person.avatarObjectKey,
+                            avatarUrl: person.avatarUrl,
+                            size: 38,
+                          ),
                           title: Text(person.displayName),
                           subtitle: person.departmentName.isEmpty
                               ? null
                               : Text(person.departmentName),
-                          onChanged: (checked) {
-                            setState(() {
-                              if (checked == true) {
-                                _selected.add(person.id);
-                              } else {
-                                _selected.remove(person.id);
-                              }
-                            });
+                          trailing: widget.single
+                              ? null
+                              : Checkbox(
+                                  value: selected,
+                                  onChanged: (checked) =>
+                                      _toggle(person, checked),
+                                ),
+                          onTap: () {
+                            if (widget.single) {
+                              Navigator.pop(context, [person]);
+                            } else {
+                              _toggle(person, !selected);
+                            }
                           },
                         );
                       },
@@ -216,12 +239,22 @@ class _TaskHelperPickerState extends State<_TaskHelperPicker> {
                                 _byId[id]!,
                           ]);
                         },
-                  child: const Text('确定'),
+                  child: Text('确定（${_selected.length}）'),
                 ),
               ),
           ],
         ),
       ),
     );
+  }
+
+  void _toggle(TaskAssignee person, bool? checked) {
+    setState(() {
+      if (checked == true) {
+        _selected.add(person.id);
+      } else {
+        _selected.remove(person.id);
+      }
+    });
   }
 }

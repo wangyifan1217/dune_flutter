@@ -131,6 +131,58 @@ class TaskApi {
   Future<TaskDetail> getDetail(int id) async {
     final resp = await http.get(_uri('$id'), headers: _headers);
     final data = _unwrap(resp);
+    return _parseTaskDetail(data);
+  }
+
+  Future<TaskDetail> getSharedDetail(String shareRef, {int? taskId}) async {
+    final ref = Uri.encodeComponent(shareRef.trim());
+    final query = taskId != null && taskId > 0
+        ? <String, String>{'taskId': '$taskId'}
+        : null;
+    final resp = await http.get(_uri('shared/$ref', query), headers: _headers);
+    return _parseTaskDetail(_unwrap(resp));
+  }
+
+  Future<String> createTaskShareGrant({
+    required int taskId,
+    required int conversationId,
+    String? sourceShareRef,
+  }) async {
+    final body = <String, dynamic>{'conversationId': conversationId};
+    if (sourceShareRef != null && sourceShareRef.trim().isNotEmpty) {
+      body['sourceShareRef'] = sourceShareRef.trim();
+    }
+    final resp = await http.post(
+      _uri('$taskId/share-grants'),
+      headers: _headers,
+      body: jsonEncode(body),
+    );
+    final data = _unwrap(resp);
+    if (data is Map) {
+      final shareRef = '${data['shareRef'] ?? ''}'.trim();
+      if (shareRef.isNotEmpty) return shareRef;
+    }
+    throw Exception('分享授权创建失败');
+  }
+
+  Future<void> bindTaskShareMessage(String shareRef, int messageId) async {
+    final resp = await http.post(
+      _uri('share-grants/${Uri.encodeComponent(shareRef)}/bind'),
+      headers: _headers,
+      body: jsonEncode({'messageId': messageId}),
+    );
+    _unwrap(resp);
+  }
+
+  Future<void> revokeTaskShareGrant(String shareRef) async {
+    final resp = await http.delete(
+      _uri('share-grants/${Uri.encodeComponent(shareRef)}'),
+      headers: _headers,
+    );
+    _unwrap(resp);
+  }
+
+  TaskDetail _parseTaskDetail(dynamic data) {
     final map = Map<String, dynamic>.from(data as Map);
     final task = TaskItem.fromJson(
       Map<String, dynamic>.from(map['task'] as Map),
@@ -466,24 +518,30 @@ class TaskApi {
         : '/org/users?q=${Uri.encodeQueryComponent(needle)}';
     final data = _unwrap(await dunesHttpGet(session, path));
     final rows = data is List ? data : const [];
-    return rows.whereType<Map>().map((raw) {
-      final json = Map<String, dynamic>.from(raw);
-      if (json['enabled'] == false) return null;
-      final id =
-          (json['userId'] as num?)?.toInt() ?? (json['id'] as num?)?.toInt() ?? 0;
-      final name =
-          '${json['displayName'] ?? json['name'] ?? json['username'] ?? ''}'
-              .trim();
-      if (id <= 0 || name.isEmpty) return null;
-      return TaskAssignee(
-        id: id,
-        displayName: name,
-        departmentName: '${json['departmentName'] ?? ''}',
-        avatarPreset: '${json['avatarPreset'] ?? ''}',
-        avatarObjectKey: '${json['avatarObjectKey'] ?? ''}',
-        avatarUrl: '${json['avatarUrl'] ?? ''}',
-      );
-    }).whereType<TaskAssignee>().toList();
+    return rows
+        .whereType<Map>()
+        .map((raw) {
+          final json = Map<String, dynamic>.from(raw);
+          if (json['enabled'] == false) return null;
+          final id =
+              (json['userId'] as num?)?.toInt() ??
+              (json['id'] as num?)?.toInt() ??
+              0;
+          final name =
+              '${json['displayName'] ?? json['name'] ?? json['username'] ?? ''}'
+                  .trim();
+          if (id <= 0 || name.isEmpty) return null;
+          return TaskAssignee(
+            id: id,
+            displayName: name,
+            departmentName: '${json['departmentName'] ?? ''}',
+            avatarPreset: '${json['avatarPreset'] ?? ''}',
+            avatarObjectKey: '${json['avatarObjectKey'] ?? ''}',
+            avatarUrl: '${json['avatarUrl'] ?? ''}',
+          );
+        })
+        .whereType<TaskAssignee>()
+        .toList();
   }
 
   Future<List<TaskAssignee>> listAssignees({String? q, String? scope}) async {

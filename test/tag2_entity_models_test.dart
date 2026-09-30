@@ -16,15 +16,30 @@ void main() {
           'confirmationStatus': 'WAIT_BUSINESS',
           'canConfirmStage': 'BUSINESS',
           'amounts': [
-            {'key': 'transit', 'label': '在途资金', 'display': '3.00', 'drill': true},
-            {'key': 'prepayment', 'label': '期末预付款余额', 'display': '1.00', 'drill': true},
+            {
+              'key': 'transit',
+              'label': '在途资金',
+              'display': '3.00',
+              'drill': true,
+            },
+            {
+              'key': 'prepayment',
+              'label': '期末预付款余额',
+              'display': '1.00',
+              'drill': true,
+            },
           ],
         },
         {
           'rowKey': 'ALL',
           'rowType': 'TOTAL',
           'amounts': [
-            {'key': 'transit', 'label': '在途资金', 'display': '3.00', 'drill': false},
+            {
+              'key': 'transit',
+              'label': '在途资金',
+              'display': '3.00',
+              'drill': false,
+            },
           ],
         },
       ],
@@ -63,5 +78,18 @@ void main() {
     expect(item.tag2CommentCount, 3);
     expect(item.tag2MyConfirmed, isTrue);
     expect(item.tag3MyConfirmed, isFalse);
+  });
+
+  test('view-all rows stay visible but cannot confirm or comment', () {
+    final row = Tag2EntityRow.fromJson({
+      'rowKey': '440000||中石油广东',
+      'rowType': 'DETAIL',
+      'provinceName': '广东',
+      'canConfirmStage': 'BUSINESS',
+      'assigned': false,
+    });
+    expect(row.provinceName, '广东');
+    expect(row.showConfirm, isFalse);
+    expect(row.showComment, isFalse);
   });
 }

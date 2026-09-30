@@ -2,7 +2,7 @@
 
 适用仓库：D:\workspace\new_dune_web\flutter
 
-当前项目版本在 pubspec.yaml 中维护。版本格式为 MAJOR.MINOR.PATCH+BUILD，例如 1.7.9+179。每次正式发版都应递增 BUILD；iOS、Android 使用同一应用版本，Windows 安装包脚本中的版本与构建号也要同步。
+当前项目版本在 pubspec.yaml 中维护。版本格式为 MAJOR.MINOR.PATCH+BUILD，例如 1.8.0+180。每次正式发版都应递增 BUILD；iOS、Android 使用同一应用版本，Windows 安装包脚本中的版本与构建号也要同步。
 
 ## 1. 发版前检查
 
@@ -17,7 +17,7 @@
 
 版本更新：
 
-- 修改 pubspec.yaml 的 version，例如 1.7.9+179 改为下一正式版本。
+- 修改 pubspec.yaml 的 version，例如 1.8.0+180 改为下一正式版本。
 - Android 使用 BUILD 作为 versionCode，发到应用商店的 versionCode 必须高于已发布版本。
 - Windows 同步修改 windows/installer/dunes_setup.iss 的 MyAppVersion 和 MyAppBuild。
 - 不要更改 Windows 安装脚本里的 AppId，否则安装器会把升级包识别成另一款应用。
@@ -159,12 +159,12 @@ Flutter 输出目录：
 
     build\installer\DunesSetup-<MyAppVersion>-<MyAppBuild>.exe
 
-例如当前脚本版本为 1.7.9 和 179 时，文件名为 DunesSetup-1.7.9-179.exe。正式发版前先在未安装开发环境的 Windows 10/11 机器上安装、启动，并验证覆盖安装旧版本可用。保持 AppId 不变。
+例如当前脚本版本为 1.8.0 和 180 时，文件名为 DunesSetup-1.8.0-180.exe。正式发版前先在未安装开发环境的 Windows 10/11 机器上安装、启动，并验证覆盖安装旧版本可用。保持 AppId 不变。
 
 构建完成后复制到交付目录，目标文件已存在时不要覆盖，先更新版本或构建号：
 
-    $version = "1.7.9"
-    $build = "179"
+    $version = "1.8.0"
+    $build = "180"
     $source = ".\build\installer\DunesSetup-$version-$build.exe"
     $targetDir = ".\dist\windows"
     $target = Join-Path $targetDir "DunesSetup-$version-$build.exe"

@@ -10,7 +10,9 @@ import 'native_task_action_page.dart';
 import 'native_task_detail_page.dart';
 import 'native_task_home_pane.dart';
 import 'task_api.dart';
+import 'task_chat_forward.dart';
 import 'task_first_use_guide.dart';
+import 'task_avatar.dart';
 import 'task_models.dart';
 import 'task_widgets.dart';
 
@@ -21,10 +23,12 @@ class NativeTaskHrbpPane extends StatefulWidget {
   const NativeTaskHrbpPane({
     super.key,
     required this.session,
+    this.onBackToTasks,
     this.onChromeChanged,
   });
 
   final AuthSession session;
+  final VoidCallback? onBackToTasks;
   final ValueChanged<TaskShellChrome>? onChromeChanged;
 
   @override
@@ -146,7 +150,13 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
       );
       return;
     }
-    widget.onChromeChanged?.call(TaskShellChrome(trailing: _guideHelpButton()));
+    widget.onChromeChanged?.call(
+      TaskShellChrome(
+        trailing: _guideHelpButton(),
+        onBack: widget.onBackToTasks,
+        backLabel: '任务',
+      ),
+    );
   }
 
   Future<void> _reload() async {
@@ -424,6 +434,48 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
     _publishChrome();
   }
 
+  Future<void> _shareTask(TaskItem task) => forwardTaskToConversation(
+    context: context,
+    session: widget.session,
+    task: task,
+  );
+
+  Future<void> _shareTasks(List<TaskItem> visibleTasks) async {
+    if (visibleTasks.isEmpty) return;
+    if (_loadingMore) {
+      showDunesCenterToast(context, '正在加载任务列表，请稍后再合并转发');
+      return;
+    }
+    final ownerId = visibleTasks.first.ownerUserId;
+    while (_hasMoreTasks) {
+      final oldPage = _taskPage;
+      final oldCount = _deptTasks.length;
+      await _loadMoreTasks();
+      if (!mounted) return;
+      if (_taskPage == oldPage && _deptTasks.length == oldCount) {
+        showDunesCenterToast(context, '剩余任务加载失败，请稍后重试');
+        return;
+      }
+    }
+    final ownerTasks = _deptTasks
+        .where((task) => task.ownerUserId == ownerId)
+        .toList(growable: false);
+    if (ownerTasks.length == 1) {
+      await _shareTask(ownerTasks.first);
+      return;
+    }
+    if (ownerTasks.isEmpty) {
+      showDunesCenterToast(context, '这个人没有可转发的主目标');
+      return;
+    }
+    await forwardTasksToConversation(
+      context: context,
+      session: widget.session,
+      tasks: ownerTasks,
+      ownerName: ownerTasks.isEmpty ? '' : ownerTasks.first.ownerName,
+    );
+  }
+
   void _openAction(TaskItem task, TaskActionMode mode) {
     setState(() {
       _pageNavBack = false;
@@ -487,34 +539,34 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
     final child = KeyedSubtree(key: _pageKey, child: _pageBody());
     return TaskTheme(
       child: AnimatedSwitcher(
-      duration: const Duration(milliseconds: 280),
-      reverseDuration: const Duration(milliseconds: 240),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      layoutBuilder: (currentChild, previousChildren) {
-        return Stack(
-          fit: StackFit.expand,
-          clipBehavior: Clip.hardEdge,
-          children: isBack
-              ? [?currentChild, ...previousChildren]
-              : [...previousChildren, ?currentChild],
-        );
-      },
-      transitionBuilder: (transitionChild, animation) {
-        final isIncoming = transitionChild.key == child.key;
-        final begin = isIncoming
-            ? (isBack ? const Offset(-0.18, 0) : const Offset(1, 0))
-            : (isBack ? const Offset(1, 0) : const Offset(-0.18, 0));
-        return SlideTransition(
-          position: Tween<Offset>(
-            begin: begin,
-            end: Offset.zero,
-          ).animate(animation),
-          child: transitionChild,
-        );
-      },
-      child: child,
-    ),
+        duration: const Duration(milliseconds: 280),
+        reverseDuration: const Duration(milliseconds: 240),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        layoutBuilder: (currentChild, previousChildren) {
+          return Stack(
+            fit: StackFit.expand,
+            clipBehavior: Clip.hardEdge,
+            children: isBack
+                ? [?currentChild, ...previousChildren]
+                : [...previousChildren, ?currentChild],
+          );
+        },
+        transitionBuilder: (transitionChild, animation) {
+          final isIncoming = transitionChild.key == child.key;
+          final begin = isIncoming
+              ? (isBack ? const Offset(-0.18, 0) : const Offset(1, 0))
+              : (isBack ? const Offset(1, 0) : const Offset(-0.18, 0));
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: begin,
+              end: Offset.zero,
+            ).animate(animation),
+            child: transitionChild,
+          );
+        },
+        child: child,
+      ),
     );
   }
 
@@ -757,6 +809,19 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
                       : '${user.displayName} · ${user.departmentName}',
                 ),
             ],
+            leadingBuilder: (userId) {
+              final user = users.where((item) => item.id == userId).firstOrNull;
+              if (user == null) return const SizedBox(width: 34);
+              return buildTaskUserAvatar(
+                session: widget.session,
+                name: user.displayName,
+                userId: user.id,
+                avatarPreset: user.avatarPreset,
+                avatarObjectKey: user.avatarObjectKey,
+                avatarUrl: user.avatarUrl,
+                size: 34,
+              );
+            },
             onChanged: (value) {
               setState(() {
                 _missingUserId = value;
@@ -936,6 +1001,7 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
                                 e.value.length,
                       completed: e.value.every((t) => t.status == 'completed'),
                       onTap: () => setState(() => _ownerFilter = e.key),
+                      onShare: () => unawaited(_shareTasks(e.value)),
                     ),
                   );
                 }, childCount: owners.length),
@@ -984,6 +1050,21 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                 ),
                 const Spacer(),
+                if (tasks.length > 1 || _hasMoreTasks)
+                  IconButton(
+                    tooltip: '合并转发这个人的主目标',
+                    onPressed: () => unawaited(_shareTasks(tasks)),
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(
+                      minWidth: 40,
+                      minHeight: 40,
+                    ),
+                    icon: const Icon(
+                      Icons.ios_share_rounded,
+                      size: 19,
+                      color: kTaskPurple,
+                    ),
+                  ),
                 TextButton(
                   onPressed: () => setState(() => _ownerFilter = null),
                   child: const Text('返回人员'),
@@ -999,7 +1080,11 @@ class _NativeTaskHrbpPaneState extends State<NativeTaskHrbpPane> {
               final t = tasks[i];
               return Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: _TaskStatCard(task: t, onTap: () => _openDetail(t.id)),
+                child: _TaskStatCard(
+                  task: t,
+                  onTap: () => _openDetail(t.id),
+                  onShare: () => unawaited(_shareTask(t)),
+                ),
               );
             }, childCount: tasks.length),
           ),
@@ -1383,6 +1468,7 @@ class _DeptStatCard extends StatelessWidget {
     required this.avgProgress,
     required this.completed,
     required this.onTap,
+    this.onShare,
   });
 
   final String name;
@@ -1391,6 +1477,7 @@ class _DeptStatCard extends StatelessWidget {
   final double avgProgress;
   final bool completed;
   final VoidCallback onTap;
+  final VoidCallback? onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -1427,6 +1514,22 @@ class _DeptStatCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (onShare != null)
+                    IconButton(
+                      tooltip: '合并转发此人的主目标',
+                      onPressed: onShare,
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(
+                        minWidth: 40,
+                        minHeight: 40,
+                      ),
+                      padding: const EdgeInsets.all(8),
+                      icon: const Icon(
+                        Icons.ios_share_rounded,
+                        size: 19,
+                        color: kTaskPurple,
+                      ),
+                    ),
                   Text(
                     taskFillProgressLabel(pct),
                     style: TextStyle(
@@ -1465,10 +1568,11 @@ class _DeptStatCard extends StatelessWidget {
 }
 
 class _TaskStatCard extends StatelessWidget {
-  const _TaskStatCard({required this.task, required this.onTap});
+  const _TaskStatCard({required this.task, required this.onTap, this.onShare});
 
   final TaskItem task;
   final VoidCallback onTap;
+  final VoidCallback? onShare;
 
   String _fmtDate(DateTime? d) {
     if (d == null) return '未定';
@@ -1518,6 +1622,22 @@ class _TaskStatCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (onShare != null)
+                    IconButton(
+                      tooltip: '转发到 IM',
+                      onPressed: onShare,
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(
+                        minWidth: 40,
+                        minHeight: 40,
+                      ),
+                      padding: const EdgeInsets.all(8),
+                      icon: const Icon(
+                        Icons.ios_share_rounded,
+                        size: 19,
+                        color: kTaskPurple,
+                      ),
+                    ),
                   Text(
                     taskFillProgressLabel(task.progressPct),
                     style: TextStyle(

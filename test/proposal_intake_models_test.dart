@@ -4977,6 +4977,44 @@ void main() {
     );
   });
 
+  test('legacy per-product reviews count toward 业务平台产品', () {
+    final form = {
+      'skuDetails': [
+        {'id': 'sku-1', 'productName': '满减券'},
+      ],
+      'childProducts': [
+        {'id': 'child-1', 'productName': '加油100'},
+      ],
+    };
+    final fields = {for (final key in kProposalTechnologyReviewFields) key: true};
+    expect(
+      proposalIntakeTechnologyReviewGaps({'technologyItems': fields}, form: form),
+      ['业务平台产品'],
+    );
+    expect(
+      proposalIntakeTechnologyReviewGaps({
+        'technologyItems': {...fields, 'skuDetails:sku-1': true},
+      }, form: form),
+      ['业务平台产品'],
+    );
+    expect(
+      proposalIntakeTechnologyReviewGaps({
+        'technologyItems': {
+          ...fields,
+          'skuDetails:sku-1': true,
+          'childProducts:child-1': true,
+        },
+      }, form: form),
+      isEmpty,
+    );
+    expect(
+      proposalIntakeTechnologyReviewGaps({
+        'technologyItems': {...fields, kProposalSkuProductsReviewKey: true},
+      }, form: form),
+      isEmpty,
+    );
+  });
+
   test(
     'child products stay off skuDetails and add merged tech review keys',
     () {

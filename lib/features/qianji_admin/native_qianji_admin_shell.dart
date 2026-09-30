@@ -109,9 +109,6 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
   VoidCallback? _onShellBackOverride;
   TaskShellChrome? _contentChrome;
 
-  /// null=探测中；以后端 hrbp/overview 鉴权为准，不写死角色。
-  bool? _canSeeTaskSummary;
-
   /// 工作台入口权限由后端实时探测；它只控制发布端入口，不限制接收人。
   bool? _canSeeAdministrativeNotice;
   bool? _canSeeCompanyBroadcast;
@@ -151,7 +148,6 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     _pageController = PageController();
     _session = AuthSessionCoordinator.instance.resolve(widget.session);
     unawaited(_refreshSessionOnEnter());
-    unawaited(_resolveTaskSummaryAccess());
     unawaited(_resolveAdministrativeNoticeAccess());
     unawaited(_resolveBroadcastAccess());
     unawaited(_resolveDailyReconAccess());
@@ -184,7 +180,6 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
         incoming.effectivePaymentInvoiceAccess !=
             _session.effectivePaymentInvoiceAccess) {
       _session = incoming;
-      unawaited(_resolveTaskSummaryAccess());
       unawaited(_resolveAdministrativeNoticeAccess());
       unawaited(_resolveBroadcastAccess());
       unawaited(_resolveDailyReconAccess());
@@ -225,7 +220,6 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     setState(() {
       _session = refreshed ?? AuthSessionCoordinator.instance.resolve(_session);
     });
-    unawaited(_resolveTaskSummaryAccess());
     unawaited(_resolveAdministrativeNoticeAccess());
     unawaited(_resolveBroadcastAccess());
     unawaited(_resolveDailyReconAccess());
@@ -235,17 +229,6 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     unawaited(_resolvePayrollReportAccess());
     unawaited(_resolvePaymentInvoiceAccess());
     unawaited(_loadSsoApps());
-  }
-
-  Future<void> _resolveTaskSummaryAccess() async {
-    // 优先读会话里后端下发的开关（若有）；否则用接口鉴权探测。
-    if (_session.hrbpAccess) {
-      if (mounted) setState(() => _canSeeTaskSummary = true);
-      return;
-    }
-    final ok = await TaskApi(_session).canAccessHrbpOverview();
-    if (!mounted) return;
-    setState(() => _canSeeTaskSummary = ok);
   }
 
   Future<void> _resolveAdministrativeNoticeAccess() async {
@@ -576,14 +559,19 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                         onTap: widget.onExit,
                         borderRadius: BorderRadius.circular(12),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: const Color(0xFFECE4F3)),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF552D8E).withValues(alpha: .04),
+                                color: const Color(
+                                  0xFF552D8E,
+                                ).withValues(alpha: .04),
                                 blurRadius: 6,
                                 offset: const Offset(0, 2),
                               ),
@@ -592,7 +580,11 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.arrow_back_ios_new_rounded, size: 14, color: Color(0xFF6B5882)),
+                              Icon(
+                                Icons.arrow_back_ios_new_rounded,
+                                size: 14,
+                                color: Color(0xFF6B5882),
+                              ),
                               SizedBox(width: 4),
                               Text(
                                 '返回我的',
@@ -613,14 +605,19 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                         borderRadius: BorderRadius.circular(12),
                         onTap: _onShellBackOverride ?? () => _goPage(0),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: const Color(0xFFECE4F3)),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF552D8E).withValues(alpha: .04),
+                                color: const Color(
+                                  0xFF552D8E,
+                                ).withValues(alpha: .04),
                                 blurRadius: 6,
                                 offset: const Offset(0, 2),
                               ),
@@ -657,7 +654,9 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                         style: TextStyle(
                           fontSize: _isOverview ? 20 : 17,
                           fontWeight: FontWeight.w800,
-                          color: _isOverview ? const Color(0xFF2C1E3F) : const Color(0xFF7045B2),
+                          color: _isOverview
+                              ? const Color(0xFF2C1E3F)
+                              : const Color(0xFF7045B2),
                         ),
                       ),
                     ),
@@ -676,10 +675,14 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFECE4F3)),
+                              border: Border.all(
+                                color: const Color(0xFFECE4F3),
+                              ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFF552D8E).withValues(alpha: .04),
+                                  color: const Color(
+                                    0xFF552D8E,
+                                  ).withValues(alpha: .04),
                                   blurRadius: 6,
                                   offset: const Offset(0, 2),
                                 ),
@@ -750,14 +753,13 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           session: _session,
           embedded: true,
           onChromeChanged: _onTaskChrome,
-          onOpenSummary: _canSeeTaskSummary == true
-              ? () => _open(_WorkbenchView.hrbp)
-              : null,
+          onOpenSummary: () => _open(_WorkbenchView.hrbp),
         );
       case _WorkbenchView.hrbp:
         return NativeTaskHrbpPane(
           key: const ValueKey('workbench-hrbp'),
           session: _session,
+          onBackToTasks: () => _open(_WorkbenchView.tasks),
           onChromeChanged: _onTaskChrome,
         );
       case _WorkbenchView.products:
@@ -889,7 +891,8 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           icon: Icons.assignment_outlined,
           color: _themePurple,
           enabled: true,
-          onTap: () => _openMergedChoices(title: '选择提案类型', choices: proposalChoices),
+          onTap: () =>
+              _openMergedChoices(title: '选择提案类型', choices: proposalChoices),
         ),
       if (!_session.isExternalUser &&
           (_canSeePaymentInvoice == true || kPaymentInvoiceStaticPreview))
@@ -950,7 +953,8 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
           icon: Icons.campaign_outlined,
           color: const Color(0xFF3D7A8C),
           enabled: true,
-          onTap: () => _openMergedChoices(title: '选择通告类型', choices: noticeChoices),
+          onTap: () =>
+              _openMergedChoices(title: '选择通告类型', choices: noticeChoices),
         ),
       if (!_session.isExternalUser && _canSeeKpiPerformance == true)
         _WorkbenchTile(
@@ -994,8 +998,12 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
       if (!_session.isExternalUser)
         for (var i = 0; i < _ssoApps.length; i++)
           _WorkbenchTile(
-            title: _ssoApps[i].title.isEmpty ? _ssoApps[i].appKey : _ssoApps[i].title,
-            subtitle: _ssoApps[i].subtitle.isEmpty ? '免登进入' : _ssoApps[i].subtitle,
+            title: _ssoApps[i].title.isEmpty
+                ? _ssoApps[i].appKey
+                : _ssoApps[i].title,
+            subtitle: _ssoApps[i].subtitle.isEmpty
+                ? '免登进入'
+                : _ssoApps[i].subtitle,
             icon: Icons.account_balance_outlined,
             color: _ssoTileColors[i % _ssoTileColors.length],
             enabled: true,
@@ -1004,56 +1012,56 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     ];
 
     return ListView(
-          padding: EdgeInsets.fromLTRB(
-            isDesktopCommOnly ? 24 : 16,
-            10,
-            isDesktopCommOnly ? 24 : 16,
-            40,
+      padding: EdgeInsets.fromLTRB(
+        isDesktopCommOnly ? 24 : 16,
+        10,
+        isDesktopCommOnly ? 24 : 16,
+        40,
+      ),
+      children: [
+        _buildSuperHeroCard(
+          collaborationCount: collabTiles.length,
+          toolCount: toolTiles.length,
+          adminCount: businessTiles.length + peopleTiles.length,
+        ),
+        const SizedBox(height: 16),
+        if (collabTiles.isNotEmpty) ...[
+          _WorkbenchSection(
+            title: '协同办公',
+            subtitle: '任务流转 · 文件共享',
+            accent: _themePurple,
+            children: collabTiles,
           ),
-          children: [
-            _buildSuperHeroCard(
-              collaborationCount: collabTiles.length,
-              toolCount: toolTiles.length,
-              adminCount: businessTiles.length + peopleTiles.length,
-            ),
-            const SizedBox(height: 16),
-            if (collabTiles.isNotEmpty) ...[
-              _WorkbenchSection(
-                title: '协同办公',
-                subtitle: '任务流转 · 文件共享',
-                accent: _themePurple,
-                children: collabTiles,
-              ),
-              const SizedBox(height: 14),
-            ],
-            if (businessTiles.isNotEmpty) ...[
-              _WorkbenchSection(
-                title: '业务与财务',
-                subtitle: '提案 · 合同 · 发票 · 对账',
-                accent: const Color(0xFF0F766E),
-                children: businessTiles,
-              ),
-              const SizedBox(height: 14),
-            ],
-            if (peopleTiles.isNotEmpty) ...[
-              _WorkbenchSection(
-                title: '行政人事',
-                subtitle: '通告 · 绩效 · 薪酬 · 差旅',
-                accent: const Color(0xFF3D7A8C),
-                children: peopleTiles,
-              ),
-              const SizedBox(height: 14),
-            ],
-            if (toolTiles.isNotEmpty) ...[
-              _WorkbenchSection(
-                title: '企业应用',
-                subtitle: '高频直达 · 单点免登',
-                accent: const Color(0xFF3880FF),
-                children: toolTiles,
-              ),
-            ],
-          ],
-        );
+          const SizedBox(height: 14),
+        ],
+        if (businessTiles.isNotEmpty) ...[
+          _WorkbenchSection(
+            title: '业务与财务',
+            subtitle: '提案 · 合同 · 发票 · 对账',
+            accent: const Color(0xFF0F766E),
+            children: businessTiles,
+          ),
+          const SizedBox(height: 14),
+        ],
+        if (peopleTiles.isNotEmpty) ...[
+          _WorkbenchSection(
+            title: '行政人事',
+            subtitle: '通告 · 绩效 · 薪酬 · 差旅',
+            accent: const Color(0xFF3D7A8C),
+            children: peopleTiles,
+          ),
+          const SizedBox(height: 14),
+        ],
+        if (toolTiles.isNotEmpty) ...[
+          _WorkbenchSection(
+            title: '企业应用',
+            subtitle: '高频直达 · 单点免登',
+            accent: const Color(0xFF3880FF),
+            children: toolTiles,
+          ),
+        ],
+      ],
+    );
   }
 
   /// 行政级数智协同工作台看板 (Executive Digital Hub)
@@ -1073,15 +1081,17 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
     if (dept.isNotEmpty) subParts.add(dept);
     if (title.isNotEmpty) subParts.add(title);
     if (phone.isNotEmpty) subParts.add(phone);
-    final identityLine = subParts.isNotEmpty ? subParts.join(' · ') : '沙丘团队协同中枢';
+    final identityLine = subParts.isNotEmpty
+        ? subParts.join(' · ')
+        : '沙丘团队协同中枢';
     final cached = getCachedMyPageProfile(_session.userId);
     final snap = userAvatarRefresh.snapshotFor(_session.userId);
     var avatarUrl = (cached?.avatarUrl ?? '').trim();
     if (avatarUrl.isEmpty) avatarUrl = (snap?.avatarUrl ?? '').trim();
     if (avatarUrl.isEmpty) avatarUrl = _session.avatarUrl.trim();
     if (avatarUrl.isEmpty) {
-      final objectKey =
-          (cached?.avatarObjectKey ?? snap?.avatarObjectKey ?? '').trim();
+      final objectKey = (cached?.avatarObjectKey ?? snap?.avatarObjectKey ?? '')
+          .trim();
       if (objectKey.isNotEmpty) {
         avatarUrl = dunesAvatarResolvedUrlCache[objectKey] ?? '';
       }
@@ -1133,7 +1143,11 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                   width: 0.6,
                 ),
               ),
-              child: Icon(icon, size: 13, color: Colors.white.withValues(alpha: .95)),
+              child: Icon(
+                icon,
+                size: 13,
+                color: Colors.white.withValues(alpha: .95),
+              ),
             ),
             const SizedBox(width: 8),
             Column(
@@ -1233,7 +1247,10 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 16,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -1280,7 +1297,9 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                                       ),
                                       borderRadius: BorderRadius.circular(6),
                                       border: Border.all(
-                                        color: Colors.white.withValues(alpha: .28),
+                                        color: Colors.white.withValues(
+                                          alpha: .28,
+                                        ),
                                         width: 0.6,
                                       ),
                                     ),
@@ -1337,7 +1356,10 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                           },
                           borderRadius: BorderRadius.circular(14),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 begin: Alignment.topLeft,
@@ -1550,7 +1572,10 @@ class _WorkbenchSection extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: const Color(0xFFF6F2FA),
                   borderRadius: BorderRadius.circular(99),
-                  border: Border.all(color: const Color(0xFFEBE3F2), width: 0.6),
+                  border: Border.all(
+                    color: const Color(0xFFEBE3F2),
+                    width: 0.6,
+                  ),
                 ),
                 child: Text(
                   '${children.length}项',
@@ -1586,7 +1611,8 @@ class _WorkbenchSection extends StatelessWidget {
                 cardHeight = 120.0;
               }
 
-              final cardWidth = ((width - gap * (perRow - 1)) / perRow).floorToDouble();
+              final cardWidth = ((width - gap * (perRow - 1)) / perRow)
+                  .floorToDouble();
 
               return Wrap(
                 spacing: gap,
@@ -1646,7 +1672,9 @@ class _WorkbenchCardState extends State<_WorkbenchCard> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      cursor: tile.enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      cursor: tile.enabled
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
       child: Opacity(
         opacity: opacity,
         child: Material(
@@ -1658,7 +1686,9 @@ class _WorkbenchCardState extends State<_WorkbenchCard> {
               duration: const Duration(milliseconds: 160),
               curve: Curves.easeOutCubic,
               decoration: BoxDecoration(
-                color: _hovered ? const Color(0xFFFAF7FD) : const Color(0xFFFDFDFE),
+                color: _hovered
+                    ? const Color(0xFFFAF7FD)
+                    : const Color(0xFFFDFDFE),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: _hovered

@@ -18,6 +18,14 @@ class QianjiRecordSuperviseHit {
     this.avatarPreset = '',
     this.avatarObjectKey = '',
     this.avatarUrl = '',
+    this.departmentName = '',
+    this.conversationId = 0,
+    this.messageId = 0,
+    this.senderUserId = 0,
+    this.senderName = '',
+    this.replySummary = '',
+    this.unreadSeconds = 0,
+    this.unrepliedSeconds = 0,
   });
 
   final String id;
@@ -30,6 +38,14 @@ class QianjiRecordSuperviseHit {
   final String avatarPreset;
   final String avatarObjectKey;
   final String avatarUrl;
+  final String departmentName;
+  final int conversationId;
+  final int messageId;
+  final int senderUserId;
+  final String senderName;
+  final String replySummary;
+  final int unreadSeconds;
+  final int unrepliedSeconds;
 
   QianjiRecordSuperviseHit copyWithAvatar({
     int? userId,
@@ -49,6 +65,14 @@ class QianjiRecordSuperviseHit {
       avatarPreset: avatarPreset ?? this.avatarPreset,
       avatarObjectKey: avatarObjectKey ?? this.avatarObjectKey,
       avatarUrl: avatarUrl ?? this.avatarUrl,
+      departmentName: departmentName,
+      conversationId: conversationId,
+      messageId: messageId,
+      senderUserId: senderUserId,
+      senderName: senderName,
+      replySummary: replySummary,
+      unreadSeconds: unreadSeconds,
+      unrepliedSeconds: unrepliedSeconds,
     );
   }
 
@@ -61,7 +85,13 @@ class QianjiRecordSuperviseHit {
       return '';
     }
 
-    final id = text(['id', 'taskId', 'reportId', 'messageId', 'conversationId']);
+    final id = text([
+      'id',
+      'taskId',
+      'reportId',
+      'messageId',
+      'conversationId',
+    ]);
     final userId =
         (json['userId'] as num?)?.toInt() ??
         (json['ownerUserId'] as num?)?.toInt() ??
@@ -71,11 +101,7 @@ class QianjiRecordSuperviseHit {
     return QianjiRecordSuperviseHit(
       id: id.isEmpty ? text(['title', 'name']) : id,
       title: text(['title', 'name', 'subject', 'taskTitle', 'bodyText']),
-      subtitle: text([
-        'subtitle',
-        'summary',
-        'departmentName',
-      ]),
+      subtitle: text(['subtitle', 'summary', 'departmentName']),
       status: text(['statusLabel', 'statusText', 'status']),
       time: text(['displayTime', 'time', 'reportDate', 'dueDate', 'createdAt']),
       userId: userId,
@@ -86,13 +112,25 @@ class QianjiRecordSuperviseHit {
         'senderName',
         'userName',
       ]),
-      avatarPreset: text(['avatarPreset', 'ownerAvatarPreset', 'peerAvatarPreset']),
+      avatarPreset: text([
+        'avatarPreset',
+        'ownerAvatarPreset',
+        'peerAvatarPreset',
+      ]),
       avatarObjectKey: text([
         'avatarObjectKey',
         'ownerAvatarObjectKey',
         'peerAvatarObjectKey',
       ]),
       avatarUrl: text(['avatarUrl', 'ownerAvatarUrl', 'peerAvatarUrl']),
+      departmentName: text(['departmentName']),
+      conversationId: (json['conversationId'] as num?)?.toInt() ?? 0,
+      messageId: (json['messageId'] as num?)?.toInt() ?? 0,
+      senderUserId: (json['senderUserId'] as num?)?.toInt() ?? 0,
+      senderName: text(['senderName']),
+      replySummary: text(['replySummary']),
+      unreadSeconds: (json['unreadSeconds'] as num?)?.toInt() ?? 0,
+      unrepliedSeconds: (json['unrepliedSeconds'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -168,10 +206,7 @@ class QianjiRecordDeptStatsResult {
 }
 
 class QianjiRecordSuperviseService {
-  QianjiRecordSuperviseService({
-    required this.session,
-    required this.kind,
-  });
+  QianjiRecordSuperviseService({required this.session, required this.kind});
 
   final AuthSession session;
   final QianjiRecordSuperviseKind kind;
@@ -197,6 +232,10 @@ class QianjiRecordSuperviseService {
     int size = 20,
     String keyword = '',
     int? departmentId,
+    String? reportDate,
+    String? month,
+    String? startDate,
+    String? endDate,
   }) async {
     final q = <String, String>{
       'page': '$page',
@@ -206,13 +245,26 @@ class QianjiRecordSuperviseService {
     final k = keyword.trim();
     if (k.isNotEmpty) q['q'] = k;
     if (departmentId != null) q['departmentId'] = '$departmentId';
-    final data = _asMap(_unwrap(await http.get(_uri(_path, q), headers: _headers)));
+    if (reportDate != null && reportDate.trim().isNotEmpty) {
+      q['reportDate'] = reportDate.trim();
+    }
+    if (month != null && month.trim().isNotEmpty) q['month'] = month.trim();
+    if (startDate != null && startDate.trim().isNotEmpty) {
+      q['startDate'] = startDate.trim();
+    }
+    if (endDate != null && endDate.trim().isNotEmpty) {
+      q['endDate'] = endDate.trim();
+    }
+    final data = _asMap(
+      _unwrap(await http.get(_uri(_path, q), headers: _headers)),
+    );
     final content =
         (data['content'] as List?) ?? (data['items'] as List?) ?? const [];
     final items = content
         .whereType<Map>()
         .map(
-          (e) => QianjiRecordSuperviseHit.fromJson(Map<String, dynamic>.from(e)),
+          (e) =>
+              QianjiRecordSuperviseHit.fromJson(Map<String, dynamic>.from(e)),
         )
         .toList(growable: false);
     final total =
@@ -223,9 +275,28 @@ class QianjiRecordSuperviseService {
     return QianjiRecordSupervisePageResult(items: items, totalCount: total);
   }
 
-  Future<QianjiRecordDeptStatsResult> fetchDeptStats() async {
+  Future<QianjiRecordDeptStatsResult> fetchDeptStats({
+    String? month,
+    String? startDate,
+    String? endDate,
+  }) async {
+    final query = <String, String>{};
+    if (month != null && month.trim().isNotEmpty) {
+      query['month'] = month.trim();
+    }
+    if (startDate != null && startDate.trim().isNotEmpty) {
+      query['startDate'] = startDate.trim();
+    }
+    if (endDate != null && endDate.trim().isNotEmpty) {
+      query['endDate'] = endDate.trim();
+    }
     final data = _asMap(
-      _unwrap(await http.get(_uri('$_path/dept-stats'), headers: _headers)),
+      _unwrap(
+        await http.get(
+          _uri('$_path/dept-stats', query.isEmpty ? null : query),
+          headers: _headers,
+        ),
+      ),
     );
     return QianjiRecordDeptStatsResult.fromJson(data);
   }

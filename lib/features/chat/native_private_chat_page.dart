@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../auth/auth_session.dart';
 import '../conversation/conversation_models.dart';
 import '../xflow/approval_chat_share.dart';
+import '../tasks/task_chat_share.dart';
 import 'native_chat_view.dart';
 
 class NativePrivateChatPage extends StatelessWidget {
@@ -19,6 +20,7 @@ class NativePrivateChatPage extends StatelessWidget {
     required this.onOpenSearch,
     this.onOpenAiSummary,
     this.onOpenApprovalShare,
+    this.onOpenTaskShare,
     this.onConversationRead,
     this.onClearFocusMessage,
     this.autoMarkRead = false,
@@ -36,6 +38,7 @@ class NativePrivateChatPage extends StatelessWidget {
   final ValueChanged<int> onOpenSearch;
   final ValueChanged<int>? onOpenAiSummary;
   final ValueChanged<ApprovalChatShare>? onOpenApprovalShare;
+  final ValueChanged<TaskChatShare>? onOpenTaskShare;
   final ValueChanged<int>? onConversationRead;
   final VoidCallback? onClearFocusMessage;
   final bool autoMarkRead;
@@ -56,6 +59,7 @@ class NativePrivateChatPage extends StatelessWidget {
       onOpenSearch: onOpenSearch,
       onOpenAiSummary: onOpenAiSummary,
       onOpenApprovalShare: onOpenApprovalShare,
+      onOpenTaskShare: onOpenTaskShare,
       onConversationRead: onConversationRead,
       onClearFocusMessage: onClearFocusMessage,
       autoMarkRead: autoMarkRead,

@@ -1787,7 +1787,7 @@ void main() {
       );
 
       await _scrollUntil(tester, '科技部板块审核');
-      expect(find.textContaining('检查遗漏：还差'), findsOneWidget);
+      expect(find.textContaining('项未复核'), findsOneWidget);
       expect(find.textContaining('财务技术接口'), findsWidgets);
 
       final checkButton = find.byKey(
@@ -2870,7 +2870,7 @@ void main() {
     expect(find.text('标签三-二级'), findsNothing);
   });
 
-  testWidgets('product settle card shows income cost and profit outside', (
+  testWidgets('product settle card omits income cost and profit', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1440, 2400);
@@ -2905,9 +2905,9 @@ void main() {
     );
     await tester.pump();
     await _scrollUntil(tester, '产品结算');
-    expect(find.text('收入 90万'), findsWidgets);
-    expect(find.text('成本 80万'), findsWidgets);
-    expect(find.text('利润 10万'), findsWidgets);
+    expect(find.text('收入 90万'), findsNothing);
+    expect(find.text('成本 80万'), findsNothing);
+    expect(find.text('利润 10万'), findsNothing);
   });
 
   testWidgets('finance reviews product settlements on the outer block', (

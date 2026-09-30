@@ -49,6 +49,8 @@ abstract final class ConversationInboxRealtime {
         unreadCount: 0,
         hasUnreadMention: false,
         hasUnreadAtAll: false,
+        updateMarkedUnread: true,
+        markedUnread: false,
       );
       return copy;
     }
@@ -108,6 +110,8 @@ abstract final class ConversationInboxRealtime {
       preview: preview?.text,
       updatedAt: at ?? old.updatedAt,
       unreadCount: nextUnread,
+      updateMarkedUnread: activeOnChatScreen,
+      markedUnread: false,
       title: _titleForEvent(event, old),
       hasUnreadMention: clearMention
           ? false
@@ -336,6 +340,8 @@ abstract final class ConversationInboxRealtime {
     bool? pinned,
     bool? hasUnreadMention,
     bool? hasUnreadAtAll,
+    bool? markedUnread,
+    bool updateMarkedUnread = false,
     String? peerImStatus,
     String? peerImStatusText,
     String? peerImStatusIcon,
@@ -368,6 +374,7 @@ abstract final class ConversationInboxRealtime {
       assistantGeneratingStatus: c.assistantGeneratingStatus,
       hasUnreadMention: hasUnreadMention ?? c.hasUnreadMention,
       hasUnreadAtAll: hasUnreadAtAll ?? c.hasUnreadAtAll,
+      markedUnread: updateMarkedUnread ? markedUnread : c.markedUnread,
       peerImStatus: peerImStatus ?? c.peerImStatus,
       peerImStatusText: peerImStatusText ?? c.peerImStatusText,
       peerImStatusIcon: peerImStatusIcon ?? c.peerImStatusIcon,

@@ -241,7 +241,10 @@ class _NativeDailyReconciliationPageState
     }
   }
 
-  Future<void> _openTag2Drilldown(Tag2EntityRow row, Tag2EntityAmount amount) async {
+  Future<void> _openTag2Drilldown(
+    Tag2EntityRow row,
+    Tag2EntityAmount amount,
+  ) async {
     if (!amount.drill || row.isTotal) return;
     try {
       final data = await _api.fetchTag2EntityDrilldown(
@@ -266,19 +269,25 @@ class _NativeDailyReconciliationPageState
     }
   }
 
-  Future<void> _submitTag2Action(Tag2EntityRow row, {required bool confirm}) async {
+  Future<void> _submitTag2Action(
+    Tag2EntityRow row, {
+    required bool confirm,
+    bool reject = false,
+  }) async {
     if (confirm && !row.showConfirm) return;
-    if (!confirm && !row.showComment) return;
+    if (reject && !row.showReject) return;
+    if (!confirm && !reject && !row.showComment) return;
     if (_tag2Busy.contains(row.rowKey)) return;
     final remark = await showTag2EntityActionDialog(
       context: context,
       row: row,
       confirm: confirm,
+      reject: reject,
     );
     if (remark == null || !mounted) return;
     setState(() => _tag2Busy.add(row.rowKey));
     try {
-      if (confirm) {
+      if (confirm || reject) {
         await _api.confirmTag2Entity(
           asOfDate: _asOfDate,
           rowKey: row.rowKey,
@@ -286,6 +295,7 @@ class _NativeDailyReconciliationPageState
           expectedStatus: row.confirmationStatus,
           remark: remark,
           projectName: row.title,
+          action: reject ? 'REJECT' : 'CONFIRM',
         );
       } else {
         await _api.commentTag2Entity(
@@ -300,7 +310,13 @@ class _NativeDailyReconciliationPageState
       setState(() => _tag2 = snap);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(confirm ? '已确认 ${row.title}' : '已记录 ${row.title} 的意见'),
+          content: Text(
+            confirm
+                ? '已确认 ${row.title}'
+                : reject
+                ? '已驳回 ${row.title} 并退回业务确认'
+                : '已记录 ${row.title} 的意见',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -538,7 +554,10 @@ class _NativeDailyReconciliationPageState
             child: Text(
               '还没有日清月结。到达每日推送时间后会出现在这里。',
               textAlign: TextAlign.center,
-              style: DunesTypography.sans(fontSize: 14, color: DunesColors.text3),
+              style: DunesTypography.sans(
+                fontSize: 14,
+                color: DunesColors.text3,
+              ),
             ),
           )
         else
@@ -766,34 +785,54 @@ class _NativeDailyReconciliationPageState
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
           child: Material(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+              child: Row(
                 children: [
-                  Text(
-                    '${shucaiDisplayDate(_asOfDate)} · ${reconCardTitle('TAG2_ENTITY')}',
-                    style: DunesTypography.sans(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${shucaiDisplayDate(_asOfDate)} · ${reconCardTitle('TAG2_ENTITY')}',
+                          style: DunesTypography.sans(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: DunesColors.text,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          hint.isEmpty ? '按主体核对。右侧可直接确认，意见选填。合计行只展示。' : hint,
+                          style: DunesTypography.sans(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: DunesColors.accent,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    hint.isEmpty
-                        ? '按主体核对。业务、运营各自确认，也可以提意见。合计行只展示。'
-                        : hint,
-                    style: DunesTypography.sans(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: DunesColors.accent,
+                  if (snap != null) ...[
+                    const SizedBox(width: 8),
+                    Tag3DailyOpinionEntry(
+                      count: tag3DailyOpinionComments(snap.comments).length,
+                      onTap: () {
+                        unawaited(
+                          showTag2EntityOpinionList(
+                            context: context,
+                            title: shucaiDisplayDate(_asOfDate),
+                            comments: snap.comments,
+                            rows: snap.rows,
+                          ),
+                        );
+                      },
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -801,25 +840,43 @@ class _NativeDailyReconciliationPageState
         ),
         if (_error != null)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: Text(
               _error!,
-              style: DunesTypography.sans(fontSize: 13, color: DunesColors.coral),
+              style: DunesTypography.sans(
+                fontSize: 13,
+                color: DunesColors.coral,
+              ),
             ),
           ),
         Expanded(
           child: snap == null
               ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-              : Tag2EntityTable(
-                  rows: snap.rows,
-                  comments: snap.comments,
-                  busyKeys: _tag2Busy,
-                  onDrill: (row, amount) =>
-                      unawaited(_openTag2Drilldown(row, amount)),
-                  onConfirm: (row) =>
-                      unawaited(_submitTag2Action(row, confirm: true)),
-                  onComment: (row) =>
-                      unawaited(_submitTag2Action(row, confirm: false)),
+              : Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
+                  child: Tag2EntityTable(
+                    rows: snap.rows,
+                    comments: snap.comments,
+                    busyKeys: _tag2Busy,
+                    onDrill: (row, amount) =>
+                        unawaited(_openTag2Drilldown(row, amount)),
+                    onConfirm: (row) =>
+                        unawaited(_submitTag2Action(row, confirm: true)),
+                    onComment: (row) =>
+                        unawaited(_submitTag2Action(row, confirm: false)),
+                    onReject: (row) => unawaited(
+                      _submitTag2Action(row, confirm: false, reject: true),
+                    ),
+                    onViewComments: (row) {
+                      unawaited(
+                        showTag2EntityCommentHistory(
+                          context: context,
+                          row: row,
+                          comments: snap.commentsFor(row.rowKey),
+                        ),
+                      );
+                    },
+                  ),
                 ),
         ),
       ],

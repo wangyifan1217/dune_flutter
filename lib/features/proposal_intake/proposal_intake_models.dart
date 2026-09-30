@@ -2222,12 +2222,44 @@ const kProposalTechnologyReviewLabels = <String, String>{
   kProposalSkuProductsReviewKey: '业务平台产品',
 };
 
-List<String> proposalIntakeTechnologyReviewGaps(
-  Map<String, dynamic> review, {
+/// 与后端 proposalIntakeTechnologyItemAliases 对齐：旧单按单个产品复核过的键也算数。
+List<String> _proposalTechnologyItemAliases(String key) {
+  if (key.startsWith('sku:')) {
+    final id = key.substring(4);
+    return [key, 'skuDetails:$id', 'channelSku:$id', 'channelSkus:$id', 'product:$id', id];
+  }
+  if (key.startsWith('child:')) {
+    final id = key.substring(6);
+    return [key, 'childProducts:$id', 'childProduct:$id', 'product:$id', id];
+  }
+  return [key];
+}
+
+/// 与后端 proposalIntakeTechnologyItemSatisfied / proposalIntakeSkuProductsReviewed 对齐。
+bool proposalIntakeTechnologyItemReviewed(
+  Map<String, dynamic> review,
+  String key, {
   Map<String, dynamic>? form,
 }) {
   final raw = review['technologyItems'];
   final items = raw is Map ? raw : const {};
+  bool satisfied(String canonical) =>
+      _proposalTechnologyItemAliases(canonical).any((k) => items[k] == true);
+  if (satisfied(key)) return true;
+  if (key != kProposalSkuProductsReviewKey || form == null) return false;
+  final productKeys = <String>[
+    for (final sku in proposalIntakeSkuDetails(form))
+      if (sku.id.trim().isNotEmpty) 'sku:${sku.id.trim()}',
+    for (final child in proposalIntakeChildProducts(form))
+      if (child.id.trim().isNotEmpty) 'child:${child.id.trim()}',
+  ];
+  return productKeys.isNotEmpty && productKeys.every(satisfied);
+}
+
+List<String> proposalIntakeTechnologyReviewGaps(
+  Map<String, dynamic> review, {
+  Map<String, dynamic>? form,
+}) {
   final keys = form == null
       ? kProposalTechnologyReviewFields
       : proposalIntakeTechnologyReviewItemKeys(form);
@@ -2241,7 +2273,8 @@ List<String> proposalIntakeTechnologyReviewGaps(
 
   return [
     for (final key in keys)
-      if (items[key] != true) labelOf(key),
+      if (!proposalIntakeTechnologyItemReviewed(review, key, form: form))
+        labelOf(key),
   ];
 }
 

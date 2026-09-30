@@ -352,4 +352,26 @@ void main() {
       0,
     );
   });
+
+  test('empty published performance stays openable', () {
+    final module = userWorkProfilePerformanceModule(
+      profileLoaded: true,
+      latestPerformance: null,
+      summary: '暂无已发布绩效数据',
+      period: '',
+    );
+    expect(module.status, UserWorkProfileModuleStatus.ready);
+    expect(module.summary, '暂无已发布绩效数据');
+  });
+
+  test('failed performance load stays retryable', () {
+    final module = userWorkProfilePerformanceModule(
+      profileLoaded: false,
+      latestPerformance: null,
+      summary: '',
+      period: '',
+    );
+    expect(module.status, UserWorkProfileModuleStatus.unavailable);
+    expect(module.summary, '绩效数据暂时无法加载');
+  });
 }

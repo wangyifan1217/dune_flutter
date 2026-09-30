@@ -6,11 +6,15 @@ import '../../core/platform/desktop_features.dart';
 import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/widgets/horizontal_drag_scroll_view.dart';
+import '../conversation/conversation_picker_sheet.dart';
+import '../conversation/conversation_service.dart';
+import '../shell/dunes_toast.dart';
 import '../auth/auth_session.dart';
 import '../tasks/task_api.dart';
 import '../tasks/task_avatar.dart';
 import '../tasks/task_models.dart';
 import 'qianji_record_supervise_service.dart';
+import 'qianji_group_reply_person_card.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
 
@@ -48,31 +52,26 @@ class _NativeQianjiRecordSupervisePageState
   bool _loadingMore = false;
   bool _hasMore = true;
   bool _superviseAll = false;
+  late DateTimeRange _selectedDateRange;
   int _page = 0;
   int _total = 0;
   int _listTotal = 0;
   static const int _pageSize = 20;
+  int get _requestPageSize =>
+      widget.kind == QianjiRecordSuperviseKind.groupReply ? 100 : _pageSize;
   String? _error;
   Timer? _keywordDebounce;
-
-  bool get _canView => switch (widget.kind) {
-    QianjiRecordSuperviseKind.task => widget.session.taskLookupAccess,
-    QianjiRecordSuperviseKind.dailyReport =>
-      widget.session.dailyReportLookupAccess,
-    QianjiRecordSuperviseKind.groupReply =>
-      widget.session.groupReplyLookupAccess,
-  };
 
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _selectedDateRange = DateTimeRange(
+      start: DateTime(now.year, now.month, 1),
+      end: DateTime(now.year, now.month + 1, 0),
+    );
     _scrollController.addListener(_onScroll);
     _keywordCtrl.addListener(_onKeywordChanged);
-    if (!_canView) {
-      _loading = false;
-      _error = '没有查看权限';
-      return;
-    }
     unawaited(_load(reset: true));
   }
 
@@ -103,7 +102,10 @@ class _NativeQianjiRecordSupervisePageState
   };
 
   void _onScroll() {
-    if (!_scrollController.hasClients || _loading || _loadingMore || !_hasMore) {
+    if (!_scrollController.hasClients ||
+        _loading ||
+        _loadingMore ||
+        !_hasMore) {
       return;
     }
     final pos = _scrollController.position;
@@ -130,13 +132,18 @@ class _NativeQianjiRecordSupervisePageState
     try {
       final result = await _service.fetchListPage(
         page: 0,
-        size: _pageSize,
+        size: _requestPageSize,
         keyword: _keywordCtrl.text,
         departmentId: _selectedDepartmentId,
+        startDate: _dateRangeStartFilter,
+        endDate: _dateRangeEndFilter,
       );
       QianjiRecordDeptStatsResult? stats;
       try {
-        stats = await _service.fetchDeptStats();
+        stats = await _service.fetchDeptStats(
+          startDate: _dateRangeStartFilter,
+          endDate: _dateRangeEndFilter,
+        );
       } catch (_) {
         stats = null;
       }
@@ -177,9 +184,11 @@ class _NativeQianjiRecordSupervisePageState
       final nextPage = _page + 1;
       final result = await _service.fetchListPage(
         page: nextPage,
-        size: _pageSize,
+        size: _requestPageSize,
         keyword: _keywordCtrl.text,
         departmentId: _selectedDepartmentId,
+        startDate: _dateRangeStartFilter,
+        endDate: _dateRangeEndFilter,
       );
       if (!mounted) return;
       final existing = _rows.map((e) => e.id).toSet();
@@ -187,13 +196,16 @@ class _NativeQianjiRecordSupervisePageState
           .where((e) => e.id.isEmpty || !existing.contains(e.id))
           .toList(growable: false);
       setState(() {
-        _rows = <QianjiRecordSuperviseHit>[..._rows, ..._withUserAvatars(appended)];
+        _rows = <QianjiRecordSuperviseHit>[
+          ..._rows,
+          ..._withUserAvatars(appended),
+        ];
         _page = nextPage;
         if (result.totalCount > _listTotal) _listTotal = result.totalCount;
         if (_listTotal < _rows.length) _listTotal = _rows.length;
         _hasMore =
             appended.isNotEmpty &&
-            result.items.length >= _pageSize &&
+            result.items.length >= _requestPageSize &&
             _rows.length < _listTotal;
       });
     } catch (_) {
@@ -205,22 +217,29 @@ class _NativeQianjiRecordSupervisePageState
   Future<void> _ensureAvatars() async {
     if (_avatarsById.isNotEmpty) return;
     try {
-      final users = await TaskApi(widget.session).listAssignees(scope: 'reports');
+      final users = await TaskApi(
+        widget.session,
+      ).listAssignees(scope: 'reports');
       if (!mounted) return;
       setState(() {
         _avatarsById = {for (final user in users) user.id: user};
         _avatarsByName = {
           for (final user in users)
-            if (user.displayName.trim().isNotEmpty) user.displayName.trim(): user,
+            if (user.displayName.trim().isNotEmpty)
+              user.displayName.trim(): user,
         };
       });
     } catch (_) {}
   }
 
-  List<QianjiRecordSuperviseHit> _withUserAvatars(List<QianjiRecordSuperviseHit> rows) {
+  List<QianjiRecordSuperviseHit> _withUserAvatars(
+    List<QianjiRecordSuperviseHit> rows,
+  ) {
     return [
       for (final row in rows)
-        if (row.avatarUrl.isNotEmpty || row.avatarPreset.isNotEmpty || row.avatarObjectKey.isNotEmpty)
+        if (row.avatarUrl.isNotEmpty ||
+            row.avatarPreset.isNotEmpty ||
+            row.avatarObjectKey.isNotEmpty)
           row
         else
           _applyAssigneeAvatar(row),
@@ -236,7 +255,9 @@ class _NativeQianjiRecordSupervisePageState
     if (user == null) return row;
     return row.copyWithAvatar(
       userId: row.userId > 0 ? row.userId : user.id,
-      personName: row.personName.trim().isNotEmpty ? row.personName : user.displayName,
+      personName: row.personName.trim().isNotEmpty
+          ? row.personName
+          : user.displayName,
       avatarPreset: user.avatarPreset,
       avatarObjectKey: user.avatarObjectKey,
       avatarUrl: user.avatarUrl,
@@ -246,6 +267,73 @@ class _NativeQianjiRecordSupervisePageState
   void _selectDepartment(int? departmentId) {
     if (_selectedDepartmentId == departmentId) return;
     setState(() => _selectedDepartmentId = departmentId);
+    unawaited(_load(reset: true));
+  }
+
+  String _dateKey(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  bool get _isCurrentMonth {
+    final now = DateTime.now();
+    return _dateKey(_selectedDateRange.start) ==
+            _dateKey(DateTime(now.year, now.month, 1)) &&
+        _dateKey(_selectedDateRange.end) ==
+            _dateKey(DateTime(now.year, now.month + 1, 0));
+  }
+
+  String? get _dateRangeStartFilter =>
+      widget.kind == QianjiRecordSuperviseKind.groupReply
+      ? _dateKey(_selectedDateRange.start)
+      : null;
+
+  String? get _dateRangeEndFilter =>
+      widget.kind == QianjiRecordSuperviseKind.groupReply
+      ? _dateKey(_selectedDateRange.end)
+      : null;
+
+  Future<void> _selectDateRange() async {
+    final range = await showDateRangePicker(
+      context: context,
+      initialDateRange: _selectedDateRange,
+      firstDate: DateTime(2020, 1, 1),
+      lastDate: DateTime(2099, 12, 31),
+      helpText: '选择统计时间段',
+      saveText: '应用',
+      initialEntryMode: DatePickerEntryMode.calendar,
+      builder: (context, child) {
+        final theme = Theme.of(context);
+        return Theme(
+          data: theme.copyWith(
+            colorScheme: theme.colorScheme.copyWith(
+              primary: _themePurple,
+              onPrimary: Colors.white,
+              secondary: _themePurple,
+              onSecondary: Colors.white,
+              surface: Colors.white,
+              onSurface: DunesColors.text,
+            ),
+            datePickerTheme: theme.datePickerTheme.copyWith(
+              backgroundColor: const Color(0xFFFCFBFE),
+              rangePickerBackgroundColor: const Color(0xFFFCFBFE),
+              headerBackgroundColor: Colors.white,
+              headerForegroundColor: DunesColors.text,
+              rangePickerHeaderBackgroundColor: const Color(0xFFF6F2FC),
+              rangePickerHeaderForegroundColor: DunesColors.text,
+              rangeSelectionBackgroundColor: const Color(0xFFEAE2FC),
+              todayForegroundColor: const WidgetStatePropertyAll(_themePurple),
+              todayBorder: const BorderSide(color: _themePurple),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (range == null || !mounted) return;
+    if (_dateKey(range.start) == _dateKey(_selectedDateRange.start) &&
+        _dateKey(range.end) == _dateKey(_selectedDateRange.end)) {
+      return;
+    }
+    setState(() => _selectedDateRange = range);
     unawaited(_load(reset: true));
   }
 
@@ -266,6 +354,8 @@ class _NativeQianjiRecordSupervisePageState
           children: [
             _header(),
             _search(),
+            if (widget.kind == QianjiRecordSuperviseKind.groupReply)
+              _dateRangeFilter(),
             _deptFilter(),
             Expanded(
               child: RefreshIndicator(
@@ -319,7 +409,9 @@ class _NativeQianjiRecordSupervisePageState
           ),
           if (_listTotal > 0 || _total > 0)
             Text(
-              '合计 ${_listTotal > 0 ? _listTotal : _total}',
+              widget.kind == QianjiRecordSuperviseKind.groupReply
+                  ? '响应记录 ${_listTotal > 0 ? _listTotal : _total}'
+                  : '合计 ${_listTotal > 0 ? _listTotal : _total}',
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -367,6 +459,95 @@ class _NativeQianjiRecordSupervisePageState
             borderSide: const BorderSide(color: _themePurple),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _dateRangeFilter() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                '时间范围',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: DunesColors.text2,
+                ),
+              ),
+              const Spacer(),
+              if (!_isCurrentMonth)
+                TextButton(
+                  onPressed: () {
+                    final now = DateTime.now();
+                    setState(
+                      () => _selectedDateRange = DateTimeRange(
+                        start: DateTime(now.year, now.month, 1),
+                        end: DateTime(now.year, now.month + 1, 0),
+                      ),
+                    );
+                    unawaited(_load(reset: true));
+                  },
+                  style: TextButton.styleFrom(
+                    foregroundColor: _themePurple,
+                    minimumSize: const Size(0, 30),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  child: const Text('本月', style: TextStyle(fontSize: 12)),
+                ),
+            ],
+          ),
+          Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: _selectDateRange,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 9,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE8EAED)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.date_range_rounded,
+                      size: 16,
+                      color: _themePurple,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${_dateKey(_selectedDateRange.start)} 至 ${_dateKey(_selectedDateRange.end)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: DunesColors.text,
+                        ),
+                      ),
+                    ),
+                    const Icon(
+                      Icons.expand_more_rounded,
+                      size: 18,
+                      color: DunesColors.text3,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -519,6 +700,43 @@ class _NativeQianjiRecordSupervisePageState
         ],
       );
     }
+    if (widget.kind == QianjiRecordSuperviseKind.groupReply) {
+      final people = groupReplyPeople(_rows);
+      return ListView.separated(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(16, 4, 16, isDesktopCommOnly ? 48 : 40),
+        itemCount: people.length + ((_loadingMore || _hasMore) ? 1 : 0),
+        separatorBuilder: (_, _) => const SizedBox(height: 10),
+        itemBuilder: (context, index) {
+          if (index >= people.length) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            );
+          }
+          final person = people[index];
+          return QianjiGroupReplyPersonCard(
+            session: widget.session,
+            person: person,
+            onTap: () => unawaited(
+              showQianjiGroupReplyPersonDetails(
+                context: context,
+                session: widget.session,
+                person: person,
+              ),
+            ),
+            onForward: () => unawaited(_forwardGroupReplyPerson(person)),
+          );
+        },
+      );
+    }
     return ListView.separated(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
@@ -599,14 +817,18 @@ class _NativeQianjiRecordSupervisePageState
                         const SizedBox(height: 6),
                         Text(
                           [
-                            if (row.personName.isNotEmpty && row.personName != title)
+                            if (row.personName.isNotEmpty &&
+                                row.personName != title)
                               row.personName,
                             row.subtitle,
                             row.time,
                           ].where((e) => e.isNotEmpty).join(' · '),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: DunesColors.text3,
+                          ),
                         ),
                       ],
                     ],
@@ -618,5 +840,30 @@ class _NativeQianjiRecordSupervisePageState
         );
       },
     );
+  }
+
+  Future<void> _forwardGroupReplyPerson(QianjiGroupReplyPerson person) async {
+    final conversationId = await showConversationPickerSheet(
+      context: context,
+      service: ConversationService(session: widget.session),
+      title: '转发群响应名片',
+    );
+    if (conversationId == null || conversationId <= 0 || !mounted) return;
+    try {
+      await ConversationService(session: widget.session).sendText(
+        conversationId,
+        '[群响应名片] ${person.name} · 待回复 ${person.waitingCount} · 已回复 ${person.repliedCount}',
+        payload: person.toPayload(),
+      );
+      if (mounted) showDunesToast(context, '群响应个人名片已转发');
+    } catch (error) {
+      if (mounted) {
+        showDunesToast(
+          context,
+          '转发失败：${friendlyErrorText(error, fallback: '请稍后重试')}',
+          kind: DunesToastKind.error,
+        );
+      }
+    }
   }
 }

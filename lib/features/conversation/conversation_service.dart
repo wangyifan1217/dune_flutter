@@ -2134,10 +2134,12 @@ class ConversationService {
     int conversationId, {
     bool? muted,
     bool? pinned,
+    bool? markedUnread,
   }) async {
     final payload = <String, dynamic>{};
     if (muted != null) payload['muted'] = muted;
     if (pinned != null) payload['pinned'] = pinned;
+    if (markedUnread != null) payload['markedUnread'] = markedUnread;
     final resp = await _client.patch(
       _uri('/conversations/$conversationId/my-settings'),
       headers: _headers,
@@ -2790,6 +2792,9 @@ class ConversationService {
           .toString(),
       hasUnreadMention: ConversationMentionUtils.unreadMentionFromJson(raw),
       hasUnreadAtAll: ConversationMentionUtils.unreadAtAllFromJson(raw),
+      markedUnread: raw.containsKey('markedUnread')
+          ? raw['markedUnread'] == true
+          : null,
       peerImStatus: peerStatus.key,
       peerImStatusText: peerStatus.text,
       peerImStatusIcon: peerStatus.icon,

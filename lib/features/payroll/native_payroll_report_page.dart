@@ -8,9 +8,12 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/widgets/dunes_month_picker.dart';
 import '../auth/auth_session.dart';
+import '../conversation/conversation_picker_sheet.dart';
+import '../conversation/conversation_service.dart';
 import '../profile/work_profile_controls.dart';
 import '../shell/dunes_toast.dart';
 import 'payroll_report_service.dart';
+import 'payroll_report_share_card.dart';
 
 const _payrollAccent = Color(0xFF7B5CD8);
 const _identityTokens = [
@@ -264,6 +267,7 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
   bool _listView = false;
   bool _groupByDept = false;
   bool _sortDesc = true;
+  String? _departmentFilter;
 
   String get _yearmo =>
       '${_month.year.toString().padLeft(4, '0')}${_month.month.toString().padLeft(2, '0')}';
@@ -546,7 +550,10 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
                       selected: _groupByDept,
                       onPressed: _busy
                           ? null
-                          : () => setState(() => _groupByDept = !_groupByDept),
+                          : () => setState(() {
+                              _groupByDept = !_groupByDept;
+                              if (!_groupByDept) _departmentFilter = null;
+                            }),
                     ),
                     _PayrollToolbarChip(
                       key: const Key('payroll-view-list'),
@@ -574,6 +581,10 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
                       ),
                   ],
                 ),
+                if (_groupByDept && _table != null) ...[
+                  const SizedBox(height: 8),
+                  _departmentPicker(_visiblePeople(_table!)),
+                ],
                 const SizedBox(height: 10),
                 TextField(
                   controller: _keyword,
@@ -663,7 +674,13 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
         child: Text('暂无匹配的工资明细', style: TextStyle(color: DunesColors.text3)),
       );
     }
-    final people = _visiblePeople(table).toList();
+    final people = _visiblePeople(table)
+        .where(
+          (person) =>
+              _departmentFilter == null ||
+              person.departmentLabel == _departmentFilter,
+        )
+        .toList();
     _sortPeople(people, descending: _sortDesc);
     final total = people.fold<num>(
       0,
@@ -745,6 +762,48 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
     );
   }
 
+  Widget _departmentPicker(List<_PayrollPersonCost> people) {
+    final departments =
+        people.map((person) => person.departmentLabel).toSet().toList()..sort();
+    if (_departmentFilter != null && !departments.contains(_departmentFilter)) {
+      _departmentFilter = null;
+    }
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 220, maxWidth: 360),
+        child: DropdownButtonFormField<String?>(
+          value: _departmentFilter,
+          isExpanded: true,
+          decoration: InputDecoration(
+            labelText: '部门筛选',
+            isDense: true,
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFFE6DCF0)),
+            ),
+          ),
+          items: [
+            const DropdownMenuItem<String?>(value: null, child: Text('全部部门')),
+            for (final department in departments)
+              DropdownMenuItem<String?>(
+                value: department,
+                child: Text(department, overflow: TextOverflow.ellipsis),
+              ),
+          ],
+          onChanged: (value) => setState(() => _departmentFilter = value),
+        ),
+      ),
+    );
+  }
+
   List<({String title, List<_PayrollPersonCost> people})> _departmentGroups(
     List<_PayrollPersonCost> people,
   ) {
@@ -789,6 +848,24 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
           Text(
             '${people.length} 人 · ${_formatAmount(total)}',
             style: const TextStyle(color: DunesColors.text2, fontSize: 12),
+          ),
+          const SizedBox(width: 4),
+          IconButton(
+            tooltip: '转发部门报表',
+            visualDensity: VisualDensity.compact,
+            onPressed: _busy
+                ? null
+                : () => unawaited(
+                    _forwardPayrollShare(
+                      kind: 'department',
+                      department: people.first.departmentLabel,
+                    ),
+                  ),
+            icon: const Icon(
+              Icons.forward_to_inbox_outlined,
+              size: 19,
+              color: _payrollAccent,
+            ),
           ),
         ],
       ),
@@ -848,6 +925,24 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
                 style: const TextStyle(color: DunesColors.text3, fontSize: 11),
               ),
             ],
+          ),
+          IconButton(
+            tooltip: '转发个人报表',
+            visualDensity: VisualDensity.compact,
+            onPressed: _busy
+                ? null
+                : () => unawaited(
+                    _forwardPayrollShare(
+                      kind: 'person',
+                      department: person.departmentLabel,
+                      personName: person.name,
+                    ),
+                  ),
+            icon: const Icon(
+              Icons.forward_to_inbox_outlined,
+              size: 19,
+              color: _payrollAccent,
+            ),
           ),
         ],
       ),
@@ -965,6 +1060,24 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
                   ],
                 ),
               ),
+              IconButton(
+                tooltip: '转发个人报表',
+                visualDensity: VisualDensity.compact,
+                onPressed: _busy
+                    ? null
+                    : () => unawaited(
+                        _forwardPayrollShare(
+                          kind: 'person',
+                          department: person.departmentLabel,
+                          personName: person.name,
+                        ),
+                      ),
+                icon: const Icon(
+                  Icons.forward_to_inbox_outlined,
+                  size: 19,
+                  color: _payrollAccent,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -1003,6 +1116,73 @@ class _NativePayrollReportPageState extends State<NativePayrollReportPage> {
       ),
     );
   }
+
+  Future<void> _forwardPayrollShare({
+    required String kind,
+    required String department,
+    String personName = '',
+  }) async {
+    final sheet = _selected;
+    if (sheet == null) return;
+    final conversations = ConversationService(session: widget.session);
+    final conversationId = await showConversationPickerSheet(
+      context: context,
+      service: conversations,
+      title: kind == 'person' ? '转发个人工资报表' : '转发部门工资报表',
+    );
+    if (conversationId == null || conversationId <= 0 || !mounted) return;
+
+    setState(() => _busy = true);
+    String? shareRef;
+    Object? failure;
+    try {
+      final normalizedDepartment = department == '未分配部门' ? '' : department;
+      final metadata = await _service.createShare(
+        yearmo: _yearmo,
+        sheet: sheet,
+        kind: kind,
+        department: normalizedDepartment,
+        personName: personName,
+      );
+      shareRef = '${metadata['shareRef'] ?? ''}';
+      if (shareRef.isEmpty) throw Exception('工资名片创建失败');
+      final card = PayrollReportShareCardData(
+        shareRef: shareRef,
+        yearmo: _yearmo,
+        kind: kind,
+        department: normalizedDepartment,
+        personName: personName,
+        sheetName: '${metadata['sheetName'] ?? sheet.name}',
+        rowCount: int.tryParse('${metadata['rowCount'] ?? 0}') ?? 0,
+      );
+      final scope = kind == 'person' ? '$department $personName' : department;
+      final sent = await conversations.sendText(
+        conversationId,
+        '[工资报表名片] $_monthLabel $scope',
+        payload: card.toPayload(),
+      );
+      if (sent == null || sent.id <= 0) throw Exception('IM 没有返回消息记录');
+    } catch (error) {
+      failure = error;
+      if (shareRef != null) {
+        try {
+          await _service.revokeShare(shareRef);
+        } catch (_) {}
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (!mounted) return;
+    if (failure == null) {
+      showDunesToast(context, '工资报表名片已转发；完整金额仅对有工资报表权限的人开放');
+    } else {
+      showDunesToast(
+        context,
+        '转发失败：${friendlyErrorText(failure, fallback: '请稍后重试')}',
+        kind: DunesToastKind.error,
+      );
+    }
+  }
 }
 
 class _PayrollToolbarChip extends StatelessWidget {
@@ -1028,7 +1208,9 @@ class _PayrollToolbarChip extends StatelessWidget {
     final Color foreground;
     final Color border;
     if (filled) {
-      background = enabled ? _payrollAccent : _payrollAccent.withValues(alpha: 0.4);
+      background = enabled
+          ? _payrollAccent
+          : _payrollAccent.withValues(alpha: 0.4);
       foreground = Colors.white;
       border = background;
     } else if (selected) {

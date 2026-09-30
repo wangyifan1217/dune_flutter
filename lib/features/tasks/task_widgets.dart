@@ -770,7 +770,9 @@ class TaskWorkbenchCard extends StatelessWidget {
     this.completeHint,
     this.onApprove,
     this.onReject,
+    this.onShare,
     this.groupMode = false,
+    this.groupTrailingAction,
     this.statusHint,
     this.approveLabel = '通过',
     this.rejectLabel = '驳回',
@@ -783,7 +785,9 @@ class TaskWorkbenchCard extends StatelessWidget {
   final String? completeHint;
   final VoidCallback? onApprove;
   final VoidCallback? onReject;
+  final VoidCallback? onShare;
   final bool groupMode;
+  final Widget? groupTrailingAction;
   final String? statusHint;
   final String approveLabel;
   final String rejectLabel;
@@ -908,6 +912,22 @@ class TaskWorkbenchCard extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (onShare != null)
+                    IconButton(
+                      tooltip: '转发到 IM',
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 40,
+                        height: 40,
+                      ),
+                      padding: EdgeInsets.zero,
+                      onPressed: onShare,
+                      icon: const Icon(
+                        Icons.ios_share_rounded,
+                        size: 19,
+                        color: kTaskPurple,
+                      ),
+                    ),
                 ],
               ),
               if (groupMode) ...[
@@ -929,9 +949,14 @@ class TaskWorkbenchCard extends StatelessWidget {
                       _TaskInfoItem(
                         icon: Icons.account_tree_outlined,
                         text: task.subtaskCount > 0
-                            ? '${task.subtaskCount} 个子目标'
+                            ? taskSubtaskProgressLabel(task)
                             : '暂无子目标',
                       ),
+                      if (task.creatorName.isNotEmpty)
+                        _TaskInfoItem(
+                          icon: Icons.edit_note_rounded,
+                          text: '创建人 ${task.creatorName}',
+                        ),
                       if (task.ownerName.isNotEmpty)
                         _TaskInfoItem(
                           icon: Icons.person_outline,
@@ -1021,19 +1046,26 @@ class TaskWorkbenchCard extends StatelessWidget {
                   ],
                 )
               else if (groupMode)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    style: TextButton.styleFrom(
-                      foregroundColor: kTaskPurple,
-                      visualDensity: VisualDensity.compact,
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 2,
+                  children: [
+                    if (groupTrailingAction != null) groupTrailingAction!,
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        foregroundColor: kTaskPurple,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      onPressed: onTap,
+                      icon: const Icon(Icons.arrow_forward, size: 16),
+                      label: const Text('查看详情与拆解'),
                     ),
-                    onPressed: onTap,
-                    icon: const Icon(Icons.arrow_forward, size: 16),
-                    label: const Text('查看详情与拆解'),
-                  ),
+                  ],
                 )
-              else if (onProgress != null || onComplete != null || completeHint != null)
+              else if (onProgress != null ||
+                  onComplete != null ||
+                  completeHint != null)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -1249,6 +1281,7 @@ class TaskDropdownField<T> extends StatelessWidget {
     required this.onChanged,
     this.sheetTitle = '请选择',
     this.forceSheet = false,
+    this.leadingBuilder,
   });
 
   final T value;
@@ -1256,6 +1289,7 @@ class TaskDropdownField<T> extends StatelessWidget {
   final ValueChanged<T> onChanged;
   final String sheetTitle;
   final bool forceSheet;
+  final Widget Function(T value)? leadingBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -1299,6 +1333,7 @@ class TaskDropdownField<T> extends StatelessWidget {
                         selected: item.$1 == value,
                         selectedColor: kTaskPurple,
                         selectedTileColor: kTaskPurple.withValues(alpha: 0.08),
+                        leading: leadingBuilder?.call(item.$1),
                         title: Text(item.$2),
                         trailing: item.$1 == value
                             ? const Icon(
@@ -1319,6 +1354,10 @@ class TaskDropdownField<T> extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
+                if (leadingBuilder != null) ...[
+                  leadingBuilder!(current.$1),
+                  const SizedBox(width: 9),
+                ],
                 Expanded(
                   child: Text(
                     current.$2,
@@ -1366,6 +1405,10 @@ class TaskDropdownField<T> extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
+                      if (leadingBuilder != null) ...[
+                        leadingBuilder!(current.$1),
+                        const SizedBox(width: 9),
+                      ],
                       Expanded(
                         child: Text(
                           current.$2,
@@ -1418,16 +1461,28 @@ class TaskDropdownField<T> extends StatelessWidget {
                     : null,
                 child: SizedBox(
                   width: menuWidth - 48,
-                  child: Text(
-                    item.$2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: item.$1 == value
-                          ? FontWeight.w600
-                          : FontWeight.w400,
-                      color: item.$1 == value ? kTaskPurple : DunesColors.text,
-                    ),
+                  child: Row(
+                    children: [
+                      if (leadingBuilder != null) ...[
+                        leadingBuilder!(item.$1),
+                        const SizedBox(width: 9),
+                      ],
+                      Expanded(
+                        child: Text(
+                          item.$2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: item.$1 == value
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                            color: item.$1 == value
+                                ? kTaskPurple
+                                : DunesColors.text,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

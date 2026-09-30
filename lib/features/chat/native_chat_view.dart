@@ -43,6 +43,7 @@ import '../kb/kb_document_coordinator.dart';
 import '../kb/native_kb_service.dart';
 import '../meeting/meeting_minutes_chat_share.dart';
 import '../meeting/native_meeting_detail_page.dart';
+import '../payroll/payroll_report_share_card.dart';
 import '../kpi/kpi_score_summary_card.dart';
 import '../kpi/kpi_summary_person_sheet.dart';
 import '../robots/robot_markdown.dart';
@@ -51,6 +52,12 @@ import '../weekly_summary/native_weekly_summary_page.dart';
 import '../weekly_summary/weekly_summary_card.dart';
 import '../weekly_summary/weekly_summary_models.dart';
 import '../xflow/approval_chat_share.dart';
+import '../tasks/task_chat_share.dart';
+import '../tasks/task_chat_share_card.dart';
+import '../tasks/task_chat_share_bundle_card.dart';
+import '../tasks/task_api.dart';
+import '../qianji/qianji_group_reply_person_card.dart';
+import '../qianji/native_qianji_daily_report_supervise_page.dart';
 import '../xflow/approval_picker_sheet.dart';
 import '../xflow/xflow_detail_logic.dart';
 import 'chat_emoji_gif_panel.dart';
@@ -243,6 +250,7 @@ class NativeChatView extends StatefulWidget {
     this.onOpenCall,
     this.onOpenAiSummary,
     this.onOpenApprovalShare,
+    this.onOpenTaskShare,
     this.onConversationRead,
     this.onClearFocusMessage,
     this.autoMarkRead = false,
@@ -270,6 +278,7 @@ class NativeChatView extends StatefulWidget {
 
   /// 打开转发的审批卡片详情（与「我审批的」同一套 B10 / XFS）。
   final ValueChanged<ApprovalChatShare>? onOpenApprovalShare;
+  final ValueChanged<TaskChatShare>? onOpenTaskShare;
   final ValueChanged<int>? onConversationRead;
 
   /// 「回到最新」时清掉上层 focus，避免后续静默刷新又跳回定位消息。
@@ -3472,6 +3481,7 @@ class _NativeChatViewState extends State<NativeChatView>
       assistantGeneratingStatus: conv.assistantGeneratingStatus,
       hasUnreadMention: conv.hasUnreadMention,
       hasUnreadAtAll: conv.hasUnreadAtAll,
+      markedUnread: conv.markedUnread,
       peerImStatus: conv.peerImStatus,
       peerImStatusText: conv.peerImStatusText,
       peerImStatusIcon: conv.peerImStatusIcon,
@@ -6643,6 +6653,9 @@ class _NativeChatViewState extends State<NativeChatView>
                 m.payload!['forward'] as Map,
               ),
             };
+          } else if (TaskChatShare.fromPayload(m.payload) != null ||
+              TaskChatShareBundle.fromPayload(m.payload) != null) {
+            payload = Map<String, dynamic>.from(m.payload!);
           } else if (WeeklySummaryShare.fromPayload(m.payload) != null) {
             payload = Map<String, dynamic>.from(m.payload!);
           }
@@ -6797,6 +6810,82 @@ class _NativeChatViewState extends State<NativeChatView>
     };
   }
 
+  Future<dynamic> _cloneTaskShareRefsInPayload(
+    dynamic value, {
+    required int conversationId,
+    required TaskApi api,
+    required List<String> createdRefs,
+  }) async {
+    if (value is Map) {
+      final input = Map<String, dynamic>.from(value);
+      final output = <String, dynamic>{};
+      for (final entry in input.entries) {
+        if (entry.key == 'taskShareCard' && entry.value is Map) {
+          final share = TaskChatShare.fromPayload({
+            'taskShareCard': entry.value,
+          });
+          if (share != null) {
+            final nextRef = await api.createTaskShareGrant(
+              taskId: share.taskId,
+              conversationId: conversationId,
+              sourceShareRef: share.shareRef,
+            );
+            createdRefs.add(nextRef);
+            output[entry.key] = share
+                .withShareRef(nextRef)
+                .toMessagePayload()['taskShareCard'];
+            continue;
+          }
+        }
+        output[entry.key] = await _cloneTaskShareRefsInPayload(
+          entry.value,
+          conversationId: conversationId,
+          api: api,
+          createdRefs: createdRefs,
+        );
+      }
+      return output;
+    }
+    if (value is List) {
+      final output = <dynamic>[];
+      for (final item in value) {
+        output.add(
+          await _cloneTaskShareRefsInPayload(
+            item,
+            conversationId: conversationId,
+            api: api,
+            createdRefs: createdRefs,
+          ),
+        );
+      }
+      return output;
+    }
+    return value;
+  }
+
+  List<String> _taskShareRefsInPayload(dynamic value) {
+    final refs = <String>{};
+    void visit(dynamic item) {
+      if (item is Map) {
+        final raw = item['taskShareCard'];
+        if (raw is Map) {
+          final ref = '${raw['shareRef'] ?? ''}'.trim();
+          if (ref.isNotEmpty) refs.add(ref);
+        }
+        for (final child in item.values) {
+          visit(child);
+        }
+      } else if (item is List) {
+        for (final child in item) {
+          visit(child);
+        }
+      }
+    }
+
+    visit(value);
+    return refs.toList(growable: false);
+  }
+
   Future<void> _sendForwardToConversation({
     required int conversationId,
     required List<_ForwardUnit> units,
@@ -6804,24 +6893,83 @@ class _NativeChatViewState extends State<NativeChatView>
   }) async {
     if (conversationId <= 0 || units.isEmpty) return;
     await _guardSend(() async {
-      if (merged) {
-        await _service.sendText(
-          conversationId,
-          '[聊天记录]',
-          payload: _buildForwardPayload(units),
-        );
-      } else {
+      final api = TaskApi(widget.session);
+      final createdRefs = <String>[];
+      final boundRefs = <String>{};
+      try {
+        final forwardedUnits = <_ForwardUnit>[];
         for (final unit in units) {
-          final text = unit.text.trim();
-          if (text.isEmpty) continue;
-          final kind = unit.kind.trim().isEmpty ? 'TEXT' : unit.kind.trim();
-          await _service.sendMessageRaw(
-            conversationId: conversationId,
-            kind: kind,
-            bodyText: text,
-            payload: unit.payload,
-          );
+          final clonedPayload = unit.payload == null
+              ? null
+              : await _cloneTaskShareRefsInPayload(
+                      unit.payload,
+                      conversationId: conversationId,
+                      api: api,
+                      createdRefs: createdRefs,
+                    )
+                    as Map<String, dynamic>;
+          forwardedUnits.add((
+            senderName: unit.senderName,
+            timeLabel: unit.timeLabel,
+            text: unit.text,
+            kind: unit.kind,
+            payload: clonedPayload,
+            avatarPreset: unit.avatarPreset,
+            avatarObjectKey: unit.avatarObjectKey,
+          ));
         }
+
+        if (merged) {
+          final sent = await _service.sendText(
+            conversationId,
+            '[聊天记录]',
+            payload: _buildForwardPayload(forwardedUnits),
+          );
+          if (createdRefs.isNotEmpty && (sent == null || sent.id <= 0)) {
+            throw Exception('IM 没有返回转发消息记录');
+          }
+          for (final shareRef in createdRefs) {
+            await api.bindTaskShareMessage(shareRef, sent!.id);
+            boundRefs.add(shareRef);
+          }
+        } else {
+          for (final unit in forwardedUnits) {
+            final text = unit.text.trim();
+            if (text.isEmpty) continue;
+            final kind = unit.kind.trim().isEmpty ? 'TEXT' : unit.kind.trim();
+            final refs = _taskShareRefsInPayload(unit.payload);
+            if (refs.isEmpty) {
+              await _service.sendMessageRaw(
+                conversationId: conversationId,
+                kind: kind,
+                bodyText: text,
+                payload: unit.payload,
+              );
+              continue;
+            }
+            final sent = await _service.sendText(
+              conversationId,
+              text,
+              payload: unit.payload,
+            );
+            if (sent == null || sent.id <= 0) {
+              throw Exception('IM 没有返回任务名片消息记录');
+            }
+            for (final shareRef in refs) {
+              await api.bindTaskShareMessage(shareRef, sent.id);
+              boundRefs.add(shareRef);
+            }
+          }
+        }
+      } catch (_) {
+        for (final shareRef in createdRefs.where(
+          (ref) => !boundRefs.contains(ref),
+        )) {
+          try {
+            await api.revokeTaskShareGrant(shareRef);
+          } catch (_) {}
+        }
+        rethrow;
       }
     }, ensureCurrentConversation: false);
     if (_messageMultiSelectMode) _exitMessageMultiSelect();
@@ -7224,6 +7372,72 @@ class _NativeChatViewState extends State<NativeChatView>
       return;
     }
     _showToast('无法打开审批详情', error: true);
+  }
+
+  void _openTaskShare(TaskChatShare share) {
+    final open = widget.onOpenTaskShare;
+    if (open != null) {
+      open(share);
+      return;
+    }
+    _showToast('无法打开任务详情', error: true);
+  }
+
+  void _openTaskShareBundle(TaskChatShareBundle bundle) {
+    unawaited(
+      showTaskChatShareBundleDetailSheet(
+        context: context,
+        bundle: bundle,
+        onOpenTask: _openTaskShare,
+      ),
+    );
+  }
+
+  void _openGroupReplyPersonShare(Map<String, dynamic>? payload) {
+    final person = QianjiGroupReplyShareCard.personFromPayload(payload);
+    if (person == null) {
+      _showToast('这张群响应名片没有可展示的明细', error: true);
+      return;
+    }
+    unawaited(
+      showQianjiGroupReplyPersonDetails(
+        context: context,
+        session: widget.session,
+        person: person,
+      ),
+    );
+  }
+
+  void _openDailyReportPersonShare(Map<String, dynamic>? payload) {
+    final data = QianjiDailyReportShareCard.payloadData(payload);
+    final report = QianjiDailyReportShareCard.reportFromPayload(payload);
+    if (data == null || report == null) {
+      _showToast('这张日报名片没有可展示的内容', error: true);
+      return;
+    }
+    unawaited(
+      showQianjiDailyReportDetail(
+        context: context,
+        userName: '${data['userName'] ?? '员工'}',
+        departmentName: '${data['departmentName'] ?? ''}',
+        report: report,
+      ),
+    );
+  }
+
+  void _openPayrollReportShare(Map<String, dynamic>? payload) {
+    final share = PayrollReportShareCardData.fromPayload(payload);
+    if (share == null) {
+      _showToast('这张工资名片无效或已失效', error: true);
+      return;
+    }
+    unawaited(
+      showPayrollReportShareDetails(
+        context: context,
+        session: widget.session,
+        share: share,
+      ),
+    );
   }
 
   String _approvalStatusLabel(String status) {
@@ -8302,6 +8516,45 @@ class _NativeChatViewState extends State<NativeChatView>
             : null,
       );
     }
+    final dailyReportShare = QianjiDailyReportShareCard.payloadData(m.payload);
+    if (dailyReportShare != null) {
+      return QianjiDailyReportShareCard(
+        session: widget.session,
+        payload: dailyReportShare,
+        onTap: () => _openDailyReportPersonShare(m.payload),
+      );
+    }
+    final payrollReportShare = PayrollReportShareCardData.fromPayload(
+      m.payload,
+    );
+    if (payrollReportShare != null) {
+      return PayrollReportShareCard(
+        data: payrollReportShare,
+        onTap: () => _openPayrollReportShare(m.payload),
+      );
+    }
+    final groupReplyShare = QianjiGroupReplyShareCard.payloadData(m.payload);
+    if (groupReplyShare != null) {
+      return QianjiGroupReplyShareCard(
+        session: widget.session,
+        payload: groupReplyShare,
+        onTap: () => _openGroupReplyPersonShare(m.payload),
+      );
+    }
+    final taskShareBundle = TaskChatShareBundle.fromPayload(m.payload);
+    if (taskShareBundle != null) {
+      return TaskChatShareBundleCard(
+        bundle: taskShareBundle,
+        onTap: () => _openTaskShareBundle(taskShareBundle),
+      );
+    }
+    final taskShare = TaskChatShare.fromPayload(m.payload);
+    if (taskShare != null) {
+      return TaskChatShareCard(
+        share: taskShare,
+        onTap: () => _openTaskShare(taskShare),
+      );
+    }
     final approvalShare = ApprovalChatShare.fromPayload(m.payload);
     if (approvalShare != null) {
       return ChatApprovalCard(
@@ -8621,6 +8874,45 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Widget _buildForwardEntryContent(_ForwardEntry e, {required bool mine}) {
+    final payrollReportShare = PayrollReportShareCardData.fromPayload(
+      e.payload,
+    );
+    if (payrollReportShare != null) {
+      return PayrollReportShareCard(
+        data: payrollReportShare,
+        onTap: () => _openPayrollReportShare(e.payload),
+      );
+    }
+    final dailyReportShare = QianjiDailyReportShareCard.payloadData(e.payload);
+    if (dailyReportShare != null) {
+      return QianjiDailyReportShareCard(
+        session: widget.session,
+        payload: dailyReportShare,
+        onTap: () => _openDailyReportPersonShare(e.payload),
+      );
+    }
+    final groupReplyShare = QianjiGroupReplyShareCard.payloadData(e.payload);
+    if (groupReplyShare != null) {
+      return QianjiGroupReplyShareCard(
+        session: widget.session,
+        payload: groupReplyShare,
+        onTap: () => _openGroupReplyPersonShare(e.payload),
+      );
+    }
+    final taskShareBundle = TaskChatShareBundle.fromPayload(e.payload);
+    if (taskShareBundle != null) {
+      return TaskChatShareBundleCard(
+        bundle: taskShareBundle,
+        onTap: () => _openTaskShareBundle(taskShareBundle),
+      );
+    }
+    final taskShare = TaskChatShare.fromPayload(e.payload);
+    if (taskShare != null) {
+      return TaskChatShareCard(
+        share: taskShare,
+        onTap: () => _openTaskShare(taskShare),
+      );
+    }
     final lighthouseCard = LighthouseSharedCardData.fromPayload(e.payload);
     if (lighthouseCard != null) {
       return ChatLighthouseCard(session: widget.session, data: lighthouseCard);
@@ -8718,6 +9010,13 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Widget _buildForwardRecordCard(_ForwardBundle bundle, {required bool mine}) {
+    final taskBundle = _taskBundleFromForward(bundle);
+    if (taskBundle != null) {
+      return TaskChatShareBundleCard(
+        bundle: taskBundle,
+        onTap: () => _openTaskShareBundle(taskBundle),
+      );
+    }
     final preview = bundle.entries.take(2).toList(growable: false);
     return Material(
       color: Colors.transparent,
@@ -8780,6 +9079,25 @@ class _NativeChatViewState extends State<NativeChatView>
           },
         ),
       ),
+    );
+  }
+
+  TaskChatShareBundle? _taskBundleFromForward(_ForwardBundle bundle) {
+    if (bundle.entries.length < 2) return null;
+    final shares = bundle.entries
+        .map((entry) => TaskChatShare.fromPayload(entry.payload))
+        .whereType<TaskChatShare>()
+        .toList(growable: false);
+    if (shares.length != bundle.entries.length ||
+        shares.any((share) => !share.isMain)) {
+      return null;
+    }
+    final ownerName = shares.first.ownerName.trim();
+    if (shares.any((share) => share.ownerName.trim() != ownerName)) return null;
+    return TaskChatShareBundle(
+      ownerName: ownerName,
+      sharedAt: shares.first.sharedAt,
+      shares: shares,
     );
   }
 

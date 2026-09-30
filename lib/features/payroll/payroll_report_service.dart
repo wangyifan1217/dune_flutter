@@ -215,6 +215,53 @@ class PayrollReportService {
     return response.bodyBytes;
   }
 
+  Future<Map<String, dynamic>> createShare({
+    required String yearmo,
+    required PayrollReportSheet sheet,
+    required String kind,
+    required String department,
+    String personName = '',
+  }) async {
+    final response = await dunesHttpPost(
+      session,
+      '/payroll-reports/shares',
+      body: jsonEncode({
+        'yearmo': yearmo,
+        'reportId': sheet.reportId,
+        'subReportId': sheet.subReportId,
+        'kind': kind,
+        'department': department,
+        if (personName.isNotEmpty) 'personName': personName,
+      }),
+      client: _client,
+    );
+    final data = _unwrap(response);
+    return data is Map<String, dynamic>
+        ? data
+        : Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<Map<String, dynamic>> fetchShare(String shareRef) async {
+    final response = await dunesHttpGet(
+      session,
+      '/payroll-reports/shares/${Uri.encodeComponent(shareRef)}',
+      client: _client,
+    );
+    final data = _unwrap(response);
+    return data is Map<String, dynamic>
+        ? data
+        : Map<String, dynamic>.from(data as Map);
+  }
+
+  Future<void> revokeShare(String shareRef) async {
+    final response = await dunesHttpDelete(
+      session,
+      '/payroll-reports/shares/${Uri.encodeComponent(shareRef)}',
+      client: _client,
+    );
+    _unwrap(response);
+  }
+
   String _query(Map<String, String> values) => values.entries
       .map(
         (entry) =>

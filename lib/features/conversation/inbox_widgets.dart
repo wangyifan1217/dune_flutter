@@ -1120,6 +1120,12 @@ enum ChatInboxRowKind {
   robot,
 }
 
+/// 手动标为未读时显示小红点；已有未读条数时仍用数字角标。
+bool chatInboxMarkedUnreadDot({
+  required int unreadCount,
+  required bool markedUnread,
+}) => markedUnread && unreadCount <= 0;
+
 class ChatInboxRow extends StatelessWidget {
   const ChatInboxRow({
     super.key,
@@ -1131,6 +1137,7 @@ class ChatInboxRow extends StatelessWidget {
     this.subtitle,
     this.memberCount,
     this.unreadCount = 0,
+    this.markedUnread = false,
     this.muted = false,
     this.pinned = false,
     this.showAiMark = false,
@@ -1163,6 +1170,7 @@ class ChatInboxRow extends StatelessWidget {
   final String? subtitle;
   final int? memberCount;
   final int unreadCount;
+  final bool markedUnread;
   final bool muted;
   final bool pinned;
   final bool showAiMark;
@@ -1264,6 +1272,15 @@ class ChatInboxRow extends StatelessWidget {
                               color: unreadColor,
                               mini: true,
                             ),
+                          )
+                        else if (chatInboxMarkedUnreadDot(
+                          unreadCount: unreadCount,
+                          markedUnread: markedUnread,
+                        ))
+                          const Positioned(
+                            right: -1,
+                            top: -1,
+                            child: _MarkedUnreadDot(),
                           ),
                       ],
                     ),
@@ -1406,6 +1423,23 @@ class ChatInboxRow extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _MarkedUnreadDot extends StatelessWidget {
+  const _MarkedUnreadDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(
+        color: const Color(0xFFFA5151),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 1.5),
+      ),
     );
   }
 }
@@ -1976,23 +2010,61 @@ class SwipeableChatInboxRow extends StatefulWidget {
   const SwipeableChatInboxRow({
     super.key,
     required this.child,
-    required this.onDelete,
+    this.onDelete,
+    this.onMarkUnread,
+    this.markUnreadLabel = '标志未读',
   });
 
   final Widget child;
-  final VoidCallback onDelete;
+  final VoidCallback? onDelete;
+  final VoidCallback? onMarkUnread;
+  final String markUnreadLabel;
 
   @override
   State<SwipeableChatInboxRow> createState() => _SwipeableChatInboxRowState();
 }
 
 class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
-  static const _actionWidth = 72.0;
+  static const _actionWidth = 76.0;
   double _offset = 0;
+
+  int get _actionCount =>
+      (widget.onMarkUnread == null ? 0 : 1) + (widget.onDelete == null ? 0 : 1);
+
+  double get _openWidth => _actionWidth * _actionCount;
 
   void _close() {
     if (_offset == 0) return;
     setState(() => _offset = 0);
+  }
+
+  Widget _swipeAction({
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return SizedBox(
+      width: _actionWidth,
+      child: Material(
+        color: color,
+        child: InkWell(
+          onTap: () {
+            _close();
+            onTap();
+          },
+          child: Center(
+            child: Text(
+              label,
+              style: DunesTypography.sans(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -2000,45 +2072,47 @@ class _SwipeableChatInboxRowState extends State<SwipeableChatInboxRow> {
     return Stack(
       clipBehavior: Clip.hardEdge,
       children: [
-        if (_offset != 0)
+        if (_offset != 0 && _actionCount > 0)
           Positioned.fill(
             child: Align(
               alignment: Alignment.centerRight,
               child: SizedBox(
-                width: _actionWidth,
-                child: Material(
-                  color: DunesColors.coral,
-                  child: InkWell(
-                    onTap: () {
-                      _close();
-                      widget.onDelete();
-                    },
-                    child: Center(
-                      child: Text(
-                        '删除',
-                        style: DunesTypography.sans(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
+                width: _openWidth,
+                child: Row(
+                  children: [
+                    if (widget.onMarkUnread != null)
+                      _swipeAction(
+                        label: widget.markUnreadLabel,
+                        color: const Color(0xFF8E8E93),
+                        onTap: widget.onMarkUnread!,
                       ),
-                    ),
-                  ),
+                    if (widget.onDelete != null)
+                      _swipeAction(
+                        label: '删除',
+                        color: DunesColors.coral,
+                        onTap: widget.onDelete!,
+                      ),
+                  ],
                 ),
               ),
             ),
           ),
         GestureDetector(
-          onHorizontalDragUpdate: (details) {
-            setState(() {
-              _offset = (_offset + details.delta.dx).clamp(-_actionWidth, 0);
-            });
-          },
-          onHorizontalDragEnd: (_) {
-            setState(() {
-              _offset = _offset < -_actionWidth / 2 ? -_actionWidth : 0;
-            });
-          },
+          onHorizontalDragUpdate: _actionCount == 0
+              ? null
+              : (details) {
+                  if (details.delta.dx.abs() < details.delta.dy.abs()) return;
+                  setState(() {
+                    _offset = (_offset + details.delta.dx).clamp(-_openWidth, 0);
+                  });
+                },
+          onHorizontalDragEnd: _actionCount == 0
+              ? null
+              : (_) {
+                  setState(() {
+                    _offset = _offset < -_openWidth / 2 ? -_openWidth : 0;
+                  });
+                },
           onTap: _offset == 0 ? null : _close,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),

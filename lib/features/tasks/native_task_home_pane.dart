@@ -9,11 +9,11 @@ import 'native_task_action_page.dart';
 import 'native_task_daily_report_page.dart';
 import 'native_task_detail_page.dart';
 import 'native_task_form.dart';
-import 'native_task_goal_table.dart';
 import 'native_task_management_pane.dart';
 import 'native_task_quick_create.dart';
 import 'task_api.dart';
 import 'task_approval_confirm.dart';
+import 'task_chat_forward.dart';
 import 'task_first_use_guide.dart';
 import 'task_inbox.dart';
 import 'task_models.dart';
@@ -223,10 +223,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             child: const Text('任务汇总'),
           ),
         if (_canCreateTasks) ...[
-          TextButton(
-            onPressed: _openQuickCreate,
-            child: const Text('快速新建'),
-          ),
+          TextButton(onPressed: _openQuickCreate, child: const Text('快速新建')),
           const SizedBox(width: 4),
           _primaryCreateButton(),
         ],
@@ -235,39 +232,97 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
   }
 
   Widget _compactListActions() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (widget.onOpenSummary != null) ...[
-          TextButton(
-            onPressed: widget.onOpenSummary,
-            style: TextButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-            ),
-            child: const Text('汇总'),
+    if (widget.onOpenSummary == null && !_canCreateTasks) {
+      return const SizedBox.shrink();
+    }
+    return PopupMenuButton<String>(
+      tooltip: '任务操作',
+      icon: const Icon(Icons.more_horiz_rounded, color: DunesColors.text2),
+      offset: const Offset(0, 8),
+      position: PopupMenuPosition.under,
+      color: Colors.white,
+      surfaceTintColor: Colors.white,
+      elevation: 8,
+      shadowColor: const Color(0x1F29203A),
+      constraints: const BoxConstraints(minWidth: 204),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: Color(0xFFECE8F3)),
+      ),
+      onSelected: (value) {
+        switch (value) {
+          case 'summary':
+            widget.onOpenSummary?.call();
+            break;
+          case 'quick':
+            unawaited(_openQuickCreate());
+            break;
+          case 'create':
+            unawaited(_openCreate());
+            break;
+        }
+      },
+      itemBuilder: (context) => [
+        if (widget.onOpenSummary != null)
+          _taskActionMenuItem(
+            value: 'summary',
+            icon: Icons.analytics_outlined,
+            label: '任务汇总',
           ),
-          const SizedBox(width: 4),
-        ],
         if (_canCreateTasks) ...[
-          OutlinedButton(
-            onPressed: _openQuickCreate,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: kTaskPurple,
-              visualDensity: VisualDensity.compact,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              side: const BorderSide(color: Color(0xFFD9D0EA)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: const Text('快速新建'),
+          _taskActionMenuItem(
+            value: 'quick',
+            icon: Icons.flash_on_outlined,
+            label: '快速新建',
           ),
-          const SizedBox(width: 6),
-          _primaryCreateButton(compact: true),
+          _taskActionMenuItem(
+            value: 'create',
+            icon: Icons.add_task_rounded,
+            label: '完整创建',
+          ),
         ],
       ],
+    );
+  }
+
+  PopupMenuItem<String> _taskActionMenuItem({
+    required String value,
+    required IconData icon,
+    required String label,
+  }) {
+    return PopupMenuItem<String>(
+      value: value,
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3EFFB),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            alignment: Alignment.center,
+            child: Icon(icon, size: 17, color: kTaskPurple),
+          ),
+          const SizedBox(width: 11),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: DunesColors.text,
+            ),
+          ),
+          const Spacer(),
+          const Icon(
+            Icons.chevron_right_rounded,
+            size: 18,
+            color: DunesColors.text3,
+          ),
+        ],
+      ),
     );
   }
 
@@ -487,6 +542,12 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     });
     _publishChrome();
   }
+
+  Future<void> _shareTask(TaskItem task) => forwardTaskToConversation(
+    context: context,
+    session: widget.session,
+    task: task,
+  );
 
   Future<void> _openAction(TaskItem task, TaskActionMode mode) async {
     final changed = await showTaskActionDialog(
@@ -780,34 +841,34 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     );
     return TaskTheme(
       child: AnimatedSwitcher(
-      duration: const Duration(milliseconds: 280),
-      reverseDuration: const Duration(milliseconds: 240),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      layoutBuilder: (currentChild, previousChildren) {
-        return Stack(
-          fit: StackFit.expand,
-          clipBehavior: Clip.hardEdge,
-          children: isBack
-              ? [?currentChild, ...previousChildren]
-              : [...previousChildren, ?currentChild],
-        );
-      },
-      transitionBuilder: (transitionChild, animation) {
-        final isIncoming = transitionChild.key == child.key;
-        final begin = isIncoming
-            ? (isBack ? const Offset(-0.18, 0) : const Offset(1, 0))
-            : (isBack ? const Offset(1, 0) : const Offset(-0.18, 0));
-        return SlideTransition(
-          position: Tween<Offset>(
-            begin: begin,
-            end: Offset.zero,
-          ).animate(animation),
-          child: transitionChild,
-        );
-      },
-      child: child,
-    ),
+        duration: const Duration(milliseconds: 280),
+        reverseDuration: const Duration(milliseconds: 240),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        layoutBuilder: (currentChild, previousChildren) {
+          return Stack(
+            fit: StackFit.expand,
+            clipBehavior: Clip.hardEdge,
+            children: isBack
+                ? [?currentChild, ...previousChildren]
+                : [...previousChildren, ?currentChild],
+          );
+        },
+        transitionBuilder: (transitionChild, animation) {
+          final isIncoming = transitionChild.key == child.key;
+          final begin = isIncoming
+              ? (isBack ? const Offset(-0.18, 0) : const Offset(1, 0))
+              : (isBack ? const Offset(1, 0) : const Offset(-0.18, 0));
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: begin,
+              end: Offset.zero,
+            ).animate(animation),
+            child: transitionChild,
+          );
+        },
+        child: child,
+      ),
     );
   }
 
@@ -858,8 +919,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                           'assigned' => '本人分派的主目标。进入详情后再看子目标。',
                           _ => '本人负责、分派，以及下级负责的主目标。进入详情后再看子目标。',
                         },
-                        'actionable' =>
-                          '今天要执行的子目标、未拆解的主目标和待确认子目标。',
+                        'actionable' => '今天要执行的子目标、未拆解的主目标和待确认子目标。',
                         _ => '先处理待你决定的事，再看逾期、今天截止和今日执行。',
                       },
                       style: const TextStyle(
@@ -882,13 +942,18 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                             const SizedBox(width: 8),
                             _roleChip('assigned', '我分派'),
                             const SizedBox(width: 8),
+                            _roleChip('participant', '我参与'),
+                            const SizedBox(width: 8),
                             _roleChip('reports', '下级'),
                           ],
                         ),
                       ),
                     ],
                     const SizedBox(height: 12),
-                    if (_scope == 'inbox') _buildInboxSearch() else _buildToolbar(),
+                    if (_scope == 'inbox')
+                      _buildInboxSearch()
+                    else
+                      _buildToolbar(),
                   ],
                 ),
               ),
@@ -1028,7 +1093,11 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
         isDense: true,
         filled: true,
         fillColor: Colors.white,
-        prefixIcon: const Icon(Icons.search, size: 20, color: DunesColors.text3),
+        prefixIcon: const Icon(
+          Icons.search,
+          size: 20,
+          color: DunesColors.text3,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Color(0xFFE8EAED)),
@@ -1037,7 +1106,10 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Color(0xFFE8EAED)),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
       ),
     );
   }
@@ -1160,11 +1232,12 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       'overdue' => list.where((task) => task.overdue).toList(growable: false),
       'dueToday' =>
         list.where((task) => taskDueOnDay(task, now)).toList(growable: false),
-      'high' => list
-          .where(
-            (task) => task.priority == 'high' || task.priority == 'urgent',
-          )
-          .toList(growable: false),
+      'high' =>
+        list
+            .where(
+              (task) => task.priority == 'high' || task.priority == 'urgent',
+            )
+            .toList(growable: false),
       _ => list,
     };
     return list;
@@ -1314,19 +1387,33 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       return [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          sliver: SliverToBoxAdapter(
-            child: Material(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              clipBehavior: Clip.antiAlias,
-              child: TaskGoalTable(
-                tasks: items,
-                onOpen: (task) => _openDetail(task.id),
-                canComplete: _canCompleteFromList,
-                onComplete: (task) => unawaited(_completeFromList(task)),
-                completeHint: _completeHint,
-              ),
-            ),
+          sliver: SliverLayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.crossAxisExtent;
+              final columns = width >= 980
+                  ? 3
+                  : width >= 620
+                  ? 2
+                  : 1;
+              return SliverGrid(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  mainAxisExtent: 280,
+                ),
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final task = items[index];
+                  return TaskWorkbenchCard(
+                    task: task,
+                    groupMode: true,
+                    onTap: () => _openDetail(task.id),
+                    onShare: () => unawaited(_shareTask(task)),
+                    groupTrailingAction: _goalCardCompleteAction(task),
+                  );
+                }, childCount: items.length),
+              );
+            },
           ),
         ),
       ];
@@ -1341,6 +1428,31 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     ];
   }
 
+  Widget _goalCardCompleteAction(TaskItem task) {
+    if (task.status == 'completed') {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Text('已完成', style: TextStyle(color: DunesColors.text3)),
+      );
+    }
+    if (!_canCompleteFromList(task)) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Text(
+          _completeHint(task) ?? '—',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+        ),
+      );
+    }
+    return TextButton(
+      onPressed: () => unawaited(_completeFromList(task)),
+      style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+      child: const Text('标记完成'),
+    );
+  }
+
   List<Widget> _buildItemCards(List<TaskItem> items) {
     final groupMode = _scope == 'goals';
     if (groupMode) {
@@ -1350,6 +1462,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             task: t,
             groupMode: true,
             onTap: () => _openDetail(t.id),
+            onShare: () => unawaited(_shareTask(t)),
           ),
           const SizedBox(height: 10),
         ],
@@ -1377,8 +1490,11 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
           TaskWorkbenchCard(
             task: t,
             onTap: () => _openDetail(t.id),
+            onShare: () => unawaited(_shareTask(t)),
             onProgress: () => _openAction(t, TaskActionMode.progress),
-            onComplete: _canCompleteFromList(t) ? () => _completeFromList(t) : null,
+            onComplete: _canCompleteFromList(t)
+                ? () => _completeFromList(t)
+                : null,
             completeHint: _completeHint(t),
           ),
         );
@@ -1515,7 +1631,10 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                 });
               },
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 child: Text(
                   '${taskInboxBucketTitle(bucket)} $count',
                   style: TextStyle(
@@ -1536,7 +1655,10 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
     );
   }
 
-  List<Widget> _inboxFocused(TaskInboxSnapshot snapshot, TaskInboxBucket bucket) {
+  List<Widget> _inboxFocused(
+    TaskInboxSnapshot snapshot,
+    TaskInboxBucket bucket,
+  ) {
     final items = snapshot.itemsOf(bucket);
     return [
       _inboxSectionTitle(
@@ -1687,6 +1809,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       },
       rejectLabel: bucket == TaskInboxBucket.receive ? '拒绝' : '驳回',
       onTap: () => _openDetail(task.id),
+      onShare: () => unawaited(_shareTask(task)),
       onApprove: decision || complete
           ? () => _actOnInbox(task, bucket, pass: true)
           : null,
@@ -1740,10 +1863,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             comment: result.comment,
           );
           if (!mounted) return;
-          showDunesCenterToast(
-            context,
-            pass ? '已接收，可以开始执行' : '已拒绝，发起人会收到结果',
-          );
+          showDunesCenterToast(context, pass ? '已接收，可以开始执行' : '已拒绝，发起人会收到结果');
         case TaskInboxBucket.assignApproval:
           if (pass) {
             await _api.approveChange(task.id, comment: result.comment);
@@ -1751,10 +1871,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             await _api.rejectChange(task.id, comment: result.comment);
           }
           if (!mounted) return;
-          showDunesCenterToast(
-            context,
-            pass ? '指派已通过，负责人已变更' : '指派已驳回，负责人未变更',
-          );
+          showDunesCenterToast(context, pass ? '指派已通过，负责人已变更' : '指派已驳回，负责人未变更');
         case TaskInboxBucket.changeApproval:
           if (pass) {
             await _api.approveChange(task.id, comment: result.comment);
@@ -1762,10 +1879,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
             await _api.rejectChange(task.id, comment: result.comment);
           }
           if (!mounted) return;
-          showDunesCenterToast(
-            context,
-            pass ? '变更已生效' : '变更已驳回，保留原内容',
-          );
+          showDunesCenterToast(context, pass ? '变更已生效' : '变更已驳回，保留原内容');
         case TaskInboxBucket.confirm:
           if (pass) {
             await _api.approve(task.id, comment: result.comment);

@@ -23,6 +23,7 @@ import 'conversation_inbox_cache.dart';
 import 'conversation_inbox_merge.dart';
 import 'conversation_inbox_realtime.dart';
 import 'conversation_mention_utils.dart';
+import 'marked_unread_storage.dart';
 import 'conversation_models.dart';
 import 'conversation_realtime_dedup.dart';
 import 'conversation_realtime_hub.dart';
@@ -234,6 +235,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   bool _loading = true;
   String? _error;
   List<NativeConversation> _items = const <NativeConversation>[];
+  Set<int> _markedUnreadIds = <int>{};
   AiSummaryItem? _aiSummaryPreview;
   int _aiSummaryUnread = 0;
   NativeNotificationSummary _notif = const NativeNotificationSummary(
@@ -302,6 +304,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
   void initState() {
     super.initState();
     _service = ConversationService(session: widget.session);
+    unawaited(_loadMarkedUnread());
     _notificationService = NotificationService(session: widget.session);
     _aiSummaryService = AiSummaryService(session: widget.session);
     _contactService = ContactService(session: widget.session);
@@ -528,14 +531,126 @@ class _NativeConversationPageState extends State<NativeConversationPage>
     _updateCommBadge(_items, _notif.unreadCount);
   }
 
+  Future<void> _loadMarkedUnread() async {
+    final ids = await MarkedUnreadStorage.load(widget.session.userId);
+    if (!mounted || ids.isEmpty) return;
+    setState(() => _markedUnreadIds = ids);
+  }
+
+  void _rememberMarkedUnread(int conversationId, bool marked) {
+    if (conversationId <= 0) return;
+    final next = Set<int>.of(_markedUnreadIds);
+    if (marked) {
+      next.add(conversationId);
+    } else {
+      next.remove(conversationId);
+    }
+    _markedUnreadIds = next;
+    unawaited(MarkedUnreadStorage.save(widget.session.userId, next));
+  }
+
+  void _forgetMarkedUnread(int conversationId) {
+    if (!_markedUnreadIds.contains(conversationId)) return;
+    _rememberMarkedUnread(conversationId, false);
+  }
+
+  void _reconcileMarkedUnread(List<NativeConversation> items) {
+    final next = Set<int>.of(_markedUnreadIds);
+    var changed = false;
+    for (final item in items) {
+      if (item.markedUnread == null) continue;
+      if (item.markedUnread!) {
+        changed |= next.add(item.id);
+      } else {
+        changed |= next.remove(item.id);
+      }
+    }
+    if (!changed) return;
+    _markedUnreadIds = next;
+    unawaited(MarkedUnreadStorage.save(widget.session.userId, next));
+  }
+
+  bool _showsMarkedUnreadDot(NativeConversation conversation) {
+    if (conversation.markedUnread == false) return false;
+    if (conversation.markedUnread == true) return true;
+    return _markedUnreadIds.contains(conversation.id);
+  }
+
+  Future<void> _setMarkedUnread(NativeConversation conversation, bool marked) async {
+    if (conversation.id <= 0) return;
+    _rememberMarkedUnread(conversation.id, marked);
+    if (!mounted) return;
+    setState(() {
+      _items = [
+        for (final item in _items)
+          if (item.id == conversation.id)
+            ConversationInboxRealtime.copyConversation(
+              item,
+              updateMarkedUnread: true,
+              markedUnread: marked,
+            )
+          else
+            item,
+      ];
+    });
+    try {
+      await _service.patchMySettings(conversation.id, markedUnread: marked);
+    } catch (_) {
+      // 旧服务端不认这个字段时，本机记录仍然生效。
+    }
+  }
+
+  Future<void> _onInboxUnreadAction(NativeConversation conversation) async {
+    final mark = conversation.unreadCount <= 0 && !_showsMarkedUnreadDot(conversation);
+    if (mark) {
+      await _setMarkedUnread(conversation, true);
+      return;
+    }
+    await _setMarkedUnread(conversation, false);
+    if (conversation.unreadCount > 0) {
+      try {
+        await _service.markConversationRead(conversation.id);
+      } catch (_) {}
+      _clearUnreadLocally(conversation.id);
+    }
+  }
+
+  Future<void> _showInboxUnreadMenu(
+    Offset position,
+    NativeConversation conversation,
+  ) async {
+    final mark = conversation.unreadCount <= 0 && !_showsMarkedUnreadDot(conversation);
+    final selected = await showMenu<bool>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        position.dx,
+        position.dy,
+      ),
+      items: [
+        PopupMenuItem<bool>(
+          value: true,
+          child: Text(mark ? '标志未读' : '标为已读'),
+        ),
+      ],
+    );
+    if (selected == true) await _onInboxUnreadAction(conversation);
+  }
+
   void _clearUnreadLocally(int conversationId) {
     if (conversationId <= 0 || !mounted) return;
     final idx = _items.indexWhere((c) => c.id == conversationId);
     if (idx < 0) return;
     final old = _items[idx];
-    if (old.unreadCount <= 0 && !old.hasUnreadMention && !old.hasUnreadAtAll) {
+    final hadMark = _showsMarkedUnreadDot(old);
+    if (old.unreadCount <= 0 &&
+        !old.hasUnreadMention &&
+        !old.hasUnreadAtAll &&
+        !hadMark) {
       return;
     }
+    _forgetMarkedUnread(conversationId);
     setState(() {
       final copy = _items.toList(growable: true);
       copy[idx] = ConversationInboxRealtime.copyConversation(
@@ -543,6 +658,8 @@ class _NativeConversationPageState extends State<NativeConversationPage>
         unreadCount: 0,
         hasUnreadMention: false,
         hasUnreadAtAll: false,
+        updateMarkedUnread: true,
+        markedUnread: false,
       );
       _items = copy;
     });
@@ -873,6 +990,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       final userId = (like.raw['userId'] as num?)?.toInt() ?? 0;
       if (userId == widget.session.userId && convId > 0) {
         widget.commUnread.clearMutedMention(convId);
+        _forgetMarkedUnread(convId);
       }
     }
 
@@ -1112,6 +1230,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
           ? mergeInboxConversations(_items, rows, selfAvatar: selfAvatar)
           : applySelfAvatarToConversations(rows, selfAvatar);
       warmConversationAvatarCache(merged);
+      _reconcileMarkedUnread(merged);
       setState(() {
         _items = merged;
         _notif = notif;
@@ -1601,6 +1720,7 @@ class _NativeConversationPageState extends State<NativeConversationPage>
                     NovaBackgroundCoordinator.instance.hasUnreadReplyFor(c.id)
                 ? (c.unreadCount > 0 ? c.unreadCount : 1)
                 : widget.commUnread.effectiveUnreadCount(c)),
+      markedUnread: !selected && _showsMarkedUnreadDot(c),
       muted: c.muted,
       pinned: c.pinned,
       showAiMark: c.isAiAssistant,
@@ -1682,17 +1802,27 @@ class _NativeConversationPageState extends State<NativeConversationPage>
       child: row,
     );
 
-    if (!allowSwipeDelete) {
-      return KeyedSubtree(key: ValueKey<int>(c.id), child: dropChild);
+    final canMarkUnread = c.id > 0;
+    final markLabel =
+        c.unreadCount <= 0 && !_showsMarkedUnreadDot(c) ? '标志未读' : '标为已读';
+    Widget inboxChild = dropChild;
+    if (canMarkUnread && isDesktopCommOnly) {
+      inboxChild = GestureDetector(
+        onSecondaryTapDown: (details) => unawaited(
+          _showInboxUnreadMenu(details.globalPosition, c),
+        ),
+        child: dropChild,
+      );
+    } else if (canMarkUnread || allowSwipeDelete) {
+      inboxChild = SwipeableChatInboxRow(
+        onDelete: allowSwipeDelete ? () => _hideConversation(c) : null,
+        onMarkUnread: canMarkUnread ? () => unawaited(_onInboxUnreadAction(c)) : null,
+        markUnreadLabel: markLabel,
+        child: dropChild,
+      );
     }
 
-    return KeyedSubtree(
-      key: ValueKey<int>(c.id),
-      child: SwipeableChatInboxRow(
-        onDelete: () => _hideConversation(c),
-        child: dropChild,
-      ),
-    );
+    return KeyedSubtree(key: ValueKey<int>(c.id), child: inboxChild);
   }
 
   List<_InboxSection> _buildSections() {

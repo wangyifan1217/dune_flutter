@@ -7,10 +7,12 @@ import '../../core/theme/dunes_theme.dart';
 import '../../core/util/friendly_error.dart';
 import '../../core/widgets/horizontal_drag_scroll_view.dart';
 import '../auth/auth_session.dart';
+import '../shell/dunes_toast.dart';
 import '../tasks/native_task_action_page.dart';
 import '../tasks/native_task_detail_page.dart';
 import '../tasks/task_api.dart';
 import '../tasks/task_avatar.dart';
+import '../tasks/task_chat_forward.dart';
 import '../tasks/task_models.dart';
 
 const _themePurple = Color(0xFF7B5CD8);
@@ -66,12 +68,17 @@ class TaskPersonRollup {
   int get completed => tasks.where(_taskCompleted).length;
   int get overdue => tasks.where(_taskOverdueOpen).length;
   int get waiting => tasks.where(_taskWaiting).length;
-  int get subtaskCount => tasks.fold<int>(0, (sum, task) => sum + task.subtaskCount);
+  int get subtaskCount =>
+      tasks.fold<int>(0, (sum, task) => sum + task.subtaskCount);
   int get counted => doing + completed + overdue + waiting;
 
   List<String> get facts {
-    final open = tasks.where((task) => !_taskIgnored(task) && !_taskCompleted(task));
-    final noAcceptance = open.where((task) => task.acceptanceCriteria.trim().isEmpty).length;
+    final open = tasks.where(
+      (task) => !_taskIgnored(task) && !_taskCompleted(task),
+    );
+    final noAcceptance = open
+        .where((task) => task.acceptanceCriteria.trim().isEmpty)
+        .length;
     final noDue = open.where((task) => task.dueAt == null).length;
     final noProgress = open.where((task) => task.progressPct <= 0).length;
     final rejected = tasks.where((task) => task.status == 'rejected').length;
@@ -86,16 +93,14 @@ class TaskPersonRollup {
 }
 
 class TaskPeopleSnapshot {
-  const TaskPeopleSnapshot({
-    required this.departments,
-    required this.people,
-  });
+  const TaskPeopleSnapshot({required this.departments, required this.people});
 
   final List<TaskPersonDept> departments;
   final List<TaskPersonRollup> people;
 }
 
-typedef TaskPeopleSnapshotLoader = Future<TaskPeopleSnapshot> Function(DateTime month);
+typedef TaskPeopleSnapshotLoader =
+    Future<TaskPeopleSnapshot> Function(DateTime month);
 
 bool _taskIgnored(TaskItem task) =>
     task.status == 'cancelled' || task.status == 'draft';
@@ -149,7 +154,8 @@ List<TaskPersonRollup> groupTaskPeople(
         departmentId = item.key;
       }
     }
-    final departmentName = departmentNames[departmentId] ??
+    final departmentName =
+        departmentNames[departmentId] ??
         (departmentId <= 0 ? '' : '部门 $departmentId');
     final avatar = _personAvatar(rows, avatars[entry.key]);
     people.add(
@@ -168,18 +174,27 @@ List<TaskPersonRollup> groupTaskPeople(
   return people;
 }
 
-(String, String, String) _personAvatar(List<TaskItem> tasks, TaskAssignee? assignee) {
+(String, String, String) _personAvatar(
+  List<TaskItem> tasks,
+  TaskAssignee? assignee,
+) {
   String preset = '';
   String objectKey = '';
   String url = '';
   void take(String nextPreset, String nextKey, String nextUrl) {
-    if (preset.isEmpty && nextPreset.trim().isNotEmpty) preset = nextPreset.trim();
-    if (objectKey.isEmpty && nextKey.trim().isNotEmpty) objectKey = nextKey.trim();
+    if (preset.isEmpty && nextPreset.trim().isNotEmpty)
+      preset = nextPreset.trim();
+    if (objectKey.isEmpty && nextKey.trim().isNotEmpty)
+      objectKey = nextKey.trim();
     if (url.isEmpty && nextUrl.trim().isNotEmpty) url = nextUrl.trim();
   }
 
   for (final task in tasks) {
-    take(task.ownerAvatarPreset, task.ownerAvatarObjectKey, task.ownerAvatarUrl);
+    take(
+      task.ownerAvatarPreset,
+      task.ownerAvatarObjectKey,
+      task.ownerAvatarUrl,
+    );
   }
   if (assignee != null) {
     take(assignee.avatarPreset, assignee.avatarObjectKey, assignee.avatarUrl);
@@ -327,7 +342,8 @@ class NativeQianjiTaskPeoplePage extends StatefulWidget {
       _NativeQianjiTaskPeoplePageState();
 }
 
-class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage> {
+class _NativeQianjiTaskPeoplePageState
+    extends State<NativeQianjiTaskPeoplePage> {
   TaskApi? _api;
   final TextEditingController _keywordCtrl = TextEditingController();
   final Set<int> _expanded = <int>{};
@@ -344,11 +360,6 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
     super.initState();
     if (widget.loadSnapshot == null) _api = TaskApi(widget.session);
     _keywordCtrl.addListener(() => setState(() {}));
-    if (!widget.session.taskLookupAccess) {
-      _loading = false;
-      _error = '没有查看权限';
-      return;
-    }
     unawaited(_load());
   }
 
@@ -378,7 +389,9 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
         _expanded.clear();
         if (_departmentId != null &&
             !snapshot.departments.any((dept) => dept.id == _departmentId) &&
-            !snapshot.people.any((person) => person.departmentId == _departmentId)) {
+            !snapshot.people.any(
+              (person) => person.departmentId == _departmentId,
+            )) {
           _departmentId = null;
         }
       });
@@ -388,6 +401,36 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  List<TaskItem> _shareableGoals(TaskPersonRollup person) {
+    final saved = person.tasks.where((task) => task.id > 0).toList(growable: false);
+    final mains = saved.where((task) => task.isMain).toList(growable: false);
+    return mains.isNotEmpty ? mains : saved;
+  }
+
+  Future<void> _shareTask(TaskItem task) => forwardTaskToConversation(
+    context: context,
+    session: widget.session,
+    task: task,
+  );
+
+  Future<void> _sharePerson(TaskPersonRollup person) async {
+    final tasks = _shareableGoals(person);
+    if (tasks.isEmpty) {
+      showDunesCenterToast(context, '这个人没有可转发的主目标');
+      return;
+    }
+    if (tasks.length == 1) {
+      await _shareTask(tasks.first);
+      return;
+    }
+    await forwardTasksToConversation(
+      context: context,
+      session: widget.session,
+      tasks: tasks,
+      ownerName: person.name,
+    );
   }
 
   void _shiftMonth(int delta) {
@@ -406,7 +449,8 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
       if (_departmentId != null && person.departmentId != _departmentId) {
         return false;
       }
-      if (_focus != TaskPeopleFocus.all && taskPeopleRead(person).focus != _focus) {
+      if (_focus != TaskPeopleFocus.all &&
+          taskPeopleRead(person).focus != _focus) {
         return false;
       }
       if (keyword.isEmpty) return true;
@@ -418,8 +462,9 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
       return haystack.contains(keyword);
     }).toList();
     rows.sort((a, b) {
-      final rank = _focusRank(taskPeopleRead(a).focus)
-          .compareTo(_focusRank(taskPeopleRead(b).focus));
+      final rank = _focusRank(
+        taskPeopleRead(a).focus,
+      ).compareTo(_focusRank(taskPeopleRead(b).focus));
       if (rank != 0) return rank;
       final overdue = b.overdue.compareTo(a.overdue);
       if (overdue != 0) return overdue;
@@ -474,9 +519,16 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.arrow_back_ios_new, size: 14, color: DunesColors.text2),
+                  Icon(
+                    Icons.arrow_back_ios_new,
+                    size: 14,
+                    color: DunesColors.text2,
+                  ),
                   SizedBox(width: 2),
-                  Text('饕', style: TextStyle(fontSize: 13, color: DunesColors.text2)),
+                  Text(
+                    '饕',
+                    style: TextStyle(fontSize: 13, color: DunesColors.text2),
+                  ),
                 ],
               ),
             ),
@@ -513,7 +565,11 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
     return IconButton(
       visualDensity: VisualDensity.compact,
       onPressed: onTap,
-      icon: Icon(icon, size: 18, color: onTap == null ? DunesColors.text3 : DunesColors.text2),
+      icon: Icon(
+        icon,
+        size: 18,
+        color: onTap == null ? DunesColors.text3 : DunesColors.text2,
+      ),
     );
   }
 
@@ -538,7 +594,10 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
               filled: true,
               fillColor: Colors.white,
               isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
               border: _fieldBorder(const Color(0xFFE8EAED)),
               enabledBorder: _fieldBorder(const Color(0xFFE8EAED)),
               focusedBorder: _fieldBorder(_themePurple),
@@ -634,7 +693,9 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: selected ? _themePurple : const Color(0xFFE8EAED)),
+            border: Border.all(
+              color: selected ? _themePurple : const Color(0xFFE8EAED),
+            ),
           ),
           child: Text(
             label,
@@ -708,7 +769,9 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
 
   Widget _body(List<TaskPersonRollup> people) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: _themePurple));
+      return const Center(
+        child: CircularProgressIndicator(color: _themePurple),
+      );
     }
     if (_error != null) {
       return ListView(
@@ -722,7 +785,9 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
             style: const TextStyle(color: DunesColors.text2),
           ),
           const SizedBox(height: 16),
-          Center(child: FilledButton(onPressed: _load, child: const Text('重试'))),
+          Center(
+            child: FilledButton(onPressed: _load, child: const Text('重试')),
+          ),
         ],
       );
     }
@@ -732,7 +797,10 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
         children: const [
           SizedBox(height: 120),
           Center(
-            child: Text('这个范围内暂无任务', style: TextStyle(color: DunesColors.text3)),
+            child: Text(
+              '这个范围内暂无任务',
+              style: TextStyle(color: DunesColors.text3),
+            ),
           ),
         ],
       );
@@ -754,8 +822,11 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
     final read = taskPeopleRead(person);
     final expanded = _expanded.contains(person.userId);
     final total = person.counted;
-    final doneRate = total <= 0 ? 0 : (person.completed / total).clamp(0.0, 1.0);
+    final doneRate = total <= 0
+        ? 0
+        : (person.completed / total).clamp(0.0, 1.0);
     final ordered = [...person.tasks]..sort(_compareTasks);
+    final shareable = _shareableGoals(person);
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(12),
@@ -814,16 +885,36 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
                         const SizedBox(height: 2),
                         Text(
                           [
-                            if (person.departmentName.isNotEmpty) person.departmentName,
+                            if (person.departmentName.isNotEmpty)
+                              person.departmentName,
                             if (total > 0) '完成 ${(doneRate * 100).round()}%',
                           ].join(' · '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: DunesColors.text3,
+                          ),
                         ),
                       ],
                     ),
                   ),
+                  if (shareable.isNotEmpty)
+                    IconButton(
+                      tooltip: shareable.length > 1 ? '合并转发此人的主目标' : '转发到 IM',
+                      onPressed: () => unawaited(_sharePerson(person)),
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(
+                        minWidth: 36,
+                        minHeight: 36,
+                      ),
+                      padding: const EdgeInsets.all(6),
+                      icon: const Icon(
+                        Icons.ios_share_rounded,
+                        size: 18,
+                        color: _themePurple,
+                      ),
+                    ),
                   Icon(
                     expanded ? Icons.expand_less : Icons.expand_more,
                     size: 18,
@@ -834,7 +925,11 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
               const SizedBox(height: 8),
               Text(
                 read.why,
-                style: const TextStyle(fontSize: 13, height: 1.35, color: DunesColors.text),
+                style: const TextStyle(
+                  fontSize: 13,
+                  height: 1.35,
+                  color: DunesColors.text,
+                ),
               ),
               const SizedBox(height: 10),
               _bar(person),
@@ -894,10 +989,17 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
   Widget _pill(String label, Color color, Color soft) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(color: soft, borderRadius: BorderRadius.circular(99)),
+      decoration: BoxDecoration(
+        color: soft,
+        borderRadius: BorderRadius.circular(99),
+      ),
       child: Text(
         label,
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
       ),
     );
   }
@@ -926,7 +1028,11 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
         child: Row(
           children: [
             for (final slice in slices)
-              if (slice.$1 > 0) Expanded(flex: slice.$1, child: ColoredBox(color: slice.$2)),
+              if (slice.$1 > 0)
+                Expanded(
+                  flex: slice.$1,
+                  child: ColoredBox(color: slice.$2),
+                ),
           ],
         ),
       ),
@@ -948,7 +1054,10 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
             ),
           ),
           const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 11, color: DunesColors.text3)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, color: DunesColors.text3),
+          ),
         ],
       ),
     );
@@ -976,14 +1085,40 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
                 children: [
                   Text(
                     task.title.trim().isEmpty ? '未命名任务' : task.title.trim(),
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                  Text(hint, style: const TextStyle(fontSize: 12, color: DunesColors.text3)),
+                  Text(
+                    hint,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: DunesColors.text3,
+                    ),
+                  ),
                 ],
               ),
             ),
             if (task.id > 0)
-              const Icon(Icons.chevron_right, size: 16, color: DunesColors.text3),
+              IconButton(
+                tooltip: '转发到 IM',
+                onPressed: () => unawaited(_shareTask(task)),
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
+                icon: const Icon(
+                  Icons.ios_share_rounded,
+                  size: 16,
+                  color: _themePurple,
+                ),
+              ),
+            if (task.id > 0)
+              const Icon(
+                Icons.chevron_right,
+                size: 16,
+                color: DunesColors.text3,
+              ),
           ],
         ),
       ),
@@ -995,12 +1130,20 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
       return ('已超期', DunesColors.coral, DunesColors.coralSoft);
     }
     if (_taskWaiting(task)) {
-      return (taskStatusLabel(task.status), DunesColors.amber, DunesColors.amberSoft);
+      return (
+        taskStatusLabel(task.status),
+        DunesColors.amber,
+        DunesColors.amberSoft,
+      );
     }
     if (_taskCompleted(task)) {
       return ('已完成', DunesColors.green, DunesColors.greenSoft);
     }
-    return (taskStatusLabel(task.status), DunesColors.blue, DunesColors.blueSoft);
+    return (
+      taskStatusLabel(task.status),
+      DunesColors.blue,
+      DunesColors.blueSoft,
+    );
   }
 
   void _openTask(int taskId) {
@@ -1015,8 +1158,10 @@ class _NativeQianjiTaskPeoplePageState extends State<NativeQianjiTaskPeoplePage>
             backLabel: '任务',
             onBack: () => Navigator.of(ctx).pop(),
             onOpenTask: (id) => _openTask(id),
-            onOpenProgress: (task) => _openAction(ctx, task, TaskActionMode.progress),
-            onOpenEvaluate: (task) => _openAction(ctx, task, TaskActionMode.evaluate),
+            onOpenProgress: (task) =>
+                _openAction(ctx, task, TaskActionMode.progress),
+            onOpenEvaluate: (task) =>
+                _openAction(ctx, task, TaskActionMode.evaluate),
           ),
         ),
       ),

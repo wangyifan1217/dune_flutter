@@ -162,6 +162,44 @@ UserWorkProfileModule _unavailableWorkProfileModule(
   },
 );
 
+/// Empty published performance stays openable. Only a failed profile load
+/// uses the refresh action.
+UserWorkProfileModule userWorkProfilePerformanceModule({
+  required bool profileLoaded,
+  required WorkProfileKpiScore? latestPerformance,
+  required String summary,
+  required String period,
+}) {
+  final latest = latestPerformance;
+  if (latest != null) {
+    final me = latest.me;
+    return UserWorkProfileModule(
+      type: UserWorkProfileModuleType.performance,
+      status: UserWorkProfileModuleStatus.ready,
+      summary: me == null
+          ? '${latest.month} 暂无已发布绩效'
+          : '最近已发布 · ${latest.month} ${me.isRubric ? '量表' : '主营'} ${me.mainScore.toStringAsFixed(2)} · ${me.resolvedGrade.label}',
+      source: '已发布绩效记录',
+      period: latest.month,
+    );
+  }
+  if (!profileLoaded) {
+    return const UserWorkProfileModule(
+      type: UserWorkProfileModuleType.performance,
+      status: UserWorkProfileModuleStatus.unavailable,
+      summary: '绩效数据暂时无法加载',
+      source: '已发布绩效记录',
+    );
+  }
+  return UserWorkProfileModule(
+    type: UserWorkProfileModuleType.performance,
+    status: UserWorkProfileModuleStatus.ready,
+    summary: summary.trim().isEmpty ? '暂无已发布绩效数据' : summary.trim(),
+    source: '已发布绩效记录',
+    period: period.trim(),
+  );
+}
+
 bool _meetingInWorkProfileMonth(NativeMeetingSummary meeting, DateTime month) {
   final date =
       NativeMeetingTime.tryParse(meeting.meetingDate) ??
@@ -238,6 +276,9 @@ Future<UserWorkProfileSnapshot> loadUserWorkProfileSnapshot(
   final performanceSummary = performanceModules.isEmpty
       ? ''
       : '${performanceModules.first['summary'] ?? ''}'.trim();
+  final performancePeriod = performanceModules.isEmpty
+      ? ''
+      : '${performanceModules.first['period'] ?? ''}'.trim();
 
   final modules = <UserWorkProfileModule>[];
   if (tasks == null) {
@@ -373,26 +414,12 @@ Future<UserWorkProfileSnapshot> loadUserWorkProfileSnapshot(
   }
 
   modules.add(
-    latestPerformance == null
-        ? UserWorkProfileModule(
-            type: UserWorkProfileModuleType.performance,
-            status: UserWorkProfileModuleStatus.unavailable,
-            summary: meta == null
-                ? '绩效数据暂时无法加载'
-                : (performanceSummary.isEmpty
-                      ? '暂无已发布绩效数据'
-                      : performanceSummary),
-            source: '已发布绩效记录',
-          )
-        : UserWorkProfileModule(
-            type: UserWorkProfileModuleType.performance,
-            status: UserWorkProfileModuleStatus.ready,
-            summary: latestPerformance.me == null
-                ? '${latestPerformance.month} 暂无已发布绩效'
-                : '最近已发布 · ${latestPerformance.month} ${latestPerformance.me!.isRubric ? '量表' : '主营'} ${latestPerformance.me!.mainScore.toStringAsFixed(2)} · ${latestPerformance.me!.resolvedGrade.label}',
-            source: '已发布绩效记录',
-            period: latestPerformance.month,
-          ),
+    userWorkProfilePerformanceModule(
+      profileLoaded: meta != null,
+      latestPerformance: latestPerformance,
+      summary: performanceSummary,
+      period: performancePeriod,
+    ),
   );
   return UserWorkProfileSnapshot(
     modules: modules,

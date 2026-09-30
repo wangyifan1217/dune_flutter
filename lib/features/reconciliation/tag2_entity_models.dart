@@ -41,6 +41,7 @@ class Tag2EntityRow {
     required this.businessBy,
     required this.operationBy,
     required this.amounts,
+    this.assigned = true,
   });
 
   final String rowKey;
@@ -57,13 +58,23 @@ class Tag2EntityRow {
   final String operationBy;
   final List<Tag2EntityAmount> amounts;
 
+  /// 本人是该行业务或运营时才能确认、提意见。灯塔补来的省份行只展示。
+  final bool assigned;
+
   bool get isTotal => rowType.toUpperCase() == 'TOTAL';
 
   bool get showConfirm =>
+      assigned &&
       !isTotal &&
       (canConfirmStage == 'BUSINESS' || canConfirmStage == 'OPERATION');
 
-  bool get showComment => !isTotal;
+  bool get showReject =>
+      assigned &&
+      !isTotal &&
+      canConfirmStage == 'OPERATION' &&
+      confirmationStatus == 'WAIT_OPERATION';
+
+  bool get showComment => assigned && !isTotal;
 
   String get title {
     final bits = [
@@ -103,7 +114,8 @@ class Tag2EntityRow {
       confirmationStatus: '${json['confirmationStatus'] ?? ''}'
           .trim()
           .toUpperCase(),
-      confirmationStatusLabel: '${json['confirmationStatusLabel'] ?? ''}'.trim(),
+      confirmationStatusLabel: '${json['confirmationStatusLabel'] ?? ''}'
+          .trim(),
       canConfirmStage: '${json['canConfirmStage'] ?? ''}'.trim().toUpperCase(),
       currentHandlers: '${json['currentHandlers'] ?? ''}'.trim(),
       businessBy: '${json['businessBy'] ?? ''}'.trim(),
@@ -115,6 +127,9 @@ class Tag2EntityRow {
                   Tag2EntityAmount.fromJson(Map<String, dynamic>.from(item)),
             ]
           : const [],
+      assigned: json['assigned'] == false
+          ? false
+          : '${json['rowType'] ?? ''}'.trim().toUpperCase() != 'TOTAL',
     );
   }
 }

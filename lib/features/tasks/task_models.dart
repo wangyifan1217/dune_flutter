@@ -35,6 +35,7 @@ class TaskItem {
     this.sourceMeetingTitle = '',
     this.overdue = false,
     this.coOwnerUserIds = const [],
+    this.participantUserIds = const [],
     this.aiState = '',
     this.completedAt,
     this.completedAtInferred = false,
@@ -84,6 +85,7 @@ class TaskItem {
   final String sourceMeetingTitle;
   final bool overdue;
   final List<int> coOwnerUserIds;
+  final List<int> participantUserIds;
 
   /// 服务端展示态：analyzing = AI 分析中，binding = AI 匹配知识库中。
   final String aiState;
@@ -155,6 +157,11 @@ class TaskItem {
       overdue: json['overdue'] == true,
       coOwnerUserIds:
           (json['coOwnerUserIds'] as List?)
+              ?.map((e) => (e as num).toInt())
+              .toList(growable: false) ??
+          const [],
+      participantUserIds:
+          (json['participantUserIds'] as List?)
               ?.map((e) => (e as num).toInt())
               .toList(growable: false) ??
           const [],
@@ -1045,7 +1052,8 @@ class TaskDailyReportCalendarUser {
       userId: (json['userId'] as num?)?.toInt() ?? 0,
       userName: '${json['userName'] ?? ''}',
       departmentName: '${json['departmentName'] ?? ''}',
-      days: (json['days'] as List?)
+      days:
+          (json['days'] as List?)
               ?.whereType<Map>()
               .map(
                 (item) => TaskDailyReportCalendarDay.fromJson(
@@ -1100,11 +1108,13 @@ class TaskDailyReportCalendar {
   factory TaskDailyReportCalendar.fromJson(Map<String, dynamic> json) {
     return TaskDailyReportCalendar(
       month: '${json['month'] ?? ''}',
-      days: (json['days'] as List?)
+      days:
+          (json['days'] as List?)
               ?.map((item) => '$item')
               .toList(growable: false) ??
           const [],
-      users: (json['users'] as List?)
+      users:
+          (json['users'] as List?)
               ?.whereType<Map>()
               .map(
                 (item) => TaskDailyReportCalendarUser.fromJson(

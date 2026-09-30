@@ -171,7 +171,7 @@ class AuthSession {
 
   bool get taskPendingAccess => _taskPermission('pending', true);
 
-  bool get taskTeamSummaryAccess => _taskPermission('teamSummary', hrbpAccess);
+  bool get taskTeamSummaryAccess => _taskPermission('teamSummary', false);
 
   bool get taskRecurringAccess => _taskPermission('recurring', false);
 

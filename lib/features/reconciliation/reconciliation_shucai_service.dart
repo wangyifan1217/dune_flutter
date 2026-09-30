@@ -16,10 +16,12 @@ const _assetBaseOverride = String.fromEnvironment(
 /// 拉取数财一体标签二 + 标签三六 Tab。优先走 flow-go（APP 出口 IP 在白名单），
 /// 失败时直连资管（本机已加白名单时可预览）。
 class ReconciliationShucaiService {
-  ReconciliationShucaiService({required AuthSession session, http.Client? client})
-    : _session = session,
-      _ownsClient = client == null,
-      _client = client ?? http.Client();
+  ReconciliationShucaiService({
+    required AuthSession session,
+    http.Client? client,
+  }) : _session = session,
+       _ownsClient = client == null,
+       _client = client ?? http.Client();
 
   final AuthSession _session;
   final http.Client _client;
@@ -46,7 +48,11 @@ class ReconciliationShucaiService {
         : _today();
     final card = _canonicalCardType(cardType, requiredIfPresent: false);
     try {
-      return await _fetchFromDunes(date, cardType: card ?? '', refresh: refresh);
+      return await _fetchFromDunes(
+        date,
+        cardType: card ?? '',
+        refresh: refresh,
+      );
     } catch (_) {
       if ((card ?? '').isNotEmpty) rethrow;
       return _fetchFromAssetDirect(date);
@@ -79,10 +85,7 @@ class ReconciliationShucaiService {
       final resp = await _client
           .post(
             uri,
-            headers: {
-              ..._headers,
-              'Content-Type': 'application/json',
-            },
+            headers: {..._headers, 'Content-Type': 'application/json'},
             body: jsonEncode({'asOfDate': date}),
           )
           .timeout(const Duration(seconds: 12));
@@ -107,9 +110,9 @@ class ReconciliationShucaiService {
 
   Future<List<ReconSectorOverview>> fetchOverview(String asOfDate) async {
     final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
-    final uri = Uri.parse('$base/reconciliation/overview').replace(
-      queryParameters: {'asOfDate': asOfDate.trim()},
-    );
+    final uri = Uri.parse(
+      '$base/reconciliation/overview',
+    ).replace(queryParameters: {'asOfDate': asOfDate.trim()});
     final resp = await _client
         .get(uri, headers: _headers)
         .timeout(const Duration(seconds: 20));
@@ -161,9 +164,9 @@ class ReconciliationShucaiService {
     if ((cardType ?? '').trim().isNotEmpty) {
       query['cardType'] = cardType!.trim();
     }
-    final uri = Uri.parse('$base/reconciliation/status').replace(
-      queryParameters: query.isEmpty ? null : query,
-    );
+    final uri = Uri.parse(
+      '$base/reconciliation/status',
+    ).replace(queryParameters: query.isEmpty ? null : query);
     final resp = await _client
         .get(uri, headers: _headers)
         .timeout(const Duration(seconds: 20));
@@ -181,10 +184,7 @@ class ReconciliationShucaiService {
     final resp = await _client
         .post(
           uri,
-          headers: {
-            ..._headers,
-            'Content-Type': 'application/json',
-          },
+          headers: {..._headers, 'Content-Type': 'application/json'},
           body: jsonEncode({
             'asOfDate': asOfDate.trim(),
             'cardType': _canonicalCardType(cardType) ?? '',
@@ -195,8 +195,13 @@ class ReconciliationShucaiService {
     _decodeEnvelope(resp, fallback: '确认失败');
   }
 
-  Future<({List<ReconRowDecision> items, Map<String, List<ReconRowReviewer>> previous})>
-      fetchRowDecisions({
+  Future<
+    ({
+      List<ReconRowDecision> items,
+      Map<String, List<ReconRowReviewer>> previous,
+    })
+  >
+  fetchRowDecisions({
     required String asOfDate,
     required String cardType,
   }) async {
@@ -225,9 +230,11 @@ class ReconciliationShucaiService {
     final raw = map['items'];
     final items = raw is List
         ? raw
-            .whereType<Map>()
-            .map((e) => ReconRowDecision.fromJson(Map<String, dynamic>.from(e)))
-            .toList(growable: false)
+              .whereType<Map>()
+              .map(
+                (e) => ReconRowDecision.fromJson(Map<String, dynamic>.from(e)),
+              )
+              .toList(growable: false)
         : const <ReconRowDecision>[];
     final previousRaw = map['previous'];
     final previous = <String, List<ReconRowReviewer>>{};
@@ -253,10 +260,7 @@ class ReconciliationShucaiService {
     final resp = await _client
         .post(
           uri,
-          headers: {
-            ..._headers,
-            'Content-Type': 'application/json',
-          },
+          headers: {..._headers, 'Content-Type': 'application/json'},
           body: jsonEncode({
             'asOfDate': asOfDate.trim(),
             'cardType': _canonicalCardType(cardType) ?? '',
@@ -310,9 +314,9 @@ class ReconciliationShucaiService {
 
   Future<Tag3DailySnapshot> fetchTag3Daily({required String asOfDate}) async {
     final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
-    final uri = Uri.parse('$base/reconciliation/tag3-daily').replace(
-      queryParameters: {'asOfDate': asOfDate.trim()},
-    );
+    final uri = Uri.parse(
+      '$base/reconciliation/tag3-daily',
+    ).replace(queryParameters: {'asOfDate': asOfDate.trim()});
     final resp = await _client
         .get(uri, headers: _headers)
         .timeout(const Duration(seconds: 30));
@@ -335,13 +339,14 @@ class ReconciliationShucaiService {
       'metricKey': metricKey.trim(),
     };
     if ((period ?? '').trim().isNotEmpty) query['period'] = period!.trim();
-    if ((statDate ?? '').trim().isNotEmpty) query['statDate'] = statDate!.trim();
+    if ((statDate ?? '').trim().isNotEmpty)
+      query['statDate'] = statDate!.trim();
     if ((sourceTab ?? '').trim().isNotEmpty) {
       query['sourceTab'] = sourceTab!.trim();
     }
-    final uri = Uri.parse('$base/reconciliation/tag3-daily/drilldown').replace(
-      queryParameters: query,
-    );
+    final uri = Uri.parse(
+      '$base/reconciliation/tag3-daily/drilldown',
+    ).replace(queryParameters: query);
     final resp = await _client
         .get(uri, headers: _headers)
         .timeout(const Duration(seconds: 25));
@@ -382,10 +387,7 @@ class ReconciliationShucaiService {
     final resp = await _client
         .post(
           uri,
-          headers: {
-            ..._headers,
-            'Content-Type': 'application/json',
-          },
+          headers: {..._headers, 'Content-Type': 'application/json'},
           body: jsonEncode(body),
         )
         .timeout(const Duration(seconds: 25));
@@ -402,10 +404,7 @@ class ReconciliationShucaiService {
     final resp = await _client
         .post(
           uri,
-          headers: {
-            ..._headers,
-            'Content-Type': 'application/json',
-          },
+          headers: {..._headers, 'Content-Type': 'application/json'},
           body: jsonEncode({
             'asOfDate': asOfDate.trim(),
             'rowKey': row.rowKey,
@@ -422,9 +421,9 @@ class ReconciliationShucaiService {
 
   Future<Tag2EntitySnapshot> fetchTag2Entity({required String asOfDate}) async {
     final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
-    final uri = Uri.parse('$base/reconciliation/tag2-entity').replace(
-      queryParameters: {'asOfDate': asOfDate.trim()},
-    );
+    final uri = Uri.parse(
+      '$base/reconciliation/tag2-entity',
+    ).replace(queryParameters: {'asOfDate': asOfDate.trim()});
     final resp = await _client
         .get(uri, headers: _headers)
         .timeout(const Duration(seconds: 30));
@@ -459,13 +458,14 @@ class ReconciliationShucaiService {
     String expectedStatus = '',
     String remark = '',
     String projectName = '',
+    String action = 'CONFIRM',
   }) async {
     final base = _session.apiBase.replaceAll(RegExp(r'/$'), '');
     final uri = Uri.parse('$base/reconciliation/tag2-entity/operate');
     final body = <String, dynamic>{
       'asOfDate': asOfDate.trim(),
       'rowKeys': [rowKey.trim()],
-      'action': 'CONFIRM',
+      'action': action.trim().toUpperCase(),
       'stage': stage.trim().toUpperCase(),
     };
     if (expectedStatus.trim().isNotEmpty) {
@@ -480,7 +480,7 @@ class ReconciliationShucaiService {
           body: jsonEncode(body),
         )
         .timeout(const Duration(seconds: 25));
-    _decodeEnvelope(resp, fallback: '确认失败');
+    _decodeEnvelope(resp, fallback: action == 'REJECT' ? '驳回失败' : '确认失败');
   }
 
   Future<void> commentTag2Entity({
@@ -519,9 +519,9 @@ class ReconciliationShucaiService {
     if (refresh) {
       query['refresh'] = '1';
     }
-    final uri = Uri.parse('$base/reconciliation/shucai').replace(
-      queryParameters: query,
-    );
+    final uri = Uri.parse(
+      '$base/reconciliation/shucai',
+    ).replace(queryParameters: query);
     final resp = await _client
         .get(uri, headers: _headers)
         .timeout(const Duration(seconds: 25));
@@ -531,10 +531,9 @@ class ReconciliationShucaiService {
   }
 
   Future<ShucaiSnapshot> _fetchFromAssetDirect(String asOfDate) async {
-    final tag2Future = _getAsset(
-      '/out/shaqiu/cnpc-shucai-tag2/list',
-      {'asOfDate': asOfDate},
-    );
+    final tag2Future = _getAsset('/out/shaqiu/cnpc-shucai-tag2/list', {
+      'asOfDate': asOfDate,
+    });
     final tag3Futures = {
       for (final tab in ShucaiSnapshot.tag3TabOrder)
         tab: _getAsset('/out/shaqiu/shucai-tag3/list', {
@@ -562,10 +561,10 @@ class ReconciliationShucaiService {
     final tag3Markdown = <String, String>{};
     for (final tab in ShucaiSnapshot.tag3TabOrder) {
       try {
-        final text = await _getAssetString(
-          '/out/shaqiu/shucai-tag3/markdown',
-          {'tab': tab, 'asOfDate': asOfDate},
-        );
+        final text = await _getAssetString('/out/shaqiu/shucai-tag3/markdown', {
+          'tab': tab,
+          'asOfDate': asOfDate,
+        });
         if (text.trim().isNotEmpty) tag3Markdown[tab] = text;
       } catch (_) {}
     }
@@ -578,10 +577,7 @@ class ReconciliationShucaiService {
     });
   }
 
-  Future<String> _getAssetString(
-    String path,
-    Map<String, String> query,
-  ) async {
+  Future<String> _getAssetString(String path, Map<String, String> query) async {
     final uri = Uri.parse('$_assetBase$path').replace(queryParameters: query);
     final resp = await _client
         .get(uri, headers: const {'Accept': 'application/json'})

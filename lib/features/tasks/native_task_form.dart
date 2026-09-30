@@ -8,6 +8,7 @@ import '../auth/auth_session.dart';
 import '../shell/dunes_toast.dart';
 import 'task_api.dart';
 import 'task_attachment_field.dart';
+import 'task_avatar.dart';
 import 'task_create_confirm.dart';
 import 'task_first_use_guide.dart';
 import 'task_helper_picker.dart';
@@ -141,27 +142,27 @@ class TaskEditorDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return TaskTheme(
       child: AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      titlePadding: EdgeInsets.zero,
-      contentPadding: EdgeInsets.zero,
-      actionsPadding: EdgeInsets.zero,
-      content: SizedBox(
-        width: 560,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(context).height * 0.78,
-          ),
-          child: _TaskEditorBody(
-            session: session,
-            parentTaskId: parentTaskId,
-            parentTask: parentTask,
-            fullscreen: false,
-            onCancel: () => Navigator.pop(context),
-            onCreated: (item) => Navigator.pop(context, item),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: EdgeInsets.zero,
+        contentPadding: EdgeInsets.zero,
+        actionsPadding: EdgeInsets.zero,
+        content: SizedBox(
+          width: 560,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+            ),
+            child: _TaskEditorBody(
+              session: session,
+              parentTaskId: parentTaskId,
+              parentTask: parentTask,
+              fullscreen: false,
+              onCancel: () => Navigator.pop(context),
+              onCreated: (item) => Navigator.pop(context, item),
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 }
@@ -205,12 +206,12 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
   bool _canAssignTeam = false;
   String _dispatchKind = 'self';
   final List<TaskAssignee> _helpers = [];
+  final List<TaskAssignee> _participants = [];
   List<TaskAssignee> _rdOwners = const [];
   final List<_SubDraft> _subDrafts = [];
   bool _guideAutoStarted = false;
   bool _rulesLoaded = false;
   bool _assignmentConfirmation = false;
-  bool _taskApproval = true;
   String? _titleError;
   String? _dateError;
 
@@ -218,10 +219,8 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
   List<(String, String)> get _subCategoryOptions =>
       _taskCategoryOptions[_category] ?? const [];
 
-  /// 主任务由当前用户创建 → 自建子任务免审。
-  bool get _parentSelfCreated =>
-      _parentTask != null &&
-      _parentTask!.creatorUserId == widget.session.userId;
+  bool get _parentIsMine =>
+      _parentTask != null && _parentTask!.ownerUserId == widget.session.userId;
 
   Future<void> _loadRules() async {
     try {
@@ -229,7 +228,6 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
       if (!mounted) return;
       setState(() {
         _assignmentConfirmation = rules.assignmentConfirmation;
-        _taskApproval = rules.taskApproval;
         _rulesLoaded = true;
       });
     } catch (_) {}
@@ -245,12 +243,8 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
       return '需求方就是创建人。自己负责时可以同时拆子任务。';
     }
     final self = _ownerId == null || _ownerId == widget.session.userId;
-    if (self) {
-      if (_taskApproval && !_parentSelfCreated) {
-        return '执行人是自己。这个主目标不是你创建的，提交后要等审批通过才生效。';
-      }
-      return '执行人是自己，创建后直接生效。';
-    }
+    if (!_parentIsMine) return '提交后由主任务负责人审核，通过后子任务才会生效。';
+    if (self) return '你是主任务负责人，创建的子任务会直接生效。';
     if (_assignmentConfirmation) {
       return '指派给他人后，对方接受才会开始执行。对方拒绝则不会生效。';
     }
@@ -398,6 +392,110 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
     });
   }
 
+  Future<void> _pickParticipants() async {
+    final picked = await showTaskHelperPicker(
+      context,
+      api: _api,
+      selectedIds: _participants.map((e) => e.id).toSet(),
+      known: _participants,
+      excludeUserId: 0,
+      title: '选择主任务参与人',
+      scope: 'participants',
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _participants
+        ..clear()
+        ..addAll(picked);
+    });
+  }
+
+  Widget _participantPicker() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE6E1EF)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.groups_2_outlined,
+                size: 18,
+                color: _themePurple,
+              ),
+              const SizedBox(width: 7),
+              const Expanded(
+                child: Text(
+                  '主任务参与人',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _pickParticipants,
+                icon: const Icon(Icons.person_add_alt_1_rounded, size: 16),
+                label: Text(_participants.isEmpty ? '添加人员' : '调整人员'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  foregroundColor: _themePurple,
+                ),
+              ),
+            ],
+          ),
+          const Text(
+            '选择自己或自己的下属。参与人可以查看主任务并提交子任务，子任务需主任务负责人审核。',
+            style: TextStyle(
+              fontSize: 11,
+              height: 1.4,
+              color: DunesColors.text3,
+            ),
+          ),
+          if (_participants.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                for (final person in _participants)
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(5, 4, 9, 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5F1FC),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        buildTaskUserAvatar(
+                          session: widget.session,
+                          name: person.displayName,
+                          userId: person.id,
+                          avatarPreset: person.avatarPreset,
+                          avatarObjectKey: person.avatarObjectKey,
+                          avatarUrl: person.avatarUrl,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          person.displayName,
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Future<void> _pickDate({required bool isStart}) async {
     final now = DateTime.now();
     final initial = isStart ? (_startAt ?? now) : (_dueAt ?? _startAt ?? now);
@@ -419,6 +517,40 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
       }
       _dateError = taskCreateRangeError(_startAt, _dueAt, required: false);
     });
+  }
+
+  TaskAssignee? _personById(
+    int? id, {
+    String fallbackName = '',
+    List<TaskAssignee> extra = const [],
+  }) {
+    if (id == null || id <= 0) return null;
+    if (id == widget.session.userId) {
+      return TaskAssignee(id: id, displayName: _requesterName);
+    }
+    for (final person in [
+      ..._rdOwners,
+      ..._participants,
+      ..._helpers,
+      ...extra,
+    ]) {
+      if (person.id == id) return person;
+    }
+    if (fallbackName.trim().isEmpty) return null;
+    return TaskAssignee(id: id, displayName: fallbackName.trim());
+  }
+
+  Widget _personAvatar(TaskAssignee? person, {double size = 28}) {
+    if (person == null) return SizedBox(width: size, height: size);
+    return buildTaskUserAvatar(
+      session: widget.session,
+      name: person.displayName,
+      userId: person.id,
+      avatarPreset: person.avatarPreset,
+      avatarObjectKey: person.avatarObjectKey,
+      avatarUrl: person.avatarUrl,
+      size: size,
+    );
   }
 
   String _fmtDate(DateTime? d) {
@@ -454,6 +586,15 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
               ),
               for (final owner in options)
                 ListTile(
+                  leading: buildTaskUserAvatar(
+                    session: widget.session,
+                    name: owner.displayName,
+                    userId: owner.id,
+                    avatarPreset: owner.avatarPreset,
+                    avatarObjectKey: owner.avatarObjectKey,
+                    avatarUrl: owner.avatarUrl,
+                    size: 38,
+                  ),
                   title: Text(owner.displayName),
                   subtitle: owner.id == widget.session.userId
                       ? const Text('自己负责，创建后直接生效')
@@ -562,7 +703,9 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
         'subCategory': _subCategory,
         'acceptanceCriteria': _acceptCtrl.text.trim(),
         'ownerUserId': ownerId,
-        if ((_isSub ? _dispatchKind == 'assist' : true) && _helpers.isNotEmpty)
+        if (!_isSub && _participants.isNotEmpty)
+          'participantUserIds': _participants.map((e) => e.id).toList(),
+        if (_isSub && _dispatchKind == 'assist' && _helpers.isNotEmpty)
           'coOwnerUserIds': _helpers.map((e) => e.id).toList(),
         if (_attachments.isNotEmpty)
           'attachments': _attachments.map((e) => e.toCreateJson()).toList(),
@@ -622,11 +765,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
     required String kind,
     required ValueChanged<String> onChanged,
   }) {
-    const options = [
-      ('self', '自己执行'),
-      ('assist', '分派协助'),
-      ('team', '给团队成员'),
-    ];
+    const options = [('self', '自己执行'), ('assist', '分派协助'), ('team', '给团队成员')];
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -646,10 +785,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             ),
             onSelected: (_) {
               if (option.$1 == 'team' && !_canAssignTeam) {
-                showDunesCenterToast(
-                  context,
-                  '只有沙丘职级为 M 序列的人员可以给团队成员创建任务',
-                );
+                showDunesCenterToast(context, '只有沙丘职级为 M 序列的人员可以给团队成员创建任务');
                 return;
               }
               onChanged(option.$1);
@@ -699,76 +835,86 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Material(
-      color: const Color(0xFFF7F8FA),
-      borderRadius: BorderRadius.circular(12),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
+        color: const Color(0xFFF7F8FA),
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                '子任务 ${index + 1}',
-                style: const TextStyle(fontWeight: FontWeight.w700),
+              Row(
+                children: [
+                  Text(
+                    '子任务 ${index + 1}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: '删除',
+                    onPressed: () {
+                      setState(() {
+                        _subDrafts.removeAt(index).dispose();
+                      });
+                    },
+                    icon: const Icon(Icons.close, size: 18),
+                  ),
+                ],
               ),
-              const Spacer(),
-              IconButton(
-                tooltip: '删除',
-                onPressed: () {
-                  setState(() {
-                    _subDrafts.removeAt(index).dispose();
-                  });
-                },
-                icon: const Icon(Icons.close, size: 18),
+              _dispatchKindChips(
+                kind: draft.kind,
+                onChanged: (kind) => setState(() {
+                  draft.kind = kind;
+                  if (kind != 'team') {
+                    draft.ownerId = null;
+                    draft.ownerName = '';
+                  }
+                  if (kind != 'assist') draft.helpers.clear();
+                }),
               ),
+              const SizedBox(height: 8),
+              _field(draft.title, '名称', hint: '简明描述子任务'),
+              const SizedBox(height: 8),
+              _field(draft.accept, '验收标准', hint: '怎样算完成'),
+              if (draft.kind == 'assist') ...[
+                const SizedBox(height: 8),
+                _pickerField(
+                  label: '协助人',
+                  value: helperLabel,
+                  leading: draft.helpers.isEmpty
+                      ? null
+                      : _personAvatar(draft.helpers.first),
+                  placeholder: draft.helpers.isEmpty,
+                  onTap: () => _pickDraftHelpers(draft),
+                ),
+              ],
+              if (draft.kind == 'team') ...[
+                const SizedBox(height: 8),
+                _pickerField(
+                  label: '执行人',
+                  value: ownerLabel,
+                  leading: _personAvatar(
+                    _personById(
+                      draft.ownerId,
+                      fallbackName: draft.ownerName,
+                      extra: draft.helpers,
+                    ),
+                  ),
+                  placeholder: draft.ownerId == null,
+                  onTap: () => _pickDraftOwner(draft),
+                ),
+              ],
+              if (draft.kind == 'self')
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text(
+                    '负责人是你自己，创建后直接由你执行。',
+                    style: TextStyle(fontSize: 12, color: DunesColors.text3),
+                  ),
+                ),
             ],
           ),
-          _dispatchKindChips(
-            kind: draft.kind,
-            onChanged: (kind) => setState(() {
-              draft.kind = kind;
-              if (kind != 'team') {
-                draft.ownerId = null;
-                draft.ownerName = '';
-              }
-              if (kind != 'assist') draft.helpers.clear();
-            }),
-          ),
-          const SizedBox(height: 8),
-          _field(draft.title, '名称', hint: '简明描述子任务'),
-          const SizedBox(height: 8),
-          _field(draft.accept, '验收标准', hint: '怎样算完成'),
-          if (draft.kind == 'assist') ...[
-            const SizedBox(height: 8),
-            _pickerField(
-              label: '协助人',
-              value: helperLabel,
-              placeholder: draft.helpers.isEmpty,
-              onTap: () => _pickDraftHelpers(draft),
-            ),
-          ],
-          if (draft.kind == 'team') ...[
-            const SizedBox(height: 8),
-            _pickerField(
-              label: '执行人',
-              value: ownerLabel,
-              placeholder: draft.ownerId == null,
-              onTap: () => _pickDraftOwner(draft),
-            ),
-          ],
-          if (draft.kind == 'self')
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: Text(
-                '负责人是你自己，创建后直接由你执行。',
-                style: TextStyle(fontSize: 12, color: DunesColors.text3),
-              ),
-            ),
-        ],
-      ),
-      ),
+        ),
       ),
     );
   }
@@ -804,6 +950,9 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             _pickerField(
               label: '需求负责人',
               value: _ownerName.isEmpty ? '选择人员' : _ownerName,
+              leading: _personAvatar(
+                _personById(_ownerId, fallbackName: _ownerName),
+              ),
               onTap: _pickRequirementOwner,
             ),
         ] else
@@ -836,6 +985,9 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
                     : _pickerField(
                         label: '需求负责人',
                         value: _ownerName.isEmpty ? '选择人员' : _ownerName,
+                        leading: _personAvatar(
+                          _personById(_ownerId, fallbackName: _ownerName),
+                        ),
                         onTap: _pickRequirementOwner,
                       ),
               ),
@@ -852,12 +1004,14 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             ),
           ),
         ],
+        if (!_isSub) ...[const SizedBox(height: 14), _participantPicker()],
         if (_isSub && _dispatchKind == 'assist')
           _pickerField(
             label: '协助人',
             value: _helpers.isEmpty
                 ? '请选择协助人'
                 : _helpers.map((e) => e.displayName).join('、'),
+            leading: _helpers.isEmpty ? null : _personAvatar(_helpers.first),
             placeholder: _helpers.isEmpty,
             onTap: _pickHelpers,
           ),
@@ -867,6 +1021,9 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             value: _ownerName.isEmpty || _ownerId == widget.session.userId
                 ? '请选择团队成员'
                 : _ownerName,
+            leading: _personAvatar(
+              _personById(_ownerId, fallbackName: _ownerName),
+            ),
             onTap: _pickAssignee,
           ),
         const SizedBox(height: 14),
@@ -1057,7 +1214,11 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
           ),
           const Text(
             '和主任务一起保存。自己执行谁都可以。分派协助是找人一起做，负责人仍是你。给团队成员只有沙丘职级为 M 序列可以，对方成为执行人。',
-            style: TextStyle(fontSize: 12, color: DunesColors.text3, height: 1.4),
+            style: TextStyle(
+              fontSize: 12,
+              color: DunesColors.text3,
+              height: 1.4,
+            ),
           ),
           for (var i = 0; i < _subDrafts.length; i++) _subDraftCard(i),
         ],
@@ -1066,15 +1227,19 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             padding: EdgeInsets.only(top: 12),
             child: Text(
               '交给科技研发中心后，由需求负责人接收并创建子任务。',
-              style: TextStyle(fontSize: 12, color: DunesColors.text3, height: 1.4),
+              style: TextStyle(
+                fontSize: 12,
+                color: DunesColors.text3,
+                height: 1.4,
+              ),
             ),
           ),
         if (_isSub) ...[
           const SizedBox(height: 8),
           Text(
-            _parentSelfCreated
-                ? '协助人谁都可以添加。只有沙丘职级为 M 序列的人可以把执行人设成任务流下级；主目标由你创建时，自己添加的子目标无需确认。'
-                : '协助人谁都可以添加。只有沙丘职级为 M 序列的人可以把执行人设成任务流下级；分给自己时需任务流上级审核。',
+            _parentIsMine
+                ? '作为主任务负责人，你创建的子任务会直接生效。'
+                : '作为主任务参与人，你创建的子任务会提交给主任务负责人审核，通过后才开始执行。',
             style: const TextStyle(
               fontSize: 12,
               color: DunesColors.text3,
@@ -1315,6 +1480,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
   Widget _pickerField({
     required String label,
     required String value,
+    Widget? leading,
     VoidCallback? onTap,
     bool placeholder = false,
     bool required = false,
@@ -1332,6 +1498,7 @@ class _TaskEditorBodyState extends State<_TaskEditorBody> {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
+                if (leading != null) ...[leading, const SizedBox(width: 9)],
                 Expanded(
                   child: Text(
                     value,

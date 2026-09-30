@@ -26,6 +26,7 @@ class NativeConversation {
     this.assistantGeneratingStatus = '',
     this.hasUnreadMention = false,
     this.hasUnreadAtAll = false,
+    this.markedUnread,
     this.peerImStatus = '',
     this.peerImStatusText = '',
     this.peerImStatusIcon = '',
@@ -66,6 +67,9 @@ class NativeConversation {
 
   /// 群聊未读 @所有人。有 @我 时优先展示 [@了你]。
   final bool hasUnreadAtAll;
+
+  /// 手动标为未读。null 表示这份数据没带这个字段（旧服务端）。
+  final bool? markedUnread;
 
   /// 私聊对端自定义状态（busy/dnd/meeting/trip/rest/leave/custom）；空或 online 不展示徽章。
   final String peerImStatus;

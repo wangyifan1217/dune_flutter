@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f4f2f9">
+<title>任务转发名片 · iOS 预览</title>
+<style>
+:root{--purple:#7054d8;--purple-dark:#382765;--ink:#242330;--muted:#92909f;--line:#eeedf2;--page:#f4f3f7;--white:#fff;--green:#3a9b73;--gold:#b47a28;--shadow:0 24px 70px #2e24511c}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);background:radial-gradient(ellipse at 50% -10%,#e8e1fa 0,transparent 43%),#eceaf0;font-size:14px;-webkit-font-smoothing:antialiased}
+button{font:inherit}.stage{min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:28px 16px 44px}.device{width:402px;max-width:100%;height:min(850px,calc(100vh - 72px));min-height:650px;background:var(--page);border:7px solid #211f27;border-radius:43px;overflow:hidden;position:relative;box-shadow:var(--shadow)}.screen{height:100%;position:relative;background:var(--page);overflow:hidden}.statusbar{height:36px;padding:10px 22px 0;display:flex;justify-content:space-between;font-size:11px;font-weight:700;letter-spacing:.15px;background:#f8f7fa}.status-icons{letter-spacing:2px}.nav{height:48px;display:grid;grid-template-columns:38px 1fr 38px;align-items:center;padding:0 17px;background:#f8f7fa}.nav button{border:0;background:transparent;color:#3c3947;cursor:pointer}.back{font-size:25px;line-height:1;padding:0;text-align:left;visibility:hidden}.back.visible{visibility:visible}.nav-title{text-align:center;font-size:15px;font-weight:680}.nav-more{text-align:right;font-size:20px;letter-spacing:1px}.viewport{height:calc(100% - 84px);overflow:auto;scrollbar-width:none;padding-bottom:24px}.viewport::-webkit-scrollbar{display:none}.chat-head{padding:14px 17px 12px;text-align:center;color:#a5a2af;font-size:10px}.bubble-row{display:flex;align-items:flex-start;gap:9px;padding:0 12px 16px}.sender-avatar{flex:0 0 32px;width:32px;height:32px;border-radius:12px;background:linear-gradient(145deg,#efcba8,#bd886d);display:grid;place-items:center;color:#fff;font-weight:650;box-shadow:0 3px 8px #4b32251a}.bubble-wrap{min-width:0;max-width:calc(100% - 41px)}.sender{font-size:10px;color:#9a97a4;margin:0 0 6px 2px}.bubble{background:white;border:1px solid #f0eef3;border-radius:4px 17px 17px 17px;padding:11px 13px;color:#4d4a58;font-size:12px;line-height:1.55;margin-bottom:9px;box-shadow:0 3px 12px #31294708}.task-card{width:min(294px,calc(100vw - 88px));border:1px solid #e8e3f4;background:#fff;border-radius:19px;overflow:hidden;cursor:pointer;box-shadow:0 7px 22px #39296f13;transition:transform .18s,box-shadow .18s;outline:none}.task-card:hover,.task-card:focus-visible{transform:translateY(-2px);box-shadow:0 11px 28px #39296f20}.task-card-top{padding:14px 14px 13px;background:linear-gradient(135deg,#39296a,#5b45a1 68%,#7960cc);color:white;position:relative;overflow:hidden}.task-card-top:after{content:"";position:absolute;width:120px;height:120px;border:1px solid #ffffff19;border-radius:50%;right:-45px;top:-69px;box-shadow:0 0 0 15px #ffffff09,0 0 0 31px #ffffff06}.brand-row{display:flex;align-items:center;justify-content:space-between;position:relative;z-index:1}.brand{display:flex;align-items:center;gap:7px;color:#e6dffb;font-size:9px;letter-spacing:.55px;font-weight:650}.brand-icon{width:22px;height:22px;border-radius:8px;background:#ffffff1d;display:grid;place-items:center;font-size:12px}.share-time{font-size:9px;color:#d0c7e8}.task-title{position:relative;z-index:1;font-size:15px;line-height:1.42;font-weight:700;letter-spacing:.05px;margin:11px 0 10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.chips{display:flex;gap:6px;position:relative;z-index:1}.chip{padding:4px 8px;border-radius:20px;font-size:9px;line-height:1;background:#ffffff19;color:#eeeaff;border:1px solid #ffffff20}.chip.status{background:#e9f6ef;color:#317952;border:0}.task-card-mid{padding:12px 14px 13px}.card-info{display:flex;justify-content:space-between;gap:8px}.info-item{min-width:0}.info-label{font-size:9px;color:#a09daa;margin-bottom:5px}.info-value{font-size:10px;font-weight:650;color:#454251;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.progress-head{display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:9px;color:#9692a1}.progress-head strong{font-size:10px;color:#5d48a7}.progress-track{height:5px;border-radius:9px;background:#efedf5;margin-top:7px;overflow:hidden}.progress-track i{display:block;width:68%;height:100%;border-radius:9px;background:linear-gradient(90deg,#8e72e6,#6548c4)}.card-bottom{border-top:1px solid #f0eef4;padding:9px 13px;display:flex;justify-content:space-between;align-items:center;color:#8a8498;font-size:9px;background:#fdfcff}.card-bottom b{color:#7258ca;font-weight:650}.card-arrow{font-size:15px;margin-left:4px;vertical-align:-1px}.chat-compose{position:absolute;left:0;right:0;bottom:0;background:#fbfafc;border-top:1px solid #eae8ee;padding:10px 13px calc(13px + env(safe-area-inset-bottom));display:flex;gap:9px;align-items:center}.compose-plus{width:28px;height:28px;border:1px solid #d9d6df;border-radius:50%;display:grid;place-items:center;color:#7c7886;font-size:18px}.compose-input{height:34px;flex:1;border:1px solid #e9e7ed;border-radius:18px;background:white;color:#b1aeba;padding:8px 13px;font-size:11px}.compose-smile{font-size:19px;color:#85818e}
+/* Read-only task detail */
+.detail-hero{margin:8px 14px 12px;border-radius:23px;padding:18px 17px 16px;color:#fff;background:linear-gradient(140deg,#34255f,#51408f 62%,#7560bb);position:relative;overflow:hidden;box-shadow:0 10px 25px #39296f24}.detail-hero:after{content:"";position:absolute;width:160px;height:160px;border:1px solid #ffffff17;border-radius:50%;right:-58px;top:-94px;box-shadow:0 0 0 20px #ffffff08,0 0 0 42px #ffffff05}.hero-kicker{font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:#d1c8ea;position:relative;z-index:1}.hero-title{font-size:20px;line-height:1.4;margin:11px 0 12px;position:relative;z-index:1}.hero-tags{display:flex;gap:7px;position:relative;z-index:1}.hero-tag{border:1px solid #ffffff31;background:#ffffff13;border-radius:18px;padding:5px 9px;font-size:10px;color:#f0ebfb}.hero-progress{margin-top:17px;position:relative;z-index:1}.hero-progress-line{display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#d8d1eb}.hero-progress-line strong{font-size:16px;color:#fff}.hero-track{height:6px;background:#ffffff29;border-radius:8px;margin-top:8px}.hero-track i{display:block;width:68%;height:100%;border-radius:8px;background:linear-gradient(90deg,#d7c8ff,#fff)}.readonly-note{margin:0 14px 11px;padding:10px 12px;display:flex;gap:9px;align-items:flex-start;background:#f1eefb;border:1px solid #e7e1f5;border-radius:13px;color:#71638f;font-size:10px;line-height:1.5}.readonly-icon{width:19px;height:19px;border-radius:7px;background:#e3dcf6;color:#7054d8;display:grid;place-items:center;flex:none;font-size:11px}.section{margin:0 14px 11px;padding:15px 14px;background:white;border:1px solid #efedf2;border-radius:18px;box-shadow:0 3px 12px #31294705}.section-heading{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;margin-bottom:14px}.section-mark{width:3px;height:14px;border-radius:3px;background:#8165de}.section-hint{margin-left:auto;color:#aaa6b2;font-size:9px;font-weight:500}.fields{display:grid;grid-template-columns:1fr 1fr;gap:14px 12px}.field.wide{grid-column:1/-1}.field-label{font-size:9px;color:#a09daa;margin-bottom:5px}.field-value{font-size:11px;line-height:1.5;color:#393744;font-weight:600}.field-sub{font-size:9px;color:#9894a1;margin-top:2px}.description{font-size:11px;line-height:1.7;color:#5b5865}.subtask{display:flex;align-items:center;gap:9px;padding:9px 0;border-top:1px solid #f1eff4}.subtask:first-of-type{border-top:0;padding-top:0}.subtask:last-child{padding-bottom:0}.check{width:18px;height:18px;border-radius:6px;background:#eaf5ef;color:#37845e;display:grid;place-items:center;font-size:11px;flex:none}.check.pending{background:#f3f0fa;color:#8c7ac2}.subtask-main{min-width:0;flex:1}.subtask-title{font-size:10px;font-weight:600;line-height:1.4}.subtask-meta{font-size:9px;color:#a09daa;margin-top:3px}.subtask-state{font-size:9px;color:#37845e}.subtask-state.pending{color:#9382c1}.timeline{padding-left:2px}.event{display:grid;grid-template-columns:18px 1fr auto;gap:8px;position:relative;padding-bottom:15px}.event:last-child{padding-bottom:0}.event:not(:last-child):before{content:"";position:absolute;left:7px;top:16px;bottom:0;width:1px;background:#ebe8f1}.event-dot{width:15px;height:15px;border-radius:50%;background:#eeeafa;color:#735bc0;display:grid;place-items:center;font-size:8px;z-index:1}.event-title{font-size:10px;font-weight:650;line-height:1.45}.event-sub{font-size:9px;color:#9692a0;margin-top:3px;line-height:1.4}.event-time{font-size:8px;color:#aaa6b1;white-space:nowrap}.attachment{display:flex;align-items:center;gap:9px;padding:9px 10px;background:#faf9fc;border:1px solid #efedf3;border-radius:12px;margin-top:7px}.file-icon{width:30px;height:32px;border-radius:8px;background:#f9eaea;color:#d27474;display:grid;place-items:center;font-size:9px;font-weight:800}.file-name{font-size:10px;font-weight:600}.file-meta{font-size:8px;color:#a19da9;margin-top:3px}.file-lock{margin-left:auto;color:#aaa5b0;font-size:11px}.detail-footer{padding:11px 16px calc(13px + env(safe-area-inset-bottom));text-align:center;color:#a19da9;font-size:9px;background:#fbfafc;border-top:1px solid #eae8ee}.home-indicator{width:112px;height:4px;border-radius:4px;background:#24222a;position:absolute;bottom:5px;left:50%;transform:translateX(-50%);z-index:4}.screen.detail .viewport{height:calc(100% - 84px)}.screen.detail .detail-footer{position:absolute;bottom:0;left:0;right:0}.screen.detail .viewport{padding-bottom:60px}
+@media(max-width:520px){html,body{background:var(--page)}.stage{padding:0;min-height:100dvh}.device{width:100%;height:100dvh;min-height:0;border:0;border-radius:0;box-shadow:none}.statusbar{padding-top:max(10px,env(safe-area-inset-top));height:calc(36px + env(safe-area-inset-top))}.nav{height:47px}.viewport{height:calc(100% - 83px - env(safe-area-inset-top))}.screen.detail .viewport{height:calc(100% - 83px - env(safe-area-inset-top))}.home-indicator{display:none}.chat-compose{padding-bottom:calc(12px + env(safe-area-inset-bottom))}.task-card{width:min(294px,calc(100vw - 78px))}.detail-hero{margin-top:7px}}
+@media(min-width:700px){.stage{align-items:center}.device{height:min(850px,calc(100vh - 48px))}}
+@media(max-height:700px) and (max-width:520px){.device{height:100dvh}.section{padding:13px}.detail-hero{padding:15px}.hero-title{font-size:18px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="device">
+    <div class="screen" id="screen">
+      <div class="statusbar"><span>9:41</span><span class="status-icons">◔ ▮▮ ▰</span></div>
+      <header class="nav">
+        <button class="back" id="back" aria-label="返回会话" onclick="showChat()">‹</button>
+        <div class="nav-title" id="navTitle">项目协作群</div>
+        <button class="nav-more" aria-label="更多">···</button>
+      </header>
+      <main class="viewport" id="viewport">
+        <div id="chatView">
+          <div class="chat-head">今天 10:24</div>
+          <div class="bubble-row">
+            <div class="sender-avatar">晨</div>
+            <div class="bubble-wrap">
+              <div class="sender">王晨</div>
+              <div class="bubble">把这个任务同步给大家，客户回访安排和当前进度都在里面。</div>
+              <article class="task-card" role="button" tabindex="0" aria-label="打开任务详情" onclick="showDetail()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showDetail()}">
+                <div class="task-card-top">
+                  <div class="brand-row"><div class="brand"><span class="brand-icon">✓</span>沙丘任务</div><span class="share-time">任务名片</span></div>
+                  <h1 class="task-title">完成华东区域 9 月客户回访与柴油库存核查</h1>
+                  <div class="chips"><span class="chip status">进行中</span><span class="chip">高优先级</span><span class="chip">主任务</span></div>
+                </div>
+                <div class="task-card-mid">
+                  <div class="card-info">
+                    <div class="info-item"><div class="info-label">负责人</div><div class="info-value">林嘉宁</div></div>
+                    <div class="info-item"><div class="info-label">截止日期</div><div class="info-value">10 月 08 日</div></div>
+                    <div class="info-item"><div class="info-label">子任务</div><div class="info-value">2 / 3 完成</div></div>
+                  </div>
+                  <div class="progress-head"><span>任务进度</span><strong>68%</strong></div>
+                  <div class="progress-track"><i></i></div>
+                </div>
+                <div class="card-bottom"><span>点击查看任务明细</span><b>只读查看 <span class="card-arrow">›</span></b></div>
+              </article>
+            </div>
+          </div>
+          <div class="bubble-row" style="padding-top:1px">
+            <div class="sender-avatar" style="background:linear-gradient(145deg,#c8b8ed,#8c73c9)">你</div>
+            <div class="bubble-wrap"><div class="sender">我</div><div class="bubble" style="border-radius:4px 17px 17px 17px">收到，我看一下。</div></div>
+          </div>
+        </div>
+        <div id="detailView" hidden>
+          <section class="detail-hero">
+            <div class="hero-kicker">SHARED TASK · 只读名片</div>
+            <h1 class="hero-title">完成华东区域 9 月客户回访与柴油库存核查</h1>
+            <div class="hero-tags"><span class="hero-tag">进行中</span><span class="hero-tag">高优先级</span><span class="hero-tag">#RW-260918</span></div>
+            <div class="hero-progress"><div class="hero-progress-line"><span>整体进度</span><strong>68%</strong></div><div class="hero-track"><i></i></div></div>
+          </section>
+          <div class="readonly-note"><span class="readonly-icon">◉</span><span>这是转发的任务详情。你可以查看任务信息、进展和附件；此页面为只读视图。</span></div>
+          <section class="section">
+            <div class="section-heading"><i class="section-mark"></i>任务信息<span class="section-hint">当前任务</span></div>
+            <div class="fields">
+              <div class="field"><div class="field-label">负责人</div><div class="field-value">林嘉宁</div><div class="field-sub">华东销售中心</div></div>
+              <div class="field"><div class="field-label">创建人</div><div class="field-value">王晨</div><div class="field-sub">区域销售经理</div></div>
+              <div class="field"><div class="field-label">任务周期</div><div class="field-value">9 月 18 日 — 10 月 08 日</div></div>
+              <div class="field"><div class="field-label">任务分类</div><div class="field-value">客户经营 · 客户回访</div></div>
+              <div class="field wide"><div class="field-label">任务说明</div><div class="description">完成华东重点客户 9 月例行回访，确认第四季度采购需求；同步核查各地柴油库存与在途情况，整理风险点并形成回访纪要。</div></div>
+              <div class="field wide"><div class="field-label">验收标准</div><div class="description">重点客户全部完成联系；库存数据与台账核对一致；提交回访纪要及异常事项清单。</div></div>
+            </div>
+          </section>
+          <section class="section">
+            <div class="section-heading"><i class="section-mark"></i>子任务<span class="section-hint">2 / 3 已完成</span></div>
+            <div class="subtask"><span class="check">✓</span><div class="subtask-main"><div class="subtask-title">汇总华东重点客户名单与历史采购量</div><div class="subtask-meta">负责人 林嘉宁 · 10 月 02 日完成</div></div><span class="subtask-state">已完成</span></div>
+            <div class="subtask"><span class="check">✓</span><div class="subtask-main"><div class="subtask-title">完成上海、浙江客户回访</div><div class="subtask-meta">负责人 林嘉宁 · 10 月 04 日完成</div></div><span class="subtask-state">已完成</span></div>
+            <div class="subtask"><span class="check pending">•</span><div class="subtask-main"><div class="subtask-title">核对区域库存并提交回访纪要</div><div class="subtask-meta">负责人 林嘉宁 · 截止 10 月 08 日</div></div><span class="subtask-state pending">进行中</span></div>
+          </section>
+          <section class="section">
+            <div class="section-heading"><i class="section-mark"></i>进展记录<span class="section-hint">最近更新</span></div>
+            <div class="timeline">
+              <div class="event"><span class="event-dot">↗</span><div><div class="event-title">已完成上海、浙江重点客户回访</div><div class="event-sub">客户已确认第四季度采购计划，纪要整理中。</div></div><span class="event-time">10/04</span></div>
+              <div class="event"><span class="event-dot">↗</span><div><div class="event-title">完成客户清单整理</div><div class="event-sub">已按区域补充近三个月采购量与联系人。</div></div><span class="event-time">10/02</span></div>
+              <div class="event"><span class="event-dot">＋</span><div><div class="event-title">任务已创建并分配</div><div class="event-sub">王晨分配给林嘉宁。</div></div><span class="event-time">09/18</span></div>
+            </div>
+          </section>
+          <section class="section">
+            <div class="section-heading"><i class="section-mark"></i>相关附件<span class="section-hint">2 个文件</span></div>
+            <div class="attachment"><span class="file-icon">XLS</span><div><div class="file-name">华东区域库存核查表.xlsx</div><div class="file-meta">Excel 文档 · 248 KB</div></div><span class="file-lock">⌕</span></div>
+            <div class="attachment"><span class="file-icon" style="background:#f0edfb;color:#8068ca">PDF</span><div><div class="file-name">9月重点客户回访安排.pdf</div><div class="file-meta">PDF 文档 · 1.2 MB</div></div><span class="file-lock">⌕</span></div>
+          </section>
+        </div>
+      </main>
+      <div class="chat-compose" id="chatCompose"><span class="compose-plus">＋</span><div class="compose-input">发送消息…</div><span class="compose-smile">☺</span></div>
+      <div class="detail-footer" id="detailFooter" hidden>任务内容仅供查看 · 最近更新于 10 月 04 日 16:32</div>
+      <div class="home-indicator"></div>
+    </div>
+  </div>
+</div>
+<script>
+const screenEl=document.getElementById('screen'),backEl=document.getElementById('back'),titleEl=document.getElementById('navTitle'),chatEl=document.getElementById('chatView'),detailEl=document.getElementById('detailView'),composeEl=document.getElementById('chatCompose'),footerEl=document.getElementById('detailFooter'),viewportEl=document.getElementById('viewport');
+function showDetail(){chatEl.hidden=true;detailEl.hidden=false;composeEl.hidden=true;footerEl.hidden=false;backEl.classList.add('visible');titleEl.textContent='任务详情';screenEl.classList.add('detail');viewportEl.scrollTop=0;}
+function showChat(){detailEl.hidden=true;chatEl.hidden=false;composeEl.hidden=false;footerEl.hidden=true;backEl.classList.remove('visible');titleEl.textContent='项目协作群';screenEl.classList.remove('detail');viewportEl.scrollTop=0;}
+</script>
+</body>
+</html>

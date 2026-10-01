@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../theme/dunes_theme.dart';
+
 /// 在 Web / 桌面宽屏下，将 App 约束为手机宽度并居中展示，便于移动端 UI 开发预览。
 class MobileViewportShell extends StatelessWidget {
   const MobileViewportShell({super.key, required this.child});
@@ -25,9 +27,11 @@ class MobileViewportShell extends StatelessWidget {
     final mediaQuery = MediaQuery.of(context);
     if (!shouldConstrain(context)) return child;
 
+    final palette =
+        Theme.of(context).extension<DunesPalette>() ?? DunesPalette.day;
     final height = mediaQuery.size.height;
     return ColoredBox(
-      color: const Color(0xFF14120F),
+      color: palette.page,
       child: Center(
         child: SizedBox(
           width: phoneWidth,

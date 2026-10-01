@@ -52,7 +52,8 @@ class DunesApp extends StatelessWidget {
           builder: (context, _) {
             final scale = AppTextScaleController.instance.scale;
             final media = MediaQuery.of(context);
-            final mobile = !kIsWeb &&
+            final mobile =
+                !kIsWeb &&
                 (defaultTargetPlatform == TargetPlatform.iOS ||
                     defaultTargetPlatform == TargetPlatform.android);
             if (mobile) unawaited(AppEggThemeController.instance.load());
@@ -62,6 +63,23 @@ class DunesApp extends StatelessWidget {
             if (mobile) {
               wrapped = Theme(
                 data: AppEggThemeController.instance.theme(DunesTheme.light()),
+                child: wrapped,
+              );
+              final night = AppEggThemeController.instance.isNight;
+              final palette = night ? DunesPalette.night : DunesPalette.day;
+              wrapped = AnnotatedRegion<SystemUiOverlayStyle>(
+                value: SystemUiOverlayStyle(
+                  statusBarColor: Colors.transparent,
+                  statusBarIconBrightness: night
+                      ? Brightness.light
+                      : Brightness.dark,
+                  systemNavigationBarColor: palette.app,
+                  systemNavigationBarIconBrightness: night
+                      ? Brightness.light
+                      : Brightness.dark,
+                  systemStatusBarContrastEnforced: false,
+                  systemNavigationBarContrastEnforced: false,
+                ),
                 child: wrapped,
               );
             }

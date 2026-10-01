@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../../core/theme/dunes_theme.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -51,18 +52,18 @@ class ImEggEffect {
   List<String> get particles =>
       customParticles ??
       switch (kind) {
-        ImEggEffectKind.birthday => const ['🎂', '🍰', '🧁', '🎂', '🍰'],
-        ImEggEffectKind.nationalDay => const ['🇨🇳', '🎆', '✨', '🇨🇳', '🎉'],
-        ImEggEffectKind.redEnvelope => const ['🧧', '✨', '🧧', '💰'],
-        ImEggEffectKind.fireworks => const ['🎆', '🎉', '✨', '🎊'],
-        ImEggEffectKind.moonFestival => const ['🌕', '🐇', '🥮', '✨'],
-        ImEggEffectKind.snow => const ['❄️', '⭐', '🎄', '❄️'],
-        ImEggEffectKind.gratitude => const ['💜', '✨', '💫', '🫶'],
-        ImEggEffectKind.graduation => const ['🎓', '🎉', '✨', '🎊'],
-        ImEggEffectKind.welcome => const ['👋', '✨', '💫', '🟣'],
-        ImEggEffectKind.recovery => const ['🌱', '🌼', '💚', '✨'],
-        ImEggEffectKind.weekend => const ['🌈', '🎉', '✨', '🌼'],
-        ImEggEffectKind.custom => const ['✨', '🎉'],
+        ImEggEffectKind.birthday => const ['🎂'],
+        ImEggEffectKind.nationalDay => const ['🇨🇳'],
+        ImEggEffectKind.redEnvelope => const ['🧧'],
+        ImEggEffectKind.fireworks => const ['🎆'],
+        ImEggEffectKind.moonFestival => const ['🌕', '🐇', '🥮'],
+        ImEggEffectKind.snow => const ['❄️'],
+        ImEggEffectKind.gratitude => const ['💜'],
+        ImEggEffectKind.graduation => const ['🎓'],
+        ImEggEffectKind.welcome => const ['👋'],
+        ImEggEffectKind.recovery => const ['🌱'],
+        ImEggEffectKind.weekend => const ['🌈'],
+        ImEggEffectKind.custom => const ['✨'],
       };
 
   int get particleCount => customParticleCount ?? (isBirthday ? 56 : 38);
@@ -409,10 +410,40 @@ class ImEggSettings {
     if (prefs.getBool(key) == true || !context.mounted) return;
     unawaited(prefs.setBool(key, true));
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      const SnackBar(
+      SnackBar(
         behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 3),
-        content: Text('早上好，今天也从容一点 ✨'),
+        duration: const Duration(seconds: 3),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        padding: EdgeInsets.zero,
+        content: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF9F6FF),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE8DFFA)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x1A49316D),
+                blurRadius: 16,
+                offset: Offset(0, 5),
+              ),
+            ],
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.wb_sunny_rounded, color: Color(0xFF8063D8)),
+              SizedBox(width: 10),
+              Text(
+                '早上好，今天也从容一点',
+                style: TextStyle(
+                  color: Color(0xFF49316D),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -589,82 +620,92 @@ void showAppHolidayWelcome(
 }) {
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
   if (overlay == null) return;
-  final isNationalDay = greeting.contains('国庆') || icon == '🇨🇳';
-  final decorations = isNationalDay
-      ? const [
-          (0.12, 0.16, '🇨🇳'),
-          (0.82, 0.14, '🎆'),
-          (0.2, 0.78, '🇨🇳'),
-          (0.76, 0.82, '✨'),
-          (0.5, 0.1, '🎇'),
-          (0.9, 0.55, '🇨🇳'),
-        ]
-      : const [
-          (0.12, 0.16, '✨'),
-          (0.82, 0.14, '🌸'),
-          (0.2, 0.78, '🎉'),
-          (0.76, 0.82, '💜'),
-          (0.5, 0.1, '🌟'),
-          (0.9, 0.55, '🎊'),
-        ];
   _holidayOverlayTimer?.cancel();
   _activeHolidayOverlay?.remove();
   late final OverlayEntry entry;
+  void dismiss() {
+    if (!identical(_activeHolidayOverlay, entry)) return;
+    entry.remove();
+    _activeHolidayOverlay = null;
+    _holidayOverlayTimer?.cancel();
+    _holidayOverlayTimer = null;
+  }
+
   entry = OverlayEntry(
     builder: (_) => Positioned.fill(
       child: Material(
-        color: const Color(0xF3FCF7FF),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            if (identical(_activeHolidayOverlay, entry)) {
-              entry.remove();
-              _activeHolidayOverlay = null;
-              _holidayOverlayTimer?.cancel();
-              _holidayOverlayTimer = null;
-            }
-          },
-          child: Stack(
-            children: [
-              for (final item in decorations)
-                Positioned(
-                  left: MediaQuery.sizeOf(context).width * item.$1,
-                  top: MediaQuery.sizeOf(context).height * item.$2,
-                  child: Text(item.$3, style: const TextStyle(fontSize: 32)),
-                ),
-              Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(icon, style: const TextStyle(fontSize: 58)),
-                    const SizedBox(height: 18),
-                    Text(
-                      greeting,
-                      style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF49316D),
+        color: Colors.transparent,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: dismiss,
+              ),
+            ),
+            Center(
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: GestureDetector(
+                    onTap: dismiss,
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 340),
+                      padding: const EdgeInsets.fromLTRB(26, 24, 26, 20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFDFCFBFF),
+                        borderRadius: BorderRadius.circular(26),
+                        border: Border.all(color: const Color(0xFFE9E0F4)),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x3349316D),
+                            blurRadius: 28,
+                            offset: Offset(0, 12),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(icon, style: const TextStyle(fontSize: 64)),
+                          const SizedBox(height: 14),
+                          Text(
+                            greeting,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 25,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF49316D),
+                            ),
+                          ),
+                          if (message.trim().isNotEmpty) ...[
+                            const SizedBox(height: 9),
+                            Text(
+                              message,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                height: 1.5,
+                                color: Color(0xFF796A8D),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 20),
+                          const Text(
+                            '轻触任意位置继续',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF9A8DAA),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      message,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        color: Color(0xFF796A8D),
-                      ),
-                    ),
-                    const SizedBox(height: 36),
-                    const Text(
-                      '轻触继续',
-                      style: TextStyle(fontSize: 12, color: Color(0xFF9A8DAA)),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     ),
@@ -712,6 +753,8 @@ class AppEggThemeController {
   bool? _lastNightTheme;
   bool _loaded = false;
 
+  bool get isNight => ImEggSettings.instance.isNightTheme;
+
   Future<void> load() async {
     if (_loaded) return;
     _loaded = true;
@@ -743,27 +786,7 @@ class AppEggThemeController {
 
   ThemeData theme(ThemeData light) {
     if (!ImEggSettings.instance.isNightTheme) return light;
-    final scheme =
-        ColorScheme.fromSeed(
-          seedColor: const Color(0xFF9B7AF0),
-          brightness: Brightness.dark,
-          surface: const Color(0xFF17151D),
-        ).copyWith(
-          primary: const Color(0xFFB69BFF),
-          secondary: const Color(0xFFD2C2FF),
-          surface: const Color(0xFF17151D),
-        );
-    return ThemeData.dark(useMaterial3: true).copyWith(
-      colorScheme: scheme,
-      scaffoldBackgroundColor: const Color(0xFF111015),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFF17151D),
-        foregroundColor: Color(0xFFF5F0FF),
-        surfaceTintColor: Colors.transparent,
-      ),
-      cardColor: const Color(0xFF201D27),
-      dividerColor: const Color(0xFF37323F),
-    );
+    return DunesTheme.dark();
   }
 }
 
@@ -954,9 +977,6 @@ class _ImCelebrationRainState extends State<_ImCelebrationRain>
                 return Stack(
                   clipBehavior: Clip.hardEdge,
                   children: <Widget>[
-                    Positioned.fill(
-                      child: ColoredBox(color: widget.effect.washColor),
-                    ),
                     for (var i = 0; i < _particles.length; i++)
                       _buildParticle(i, width, height),
                   ],
@@ -1014,19 +1034,39 @@ class _ImCelebrationRainState extends State<_ImCelebrationRain>
       top: y,
       child: Opacity(
         opacity: opacity,
-        child: Transform.rotate(
-          angle: _reducedMotion ? 0 : progress * math.pi * 2 + particle.phase,
+        child: Transform(
+          alignment: Alignment.center,
+          transform: Matrix4.identity()
+            ..setEntry(3, 2, 0.0012)
+            ..rotateY(
+              _reducedMotion
+                  ? 0
+                  : math.sin(progress * math.pi * 2 + particle.phase) * .28,
+            )
+            ..rotateZ(
+              _reducedMotion ? 0 : progress * math.pi * 2 + particle.phase,
+            ),
           child: Text(
             particle.emoji,
             textScaler: TextScaler.noScaling,
             style: TextStyle(
               fontSize: particle.size,
               height: 1,
-              shadows: const <Shadow>[
+              shadows: <Shadow>[
                 Shadow(
-                  color: Color(0x30403152),
-                  blurRadius: 8,
-                  offset: Offset(0, 3),
+                  color: const Color(0x50361E51),
+                  blurRadius: 5,
+                  offset: const Offset(2, 4),
+                ),
+                Shadow(
+                  color: widget.effect.washColor.withValues(alpha: .3),
+                  blurRadius: 10,
+                  offset: Offset.zero,
+                ),
+                const Shadow(
+                  color: Color(0x66FFFFFF),
+                  blurRadius: 1,
+                  offset: Offset(-1, -1),
                 ),
               ],
             ),

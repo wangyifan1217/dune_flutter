@@ -277,17 +277,19 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
   /// PC 左侧竖栏。标准标题栏下内容区绘制，不与 macOS 红绿灯重叠。
   Widget _buildSideRail() {
     final settingsTap = widget.onDesktopSettingsTap;
+    final palette =
+        Theme.of(context).extension<DunesPalette>() ?? DunesPalette.day;
     return Container(
       width: kDunesMainSideRailWidth,
-      color: DunesColors.bgApp,
+      color: palette.app,
       child: SafeArea(
         // 保留左右安全区（外接刘海/圆角屏）；顶部由系统标题栏占用，无需再垫。
         top: false,
         bottom: false,
         child: Container(
-          decoration: const BoxDecoration(
-            color: DunesColors.bgApp,
-            border: Border(right: BorderSide(color: DunesColors.borderSoft)),
+          decoration: BoxDecoration(
+            color: palette.app,
+            border: Border(right: BorderSide(color: palette.borderSubtle)),
           ),
           child: Column(
             children: [
@@ -320,12 +322,14 @@ class _DunesMainTabBarState extends State<DunesMainTabBar> {
     bool showRedDot = false,
   }) {
     assert(icon != null || iconBuilder != null);
+    final palette =
+        Theme.of(context).extension<DunesPalette>() ?? DunesPalette.day;
     final active = screen != null && widget.activeScreen == screen;
     final color = active
         ? DunesColors.brandPurple
         : _isVertical
-        ? DunesColors.text3
-        : const Color(0xFF687087);
+        ? palette.textMuted
+        : palette.textSecondary;
     final tabIcon = iconBuilder != null
         ? SizedBox(width: 24, height: 24, child: iconBuilder(color))
         : Icon(icon, size: _isVertical ? 24 : 23, color: color);
@@ -460,13 +464,15 @@ class _UnreadDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette =
+        Theme.of(context).extension<DunesPalette>() ?? DunesPalette.day;
     return Container(
       width: 9,
       height: 9,
       decoration: BoxDecoration(
         color: DunesColors.coral,
         shape: BoxShape.circle,
-        border: Border.all(color: DunesColors.bgApp, width: 2),
+        border: Border.all(color: palette.app, width: 2),
       ),
     );
   }

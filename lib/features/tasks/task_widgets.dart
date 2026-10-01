@@ -1148,8 +1148,8 @@ class _TaskInfoItem extends StatelessWidget {
   }
 }
 
-MenuStyle get kTaskMenuStyle => MenuStyle(
-  backgroundColor: const WidgetStatePropertyAll(Colors.white),
+MenuStyle _taskMenuStyle(DunesPalette palette) => MenuStyle(
+  backgroundColor: WidgetStatePropertyAll(palette.surface),
   elevation: const WidgetStatePropertyAll(8),
   shadowColor: WidgetStatePropertyAll(Colors.black.withValues(alpha: 0.12)),
   shape: WidgetStatePropertyAll(
@@ -1158,8 +1158,11 @@ MenuStyle get kTaskMenuStyle => MenuStyle(
   padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
 );
 
+MenuStyle get kTaskMenuStyle => _taskMenuStyle(DunesPalette.day);
+
 ThemeData taskThemeData(BuildContext context) {
   final base = Theme.of(context);
+  final palette = base.extension<DunesPalette>() ?? DunesPalette.day;
   final colorScheme = base.colorScheme.copyWith(
     primary: kTaskPurple,
     onPrimary: Colors.white,
@@ -1216,24 +1219,26 @@ ThemeData taskThemeData(BuildContext context) {
     chipTheme: base.chipTheme.copyWith(
       selectedColor: kTaskPurple.withValues(alpha: 0.14),
       checkmarkColor: kTaskPurple,
-      labelStyle: const TextStyle(color: DunesColors.text2),
+      labelStyle: TextStyle(color: palette.textSecondary),
       secondaryLabelStyle: const TextStyle(
         color: kTaskPurple,
         fontWeight: FontWeight.w600,
       ),
-      side: const BorderSide(color: Color(0xFFE8EAED)),
+      side: BorderSide(color: palette.borderSubtle),
     ),
     listTileTheme: ListTileThemeData(
       selectedColor: kTaskPurple,
       selectedTileColor: kTaskPurple.withValues(alpha: 0.08),
-      iconColor: DunesColors.text2,
+      iconColor: palette.textSecondary,
     ),
     popupMenuTheme: PopupMenuThemeData(
-      color: Colors.white,
-      surfaceTintColor: Colors.white,
+      color: palette.surface,
+      surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
-    dropdownMenuTheme: DropdownMenuThemeData(menuStyle: kTaskMenuStyle),
+    dropdownMenuTheme: DropdownMenuThemeData(
+      menuStyle: _taskMenuStyle(palette),
+    ),
     datePickerTheme: DatePickerThemeData(
       backgroundColor: Colors.white,
       headerBackgroundColor: kTaskPurple,
@@ -1248,8 +1253,8 @@ ThemeData taskThemeData(BuildContext context) {
       }),
       dayForegroundColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) return Colors.white;
-        if (states.contains(WidgetState.disabled)) return DunesColors.text3;
-        return DunesColors.text;
+        if (states.contains(WidgetState.disabled)) return palette.textMuted;
+        return palette.text;
       }),
       todayForegroundColor: const WidgetStatePropertyAll(kTaskPurple),
       todayBackgroundColor: WidgetStatePropertyAll(
@@ -1382,18 +1387,20 @@ class TaskDropdownField<T> extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        final palette =
+            Theme.of(context).extension<DunesPalette>() ?? DunesPalette.day;
         final menuWidth = constraints.maxWidth.isFinite
             ? constraints.maxWidth
             : 220.0;
         return MenuAnchor(
           alignmentOffset: const Offset(0, 6),
-          style: kTaskMenuStyle,
+          style: _taskMenuStyle(palette),
           builder: (context, controller, child) {
             final open = controller.isOpen;
             return Material(
               color: open
                   ? kTaskPurple.withValues(alpha: 0.08)
-                  : const Color(0xFFF5F6F8),
+                  : palette.surfaceRaised,
               borderRadius: BorderRadius.circular(10),
               child: InkWell(
                 borderRadius: BorderRadius.circular(10),
@@ -1511,15 +1518,17 @@ class TaskFilterChipDropdown<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette =
+        Theme.of(context).extension<DunesPalette>() ?? DunesPalette.day;
     return MenuAnchor(
       alignmentOffset: const Offset(0, 6),
-      style: kTaskMenuStyle,
+      style: _taskMenuStyle(palette),
       builder: (context, controller, child) {
         final open = controller.isOpen;
         return Material(
           color: open
               ? kTaskPurple.withValues(alpha: 0.08)
-              : const Color(0xFFF5F6F8),
+              : palette.surfaceRaised,
           borderRadius: BorderRadius.circular(10),
           child: InkWell(
             borderRadius: BorderRadius.circular(10),

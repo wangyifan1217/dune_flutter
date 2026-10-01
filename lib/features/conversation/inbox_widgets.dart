@@ -1,4 +1,3 @@
-import 'package:characters/characters.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -51,7 +50,7 @@ class ChatInboxHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final showStatusBadge = selfImStatus.showsBadge;
     return Container(
-      color: const Color(0xFFF5F5F5),
+      color: Colors.transparent,
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
       child: SizedBox(
         height: showStatusBadge ? 52 : 40,

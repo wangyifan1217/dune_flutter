@@ -12,6 +12,7 @@ import 'core/theme/dunes_theme.dart';
 import 'core/widgets/app_watermark.dart';
 import 'features/chat/chat_image_preview_window_stub.dart'
     if (dart.library.io) 'features/chat/chat_image_preview_window.dart';
+import 'features/chat/im_celebration.dart';
 import 'features/desktop/desktop_esc_minimize.dart';
 import 'features/desktop/windows_desktop_tray.dart';
 import 'features/push/push_service.dart';
@@ -44,13 +45,26 @@ class DunesApp extends StatelessWidget {
       supportedLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
       builder: (context, child) {
         return ListenableBuilder(
-          listenable: AppTextScaleController.instance,
+          listenable: Listenable.merge([
+            AppTextScaleController.instance,
+            AppEggThemeController.instance.revision,
+          ]),
           builder: (context, _) {
             final scale = AppTextScaleController.instance.scale;
             final media = MediaQuery.of(context);
+            final mobile = !kIsWeb &&
+                (defaultTargetPlatform == TargetPlatform.iOS ||
+                    defaultTargetPlatform == TargetPlatform.android);
+            if (mobile) unawaited(AppEggThemeController.instance.load());
             Widget wrapped = MobileViewportShell(
               child: AppWatermark(child: child ?? const SizedBox.shrink()),
             );
+            if (mobile) {
+              wrapped = Theme(
+                data: AppEggThemeController.instance.theme(DunesTheme.light()),
+                child: wrapped,
+              );
+            }
             if (isDesktopCommOnly) {
               wrapped = DesktopEscMinimize(child: wrapped);
               // 托盘 / 最小化 / Cmd+H / 切桌面：停动画。失焦不冻，避免双屏切窗看起来卡死。

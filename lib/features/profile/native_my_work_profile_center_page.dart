@@ -18,6 +18,7 @@ import '../conversation/conversation_picker_sheet.dart';
 import '../conversation/conversation_service.dart';
 import '../conversation/inbox_hidden_storage.dart';
 import '../conversation/notification_service.dart';
+import '../chat/im_celebration.dart';
 import '../kb/native_kb_models.dart';
 import '../kb/native_kb_service.dart';
 import '../meeting/meeting_live_controller.dart';
@@ -848,6 +849,18 @@ class _NativeMyWorkProfileCenterPageState
                   _openTextScalePicker();
                 },
               ),
+              if (!isDesktopCommOnly) ...[
+                _buildSettingTile(
+                  icon: Icons.dark_mode_outlined,
+                  iconColor: const Color(0xFF6552B8),
+                  title: '日夜主题',
+                  subtitle: '自动切换，或临时选择日间 / 夜间',
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _openEggThemePicker();
+                  },
+                ),
+              ],
               _buildSettingTile(
                 icon: Icons.history_rounded,
                 iconColor: const Color(0xFF3880FF),
@@ -883,6 +896,51 @@ class _NativeMyWorkProfileCenterPageState
                   },
                 ),
               ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openEggThemePicker() {
+    final controller = AppEggThemeController.instance;
+    final canOverride = ImEggSettings.instance.manualThemeOverrideEnabled;
+    final options = <(String, String, IconData)>[
+      ('auto', '跟随自动时段', Icons.auto_mode_rounded),
+      if (canOverride) ...[
+        ('day', '日间模式', Icons.light_mode_rounded),
+        ('night', '夜间模式', Icons.dark_mode_rounded),
+      ],
+    ];
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('APP 外观', style: DunesTypography.sans(fontSize: 17, fontWeight: FontWeight.w700, color: const Color(0xFF37274C))),
+              const SizedBox(height: 8),
+              Text(canOverride ? '仅影响 iOS / Android APP。自动模式按管理员设置的本地时段切换。' : '仅影响 iOS / Android APP；手动切换由管理员关闭。', style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3)),
+              const SizedBox(height: 12),
+              for (final option in options)
+                ValueListenableBuilder<String>(
+                  valueListenable: controller.manualOverride,
+                  builder: (context, selected, _) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(option.$3, color: const Color(0xFF7045B2)),
+                    title: Text(option.$2),
+                    trailing: selected == option.$1 ? const Icon(Icons.check_circle_rounded, color: Color(0xFF7045B2)) : null,
+                    onTap: () async {
+                      await controller.setOverride(option.$1);
+                      if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+                    },
+                  ),
+                ),
             ],
           ),
         ),
@@ -1479,6 +1537,17 @@ class _NativeMyWorkProfileCenterPageState
                                   fallbackText: avatarText,
                                 ),
                               ),
+                              if (ImEggSettings.instance.seasonalDecoration.isNotEmpty)
+                                Positioned(
+                                  right: -3,
+                                  top: -7,
+                                  child: IgnorePointer(
+                                    child: Text(
+                                      ImEggSettings.instance.seasonalDecoration,
+                                      style: const TextStyle(fontSize: 18, height: 1),
+                                    ),
+                                  ),
+                                ),
                               Positioned(
                                 right: -2,
                                 bottom: -2,

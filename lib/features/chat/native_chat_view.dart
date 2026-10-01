@@ -62,6 +62,7 @@ import '../qianji/native_qianji_daily_report_supervise_page.dart';
 import '../xflow/approval_picker_sheet.dart';
 import '../xflow/xflow_detail_logic.dart';
 import 'chat_emoji_gif_panel.dart';
+import 'im_celebration.dart';
 import 'chat_foreground_sync.dart';
 import 'desktop_composer_focus.dart';
 import 'chat_image_batch_preview.dart';
@@ -555,6 +556,7 @@ class _NativeChatViewState extends State<NativeChatView>
     ChatForegroundSync.addListener(_onChatForegroundResumed);
     ChatForegroundSync.addPauseListener(_onChatForegroundPaused);
     _service = ConversationService(session: widget.session);
+    if (_supportsMobileEggs) unawaited(_ensureEggSettings());
     ChatFileUploadCoordinator.instance.addListener(_onFileUploadUpdate);
     _realtime = ConversationRealtimeHub.instance.of(widget.session);
     _scrollController.addListener(_onScroll);
@@ -1516,6 +1518,7 @@ class _NativeChatViewState extends State<NativeChatView>
       if (_isPrivate && msg.senderUserId != widget.session.userId) {
         unawaited(_refreshPeerReadFromServer());
       }
+      _maybePlayIncomingEgg(msg);
       return true;
     }
     if (stickBottom) {
@@ -1531,7 +1534,112 @@ class _NativeChatViewState extends State<NativeChatView>
     if (_isPrivate && msg.senderUserId != widget.session.userId) {
       unawaited(_refreshPeerReadFromServer());
     }
+    _maybePlayIncomingEgg(msg);
     return true;
+  }
+
+  Future<void> _maybePlayIncomingEgg(NativeChatMessage message) async {
+    if (!_supportsMobileEggs ||
+        message.senderUserId == widget.session.userId ||
+        message.kind.toUpperCase() != 'TEXT' ||
+        !_canPlayChatEffect) {
+      return;
+    }
+    final effectOverlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (effectOverlay == null) return;
+    await _ensureEggSettings();
+    if (!ImEggSettings.instance.activeReceiverEnabled) return;
+    final effect = matchImEggEffect(message.bodyText);
+    if (effect == null) return;
+    final conversationId = _conversation?.id ?? 0;
+    if (!ImEggPlaybackStore.allowEffect(
+      userId: widget.session.userId,
+      conversationId: conversationId,
+      maxPer10Minutes: ImEggSettings.instance.maxPer10Minutes,
+    )) {
+      return;
+    }
+    final shouldPlay = await ImEggPlaybackStore.markPlayed(
+      userId: widget.session.userId,
+      conversationId: conversationId,
+      messageId: message.id,
+    );
+    if (!shouldPlay || _conversation?.id != conversationId) {
+      return;
+    }
+    if (!effectOverlay.mounted || !_canPlayChatEffect) return;
+    showImEggEffectOnOverlay(effectOverlay, effect, seed: message.id);
+  }
+
+  bool get _canPlayChatEffect =>
+      mounted &&
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
+      TickerMode.valuesOf(context).enabled &&
+      (ModalRoute.of(context)?.isCurrent ?? true);
+
+  bool get _supportsMobileEggs =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.android);
+
+  Future<void> _ensureEggSettings() => ImEggSettings.instance.ensureLoaded(
+    apiBase: widget.session.apiBase,
+    token: widget.session.token,
+  );
+
+  Future<void> _replayLatestUnreadEgg(
+    List<NativeChatMessage> messages,
+    int conversationId,
+  ) async {
+    if (!_supportsMobileEggs) return;
+    final effectOverlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (effectOverlay == null) return;
+    await _ensureEggSettings();
+    if (!ImEggSettings.instance.replayLatestOnOpen ||
+        !ImEggSettings.instance.activeReceiverEnabled) {
+      return;
+    }
+    if (_sessionUnreadCount <= 0 || _firstUnreadMessageId <= 0) return;
+    final candidates = messages
+        .where(
+          (message) =>
+              message.id >= _firstUnreadMessageId &&
+              message.senderUserId != widget.session.userId &&
+              message.kind.toUpperCase() == 'TEXT' &&
+              matchImEggEffect(message.bodyText) != null,
+        )
+        .toList(growable: false);
+    if (candidates.isEmpty) return;
+    final latest = candidates.last;
+    final lastPlayed = await ImEggPlaybackStore.lastPlayedId(
+      widget.session.userId,
+      conversationId,
+    );
+    if (latest.id <= lastPlayed ||
+        !mounted ||
+        _conversation?.id != conversationId) {
+      return;
+    }
+    if (!_canPlayChatEffect ||
+        !ImEggPlaybackStore.allowEffect(
+          userId: widget.session.userId,
+          conversationId: conversationId,
+          maxPer10Minutes: ImEggSettings.instance.maxPer10Minutes,
+        )) {
+      return;
+    }
+    final effect = matchImEggEffect(latest.bodyText);
+    if (effect == null) return;
+    final shouldPlay = await ImEggPlaybackStore.markPlayed(
+      userId: widget.session.userId,
+      conversationId: conversationId,
+      messageId: latest.id,
+    );
+    if (!shouldPlay || _conversation?.id != conversationId) {
+      return;
+    }
+    if (!effectOverlay.mounted || !_canPlayChatEffect) return;
+    showImEggEffectOnOverlay(effectOverlay, effect, seed: latest.id);
   }
 
   bool _patchRecalledMessage(ConversationRealtimeEvent event) {
@@ -2436,6 +2544,13 @@ class _NativeChatViewState extends State<NativeChatView>
               )
             : conv;
         _captureSessionUnread(unreadSource, nextMessages);
+      }
+      if (!locating) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _conversation?.id == conv.id) {
+            unawaited(_replayLatestUnreadEgg(nextMessages, conv.id));
+          }
+        });
       }
       final stickLatest = focusId <= 0 && _shouldStickToLatestOnLoad;
       _forceLatestMode = false;
@@ -3546,6 +3661,9 @@ class _NativeChatViewState extends State<NativeChatView>
   }
 
   Future<void> _send() async {
+    final effectOverlay = _supportsMobileEggs
+        ? Overlay.maybeOf(context, rootOverlay: true)
+        : null;
     if (_desktopComposerAttachments.isNotEmpty) {
       await _sendDesktopStagedBundle();
       return;
@@ -3597,6 +3715,20 @@ class _NativeChatViewState extends State<NativeChatView>
         locating: locating,
       )) {
         await _load(silent: true);
+      }
+      if (_supportsMobileEggs) await _ensureEggSettings();
+      final sentEffect = _supportsMobileEggs ? matchImEggEffect(text) : null;
+      final activeConversationId = conv.id;
+      if (sentEffect != null &&
+          ImEggSettings.instance.senderEnabled &&
+          _canPlayChatEffect &&
+          effectOverlay?.mounted == true &&
+          ImEggPlaybackStore.allowEffect(
+            userId: widget.session.userId,
+            conversationId: activeConversationId,
+            maxPer10Minutes: ImEggSettings.instance.maxPer10Minutes,
+          )) {
+        showImEggEffectOnOverlay(effectOverlay!, sentEffect, seed: sent?.id ?? 0);
       }
       if (mounted) {
         setState(_clearPendingNewMessages);

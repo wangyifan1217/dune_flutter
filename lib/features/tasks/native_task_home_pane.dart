@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session.dart';
+import '../chat/im_celebration.dart';
 import '../shell/dunes_toast.dart';
 import 'native_task_action_page.dart';
 import 'native_task_daily_report_page.dart';
@@ -1922,6 +1923,7 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
       });
       if (!mounted) return;
       showDunesCenterToast(context, '已办结');
+      maybeShowTaskCompletionEffect(context, widget.session.userId);
       await _reload();
     } catch (e) {
       if (mounted) showDunesCenterToast(context, '$e');

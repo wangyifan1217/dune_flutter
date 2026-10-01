@@ -7,9 +7,9 @@ import 'package:flutter/services.dart';
 import '../../core/analytics/usage_analytics.dart';
 import '../../core/navigation/navigation_controller.dart';
 import '../../core/platform/desktop_features.dart';
-import '../../core/theme/dunes_theme.dart';
 import '../auth/auth_session_guard.dart';
 import '../auth/auth_session.dart';
+import '../chat/im_celebration.dart';
 import '../native/native_screen_host.dart';
 import '../update/app_update_top_banner.dart';
 
@@ -41,6 +41,28 @@ class _DunesShellState extends State<DunesShell> {
     super.initState();
     _navigation = DunesNavigationController(initialScreen: widget.initialScreen);
     _bindUsage();
+    if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_startMobileEggs()));
+    }
+  }
+
+  Future<void> _startMobileEggs() async {
+    await AppEggThemeController.instance.load();
+    await ImEggSettings.instance.ensureLoaded(
+      apiBase: widget.session.apiBase,
+      token: widget.session.token,
+    );
+    if (!mounted) return;
+    final holidayShown = await ImEggSettings.instance.maybeShowHolidayWelcome(
+      context,
+      widget.session.userId,
+    );
+    if (!holidayShown && mounted) {
+      await ImEggSettings.instance.maybeShowDailyWelcome(
+        context,
+        widget.session.userId,
+      );
+    }
   }
 
   @override
@@ -79,7 +101,7 @@ class _DunesShellState extends State<DunesShell> {
               }
             },
             child: Scaffold(
-              backgroundColor: DunesColors.bgApp,
+              backgroundColor: Theme.of(context).scaffoldBackgroundColor,
               body: Column(
                 children: [
                   // PC：有新版本时顶部常驻提示，点「稍后」后仍可见。

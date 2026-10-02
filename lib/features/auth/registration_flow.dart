@@ -156,7 +156,11 @@ class _RegistrationFlowPageState extends State<RegistrationFlowPage> {
       controller: controller,
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
-      decoration: authInputDecoration(hintText: hint, errorText: error),
+      decoration: authInputDecoration(
+        context: context,
+        hintText: hint,
+        errorText: error,
+      ),
       onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
       onChanged: (_) {
         if (_error != null) setState(() => _error = null);

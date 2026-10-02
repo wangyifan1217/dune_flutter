@@ -19,7 +19,11 @@ class AuthScaffold extends StatelessWidget {
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
 
     return Scaffold(
-      backgroundColor: authBg,
+      backgroundColor: DunesColors.resolve(
+        context,
+        authBg,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
@@ -149,7 +153,11 @@ class AuthBackButton extends StatelessWidget {
     return IconButton(
       onPressed: onPressed,
       style: IconButton.styleFrom(
-        backgroundColor: authSurface,
+        backgroundColor: DunesColors.resolve(
+          context,
+          authSurface,
+          role: DunesColorRole.surface,
+        ),
         foregroundColor: DunesColors.resolve(context, DunesColors.text),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         side: BorderSide(
@@ -379,7 +387,11 @@ class _AuthCodeBox extends StatelessWidget {
         ? DunesColors.resolve(context, DunesColors.coral)
         : active
         ? DunesColors.resolve(context, authBlue)
-        : DunesColors.resolve(context, const Color(0xFFE8ECF2));
+        : DunesColors.resolve(
+            context,
+            const Color(0xFFE8ECF2),
+            role: DunesColorRole.border,
+          );
     return AnimatedContainer(
       duration: const Duration(milliseconds: 120),
       width: 48,
@@ -431,33 +443,54 @@ final ButtonStyle authPrimaryButtonStyle =
       }),
     );
 
-InputDecoration authInputDecoration({String? hintText, String? errorText}) {
+InputDecoration authInputDecoration({
+  BuildContext? context,
+  String? hintText,
+  String? errorText,
+}) {
+  Color resolve(Color light, DunesColorRole role) =>
+      context == null ? light : DunesColors.resolve(context, light, role: role);
   return InputDecoration(
     hintText: hintText,
     errorText: errorText,
-    hintStyle: DunesTypography.sans(fontSize: 16, color: DunesColors.text3),
+    hintStyle: DunesTypography.sans(
+      fontSize: 16,
+      color: resolve(DunesColors.text3, DunesColorRole.foreground),
+    ),
     filled: true,
-    fillColor: authSurface,
+    fillColor: resolve(authSurface, DunesColorRole.surface),
     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: Color(0xFFE8ECF2)),
+      borderSide: BorderSide(
+        color: resolve(const Color(0xFFE8ECF2), DunesColorRole.border),
+      ),
     ),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: Color(0xFFE8ECF2)),
+      borderSide: BorderSide(
+        color: resolve(const Color(0xFFE8ECF2), DunesColorRole.border),
+      ),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: authBlue, width: 1.5),
+      borderSide: BorderSide(
+        color: resolve(authBlue, DunesColorRole.foreground),
+        width: 1.5,
+      ),
     ),
     errorBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: DunesColors.coral),
+      borderSide: BorderSide(
+        color: resolve(DunesColors.coral, DunesColorRole.foreground),
+      ),
     ),
     focusedErrorBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: DunesColors.coral, width: 1.5),
+      borderSide: BorderSide(
+        color: resolve(DunesColors.coral, DunesColorRole.foreground),
+        width: 1.5,
+      ),
     ),
   );
 }

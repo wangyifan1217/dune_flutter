@@ -19,6 +19,7 @@ import '../conversation/conversation_service.dart';
 import '../conversation/inbox_hidden_storage.dart';
 import '../conversation/notification_service.dart';
 import '../chat/im_celebration.dart';
+import '../chat/app_theme_guide.dart';
 import '../kb/native_kb_models.dart';
 import '../kb/native_kb_service.dart';
 import '../meeting/meeting_live_controller.dart';
@@ -920,7 +921,7 @@ class _NativeMyWorkProfileCenterPageState
                         const Color(0xFFBB7B27),
                       ),
                       title: '节日祝福',
-                      subtitle: '随时重看节日欢迎与祝福',
+                      subtitle: '随时重看当前节日的祝福',
                       onTap: () {
                         Navigator.of(ctx).pop();
                         _openHolidayGreetings();
@@ -1089,113 +1090,21 @@ class _NativeMyWorkProfileCenterPageState
   }
 
   void _openHolidayGreetings() {
-    final settings = ImEggSettings.instance;
-    final current = settings.holidayFor(DateTime.now());
-    final greetings = [...settings.holidayGreetings];
-    greetings.sort((a, b) {
-      final aCurrent = a['date'] == current?['date'];
-      final bCurrent = b['date'] == current?['date'];
-      if (aCurrent != bCurrent) return aCurrent ? -1 : 1;
-      return (a['date'] ?? '').compareTo(b['date'] ?? '');
-    });
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: SizedBox(
-          height: MediaQuery.sizeOf(sheetContext).height * .7,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '节日祝福',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    SizedBox(height: 6),
-                    Text('点选节日即可重看祝福，看过也可以再次打开。'),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: greetings.isEmpty
-                    ? const Center(child: Text('暂无可展示的节日祝福'))
-                    : ListView.builder(
-                        itemCount: greetings.length,
-                        itemBuilder: (ctx, index) {
-                          final greeting = greetings[index];
-                          final today = greeting['date'] == current?['date'];
-                          return ListTile(
-                            leading: const Icon(Icons.celebration_outlined),
-                            title: Text(
-                              '${greeting['name']}${today ? ' · 当前节日' : ''}',
-                            ),
-                            subtitle: Text(greeting['message'] ?? ''),
-                            trailing: const Icon(Icons.chevron_right_rounded),
-                            onTap: () {
-                              Navigator.of(sheetContext).pop();
-                              showAppHolidayWelcome(
-                                context,
-                                greeting['greeting'] ??
-                                    greeting['name'] ??
-                                    '节日快乐',
-                                message: greeting['message'] ?? '',
-                                icon: greeting['icon'] ?? '✨',
-                              );
-                            },
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    final current = ImEggSettings.instance.holidayFor(DateTime.now());
+    if (current == null) {
+      showDunesToast(context, '当前暂无节日祝福');
+      return;
+    }
+    showAppHolidayWelcome(
+      context,
+      current['greeting'] ?? current['name'] ?? '节日快乐',
+      message: current['message'] ?? '',
+      icon: current['icon'] ?? '✨',
     );
   }
 
   void _openEggThemeGuide() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                '日夜显示使用指引',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                ImEggSettings.instance.themeGuide,
-                style: const TextStyle(fontSize: 14, height: 1.7),
-              ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: () {
-                  Navigator.of(sheetContext).pop();
-                  _openEggThemePicker();
-                },
-                child: const Text('去设置日夜主题'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    unawaited(showAppThemeGuide(context));
   }
 
   Widget _buildSettingTile({

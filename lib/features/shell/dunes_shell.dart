@@ -10,6 +10,7 @@ import '../../core/platform/desktop_features.dart';
 import '../auth/auth_session_guard.dart';
 import '../auth/auth_session.dart';
 import '../chat/im_celebration.dart';
+import '../chat/app_theme_guide.dart';
 import '../native/native_screen_host.dart';
 import '../update/app_update_top_banner.dart';
 
@@ -63,6 +64,8 @@ class _DunesShellState extends State<DunesShell> with WidgetsBindingObserver {
         apiBase: widget.session.apiBase,
         token: widget.session.token,
       );
+      if (!mounted) return;
+      await maybeShowFirstAppThemeGuide(context, widget.session.userId);
       if (!mounted) return;
       final holidayShown = await ImEggSettings.instance.maybeShowHolidayWelcome(
         context,

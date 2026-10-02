@@ -154,32 +154,7 @@ class _QuickMeetingButton extends StatelessWidget {
                 height: 30,
                 padding: const EdgeInsets.fromLTRB(4, 0, 10, 0),
                 decoration: BoxDecoration(
-                  color: DunesColors.resolve(
-                    context,
-                    Colors.white,
-                    role: DunesColorRole.surface,
-                  ),
                   borderRadius: BorderRadius.circular(999),
-                  border: Border.all(
-                    color: live
-                        ? DunesColors.resolve(
-                            context,
-                            const Color(0xFFF1C9BC),
-                            role: DunesColorRole.border,
-                          )
-                        : DunesColors.resolve(
-                            context,
-                            const Color(0xFFE4DCF4),
-                            role: DunesColorRole.border,
-                          ),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: fg.withValues(alpha: 0.12),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,

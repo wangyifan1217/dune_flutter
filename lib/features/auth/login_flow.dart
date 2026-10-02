@@ -362,9 +362,13 @@ class _LoginFlowState extends State<LoginFlow> with WidgetsBindingObserver {
       );
     }
     if (_hydrating) {
-      return const Scaffold(
-        backgroundColor: _authBg,
-        body: Center(
+      return Scaffold(
+        backgroundColor: DunesColors.resolve(
+          context,
+          _authBg,
+          role: DunesColorRole.surface,
+        ),
+        body: const Center(
           child: CircularProgressIndicator(strokeWidth: 2, color: _authBlue),
         ),
       );
@@ -501,6 +505,7 @@ class _PhoneStepState extends State<_PhoneStep> {
             ),
             decoration:
                 authInputDecoration(
+                  context: context,
                   hintText: '请输入手机号',
                   errorText: _error,
                 ).copyWith(

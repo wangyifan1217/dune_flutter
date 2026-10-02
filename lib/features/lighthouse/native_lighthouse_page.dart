@@ -29930,7 +29930,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                             t.icon,
                             size: 13,
                             color: isOn
-                                ? t.color
+                                ? DunesColors.resolve(context, t.color)
                                 : DunesColors.resolve(context, LhColors.mute2),
                           ),
                     onTap: () => setState(() {
@@ -37860,8 +37860,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                       )
                     : (isChildRow
                           ? (isRowHovered
-                                ? lighthouseProductL3ChildHoverFill(groupColor)
-                                : lighthouseProductL3ChildFill(groupColor))
+                                ? lighthouseProductL3ChildHoverFill(
+                                    groupColor,
+                                    context: context,
+                                  )
+                                : lighthouseProductL3ChildFill(
+                                    groupColor,
+                                    context: context,
+                                  ))
                           : (isRowHovered
                                 ? Color.alphaBlend(
                                     groupColor.withAlpha(8),
@@ -37892,8 +37898,14 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                 border: Border.all(
                   color: isChildRow
                       ? (isRowHovered
-                            ? lighthouseProductL3ChildHoverBorder(groupColor)
-                            : lighthouseProductL3ChildBorder(groupColor))
+                            ? lighthouseProductL3ChildHoverBorder(
+                                groupColor,
+                                context: context,
+                              )
+                            : lighthouseProductL3ChildBorder(
+                                groupColor,
+                                context: context,
+                              ))
                       : (isTopTenLedgerRow && !isAnyExpanded && !isEquityFocus
                             ? lighthouseRankSkin(
                                 idx,

@@ -120,20 +120,67 @@ List<Map<String, dynamic>> lighthouseProductL3LedgerRows(
 }
 
 /// 细分子卡底：业务线色薄薄铺一层，和一级白卡分开。
-Color lighthouseProductL3ChildFill(Color groupColor) =>
-    Color.alphaBlend(groupColor.withAlpha(22), const Color(0xFFF7F3FC));
+Color lighthouseProductL3ChildFill(Color groupColor, {BuildContext? context}) =>
+    _productL3Blend(
+      groupColor,
+      22,
+      const Color(0xFFF7F3FC),
+      context,
+      DunesColorRole.surface,
+    );
 
 /// 鼠标经过细分子卡时再加一层业务色，给出克制但清楚的定位反馈。
-Color lighthouseProductL3ChildHoverFill(Color groupColor) =>
-    Color.alphaBlend(groupColor.withAlpha(38), const Color(0xFFF7F3FC));
+Color lighthouseProductL3ChildHoverFill(
+  Color groupColor, {
+  BuildContext? context,
+}) => _productL3Blend(
+  groupColor,
+  38,
+  const Color(0xFFF7F3FC),
+  context,
+  DunesColorRole.surface,
+);
 
 /// 细分子卡描边：比一级 hairline 更饱和，扫一眼能认出是挂下来的。
-Color lighthouseProductL3ChildBorder(Color groupColor) =>
-    Color.alphaBlend(groupColor.withAlpha(110), const Color(0xFFD9D0F0));
+Color lighthouseProductL3ChildBorder(
+  Color groupColor, {
+  BuildContext? context,
+}) => _productL3Blend(
+  groupColor,
+  110,
+  const Color(0xFFD9D0F0),
+  context,
+  DunesColorRole.border,
+);
 
 /// 悬停描边比静止态更清楚，但不做高饱和整圈描边。
-Color lighthouseProductL3ChildHoverBorder(Color groupColor) =>
-    Color.alphaBlend(groupColor.withAlpha(150), const Color(0xFFD9D0F0));
+Color lighthouseProductL3ChildHoverBorder(
+  Color groupColor, {
+  BuildContext? context,
+}) => _productL3Blend(
+  groupColor,
+  150,
+  const Color(0xFFD9D0F0),
+  context,
+  DunesColorRole.border,
+);
+
+Color _productL3Blend(
+  Color groupColor,
+  int alpha,
+  Color base,
+  BuildContext? context,
+  DunesColorRole role,
+) {
+  // 先适配底色再叠业务色，保留细分层级及悬停反馈，避免合成色漏过主题。
+  final themedBase = context == null
+      ? base
+      : DunesColors.resolve(context, base, role: role);
+  final tint = context != null && role == DunesColorRole.border
+      ? DunesColors.resolve(context, groupColor)
+      : groupColor;
+  return Color.alphaBlend(tint.withAlpha(alpha), themedBase);
+}
 
 /// 细分子卡左侧色轨宽度。
 const double lighthouseProductL3ChildRailWidth = 3.5;

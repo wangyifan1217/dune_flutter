@@ -1348,9 +1348,17 @@ ThemeData taskThemeData(BuildContext context) {
       }),
       trackColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
-          return DunesColors.resolve(context, kTaskPurple);
+          return DunesColors.resolve(
+            context,
+            kTaskPurple,
+            role: DunesColorRole.surface,
+          );
         }
-        return DunesColors.resolve(context, const Color(0xFFD1D5DB));
+        return DunesColors.resolve(
+          context,
+          const Color(0xFFD1D5DB),
+          role: DunesColorRole.surface,
+        );
       }),
       trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
     ),

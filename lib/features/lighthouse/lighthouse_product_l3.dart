@@ -193,13 +193,21 @@ class LhProductL3BranchMark extends StatelessWidget {
             colors: [
               Color.lerp(
                 color,
-                DunesColors.resolve(context, Colors.white),
+                DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
                 0.2,
               )!,
               color,
               Color.lerp(
                 color,
-                DunesColors.resolve(context, const Color(0xFF1F2421)),
+                DunesColors.resolve(
+                  context,
+                  const Color(0xFF1F2421),
+                  role: DunesColorRole.surface,
+                ),
                 0.16,
               )!,
             ],
@@ -274,13 +282,21 @@ class LhProductL3ChildShell extends StatelessWidget {
                   colors: [
                     Color.lerp(
                       color,
-                      DunesColors.resolve(context, Colors.white),
+                      DunesColors.resolve(
+                        context,
+                        Colors.white,
+                        role: DunesColorRole.surface,
+                      ),
                       0.18,
                     )!,
                     color,
                     Color.lerp(
                       color,
-                      DunesColors.resolve(context, const Color(0xFF1F2421)),
+                      DunesColors.resolve(
+                        context,
+                        const Color(0xFF1F2421),
+                        role: DunesColorRole.surface,
+                      ),
                       0.12,
                     )!,
                   ],

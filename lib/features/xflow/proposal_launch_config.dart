@@ -165,7 +165,7 @@ class ProposalQuickLaunchCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (item.isPlaceholder) {
-      return _placeholderCell();
+      return _placeholderCell(context);
     }
 
     final badge = item.badge?.trim();
@@ -280,26 +280,43 @@ class ProposalQuickLaunchCell extends StatelessWidget {
     );
   }
 
-  Widget _placeholderCell() {
+  Widget _placeholderCell(BuildContext context) {
     return Container(
       height: 74,
       decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
+        color: DunesColors.resolveNullable(
+          context,
+          DunesColors.bgSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFEFEFEF)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFEFEFEF),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       alignment: Alignment.center,
       child: Container(
         width: 30,
         height: 30,
         decoration: BoxDecoration(
-          color: const Color(0xFFECECEC),
+          color: DunesColors.resolveNullable(
+            context,
+            const Color(0xFFECECEC),
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(
           Icons.widgets_outlined,
           size: 16,
-          color: DunesColors.text3.withValues(alpha: 0.55),
+          color: DunesColors.resolveNullable(
+            context,
+            DunesColors.text3.withValues(alpha: 0.55),
+          ),
         ),
       ),
     );

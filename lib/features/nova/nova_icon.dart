@@ -109,9 +109,21 @@ class _NovaIconSparkleFallback extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            DunesColors.resolve(context, Color(0xFFA78BD9)),
-            DunesColors.resolve(context, Color(0xFF7C62C2)),
-            DunesColors.resolve(context, Color(0xFF5A40A0)),
+            DunesColors.resolve(
+              context,
+              Color(0xFFA78BD9),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFF7C62C2),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFF5A40A0),
+              role: DunesColorRole.surface,
+            ),
           ],
         ),
         borderRadius: BorderRadius.circular(borderRadius),

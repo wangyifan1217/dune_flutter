@@ -365,8 +365,16 @@ class _NovaSideDrawerState extends State<NovaSideDrawer> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                DunesColors.resolve(context, Color(0xFFF9F7FF)),
-                DunesColors.resolve(context, Color(0xFFF0E9FC)),
+                DunesColors.resolve(
+                  context,
+                  Color(0xFFF9F7FF),
+                  role: DunesColorRole.surface,
+                ),
+                DunesColors.resolve(
+                  context,
+                  Color(0xFFF0E9FC),
+                  role: DunesColorRole.surface,
+                ),
               ],
             ),
             borderRadius: BorderRadius.circular(16),

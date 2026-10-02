@@ -1321,18 +1321,42 @@ class _PayrollToolbarChip extends StatelessWidget {
     final Color border;
     if (filled) {
       background = enabled
-          ? DunesColors.resolve(context, _payrollAccent)
-          : DunesColors.resolve(context, _payrollAccent).withValues(alpha: 0.4);
+          ? DunesColors.resolve(
+              context,
+              _payrollAccent,
+              role: DunesColorRole.surface,
+            )
+          : DunesColors.resolve(
+              context,
+              _payrollAccent,
+              role: DunesColorRole.surface,
+            ).withValues(alpha: 0.4);
       foreground = DunesColors.resolve(context, Colors.white);
       border = background;
     } else if (selected) {
-      background = DunesColors.resolve(context, const Color(0xFFF6F0FC));
+      background = DunesColors.resolve(
+        context,
+        const Color(0xFFF6F0FC),
+        role: DunesColorRole.surface,
+      );
       foreground = DunesColors.resolve(context, const Color(0xFF6B46A8));
-      border = DunesColors.resolve(context, const Color(0xFFD2BBE8));
+      border = DunesColors.resolve(
+        context,
+        const Color(0xFFD2BBE8),
+        role: DunesColorRole.border,
+      );
     } else {
-      background = DunesColors.resolve(context, Colors.white);
+      background = DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      );
       foreground = DunesColors.resolve(context, const Color(0xFF5D536B));
-      border = DunesColors.resolve(context, const Color(0xFFE6DCF0));
+      border = DunesColors.resolve(
+        context,
+        const Color(0xFFE6DCF0),
+        role: DunesColorRole.border,
+      );
     }
     return Material(
       color: DunesColors.resolveNullable(

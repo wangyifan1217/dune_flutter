@@ -690,8 +690,16 @@ class _NewChatModeCard extends StatelessWidget {
         ? DunesColors.resolve(context, DunesColors.accentLine)
         : DunesColors.resolve(context, DunesColors.border);
     final iconBg = selected
-        ? DunesColors.resolve(context, DunesColors.accent)
-        : DunesColors.resolve(context, DunesColors.bgSoft);
+        ? DunesColors.resolve(
+            context,
+            DunesColors.accent,
+            role: DunesColorRole.surface,
+          )
+        : DunesColors.resolve(
+            context,
+            DunesColors.bgSoft,
+            role: DunesColorRole.surface,
+          );
     final iconColor = selected
         ? DunesColors.resolve(context, Colors.white)
         : DunesColors.resolve(context, DunesColors.text2);
@@ -708,8 +716,16 @@ class _NewChatModeCard extends StatelessWidget {
             gradient: selected
                 ? LinearGradient(
                     colors: [
-                      DunesColors.resolve(context, DunesColors.accentSoft),
-                      DunesColors.resolve(context, DunesColors.bgApp),
+                      DunesColors.resolve(
+                        context,
+                        DunesColors.accentSoft,
+                        role: DunesColorRole.surface,
+                      ),
+                      DunesColors.resolve(
+                        context,
+                        DunesColors.bgApp,
+                        role: DunesColorRole.surface,
+                      ),
                     ],
                   )
                 : null,
@@ -1004,10 +1020,15 @@ class _NewChatDeptBlockState extends State<_NewChatDeptBlock> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    DunesColors.resolve(context, DunesColors.bgSoft),
+                    DunesColors.resolve(
+                      context,
+                      DunesColors.bgSoft,
+                      role: DunesColorRole.surface,
+                    ),
                     DunesColors.resolve(
                       context,
                       DunesColors.bgApp,
+                      role: DunesColorRole.surface,
                     ).withValues(alpha: 0.2),
                   ],
                 ),

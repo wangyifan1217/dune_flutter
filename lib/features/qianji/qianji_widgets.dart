@@ -12,8 +12,16 @@ class QianjiPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = iterating
-        ? DunesColors.resolve(context, DunesColors.blueSoft)
-        : DunesColors.resolve(context, DunesColors.greenSoft);
+        ? DunesColors.resolve(
+            context,
+            DunesColors.blueSoft,
+            role: DunesColorRole.surface,
+          )
+        : DunesColors.resolve(
+            context,
+            DunesColors.greenSoft,
+            role: DunesColorRole.surface,
+          );
     final fg = iterating
         ? DunesColors.resolve(context, DunesColors.blue)
         : DunesColors.resolve(context, DunesColors.green);
@@ -305,11 +313,20 @@ class QianjiGanttBlock extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                _legend(DunesColors.resolve(context, DunesColors.green), '已完成'),
-                const SizedBox(width: 12),
-                _legend(DunesColors.resolve(context, DunesColors.blue), '进行中'),
+                _legend(
+                  context,
+                  DunesColors.resolve(context, DunesColors.green),
+                  '已完成',
+                ),
                 const SizedBox(width: 12),
                 _legend(
+                  context,
+                  DunesColors.resolve(context, DunesColors.blue),
+                  '进行中',
+                ),
+                const SizedBox(width: 12),
+                _legend(
+                  context,
                   DunesColors.resolve(context, DunesColors.border),
                   '待开始',
                 ),
@@ -451,7 +468,7 @@ class QianjiGanttBlock extends StatelessWidget {
     );
   }
 
-  Widget _legend(Color color, String label) {
+  Widget _legend(BuildContext context, Color color, String label) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -459,14 +476,22 @@ class QianjiGanttBlock extends StatelessWidget {
           width: 10,
           height: 6,
           decoration: BoxDecoration(
-            color: color,
+            color: DunesColors.resolveNullable(
+              context,
+              color,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(2),
           ),
         ),
         const SizedBox(width: 4),
         Text(
           label,
-          style: DunesTypography.sans(fontSize: 10, color: DunesColors.text3),
+          style: DunesTypography.sans(
+            fontSize: 10,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
         ),
       ],
     );

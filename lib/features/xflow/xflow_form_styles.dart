@@ -34,20 +34,52 @@ class XfActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final kind = actionKind ?? '';
-    Color bg = DunesColors.resolve(context, XfProposalUi.cardAlt);
-    Color border = DunesColors.resolve(context, XfProposalUi.line);
+    Color bg = DunesColors.resolve(
+      context,
+      XfProposalUi.cardAlt,
+      role: DunesColorRole.surface,
+    );
+    Color border = DunesColors.resolve(
+      context,
+      XfProposalUi.line,
+      role: DunesColorRole.border,
+    );
     Color fg = DunesColors.resolve(context, XfProposalUi.ink);
     if (kind == 'push-colleague') {
-      bg = DunesColors.resolve(context, XfProposalUi.coral);
-      border = DunesColors.resolve(context, XfProposalUi.coral);
+      bg = DunesColors.resolve(
+        context,
+        XfProposalUi.coral,
+        role: DunesColorRole.surface,
+      );
+      border = DunesColors.resolve(
+        context,
+        XfProposalUi.coral,
+        role: DunesColorRole.border,
+      );
       fg = DunesColors.resolve(context, Colors.white);
     } else if (kind == 'clear-form') {
-      bg = DunesColors.resolve(context, Colors.white);
-      border = DunesColors.resolve(context, XfProposalUi.coral);
+      bg = DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      );
+      border = DunesColors.resolve(
+        context,
+        XfProposalUi.coral,
+        role: DunesColorRole.border,
+      );
       fg = DunesColors.resolve(context, XfProposalUi.coral);
     } else if (kind == 'ai-summary' || kind == 'ai-policy') {
-      bg = DunesColors.resolve(context, XfProposalUi.coralSoft);
-      border = DunesColors.resolve(context, const Color(0xFFFFD6C8));
+      bg = DunesColors.resolve(
+        context,
+        XfProposalUi.coralSoft,
+        role: DunesColorRole.surface,
+      );
+      border = DunesColors.resolve(
+        context,
+        const Color(0xFFFFD6C8),
+        role: DunesColorRole.border,
+      );
       fg = DunesColors.resolve(context, XfProposalUi.coral);
     }
     return Material(

@@ -50,11 +50,11 @@ class FundSecondmentKanban extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildHero(netting),
+                _buildHero(context, netting),
                 const SizedBox(height: 10),
                 _RepayProgressBar(ratio: summary.repaidRatio),
                 const SizedBox(height: 10),
-                _buildStatChips(),
+                _buildStatChips(context),
                 if (summary.overdueCount > 0) ...[
                   const SizedBox(height: 8),
                   _AlertStrip(
@@ -76,7 +76,7 @@ class FundSecondmentKanban extends StatelessWidget {
                     (summary.routes.isNotEmpty ||
                         summary.lenders.isNotEmpty)) ...[
                   const SizedBox(height: 12),
-                  _buildBreakdown(wide, netting),
+                  _buildBreakdown(context, wide, netting),
                 ],
               ],
             );
@@ -86,7 +86,7 @@ class FundSecondmentKanban extends StatelessWidget {
     );
   }
 
-  Widget _buildHero(FundSecondmentNetting? netting) {
+  Widget _buildHero(BuildContext context, FundSecondmentNetting? netting) {
     final remaining = summary.remainingTotalWan;
     final allClear = summary.count > 0 && remaining <= 0;
     final title = allClear ? '目前没有未收回的钱' : '待收回';
@@ -96,10 +96,10 @@ class FundSecondmentKanban extends StatelessWidget {
         ? '还没有审批通过的借调'
         : '借出去还没还回来 · 一共 ${formatFundSecondmentWan(summary.borrowTotalWan)}，已收回 ${formatFundSecondmentWan(summary.repaidTotalWan)}';
     final amountColor = allClear
-        ? DunesColors.green
+        ? DunesColors.resolve(context, DunesColors.green)
         : remaining > 0
-        ? DunesColors.coral
-        : DunesColors.text3;
+        ? DunesColors.resolve(context, DunesColors.coral)
+        : DunesColors.resolve(context, DunesColors.text3);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -109,30 +109,39 @@ class FundSecondmentKanban extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    DunesColors.text2,
+                  ),
                 ),
               ),
               const SizedBox(height: 2),
               Text(
                 subtitle,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   height: 1.35,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    DunesColors.text3,
+                  ),
                 ),
               ),
               if (netting != null && netting.hasBridge) ...[
                 const SizedBox(height: 4),
                 Text(
                   '去掉过桥重复的 ${formatFundSecondmentWan(netting.bridgeWan)}后，还要归还 ${formatFundSecondmentWan(netting.netWan)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     height: 1.35,
                     fontWeight: FontWeight.w600,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolveNullable(
+                      context,
+                      DunesColors.text2,
+                    ),
                   ),
                 ),
               ],
@@ -146,14 +155,14 @@ class FundSecondmentKanban extends StatelessWidget {
             fontSize: 28,
             height: 1.05,
             fontWeight: FontWeight.w800,
-            color: amountColor,
+            color: DunesColors.resolveNullable(context, amountColor),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildStatChips() {
+  Widget _buildStatChips(BuildContext context) {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -161,13 +170,13 @@ class FundSecondmentKanban extends StatelessWidget {
         _KanbanChip(
           label: '未还清 ${summary.unsettledCount} 笔',
           selected: filterOpen,
-          color: DunesColors.coral,
+          color: DunesColors.resolve(context, DunesColors.coral),
           onTap: onFilterOpen,
         ),
         _KanbanChip(
           label: '已还清 ${summary.settledCount} 笔',
           selected: filterSettled,
-          color: DunesColors.green,
+          color: DunesColors.resolve(context, DunesColors.green),
           onTap: onFilterSettled,
         ),
         _KanbanChip(
@@ -180,7 +189,11 @@ class FundSecondmentKanban extends StatelessWidget {
     );
   }
 
-  Widget _buildBreakdown(bool wide, FundSecondmentNetting? netting) {
+  Widget _buildBreakdown(
+    BuildContext context,
+    bool wide,
+    FundSecondmentNetting? netting,
+  ) {
     final useNet = netting != null && netting.hasBridge;
     final routes = _BreakdownColumn(
       title: '谁欠谁',
@@ -241,10 +254,10 @@ class FundSecondmentKanban extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           netting!.bridgeNote,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 11,
             height: 1.4,
-            color: DunesColors.text3,
+            color: DunesColors.resolveNullable(context, DunesColors.text3),
           ),
         ),
       ],

@@ -70,20 +70,20 @@ class WeeklySummaryPoster extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _header(view),
+                  _header(context, view),
                   const SizedBox(height: 10),
-                  _communicationSection(view),
+                  _communicationSection(context, view),
                   if (view.meetings.isNotEmpty) ...[
-                    _divider(),
-                    _meetingsSection(view),
+                    _divider(context),
+                    _meetingsSection(context, view),
                   ],
                   if (view.portrait.isNotEmpty) ...[
-                    _divider(),
-                    _portraitSection(view),
+                    _divider(context),
+                    _portraitSection(context, view),
                   ],
                   if (view.travel.isNotEmpty || view.route.isNotEmpty) ...[
-                    _divider(),
-                    _travelSection(view),
+                    _divider(context),
+                    _travelSection(context, view),
                   ],
                 ],
               ),
@@ -94,7 +94,7 @@ class WeeklySummaryPoster extends StatelessWidget {
     );
   }
 
-  Widget _header(_WeeklySummaryView view) {
+  Widget _header(BuildContext context, _WeeklySummaryView view) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.baseline,
       textBaseline: TextBaseline.alphabetic,
@@ -108,6 +108,7 @@ class WeeklySummaryPoster extends StatelessWidget {
               letterSpacing: -0.3,
               color: _ink,
               height: 1.15,
+              context: context,
             ),
           ),
         ),
@@ -118,16 +119,17 @@ class WeeklySummaryPoster extends StatelessWidget {
               fontSize: 11.5,
               fontWeight: FontWeight.w500,
               color: _secondary,
+              context: context,
             ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
           ),
         if (showShareHint) ...[
           const SizedBox(width: 4),
           GestureDetector(
             onTap: onShare,
-            child: const Icon(
+            child: Icon(
               Icons.ios_share_rounded,
               size: 15,
-              color: _secondary,
+              color: DunesColors.resolveNullable(context, _secondary),
             ),
           ),
         ],
@@ -135,18 +137,26 @@ class WeeklySummaryPoster extends StatelessWidget {
     );
   }
 
-  Widget _divider() {
-    return const Padding(
+  Widget _divider(BuildContext context) {
+    return Padding(
       padding: EdgeInsets.symmetric(vertical: 9),
       child: SizedBox(
         height: 0.5,
         width: double.infinity,
-        child: DecoratedBox(decoration: BoxDecoration(color: _line)),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: DunesColors.resolveNullable(
+              context,
+              _line,
+              role: DunesColorRole.surface,
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _sectionTitle(String title) {
+  Widget _sectionTitle(BuildContext context, String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 7),
       child: Text(
@@ -155,16 +165,17 @@ class WeeklySummaryPoster extends StatelessWidget {
           fontSize: 11,
           fontWeight: FontWeight.w600,
           color: _secondary,
+          context: context,
         ),
       ),
     );
   }
 
-  Widget _communicationSection(_WeeklySummaryView view) {
+  Widget _communicationSection(BuildContext context, _WeeklySummaryView view) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('沟通'),
+        _sectionTitle(context, '沟通'),
         Row(
           children: [
             for (final item in view.communication)
@@ -181,6 +192,7 @@ class WeeklySummaryPoster extends StatelessWidget {
                             letterSpacing: -0.4,
                             color: _ink,
                             height: 1.05,
+                            context: context,
                           ).copyWith(
                             fontFeatures: const [FontFeature.tabularFigures()],
                           ),
@@ -191,6 +203,7 @@ class WeeklySummaryPoster extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 10.5,
                         color: _secondary,
+                        context: context,
                       ),
                     ),
                   ],
@@ -206,6 +219,7 @@ class WeeklySummaryPoster extends StatelessWidget {
               fontSize: 11,
               color: _secondary,
               height: 1.25,
+              context: context,
             ),
           ),
         ],
@@ -213,11 +227,11 @@ class WeeklySummaryPoster extends StatelessWidget {
     );
   }
 
-  Widget _meetingsSection(_WeeklySummaryView view) {
+  Widget _meetingsSection(BuildContext context, _WeeklySummaryView view) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('会议'),
+        _sectionTitle(context, '会议'),
         Row(
           children: [
             for (final item in view.meetings)
@@ -234,6 +248,7 @@ class WeeklySummaryPoster extends StatelessWidget {
                             letterSpacing: -0.3,
                             color: _ink,
                             height: 1.05,
+                            context: context,
                           ).copyWith(
                             fontFeatures: const [FontFeature.tabularFigures()],
                           ),
@@ -244,6 +259,7 @@ class WeeklySummaryPoster extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 10.5,
                         color: _secondary,
+                        context: context,
                       ),
                     ),
                   ],
@@ -255,14 +271,18 @@ class WeeklySummaryPoster extends StatelessWidget {
     );
   }
 
-  Widget _portraitSection(_WeeklySummaryView view) {
+  Widget _portraitSection(BuildContext context, _WeeklySummaryView view) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('画像'),
+        _sectionTitle(context, '画像'),
         DecoratedBox(
           decoration: BoxDecoration(
-            color: _tileBg,
+            color: DunesColors.resolveNullable(
+              context,
+              _tileBg,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Padding(
@@ -279,6 +299,7 @@ class WeeklySummaryPoster extends StatelessWidget {
                           style: DunesTypography.sans(
                             fontSize: 11.5,
                             color: _inkSub,
+                            context: context,
                           ),
                         ),
                       ),
@@ -289,6 +310,7 @@ class WeeklySummaryPoster extends StatelessWidget {
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                               color: _ink,
+                              context: context,
                             ).copyWith(
                               fontFeatures: const [
                                 FontFeature.tabularFigures(),
@@ -306,11 +328,11 @@ class WeeklySummaryPoster extends StatelessWidget {
     );
   }
 
-  Widget _travelSection(_WeeklySummaryView view) {
+  Widget _travelSection(BuildContext context, _WeeklySummaryView view) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('差旅'),
+        _sectionTitle(context, '差旅'),
         if (view.travel.isNotEmpty)
           Row(
             children: [
@@ -328,6 +350,7 @@ class WeeklySummaryPoster extends StatelessWidget {
                               letterSpacing: -0.3,
                               color: _ink,
                               height: 1.05,
+                              context: context,
                             ).copyWith(
                               fontFeatures: const [
                                 FontFeature.tabularFigures(),
@@ -340,6 +363,7 @@ class WeeklySummaryPoster extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 10,
                           color: _secondary,
+                          context: context,
                         ),
                       ),
                     ],
@@ -356,6 +380,7 @@ class WeeklySummaryPoster extends StatelessWidget {
               fontWeight: FontWeight.w500,
               color: _inkSub,
               height: 1.25,
+              context: context,
             ),
           ),
         ],

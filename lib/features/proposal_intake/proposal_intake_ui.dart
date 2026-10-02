@@ -1036,19 +1036,39 @@ class ProposalChoiceChip extends StatelessWidget {
     final canTap = enabled && onSelected != null;
     final background = !enabled
         ? (selected
-              ? DunesColors.resolve(context, const Color(0xFFD0D5DE))
-              : DunesColors.resolve(context, ProposalPalette.page))
+              ? DunesColors.resolve(
+                  context,
+                  const Color(0xFFD0D5DE),
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  ProposalPalette.page,
+                  role: DunesColorRole.surface,
+                ))
         : (selected
               ? selectedFill
-              : DunesColors.resolve(context, Colors.white));
+              : DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ));
     final foreground = enabled
         ? DunesColors.resolve(context, ProposalPalette.text)
         : DunesColors.resolve(context, ProposalPalette.text3);
     final border = selected
         ? (enabled
               ? selectedBorder
-              : DunesColors.resolve(context, ProposalPalette.text4))
-        : DunesColors.resolve(context, ProposalPalette.text4);
+              : DunesColors.resolve(
+                  context,
+                  ProposalPalette.text4,
+                  role: DunesColorRole.border,
+                ))
+        : DunesColors.resolve(
+            context,
+            ProposalPalette.text4,
+            role: DunesColorRole.border,
+          );
     return Material(
       color: DunesColors.resolveNullable(
         context,

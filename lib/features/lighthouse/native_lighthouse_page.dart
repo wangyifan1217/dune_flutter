@@ -180,8 +180,16 @@ class _LhAppBrandMark extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            DunesColors.resolve(context, _LhPlum.deep),
-            DunesColors.resolve(context, _LhPlum.primary),
+            DunesColors.resolve(
+              context,
+              _LhPlum.deep,
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              _LhPlum.primary,
+              role: DunesColorRole.surface,
+            ),
           ],
         ),
         boxShadow: [
@@ -417,12 +425,14 @@ const Color _kHeroVerifiedScaleColor = LhColors.product;
 const Color _kHeroVerifiedSpreadColor = LhColors.ink;
 
 TextStyle _heroSemanticStyle({
+  BuildContext? context,
   required Color color,
   double size = 7.5,
   FontWeight weight = FontWeight.w500,
   double letterSpacing = 0.3,
   double? height,
 }) => LhTypography.mono(
+  context: context,
   size: size,
   color: color,
   weight: weight,
@@ -1641,8 +1651,16 @@ class _LhAuroraState extends State<_LhAurora> with TickerProviderStateMixin {
                     center: Alignment(c1x, c1y),
                     radius: r1,
                     colors: [
-                      DunesColors.resolve(ctx, _LhPlum.primary).withAlpha(a1),
-                      DunesColors.resolve(ctx, _LhPlum.primary).withAlpha(0),
+                      DunesColors.resolve(
+                        ctx,
+                        _LhPlum.primary,
+                        role: DunesColorRole.surface,
+                      ).withAlpha(a1),
+                      DunesColors.resolve(
+                        ctx,
+                        _LhPlum.primary,
+                        role: DunesColorRole.surface,
+                      ).withAlpha(0),
                     ],
                     stops: const [0.0, 0.7],
                   ),
@@ -1655,8 +1673,16 @@ class _LhAuroraState extends State<_LhAurora> with TickerProviderStateMixin {
                     center: Alignment(c2x, c2y),
                     radius: r2,
                     colors: [
-                      DunesColors.resolve(ctx, _LhPlum.deep).withAlpha(a2),
-                      DunesColors.resolve(ctx, _LhPlum.deep).withAlpha(0),
+                      DunesColors.resolve(
+                        ctx,
+                        _LhPlum.deep,
+                        role: DunesColorRole.surface,
+                      ).withAlpha(a2),
+                      DunesColors.resolve(
+                        ctx,
+                        _LhPlum.deep,
+                        role: DunesColorRole.surface,
+                      ).withAlpha(0),
                     ],
                     stops: const [0.0, 0.75],
                   ),
@@ -1669,8 +1695,16 @@ class _LhAuroraState extends State<_LhAurora> with TickerProviderStateMixin {
                     center: Alignment(c3x, c3y),
                     radius: 0.55,
                     colors: [
-                      DunesColors.resolve(ctx, Colors.white).withAlpha(a3),
-                      DunesColors.resolve(ctx, Colors.white).withAlpha(0),
+                      DunesColors.resolve(
+                        ctx,
+                        Colors.white,
+                        role: DunesColorRole.surface,
+                      ).withAlpha(a3),
+                      DunesColors.resolve(
+                        ctx,
+                        Colors.white,
+                        role: DunesColorRole.surface,
+                      ).withAlpha(0),
                     ],
                     stops: const [0.0, 0.7],
                   ),
@@ -1817,11 +1851,31 @@ class _LhSheenState extends State<_LhSheen>
               begin: const Alignment(-1.0, -0.3),
               end: const Alignment(1.0, 0.3),
               colors: [
-                DunesColors.resolve(ctx, Colors.white).withAlpha(0),
-                DunesColors.resolve(ctx, Colors.white).withAlpha(0),
-                DunesColors.resolve(ctx, Colors.white).withAlpha(peakAlpha),
-                DunesColors.resolve(ctx, Colors.white).withAlpha(0),
-                DunesColors.resolve(ctx, Colors.white).withAlpha(0),
+                DunesColors.resolve(
+                  ctx,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ).withAlpha(0),
+                DunesColors.resolve(
+                  ctx,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ).withAlpha(0),
+                DunesColors.resolve(
+                  ctx,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ).withAlpha(peakAlpha),
+                DunesColors.resolve(
+                  ctx,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ).withAlpha(0),
+                DunesColors.resolve(
+                  ctx,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ).withAlpha(0),
               ],
               stops: [
                 (band - 0.30).clamp(0.0, 1.0),
@@ -6821,8 +6875,16 @@ class _MetaCompareStageState extends State<_MetaCompareStage> {
     final isAlt = i.isOdd;
     // 微 zebra: 奇数行 mist, 偶数白, 主副对比不失彩
     final rowBg = isAlt
-        ? DunesColors.resolve(context, _LhPlum.mist)
-        : DunesColors.resolve(context, Colors.white);
+        ? DunesColors.resolve(
+            context,
+            _LhPlum.mist,
+            role: DunesColorRole.surface,
+          )
+        : DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          );
     final shareOfActive = sumAbs > 0
         ? (e.values[_sortKey] ?? 0).abs() / sumAbs * 100
         : 0.0;
@@ -15641,7 +15703,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
   Widget build(BuildContext context) {
     if (widget.sharedCard != null) {
       return Theme(
-        data: DunesTheme.light(),
+        data: Theme.of(context).brightness == Brightness.dark
+            ? Theme.of(context)
+            : DunesTheme.light(),
         child: Material(color: Colors.transparent, child: _buildSharedCard()),
       );
     }
@@ -15652,7 +15716,9 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         _handleInternalBack();
       },
       child: Theme(
-        data: DunesTheme.light(),
+        data: Theme.of(context).brightness == Brightness.dark
+            ? Theme.of(context)
+            : DunesTheme.light(),
         child: Scaffold(
           backgroundColor: DunesColors.resolve(
             context,
@@ -20014,8 +20080,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            DunesColors.resolve(context, LhColors.paper),
-            DunesColors.resolve(context, LhColors.copperSoft).withAlpha(92),
+            DunesColors.resolve(
+              context,
+              LhColors.paper,
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              LhColors.copperSoft,
+              role: DunesColorRole.surface,
+            ).withAlpha(92),
           ],
         ),
         borderRadius: BorderRadius.circular(13),
@@ -21660,6 +21734,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                       cellBg = DunesColors.resolve(
                                         ctx,
                                         _LhPlum.primary,
+                                        role: DunesColorRole.surface,
                                       );
                                       textColor = DunesColors.resolve(
                                         ctx,
@@ -21674,6 +21749,7 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
                                       cellBg = DunesColors.resolve(
                                         ctx,
                                         _LhPlum.mist,
+                                        role: DunesColorRole.surface,
                                       );
                                       textColor = DunesColors.resolve(
                                         ctx,
@@ -21928,8 +22004,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           // v24 · 轨道 = 凹槽（淡紫底、Hero 卡同款紫发丝边、不投影），
           // 胶囊 = 缩小的 Hero 白卡（白纸 + 同色边 + 轻投影）。
           trackColor: lighthousePeriodUsesHeroSurface
-              ? DunesColors.resolve(context, const Color(0xFFF3EFFA))
-              : DunesColors.resolve(context, LhColors.paper),
+              ? DunesColors.resolve(
+                  context,
+                  const Color(0xFFF3EFFA),
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  LhColors.paper,
+                  role: DunesColorRole.surface,
+                ),
           trackBorder: lighthousePeriodUsesHeroSurface
               ? DunesColors.resolve(
                   context,
@@ -21946,14 +22030,38 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               : DunesColors.resolve(context, Colors.black).withAlpha(8),
           pillGradient: lighthousePeriodUsesHeroSurface
               ? [
-                  DunesColors.resolve(context, Color(0xFFFFFFFF)),
-                  DunesColors.resolve(context, Color(0xFFFFFFFF)),
-                  DunesColors.resolve(context, Color(0xFFFCFAFF)),
+                  DunesColors.resolve(
+                    context,
+                    Color(0xFFFFFFFF),
+                    role: DunesColorRole.surface,
+                  ),
+                  DunesColors.resolve(
+                    context,
+                    Color(0xFFFFFFFF),
+                    role: DunesColorRole.surface,
+                  ),
+                  DunesColors.resolve(
+                    context,
+                    Color(0xFFFCFAFF),
+                    role: DunesColorRole.surface,
+                  ),
                 ]
               : [
-                  DunesColors.resolve(context, Color(0xFFF6F1FD)),
-                  DunesColors.resolve(context, Color(0xFFE3D9F7)),
-                  DunesColors.resolve(context, Color(0xFFEFE9FB)),
+                  DunesColors.resolve(
+                    context,
+                    Color(0xFFF6F1FD),
+                    role: DunesColorRole.surface,
+                  ),
+                  DunesColors.resolve(
+                    context,
+                    Color(0xFFE3D9F7),
+                    role: DunesColorRole.surface,
+                  ),
+                  DunesColors.resolve(
+                    context,
+                    Color(0xFFEFE9FB),
+                    role: DunesColorRole.surface,
+                  ),
                 ],
           pillEdgeColor: lighthousePeriodUsesHeroSurface
               ? DunesColors.resolve(context, _LhPlum.line)
@@ -25222,7 +25330,11 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       case _FlowRole.anchor:
         // 起点: 极淡纸色底 + ink 深色 2px 左边框 —— 沉稳、"这是源头"
         leftAccent = DunesColors.resolve(context, LhColors.ink);
-        bg = DunesColors.resolve(context, LhColors.paper).withAlpha(140);
+        bg = DunesColors.resolve(
+          context,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ).withAlpha(140);
         leftWidth = 2;
         break;
       case _FlowRole.intermediate:
@@ -25231,12 +25343,20 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
           context,
           _LhPlum.primary,
         ).withAlpha(160);
-        bg = DunesColors.resolve(context, _LhPlum.soft).withAlpha(80);
+        bg = DunesColors.resolve(
+          context,
+          _LhPlum.soft,
+          role: DunesColorRole.surface,
+        ).withAlpha(80);
         leftWidth = 2;
         break;
       case _FlowRole.result:
         leftAccent = DunesColors.resolve(context, LhColors.ink);
-        bg = DunesColors.resolve(context, Colors.white);
+        bg = DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        );
         leftWidth = 3;
         break;
     }
@@ -28467,10 +28587,22 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
     final height = strong ? 28.0 : 26.0;
     final bg = strong
         ? (isOn
-              ? DunesColors.resolve(context, _LhPlum.deep)
-              : DunesColors.resolve(context, const Color(0xFFF2F0F6)))
+              ? DunesColors.resolve(
+                  context,
+                  _LhPlum.deep,
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  const Color(0xFFF2F0F6),
+                  role: DunesColorRole.surface,
+                ))
         : (isOn
-              ? DunesColors.resolve(context, _LhPlum.primary).withAlpha(22)
+              ? DunesColors.resolve(
+                  context,
+                  _LhPlum.primary,
+                  role: DunesColorRole.surface,
+                ).withAlpha(22)
               : Colors.transparent);
     final fg = strong
         ? (isOn
@@ -32851,9 +32983,17 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
       //   active 态用 copper.withAlpha(24) fill (跟 _ddChip 完全对齐).
       //   prefix label 换 mono UPPER letterSpacing 0.5, 跟 hero kicker 同族.
       final bg = isActive
-          ? DunesColors.resolve(context, _LhPlum.primary).withAlpha(24)
+          ? DunesColors.resolve(
+              context,
+              _LhPlum.primary,
+              role: DunesColorRole.surface,
+            ).withAlpha(24)
           : (isOpen
-                ? DunesColors.resolve(context, const Color(0x080A0A0F))
+                ? DunesColors.resolve(
+                    context,
+                    const Color(0x080A0A0F),
+                    role: DunesColorRole.surface,
+                  )
                 : Colors.transparent);
       return GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -37649,10 +37789,22 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
         r['isChild'] != true &&
         (r['name']?.toString() ?? '') == _equityFocusRow;
     final cardBorder = isEquityFocus
-        ? DunesColors.resolve(context, _LhPlum.primary).withAlpha(150)
+        ? DunesColors.resolve(
+            context,
+            _LhPlum.primary,
+            role: DunesColorRole.border,
+          ).withAlpha(150)
         : (isAnyExpanded
-              ? DunesColors.resolve(context, _LhPlum.primary).withAlpha(70)
-              : DunesColors.resolve(context, _LhPlum.line).withAlpha(165));
+              ? DunesColors.resolve(
+                  context,
+                  _LhPlum.primary,
+                  role: DunesColorRole.border,
+                ).withAlpha(70)
+              : DunesColors.resolve(
+                  context,
+                  _LhPlum.line,
+                  role: DunesColorRole.border,
+                ).withAlpha(165));
     final isChildRow = r['isChild'] == true;
     final isTopTenLedgerRow =
         !isChildRow &&
@@ -43450,8 +43602,16 @@ class _NativeLighthousePageState extends State<NativeLighthousePage> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                DunesColors.resolve(context, Colors.white),
-                DunesColors.resolve(context, _LhPlum.mist),
+                DunesColors.resolve(
+                  context,
+                  Colors.white,
+                  role: DunesColorRole.surface,
+                ),
+                DunesColors.resolve(
+                  context,
+                  _LhPlum.mist,
+                  role: DunesColorRole.surface,
+                ),
               ],
               stops: const [0.0, 1.0],
             ),
@@ -44011,8 +44171,16 @@ class _AnalysisCard extends StatelessWidget {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            DunesColors.resolve(context, Colors.white),
-            DunesColors.resolve(context, _LhPlum.mist),
+            DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              _LhPlum.mist,
+              role: DunesColorRole.surface,
+            ),
           ],
           stops: const [0.0, 1.0],
         ),

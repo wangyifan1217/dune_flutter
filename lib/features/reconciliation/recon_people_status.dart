@@ -101,7 +101,7 @@ class ReconEveryoneStatusPane extends StatelessWidget {
                   children: [
                     for (var i = 0; i < sectors.length; i++) ...[
                       if (i > 0) const SizedBox(height: 14),
-                      _sectorBlock(sectors[i]),
+                      _sectorBlock(context, sectors[i]),
                     ],
                   ],
                 ),
@@ -113,7 +113,7 @@ class ReconEveryoneStatusPane extends StatelessWidget {
     );
   }
 
-  Widget _sectorBlock(ReconSectorPeopleAck sector) {
+  Widget _sectorBlock(BuildContext context, ReconSectorPeopleAck sector) {
     final total = sector.people.length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -125,24 +125,35 @@ class ReconEveryoneStatusPane extends StatelessWidget {
           style: DunesTypography.sans(
             fontSize: 14,
             fontWeight: FontWeight.w700,
-            color: DunesColors.text,
+            color: DunesColors.resolve(context, DunesColors.text),
+            context: context,
           ),
         ),
         if (total <= 0) ...[
           const SizedBox(height: 8),
           Text(
             '该板块还没有配置核对人。',
-            style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
         ] else ...[
           for (final step in reconAuditChainSteps)
-            ..._layerRows(sector.people.where((e) => e.step == step).toList()),
+            ..._layerRows(
+              context,
+              sector.people.where((e) => e.step == step).toList(),
+            ),
         ],
       ],
     );
   }
 
-  List<Widget> _layerRows(List<ReconPeopleAckEntry> people) {
+  List<Widget> _layerRows(
+    BuildContext context,
+    List<ReconPeopleAckEntry> people,
+  ) {
     if (people.isEmpty) return const [];
     return [
       const SizedBox(height: 8),
@@ -151,18 +162,19 @@ class ReconEveryoneStatusPane extends StatelessWidget {
         style: DunesTypography.sans(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: DunesColors.text3,
+          color: DunesColors.resolve(context, DunesColors.text3),
+          context: context,
         ),
       ),
       const SizedBox(height: 6),
       for (final item in people) ...[
-        _personRow(item),
+        _personRow(context, item),
         const SizedBox(height: 6),
       ],
     ];
   }
 
-  Widget _personRow(ReconPeopleAckEntry item) {
+  Widget _personRow(BuildContext context, ReconPeopleAckEntry item) {
     final person = item.person;
     final name = person.displayName;
     final initial = name.isEmpty ? '审' : name.substring(0, 1);
@@ -174,9 +186,19 @@ class ReconEveryoneStatusPane extends StatelessWidget {
     final time = reconFormatDecidedAt(item.decidedAt);
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
+        color: DunesColors.resolveNullable(
+          context,
+          DunesColors.bgSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
@@ -204,7 +226,8 @@ class ReconEveryoneStatusPane extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: DunesColors.text,
+                      color: DunesColors.resolve(context, DunesColors.text),
+                      context: context,
                     ),
                   ),
                   if (time.isNotEmpty)
@@ -212,7 +235,8 @@ class ReconEveryoneStatusPane extends StatelessWidget {
                       '确认时间  $time',
                       style: DunesTypography.sans(
                         fontSize: 11,
-                        color: DunesColors.text2,
+                        color: DunesColors.resolve(context, DunesColors.text2),
+                        context: context,
                       ),
                     ),
                 ],
@@ -223,7 +247,10 @@ class ReconEveryoneStatusPane extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: item.confirmed ? DunesColors.green : DunesColors.amber,
+                color: item.confirmed
+                    ? DunesColors.resolve(context, DunesColors.green)
+                    : DunesColors.resolve(context, DunesColors.amber),
+                context: context,
               ),
             ),
           ],
@@ -318,6 +345,7 @@ class ReconUnmatchedPane extends StatelessWidget {
                   children: [
                     for (final step in reconAuditChainSteps)
                       ..._stepBlock(
+                        context,
                         unmatched
                             .where((e) => e.step.toUpperCase() == step)
                             .toList(),
@@ -332,7 +360,10 @@ class ReconUnmatchedPane extends StatelessWidget {
     );
   }
 
-  List<Widget> _stepBlock(List<ReconUnmatchedSlot> items) {
+  List<Widget> _stepBlock(
+    BuildContext context,
+    List<ReconUnmatchedSlot> items,
+  ) {
     if (items.isEmpty) return const [];
     return [
       Padding(
@@ -342,15 +373,19 @@ class ReconUnmatchedPane extends StatelessWidget {
           style: DunesTypography.sans(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: DunesColors.coral,
+            color: DunesColors.resolve(context, DunesColors.coral),
+            context: context,
           ),
         ),
       ),
-      for (final item in items) ...[_row(item), const SizedBox(height: 6)],
+      for (final item in items) ...[
+        _row(context, item),
+        const SizedBox(height: 6),
+      ],
     ];
   }
 
-  Widget _row(ReconUnmatchedSlot item) {
+  Widget _row(BuildContext context, ReconUnmatchedSlot item) {
     final name = item.name.trim().isEmpty ? '未匹配' : item.name.trim();
     final countHint = item.count > 1 ? '  · ${item.count} 行' : '';
     final isL2 = item.step.toUpperCase() == reconChainL2;
@@ -360,9 +395,19 @@ class ReconUnmatchedPane extends StatelessWidget {
     final loc = item.location;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: DunesColors.coralSoft,
+        color: DunesColors.resolveNullable(
+          context,
+          DunesColors.coralSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: DunesColors.coral.withValues(alpha: 0.25)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.coral,
+            role: DunesColorRole.border,
+          ).withValues(alpha: 0.25),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
@@ -374,7 +419,8 @@ class ReconUnmatchedPane extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: DunesColors.coral,
+                color: DunesColors.resolve(context, DunesColors.coral),
+                context: context,
               ),
             ),
             if (loc.isNotEmpty)
@@ -384,7 +430,8 @@ class ReconUnmatchedPane extends StatelessWidget {
                   loc,
                   style: DunesTypography.sans(
                     fontSize: 12,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                    context: context,
                   ),
                 ),
               ),

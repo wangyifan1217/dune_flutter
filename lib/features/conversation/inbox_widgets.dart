@@ -197,20 +197,24 @@ class _QuickMeetingButton extends StatelessWidget {
                                   DunesColors.resolve(
                                     context,
                                     Color(0xFFE07A5F),
+                                    role: DunesColorRole.surface,
                                   ),
                                   DunesColors.resolve(
                                     context,
                                     Color(0xFFBC5C40),
+                                    role: DunesColorRole.surface,
                                   ),
                                 ]
                               : [
                                   DunesColors.resolve(
                                     context,
                                     Color(0xFF9D84EC),
+                                    role: DunesColorRole.surface,
                                   ),
                                   DunesColors.resolve(
                                     context,
                                     Color(0xFF6E52CC),
+                                    role: DunesColorRole.surface,
                                   ),
                                 ],
                         ),
@@ -1872,8 +1876,16 @@ class _Avatar extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              DunesColors.resolve(context, DunesColors.brandPurple),
-              DunesColors.resolve(context, DunesColors.brandPurpleDeep),
+              DunesColors.resolve(
+                context,
+                DunesColors.brandPurple,
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                DunesColors.brandPurpleDeep,
+                role: DunesColorRole.surface,
+              ),
             ],
           ),
         );
@@ -1889,8 +1901,16 @@ class _Avatar extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              DunesColors.resolve(context, Color(0xFF2F8F7E)),
-              DunesColors.resolve(context, Color(0xFF5EAEDE)),
+              DunesColors.resolve(
+                context,
+                Color(0xFF2F8F7E),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFF5EAEDE),
+                role: DunesColorRole.surface,
+              ),
             ],
           ),
         );
@@ -1906,8 +1926,16 @@ class _Avatar extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              DunesColors.resolve(context, Color(0xFF8C5A91)),
-              DunesColors.resolve(context, Color(0xFFC17B7B)),
+              DunesColors.resolve(
+                context,
+                Color(0xFF8C5A91),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFFC17B7B),
+                role: DunesColorRole.surface,
+              ),
             ],
           ),
         );
@@ -1951,8 +1979,16 @@ class _Avatar extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              DunesColors.resolve(context, Color(0xFFC4A574)),
-              DunesColors.resolve(context, Color(0xFF8B6A3F)),
+              DunesColors.resolve(
+                context,
+                Color(0xFFC4A574),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFF8B6A3F),
+                role: DunesColorRole.surface,
+              ),
             ],
           ),
         );
@@ -1968,8 +2004,16 @@ class _Avatar extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              DunesColors.resolve(context, Color(0xFF5B6FC4)),
-              DunesColors.resolve(context, Color(0xFF7652B8)),
+              DunesColors.resolve(
+                context,
+                Color(0xFF5B6FC4),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFF7652B8),
+                role: DunesColorRole.surface,
+              ),
             ],
           ),
         );
@@ -1985,8 +2029,16 @@ class _Avatar extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              DunesColors.resolve(context, Color(0xFF3D7A8C)),
-              DunesColors.resolve(context, Color(0xFF5DA7A2)),
+              DunesColors.resolve(
+                context,
+                Color(0xFF3D7A8C),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFF5DA7A2),
+                role: DunesColorRole.surface,
+              ),
             ],
           ),
         );
@@ -2000,8 +2052,16 @@ class _Avatar extends StatelessWidget {
           borderRadius: borderRadius,
           gradient: LinearGradient(
             colors: [
-              DunesColors.resolve(context, Color(0xFFC2AEE7)),
-              DunesColors.resolve(context, Color(0xFF9C82CE)),
+              DunesColors.resolve(
+                context,
+                Color(0xFFC2AEE7),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFF9C82CE),
+                role: DunesColorRole.surface,
+              ),
             ],
           ),
         );
@@ -2029,8 +2089,16 @@ class _Avatar extends StatelessWidget {
           borderRadius: borderRadius,
           gradient: LinearGradient(
             colors: [
-              DunesColors.resolve(context, Color(0xFFB8A4E8)),
-              DunesColors.resolve(context, Color(0xFF7B5CD8)),
+              DunesColors.resolve(
+                context,
+                Color(0xFFB8A4E8),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFF7B5CD8),
+                role: DunesColorRole.surface,
+              ),
             ],
           ),
         );
@@ -2046,8 +2114,16 @@ class _Avatar extends StatelessWidget {
           borderRadius: borderRadius,
           gradient: LinearGradient(
             colors: [
-              DunesColors.resolve(context, Color(0xFFC2AEE7)),
-              DunesColors.resolve(context, Color(0xFF9C82CE)),
+              DunesColors.resolve(
+                context,
+                Color(0xFFC2AEE7),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFF9C82CE),
+                role: DunesColorRole.surface,
+              ),
             ],
           ),
         );
@@ -2061,8 +2137,16 @@ class _Avatar extends StatelessWidget {
           borderRadius: borderRadius,
           gradient: LinearGradient(
             colors: [
-              DunesColors.resolve(context, Color(0xFFD9C9F0)),
-              DunesColors.resolve(context, Color(0xFFB89FE2)),
+              DunesColors.resolve(
+                context,
+                Color(0xFFD9C9F0),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFFB89FE2),
+                role: DunesColorRole.surface,
+              ),
             ],
           ),
         );
@@ -2085,8 +2169,16 @@ class _Avatar extends StatelessWidget {
             borderRadius: borderRadius,
             gradient: LinearGradient(
               colors: [
-                DunesColors.resolve(context, Color(0xFF9079C2)),
-                DunesColors.resolve(context, Color(0xFF6A4FA0)),
+                DunesColors.resolve(
+                  context,
+                  Color(0xFF9079C2),
+                  role: DunesColorRole.surface,
+                ),
+                DunesColors.resolve(
+                  context,
+                  Color(0xFF6A4FA0),
+                  role: DunesColorRole.surface,
+                ),
               ],
             ),
           );
@@ -2100,8 +2192,16 @@ class _Avatar extends StatelessWidget {
             borderRadius: borderRadius,
             gradient: LinearGradient(
               colors: [
-                DunesColors.resolve(context, Color(0xFFCABCEB)),
-                DunesColors.resolve(context, Color(0xFFA88CD8)),
+                DunesColors.resolve(
+                  context,
+                  Color(0xFFCABCEB),
+                  role: DunesColorRole.surface,
+                ),
+                DunesColors.resolve(
+                  context,
+                  Color(0xFFA88CD8),
+                  role: DunesColorRole.surface,
+                ),
               ],
             ),
           );

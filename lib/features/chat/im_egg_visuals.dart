@@ -5,26 +5,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dunes_app/core/theme/dunes_theme.dart';
 
-/// One isolated canvas for the entire effect. Glyph paragraphs and trajectories
-/// are prepared once; animation ticks only repaint this layer.
+/// One isolated canvas for the effect. Glyphs are cached before animation ticks.
 class ImEggParticleField extends StatefulWidget {
   const ImEggParticleField({
     super.key,
-    required this.glyphs,
+    this.motifs = const <String>[],
+    this.glyphs = const <String>[],
     required this.duration,
     required this.count,
     required this.onFinished,
+    this.washColor = const Color(0x00000000),
     this.seed = 0,
     this.motion = 'fall',
     this.birthday = false,
+    this.blueWash = false,
   });
 
+  final List<String> motifs;
+
+  /// Emoji glyphs used by the HTML preview's particle combinations.
   final List<String> glyphs;
   final Duration duration;
   final int count;
   final int seed;
   final String motion;
   final bool birthday;
+  final bool blueWash;
+  final Color washColor;
   final VoidCallback onFinished;
 
   @override
@@ -35,7 +42,7 @@ class _ImEggParticleFieldState extends State<ImEggParticleField>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _animation;
   late final List<_Particle> _particles;
-  final Map<String, TextPainter> _glyphs = {};
+  final Map<String, TextPainter> _glyphPainters = <String, TextPainter>{};
   Timer? _staticTimer;
   bool _reducedMotion = false;
   bool _finished = false;
@@ -51,47 +58,57 @@ class _ImEggParticleFieldState extends State<ImEggParticleField>
     final random = math.Random(
       widget.seed == 0 ? DateTime.now().microsecondsSinceEpoch : widget.seed,
     );
-    final glyphs = widget.glyphs.isEmpty ? const ['✨'] : widget.glyphs;
-    for (final glyph in glyphs.toSet()) {
-      if (_isChinaFlag(glyph)) continue;
-      _glyphs[glyph] = TextPainter(
-        text: TextSpan(
-          text: glyph,
-          style: const TextStyle(
-            fontSize: 40,
-            height: 1,
-            color: Color(0xFF7657DC),
-            decoration: TextDecoration.none,
-            fontFamily: 'Apple Color Emoji',
-            fontFamilyFallback: [
-              'Apple Color Emoji',
-              'Noto Color Emoji',
-              'Segoe UI Emoji',
-            ],
-            shadows: [
-              Shadow(
-                color: Color(0x3275413C),
-                blurRadius: 4,
-                offset: Offset(0, 3),
-              ),
-            ],
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-    }
+    final glyphs = widget.glyphs.isNotEmpty
+        ? widget.glyphs
+        : widget.motifs.map(_emojiForMotif).toList(growable: false);
+    final usableGlyphs = glyphs.isEmpty
+        ? const ['🎉', '✨', '🎊', '💫']
+        : glyphs;
     _particles = List.generate(
       widget.count.clamp(1, 56),
       (index) => _Particle(
-        x: .025 + random.nextDouble() * .95,
+        x: .02 + random.nextDouble() * .96,
         phase: random.nextDouble() * math.pi * 2,
-        drift: 10 + random.nextDouble() * 36,
-        size: (widget.birthday ? 20 : 18) + random.nextDouble() * 17,
-        delay: random.nextDouble() * .2,
-        duration: .6 + random.nextDouble() * .25,
-        glyph: glyphs[random.nextInt(glyphs.length)],
+        drift: (random.nextDouble() - .5) * 55,
+        size:
+            (widget.birthday ? 18 : 16) +
+            random.nextDouble() * (widget.birthday ? 18 : 14),
+        delay: random.nextDouble() * .85,
+        duration: 2.4 + random.nextDouble() * 1.4,
+        glyph: usableGlyphs[random.nextInt(usableGlyphs.length)],
       ),
     );
+    for (final particle in _particles) {
+      final fontSize = particle.size.roundToDouble();
+      final key = _glyphPainterKey(particle.glyph, fontSize);
+      _glyphPainters.putIfAbsent(
+        key,
+        () => TextPainter(
+          text: TextSpan(
+            text: particle.glyph,
+            style: TextStyle(
+              fontSize: fontSize,
+              height: 1,
+              decoration: TextDecoration.none,
+              fontFamily: 'Apple Color Emoji',
+              fontFamilyFallback: const [
+                'Apple Color Emoji',
+                'Noto Color Emoji',
+                'Segoe UI Emoji',
+              ],
+              shadows: const [
+                Shadow(
+                  color: Color(0x3575413C),
+                  blurRadius: 5,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout(),
+      );
+    }
   }
 
   @override
@@ -129,8 +146,8 @@ class _ImEggParticleFieldState extends State<ImEggParticleField>
     WidgetsBinding.instance.removeObserver(this);
     _staticTimer?.cancel();
     _animation.dispose();
-    for (final glyph in _glyphs.values) {
-      glyph.dispose();
+    for (final painter in _glyphPainters.values) {
+      painter.dispose();
     }
     super.dispose();
   }
@@ -143,9 +160,13 @@ class _ImEggParticleFieldState extends State<ImEggParticleField>
           painter: _ParticlePainter(
             animation: _animation,
             particles: _particles,
-            glyphs: _glyphs,
+            glyphPainters: _glyphPainters,
+            washColor: widget.washColor,
+            duration: widget.duration,
             motion: widget.motion,
             reducedMotion: _reducedMotion,
+            birthday: widget.birthday,
+            blueWash: widget.blueWash,
           ),
           child: const SizedBox.expand(),
         ),
@@ -172,36 +193,82 @@ class _ParticlePainter extends CustomPainter {
   _ParticlePainter({
     required this.animation,
     required this.particles,
-    required this.glyphs,
+    required this.glyphPainters,
+    required this.washColor,
+    required this.duration,
     required this.motion,
     required this.reducedMotion,
+    required this.birthday,
+    required this.blueWash,
   }) : super(repaint: animation);
   final Animation<double> animation;
   final List<_Particle> particles;
-  final Map<String, TextPainter> glyphs;
+  final Map<String, TextPainter> glyphPainters;
+  final Color washColor;
+  final Duration duration;
   final String motion;
   final bool reducedMotion;
+  final bool birthday;
+  final bool blueWash;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final fraction = (180 / duration.inMilliseconds).clamp(0.0, .5);
+    var overlayOpacity = reducedMotion
+        ? 1.0
+        : (animation.value / fraction).clamp(0.0, 1.0);
+    if (!reducedMotion && animation.value > 1 - fraction) {
+      overlayOpacity = math.min(
+        overlayOpacity,
+        ((1 - animation.value) / fraction).clamp(0.0, 1.0),
+      );
+    }
+    canvas.saveLayer(
+      Offset.zero & size,
+      Paint()..color = Colors.white.withValues(alpha: overlayOpacity),
+    );
     canvas.save();
     canvas.clipRect(Offset.zero & size);
+    _drawWash(canvas, size);
+    final elapsed = animation.value * duration.inMilliseconds / 1000;
     final visible = reducedMotion ? particles.take(8) : particles;
     for (final particle in visible) {
-      final progress = reducedMotion
+      final rawProgress = reducedMotion
           ? particle.x
-          : ((animation.value - particle.delay) / particle.duration).clamp(
-              0.0,
-              1.0,
-            );
-      if (!reducedMotion &&
-          (animation.value < particle.delay || progress >= 1)) {
+          : ((elapsed - particle.delay) / particle.duration).clamp(0.0, 1.0);
+      if (!reducedMotion && (elapsed < particle.delay || rawProgress >= 1)) {
         continue;
       }
-      final (x, y) = reducedMotion
+      final progress = reducedMotion
+          ? rawProgress
+          : const Cubic(.35, .05, .65, .95).transform(rawProgress);
+      final (x, y, rotation, scale, opacity) = reducedMotion
           ? (
               size.width * particle.x,
               size.height * (.1 + particle.phase / (math.pi * 2) * .8),
+              0.0,
+              1.0,
+              .9,
+            )
+          : motion == 'fall'
+          ? (
+              size.width * particle.x + particle.drift * progress,
+              progress < .52
+                  ? _lerp(-78, -54 + size.height * .48, progress / .52)
+                  : _lerp(
+                      -54 + size.height * .48,
+                      -54 + size.height * 1.08,
+                      (progress - .52) / .48,
+                    ),
+              progress < .52
+                  ? _lerp(-22, 165, progress / .52) * math.pi / 180
+                  : _lerp(165, 350, (progress - .52) / .48) * math.pi / 180,
+              progress < .52
+                  ? _lerp(.78, 1, progress / .52)
+                  : _lerp(1, .9, (progress - .52) / .48),
+              progress < .09
+                  ? progress / .09
+                  : ((1 - progress) / .91).clamp(0.0, 1.0),
             )
           : switch (motion) {
               'float' => (
@@ -209,12 +276,22 @@ class _ParticlePainter extends CustomPainter {
                     math.sin(progress * math.pi + particle.phase) *
                         particle.drift,
                 size.height + 45 - (size.height + 90) * progress,
+                progress * math.pi * 2 - .35 + particle.phase * .08,
+                .94 + math.sin(progress * math.pi * 2 + particle.phase) * .06,
+                progress < .09
+                    ? progress / .09
+                    : ((1 - progress) / .91).clamp(0.0, 1.0),
               ),
               'burst' => (
                 size.width / 2 +
                     math.cos(particle.phase) * size.width * .62 * progress,
                 size.height / 2 +
                     math.sin(particle.phase) * size.height * .62 * progress,
+                progress * math.pi * 2 - .35 + particle.phase * .08,
+                .94 + math.sin(progress * math.pi * 2 + particle.phase) * .06,
+                progress < .09
+                    ? progress / .09
+                    : ((1 - progress) / .91).clamp(0.0, 1.0),
               ),
               'orbit' => (
                 size.width / 2 +
@@ -225,50 +302,133 @@ class _ParticlePainter extends CustomPainter {
                     math.sin(particle.phase + progress * math.pi * 4) *
                         size.height *
                         (.08 + progress * .35),
+                progress * math.pi * 2 - .35 + particle.phase * .08,
+                .94 + math.sin(progress * math.pi * 2 + particle.phase) * .06,
+                progress < .09
+                    ? progress / .09
+                    : ((1 - progress) / .91).clamp(0.0, 1.0),
               ),
               _ => (
                 size.width * particle.x +
                     math.sin(progress * math.pi * 2 + particle.phase) *
                         particle.drift,
                 -45 + (size.height + 110) * progress,
+                progress * math.pi * 2 - .35 + particle.phase * .08,
+                .94 + math.sin(progress * math.pi * 2 + particle.phase) * .06,
+                progress < .09
+                    ? progress / .09
+                    : ((1 - progress) / .91).clamp(0.0, 1.0),
               ),
             };
       canvas.save();
       canvas.translate(x, y);
       if (!reducedMotion) {
-        canvas.rotate(progress * math.pi * 2 - .35 + particle.phase * .08);
-        canvas.scale(
-          .94 + math.sin(progress * math.pi * 2 + particle.phase) * .06,
-          1,
-        );
+        canvas.rotate(rotation);
+        canvas.scale(scale, scale);
       }
-      if (_isChinaFlag(particle.glyph)) {
-        paintChinaFlag(
+      canvas.saveLayer(
+        Rect.fromCircle(center: Offset.zero, radius: particle.size * 1.5),
+        Paint()..color = Colors.white.withValues(alpha: opacity),
+      );
+      final glyphPainter =
+          glyphPainters[_glyphPainterKey(
+            particle.glyph,
+            particle.size.roundToDouble(),
+          )];
+      if (glyphPainter != null) {
+        glyphPainter.paint(
           canvas,
-          Rect.fromCenter(
-            center: Offset.zero,
-            width: particle.size * 1.35,
-            height: particle.size * .9,
-          ),
+          Offset(-glyphPainter.width / 2, -glyphPainter.height / 2),
         );
-      } else {
-        final painter = glyphs[particle.glyph]!;
-        final scale = particle.size / 40;
-        canvas.scale(scale);
-        painter.paint(canvas, Offset(-painter.width / 2, -painter.height / 2));
       }
+      canvas.restore();
       canvas.restore();
     }
     canvas.restore();
+    canvas.restore();
+  }
+
+  void _drawWash(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final Gradient gradient = birthday
+        ? const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0x0AFFF8EE), Color(0x0AF8E3F2)],
+          )
+        : blueWash
+        ? const RadialGradient(
+            center: Alignment(0, -.04),
+            radius: .78,
+            colors: [Color(0xEDEEF9FF), Color(0xCCDCEEFF), Color(0xBCD9D7FF)],
+            stops: [0, .35, 1],
+          )
+        : const RadialGradient(
+            center: Alignment(0, -.06),
+            radius: .82,
+            colors: [
+              Color(0xEBFFF8DD),
+              Color(0xA3FFF1D5),
+              Color(0xADF0DDFF),
+              Color(0xB8EBE5FF),
+            ],
+            stops: [0, .27, .69, 1],
+          );
+    final shader = gradient.createShader(rect);
+    canvas.drawRect(rect, Paint()..shader = shader);
+    // Configured wash tint adds a small brand tint while preserving the preview wash.
+    final tintOpacity = ((washColor.toARGB32() >> 24) & 0xff) / 255 * .18;
+    if (!birthday && !blueWash && tintOpacity > 0) {
+      canvas.drawRect(
+        rect,
+        Paint()..color = washColor.withValues(alpha: tintOpacity),
+      );
+    }
   }
 
   @override
   bool shouldRepaint(covariant _ParticlePainter old) =>
       old.reducedMotion != reducedMotion ||
+      old.washColor != washColor ||
+      old.glyphPainters != glyphPainters ||
+      old.duration != duration ||
+      old.birthday != birthday ||
+      old.blueWash != blueWash ||
       old.particles != particles ||
       old.motion != motion;
 }
 
+double _lerp(double a, double b, double t) => a + (b - a) * t;
+
+String _glyphPainterKey(String glyph, double fontSize) =>
+    '$glyph|${fontSize.round()}';
+
+String _emojiForMotif(String motif) => switch (motif) {
+  'cake' => '🎂',
+  'cakeSlice' || 'pastry' => '🍰',
+  'cupcake' => '🧁',
+  'redPacket' => '🧧',
+  'coin' => '💰',
+  'firework' => '🎆',
+  'confetti' => '🎉',
+  'goldStar' || 'star' => '⭐',
+  'sparkle' => '✨',
+  'moon' => '🌕',
+  'rabbit' => '🐇',
+  'snowflake' => '❄️',
+  'pine' => '🎄',
+  'heart' => '💜',
+  'greenHeart' => '💚',
+  'cap' => '🎓',
+  'sprout' => '🌱',
+  'flower' => '🌼',
+  'rainbow' => '🌈',
+  'flag' => '🇨🇳',
+  'gift' => '🎁',
+  'ribbon' => '💫',
+  'sun' => '☀️',
+  _ => '🎊',
+};
 bool _isChinaFlag(String glyph) =>
     glyph == '🇨🇳' || glyph.trim().toUpperCase() == 'CN';
 

@@ -31,7 +31,7 @@ class GroupCompositeAvatar extends StatelessWidget {
     // 按 userId 稳定排序，避免列表刷新时拼贴顺序跳动。
     final shown = _stableMembers(members);
     if (shown.isEmpty) {
-      return _fallbackIcon();
+      return _fallbackIcon(context);
     }
     if (shown.length == 1) {
       final m = shown.first;
@@ -109,19 +109,30 @@ class GroupCompositeAvatar extends StatelessWidget {
     );
   }
 
-  Widget _fallbackIcon() {
+  Widget _fallbackIcon(BuildContext context) {
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(size * 0.18),
-        gradient: const LinearGradient(
-          colors: [Color(0xFFCABCEB), Color(0xFFA88CD8)],
+        gradient: LinearGradient(
+          colors: [
+            DunesColors.resolve(
+              context,
+              Color(0xFFCABCEB),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFFA88CD8),
+              role: DunesColorRole.surface,
+            ),
+          ],
         ),
       ),
       child: Icon(
         Icons.groups_outlined,
-        color: Colors.white,
+        color: DunesColors.resolveNullable(context, Colors.white),
         size: size * 0.38,
       ),
     );

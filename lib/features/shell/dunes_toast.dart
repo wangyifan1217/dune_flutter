@@ -303,8 +303,16 @@ class _DunesActionToastOverlayState extends State<_DunesActionToastOverlay>
     final topInset = MediaQuery.paddingOf(context).top;
     final isError = widget.kind == DunesToastKind.error;
     final bg = isError
-        ? DunesColors.resolve(context, const Color(0xF0B43228))
-        : DunesColors.resolve(context, const Color(0xF21D2024));
+        ? DunesColors.resolve(
+            context,
+            const Color(0xF0B43228),
+            role: DunesColorRole.surface,
+          )
+        : DunesColors.resolve(
+            context,
+            const Color(0xF21D2024),
+            role: DunesColorRole.surface,
+          );
     return Positioned(
       top: topInset + 10,
       left: 16,

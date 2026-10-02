@@ -32,8 +32,16 @@ class NovaAiBadge extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            DunesColors.resolve(context, Color(0xFFFFD580)),
-            DunesColors.resolve(context, Color(0xFFFFA850)),
+            DunesColors.resolve(
+              context,
+              Color(0xFFFFD580),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFFFFA850),
+              role: DunesColorRole.surface,
+            ),
           ],
         ),
         borderRadius: BorderRadius.circular(3),
@@ -553,10 +561,12 @@ Future<void> showNovaModelSheet(
                                             DunesColors.resolve(
                                               ctx,
                                               Color(0xFF553B96),
+                                              role: DunesColorRole.surface,
                                             ),
                                             DunesColors.resolve(
                                               ctx,
                                               Color(0xFF7B5CB8),
+                                              role: DunesColorRole.surface,
                                             ),
                                           ],
                                         )
@@ -680,8 +690,16 @@ class NovaStatusBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = warning
-        ? DunesColors.resolve(context, DunesColors.coralSoft)
-        : DunesColors.resolve(context, DunesColors.accentSoft);
+        ? DunesColors.resolve(
+            context,
+            DunesColors.coralSoft,
+            role: DunesColorRole.surface,
+          )
+        : DunesColors.resolve(
+            context,
+            DunesColors.accentSoft,
+            role: DunesColorRole.surface,
+          );
     final fg = warning
         ? DunesColors.resolve(context, DunesColors.coral)
         : DunesColors.resolve(context, DunesColors.accentDeep);
@@ -1737,7 +1755,7 @@ class NovaC4MessageRow extends StatelessWidget {
             ...uniqueAttachments.map(
               (a) => resolver != null
                   ? _combinedAttachment(context, resolver, a)
-                  : _localAttachmentFallback(a),
+                  : _localAttachmentFallback(context, a),
             ),
           ],
         ),
@@ -1755,7 +1773,10 @@ class NovaC4MessageRow extends StatelessWidget {
     return NovaC4SentBubble(text: text, highlighted: highlighted);
   }
 
-  Widget _localAttachmentFallback(NovaMessageAttachment a) {
+  Widget _localAttachmentFallback(
+    BuildContext context,
+    NovaMessageAttachment a,
+  ) {
     if (_isImageAttachment(a) &&
         a.previewBytes != null &&
         a.previewBytes!.isNotEmpty) {
@@ -1772,7 +1793,11 @@ class NovaC4MessageRow extends StatelessWidget {
       padding: const EdgeInsets.only(top: 6),
       child: Text(
         name,
-        style: DunesTypography.sans(fontSize: 12, color: Colors.white70),
+        style: DunesTypography.sans(
+          fontSize: 12,
+          color: DunesColors.resolve(context, Colors.white70),
+          context: context,
+        ),
       ),
     );
   }
@@ -1909,7 +1934,7 @@ class NovaC4MessageRow extends StatelessWidget {
   String get _aiCopyText =>
       !thinking && kind.toUpperCase() == 'TEXT' ? text : '';
 
-  Widget _buildUserAvatar() {
+  Widget _buildUserAvatar(BuildContext context) {
     final initial = userInitial.isNotEmpty
         ? userInitial
         : (userName.isNotEmpty ? userName[0] : '我');
@@ -1919,8 +1944,19 @@ class NovaC4MessageRow extends StatelessWidget {
       margin: const EdgeInsets.only(left: 8),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: const Color(0xFFF0F4FC),
-        border: Border.all(color: Colors.white, width: 1.5),
+        color: DunesColors.resolveNullable(
+          context,
+          const Color(0xFFF0F4FC),
+          role: DunesColorRole.surface,
+        ),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.border,
+          ),
+          width: 1.5,
+        ),
         boxShadow: const [
           BoxShadow(
             color: Color(0x14000000),
@@ -1940,20 +1976,34 @@ class NovaC4MessageRow extends StatelessWidget {
             : userAvatarObjectKey,
         avatarUrl: userAvatarUrl.trim().isEmpty ? null : userAvatarUrl,
         avatarService: avatarService,
-        fallbackBackground: const Color(0xFFF0F4FC),
-        fallbackForeground: const Color(0xFF2E75FF),
+        fallbackBackground: DunesColors.resolve(
+          context,
+          const Color(0xFFF0F4FC),
+          role: DunesColorRole.surface,
+        ),
+        fallbackForeground: DunesColors.resolve(
+          context,
+          const Color(0xFF2E75FF),
+        ),
       ),
     );
   }
 
-  Widget _buildAiAvatar() {
+  Widget _buildAiAvatar(BuildContext context) {
     return Container(
       width: 38,
       height: 38,
       margin: const EdgeInsets.only(right: 8),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 1.5),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.border,
+          ),
+          width: 1.5,
+        ),
         boxShadow: const [
           BoxShadow(
             color: Color(0x186B3FE2),
@@ -2004,7 +2054,7 @@ class NovaC4MessageRow extends StatelessWidget {
                   _userCopyText,
                 ),
               ),
-              _buildUserAvatar(),
+              _buildUserAvatar(context),
             ],
           ),
           if (onResend != null)
@@ -2046,7 +2096,7 @@ class NovaC4MessageRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildAiAvatar(),
+          _buildAiAvatar(context),
           Flexible(
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),

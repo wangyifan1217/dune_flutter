@@ -583,8 +583,16 @@ class _NativeWorkProfileManagementPageState
     decoration: BoxDecoration(
       gradient: LinearGradient(
         colors: [
-          DunesColors.resolve(context, Color(0xFF604084)),
-          DunesColors.resolve(context, Color(0xFF8E6BBC)),
+          DunesColors.resolve(
+            context,
+            Color(0xFF604084),
+            role: DunesColorRole.surface,
+          ),
+          DunesColors.resolve(
+            context,
+            Color(0xFF8E6BBC),
+            role: DunesColorRole.surface,
+          ),
         ],
       ),
       borderRadius: BorderRadius.circular(20),

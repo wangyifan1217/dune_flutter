@@ -422,43 +422,83 @@ class _StatusChip extends StatelessWidget {
     late final Color fg;
     late final String label;
     if (st == 'OPEN' || st == 'PENDING') {
-      bg = DunesColors.resolve(context, DunesColors.amberSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.amberSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, const Color(0xFF5D3508));
       label = '审批中';
     } else if (st == 'APPROVED' || st == 'DONE' || st == 'LIVE') {
-      bg = DunesColors.resolve(context, DunesColors.greenSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.greenSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, const Color(0xFF085041));
       label = '已通过';
     } else if (st == 'REJECTED') {
-      bg = DunesColors.resolve(context, DunesColors.coralSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.coralSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, const Color(0xFF993C1D));
       label = '已驳回';
     } else if (st == 'FILLING') {
-      bg = DunesColors.resolve(context, DunesColors.blueSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.blueSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, DunesColors.blue);
       label = '填写中';
     } else if (st == 'REVIEWING') {
-      bg = DunesColors.resolve(context, DunesColors.amberSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.amberSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, const Color(0xFF5D3508));
       label = '复核中';
     } else if (st == 'PENDING_PRESIDENT') {
-      bg = DunesColors.resolve(context, DunesColors.amberSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.amberSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, const Color(0xFF5D3508));
       label = '待最终确认';
     } else if (st == 'DRAFT' || st == 'PENDING_INITIATE') {
-      bg = DunesColors.resolve(context, DunesColors.blueSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.blueSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, DunesColors.blue);
       label = st == 'PENDING_INITIATE' ? '待发起' : '草稿';
     } else if (st == 'VOIDED') {
-      bg = DunesColors.resolve(context, const Color(0xFFF0F0F0));
+      bg = DunesColors.resolve(
+        context,
+        const Color(0xFFF0F0F0),
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, DunesColors.text3);
       label = '已作废';
     } else if (st == 'SUPERSEDED') {
-      bg = DunesColors.resolve(context, DunesColors.bgSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.bgSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, DunesColors.text2);
       label = '已替代';
     } else {
-      bg = DunesColors.resolve(context, DunesColors.bgSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.bgSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, DunesColors.text2);
       label = st.isEmpty ? '未知' : st;
     }

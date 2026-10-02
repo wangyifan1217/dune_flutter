@@ -120,13 +120,18 @@ class ReconFrozenAuditLane extends StatelessWidget {
           children: [
             if (includeHeader)
               _band(
+                context,
                 height: headerH,
                 color: DunesColors.resolve(context, const Color(0xFFF6F7F9)),
                 child: Row(
                   children: [
                     for (final step in steps)
-                      _headerCell(reconChainStepLabel(step), width: layerW),
-                    _headerCell('审核记录', width: recordW),
+                      _headerCell(
+                        context,
+                        reconChainStepLabel(step),
+                        width: layerW,
+                      ),
+                    _headerCell(context, '审核记录', width: recordW),
                   ],
                 ),
               ),
@@ -158,6 +163,7 @@ class ReconFrozenAuditLane extends StatelessWidget {
                             children: [
                               for (final step in steps)
                                 _statusCell(
+                                  context,
                                   reconReviewerForLayer(reviewersAt(i), step),
                                   width: layerW,
                                 ),
@@ -189,23 +195,39 @@ class ReconFrozenAuditLane extends StatelessWidget {
     );
   }
 
-  Widget _band({
+  Widget _band(
+    BuildContext context, {
     required double height,
     required Color color,
     required Widget child,
   }) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: color,
-        border: const Border(
-          bottom: BorderSide(color: DunesColors.borderSoft, width: 0.5),
+        color: DunesColors.resolveNullable(
+          context,
+          color,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
         ),
       ),
       child: SizedBox(height: height, child: child),
     );
   }
 
-  Widget _headerCell(String text, {required double width}) {
+  Widget _headerCell(
+    BuildContext context,
+    String text, {
+    required double width,
+  }) {
     return SizedBox(
       width: width,
       child: Padding(
@@ -219,7 +241,8 @@ class ReconFrozenAuditLane extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: fontSize,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
             ),
           ),
         ),
@@ -227,7 +250,11 @@ class ReconFrozenAuditLane extends StatelessWidget {
     );
   }
 
-  Widget _statusCell(ReconRowReviewer? reviewer, {required double width}) {
+  Widget _statusCell(
+    BuildContext context,
+    ReconRowReviewer? reviewer, {
+    required double width,
+  }) {
     final label = reviewer?.statusLabel ?? '未处理';
     return SizedBox(
       width: width,
@@ -243,6 +270,7 @@ class ReconFrozenAuditLane extends StatelessWidget {
               fontSize: fontSize - 1,
               fontWeight: FontWeight.w600,
               color: reconAuditStatusColor(reviewer),
+              context: context,
             ),
           ),
         ),
@@ -406,6 +434,7 @@ class ReconAuditRecordPane extends StatelessWidget {
               const SizedBox(height: 14),
               for (var i = 0; i < visibleSteps.length; i++) ...[
                 _layerCard(
+                  context,
                   step: visibleSteps[i],
                   reviewer: reconReviewerForLayer(reviewers, visibleSteps[i]),
                 ),
@@ -418,7 +447,8 @@ class ReconAuditRecordPane extends StatelessWidget {
     );
   }
 
-  Widget _layerCard({
+  Widget _layerCard(
+    BuildContext context, {
     required String step,
     required ReconRowReviewer? reviewer,
   }) {
@@ -436,9 +466,19 @@ class ReconAuditRecordPane extends StatelessWidget {
     );
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
+        color: DunesColors.resolveNullable(
+          context,
+          DunesColors.bgSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
@@ -467,7 +507,11 @@ class ReconAuditRecordPane extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                       Text(
@@ -477,7 +521,8 @@ class ReconAuditRecordPane extends StatelessWidget {
                         style: DunesTypography.sans(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: DunesColors.text,
+                          color: DunesColors.resolve(context, DunesColors.text),
+                          context: context,
                         ),
                       ),
                     ],
@@ -489,6 +534,7 @@ class ReconAuditRecordPane extends StatelessWidget {
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: reconAuditStatusColor(reviewer),
+                    context: context,
                   ),
                 ),
               ],
@@ -499,21 +545,37 @@ class ReconAuditRecordPane extends StatelessWidget {
                 '确认时间  $time',
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: DunesColors.text2,
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
                 ),
               ),
             ],
             if (reviewer?.rejected == true && reason.isNotEmpty) ...[
               const SizedBox(height: 8),
-              _kv('驳回原因', reason, DunesColors.coral),
+              _kv(
+                context,
+                '驳回原因',
+                reason,
+                DunesColors.resolve(context, DunesColors.coral),
+              ),
             ],
             if (reviewer?.reconfirmed == true && reason.isNotEmpty) ...[
               const SizedBox(height: 8),
-              _kv('复核说明', reason, DunesColors.green),
+              _kv(
+                context,
+                '复核说明',
+                reason,
+                DunesColors.resolve(context, DunesColors.green),
+              ),
             ],
             if (rejectHistory.isNotEmpty && rejectHistory != reason) ...[
               const SizedBox(height: 8),
-              _kv('驳回历史', rejectHistory, DunesColors.coral),
+              _kv(
+                context,
+                '驳回历史',
+                rejectHistory,
+                DunesColors.resolve(context, DunesColors.coral),
+              ),
             ],
           ],
         ),
@@ -521,7 +583,7 @@ class ReconAuditRecordPane extends StatelessWidget {
     );
   }
 
-  Widget _kv(String label, String text, Color color) {
+  Widget _kv(BuildContext context, String label, String text, Color color) {
     return Text.rich(
       TextSpan(
         children: [
@@ -531,11 +593,16 @@ class ReconAuditRecordPane extends StatelessWidget {
               fontSize: 12,
               fontWeight: FontWeight.w700,
               color: color,
+              context: context,
             ),
           ),
           TextSpan(
             text: text,
-            style: DunesTypography.sans(fontSize: 12, color: DunesColors.text),
+            style: DunesTypography.sans(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
+            ),
           ),
         ],
       ),

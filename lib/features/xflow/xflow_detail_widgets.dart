@@ -152,11 +152,12 @@ class XfDetHero extends StatelessWidget {
     final createdAt = fmtDetailTime(raw['createdAt']);
 
     final chips = <Widget>[
-      if (tag1.isNotEmpty && tag1 != '—') _metaChip(Icons.sell_outlined, tag1),
+      if (tag1.isNotEmpty && tag1 != '—')
+        _metaChip(context, Icons.sell_outlined, tag1),
       if (taskLevel.isNotEmpty)
-        _metaChip(Icons.bar_chart_outlined, '$taskLevel 级'),
+        _metaChip(context, Icons.bar_chart_outlined, '$taskLevel 级'),
       if (coverageText.isNotEmpty && coverageText != '—')
-        _metaChip(Icons.location_on_outlined, coverageText),
+        _metaChip(context, Icons.location_on_outlined, coverageText),
     ];
 
     return Container(
@@ -165,9 +166,21 @@ class XfDetHero extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            DunesColors.resolve(context, Color(0xFF30235F)),
-            DunesColors.resolve(context, Color(0xFF51408F)),
-            DunesColors.resolve(context, Color(0xFF7058B6)),
+            DunesColors.resolve(
+              context,
+              Color(0xFF30235F),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFF51408F),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFF7058B6),
+              role: DunesColorRole.surface,
+            ),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -268,11 +281,16 @@ class XfDetHero extends StatelessWidget {
             Row(
               children: [
                 if (owner.isNotEmpty) ...[
-                  Expanded(child: _heroMeta('申请人', owner)),
+                  Expanded(child: _heroMeta(context, '申请人', owner)),
                   const Spacer(),
                 ],
                 if (createdAt.isNotEmpty)
-                  _heroMeta('提交时间', createdAt, align: CrossAxisAlignment.end),
+                  _heroMeta(
+                    context,
+                    '提交时间',
+                    createdAt,
+                    align: CrossAxisAlignment.end,
+                  ),
               ],
             ),
           ],
@@ -281,17 +299,22 @@ class XfDetHero extends StatelessWidget {
     );
   }
 
-  Widget _metaChip(IconData icon, String text) {
+  Widget _metaChip(BuildContext context, IconData icon, String text) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 12, color: const Color(0xFFE2D9F8)),
+        Icon(
+          icon,
+          size: 12,
+          color: DunesColors.resolveNullable(context, const Color(0xFFE2D9F8)),
+        ),
         const SizedBox(width: 4),
         Text(
           text,
           style: DunesTypography.sans(
             fontSize: 10,
-            color: const Color(0xFFE2D9F8),
+            color: DunesColors.resolve(context, const Color(0xFFE2D9F8)),
+            context: context,
           ),
         ),
       ],
@@ -299,6 +322,7 @@ class XfDetHero extends StatelessWidget {
   }
 
   Widget _heroMeta(
+    BuildContext context,
     String label,
     String value, {
     CrossAxisAlignment align = CrossAxisAlignment.start,
@@ -310,7 +334,8 @@ class XfDetHero extends StatelessWidget {
           label,
           style: DunesTypography.sans(
             fontSize: 9,
-            color: const Color(0xFFBFB4DE),
+            color: DunesColors.resolve(context, const Color(0xFFBFB4DE)),
+            context: context,
           ),
         ),
         const SizedBox(height: 4),
@@ -321,7 +346,8 @@ class XfDetHero extends StatelessWidget {
           style: DunesTypography.sans(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: Colors.white,
+            color: DunesColors.resolve(context, Colors.white),
+            context: context,
           ),
         ),
       ],
@@ -337,17 +363,33 @@ class _StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color bg = DunesColors.resolve(context, DunesColors.bgSoft);
+    Color bg = DunesColors.resolve(
+      context,
+      DunesColors.bgSoft,
+      role: DunesColorRole.surface,
+    );
     Color fg = DunesColors.resolve(context, DunesColors.text2);
     switch (tone) {
       case DetailStatusTone.ok:
-        bg = DunesColors.resolve(context, const Color(0xFFE6F5EC));
+        bg = DunesColors.resolve(
+          context,
+          const Color(0xFFE6F5EC),
+          role: DunesColorRole.surface,
+        );
         fg = DunesColors.resolve(context, const Color(0xFF2D8A5E));
       case DetailStatusTone.warn:
-        bg = DunesColors.resolve(context, const Color(0xFFFFF4E0));
+        bg = DunesColors.resolve(
+          context,
+          const Color(0xFFFFF4E0),
+          role: DunesColorRole.surface,
+        );
         fg = DunesColors.resolve(context, const Color(0xFFD4A017));
       case DetailStatusTone.bad:
-        bg = DunesColors.resolve(context, const Color(0xFFFDE8E4));
+        bg = DunesColors.resolve(
+          context,
+          const Color(0xFFFDE8E4),
+          role: DunesColorRole.surface,
+        );
         fg = DunesColors.resolve(context, DunesColors.coral);
       case DetailStatusTone.muted:
         break;
@@ -486,8 +528,16 @@ class XfDetRejectBanner extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            DunesColors.resolve(context, Color(0xFFFFF5F3)),
-            DunesColors.resolve(context, Colors.white),
+            DunesColors.resolve(
+              context,
+              Color(0xFFFFF5F3),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Colors.white,
+              role: DunesColorRole.surface,
+            ),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -923,8 +973,8 @@ class XfDetPushContext extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (toName.isNotEmpty) ...[
-            _pushInfoRow('代发起人', toName, highlight: true),
-            if (toDept.isNotEmpty) _pushInfoRow('代发起人部门', toDept),
+            _pushInfoRow(context, '代发起人', toName, highlight: true),
+            if (toDept.isNotEmpty) _pushInfoRow(context, '代发起人部门', toDept),
             const SizedBox(height: 4),
           ],
           Container(
@@ -946,10 +996,10 @@ class XfDetPushContext extends StatelessWidget {
             ),
             child: Column(
               children: [
-                _pushInfoRow('推送人', (by['name'] ?? '—').toString()),
-                _pushInfoRow('部门', (by['dept'] ?? '—').toString()),
+                _pushInfoRow(context, '推送人', (by['name'] ?? '—').toString()),
+                _pushInfoRow(context, '部门', (by['dept'] ?? '—').toString()),
                 if ((by['at'] ?? '').toString().isNotEmpty)
-                  _pushInfoRow('推送时间', fmtDetailTime(by['at'])),
+                  _pushInfoRow(context, '推送时间', fmtDetailTime(by['at'])),
               ],
             ),
           ),
@@ -1003,7 +1053,12 @@ class XfDetPushContext extends StatelessWidget {
     );
   }
 
-  Widget _pushInfoRow(String k, String v, {bool highlight = false}) {
+  Widget _pushInfoRow(
+    BuildContext context,
+    String k,
+    String v, {
+    bool highlight = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -1015,7 +1070,8 @@ class XfDetPushContext extends StatelessWidget {
               k,
               style: DunesTypography.sans(
                 fontSize: 11,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           ),
@@ -1026,7 +1082,10 @@ class XfDetPushContext extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 12,
                 fontWeight: highlight ? FontWeight.w700 : FontWeight.w600,
-                color: highlight ? DunesColors.accent : DunesColors.text,
+                color: highlight
+                    ? DunesColors.resolve(context, DunesColors.accent)
+                    : DunesColors.resolve(context, DunesColors.text),
+                context: context,
               ),
             ),
           ),
@@ -1607,12 +1666,13 @@ class XfDetRepeatableGroups extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var i = 0; i < rows.length; i++)
-          _groupCard(cols, rows[i], '${field.itemTitle}${i + 1}'),
+          _groupCard(context, cols, rows[i], '${field.itemTitle}${i + 1}'),
       ],
     );
   }
 
   Widget _groupCard(
+    BuildContext context,
     List<XflowField> cols,
     Map<String, dynamic> row,
     String title,
@@ -1621,9 +1681,19 @@ class XfDetRepeatableGroups extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
       decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
+        color: DunesColors.resolveNullable(
+          context,
+          DunesColors.bgSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: DunesColors.borderSoft),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1635,7 +1705,8 @@ class XfDetRepeatableGroups extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
               ),
             ),
           ),
@@ -1651,7 +1722,8 @@ class XfDetRepeatableGroups extends StatelessWidget {
                       style: DunesTypography.sans(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
-                        color: DunesColors.text3,
+                        color: DunesColors.resolve(context, DunesColors.text3),
+                        context: context,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -1676,7 +1748,11 @@ class XfDetRepeatableGroups extends StatelessWidget {
                         col.label.isEmpty ? col.key : col.label,
                         style: DunesTypography.sans(
                           fontSize: 12,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                     ),
@@ -1685,8 +1761,12 @@ class XfDetRepeatableGroups extends StatelessWidget {
                         formatGroupCellDisplay(col, row),
                         style: DunesTypography.sans(
                           fontSize: 13,
-                          color: DunesColors.text2,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
                           height: 1.45,
+                          context: context,
                         ),
                       ),
                     ),
@@ -1759,9 +1839,9 @@ class XfDetTable extends StatelessWidget {
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _headerRow(cols),
+        _headerRow(context, cols),
         for (final row in rows) ...[
-          _dataRow(cols, row),
+          _dataRow(context, cols, row),
           if (row[nestedKey] is List && (row[nestedKey] as List).isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 4, 4, 8),
@@ -1806,9 +1886,13 @@ class XfDetTable extends StatelessWidget {
     );
   }
 
-  Widget _headerRow(List<Map<String, dynamic>> cols) {
+  Widget _headerRow(BuildContext context, List<Map<String, dynamic>> cols) {
     return Container(
-      color: DunesColors.bgSoft,
+      color: DunesColors.resolveNullable(
+        context,
+        DunesColors.bgSoft,
+        role: DunesColorRole.surface,
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1822,7 +1906,8 @@ class XfDetTable extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ),
@@ -1832,12 +1917,22 @@ class XfDetTable extends StatelessWidget {
     );
   }
 
-  Widget _dataRow(List<Map<String, dynamic>> cols, Map<String, dynamic> row) {
+  Widget _dataRow(
+    BuildContext context,
+    List<Map<String, dynamic>> cols,
+    Map<String, dynamic> row,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         border: Border(
-          top: BorderSide(color: DunesColors.borderSoft.withValues(alpha: 0.7)),
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft.withValues(alpha: 0.7),
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
       ),
       child: Row(
@@ -1851,8 +1946,9 @@ class XfDetTable extends StatelessWidget {
                   formatCellDisplay(row[col['key']], col, row),
                   style: DunesTypography.sans(
                     fontSize: 13,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
                     height: 1.45,
+                    context: context,
                   ),
                 ),
               ),
@@ -2659,14 +2755,30 @@ class _ApvBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = approve
-        ? DunesColors.resolve(context, const Color(0xFF7054D8))
-        : DunesColors.resolve(context, Colors.white);
+        ? DunesColors.resolve(
+            context,
+            const Color(0xFF7054D8),
+            role: DunesColorRole.surface,
+          )
+        : DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          );
     final fg = approve
         ? DunesColors.resolve(context, Colors.white)
         : DunesColors.resolve(context, DunesColors.coral);
     final border = approve
-        ? DunesColors.resolve(context, const Color(0xFF7054D8))
-        : DunesColors.resolve(context, DunesColors.coral);
+        ? DunesColors.resolve(
+            context,
+            const Color(0xFF7054D8),
+            role: DunesColorRole.border,
+          )
+        : DunesColors.resolve(
+            context,
+            DunesColors.coral,
+            role: DunesColorRole.border,
+          );
     return Material(
       color: DunesColors.resolveNullable(
         context,
@@ -2905,17 +3017,41 @@ class _ActBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color bg = DunesColors.resolve(context, Colors.white);
+    Color bg = DunesColors.resolve(
+      context,
+      Colors.white,
+      role: DunesColorRole.surface,
+    );
     Color fg = DunesColors.resolve(context, DunesColors.text);
-    Color border = DunesColors.resolve(context, DunesColors.border);
+    Color border = DunesColors.resolve(
+      context,
+      DunesColors.border,
+      role: DunesColorRole.border,
+    );
     if (primary) {
-      bg = DunesColors.resolve(context, DunesColors.accent);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.accent,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, Colors.white);
-      border = DunesColors.resolve(context, DunesColors.accent);
+      border = DunesColors.resolve(
+        context,
+        DunesColors.accent,
+        role: DunesColorRole.border,
+      );
     } else if (danger) {
-      bg = DunesColors.resolve(context, DunesColors.coral);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.coral,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, Colors.white);
-      border = DunesColors.resolve(context, DunesColors.coral);
+      border = DunesColors.resolve(
+        context,
+        DunesColors.coral,
+        role: DunesColorRole.border,
+      );
     }
     return Material(
       color: DunesColors.resolveNullable(

@@ -162,13 +162,21 @@ class _NativeB3PageState extends State<NativeB3Page> {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            DunesColors.resolve(context, Color(0xFFEFE9FB)),
+            DunesColors.resolve(
+              context,
+              Color(0xFFEFE9FB),
+              role: DunesColorRole.surface,
+            ),
             DunesColors.resolve(
               context,
               XflowApprovalPalette.page,
               role: DunesColorRole.surface,
             ),
-            DunesColors.resolve(context, Color(0xFFFBFAF6)),
+            DunesColors.resolve(
+              context,
+              Color(0xFFFBFAF6),
+              role: DunesColorRole.surface,
+            ),
           ],
           stops: [0, .28, .62],
         ),

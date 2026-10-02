@@ -526,30 +526,30 @@ class _ListPane extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   if (code.isNotEmpty) ...[
-                    _metaRow('编号', code),
+                    _metaRow(context, '编号', code),
                     const SizedBox(height: 4),
                   ],
-                  _metaRow('种类', kind),
+                  _metaRow(context, '种类', kind),
                   if (type.isNotEmpty && type != kind) ...[
                     const SizedBox(height: 4),
-                    _metaRow('类型', type),
+                    _metaRow(context, '类型', type),
                   ],
                   if (submitter.isNotEmpty) ...[
                     const SizedBox(height: 4),
-                    _metaRow('发起人', submitter),
+                    _metaRow(context, '发起人', submitter),
                   ],
                   if (timeText.isNotEmpty) ...[
                     const SizedBox(height: 4),
-                    _metaRow('发起时间', timeText),
+                    _metaRow(context, '发起时间', timeText),
                   ],
                   if (stepText.isNotEmpty) ...[
                     const SizedBox(height: 4),
-                    _metaRow('审批进度', stepText),
+                    _metaRow(context, '审批进度', stepText),
                   ],
                   if (item.scaleWan != null &&
                       item.scaleWan!.trim().isNotEmpty) ...[
                     const SizedBox(height: 4),
-                    _metaRow('金额', '¥${item.scaleWan!.trim()}万'),
+                    _metaRow(context, '金额', '¥${item.scaleWan!.trim()}万'),
                   ],
                   if (mode != ApprovalAssistantPickMode.browse) ...[
                     const SizedBox(height: 10),
@@ -579,14 +579,18 @@ class _ListPane extends StatelessWidget {
     );
   }
 
-  Widget _metaRow(String label, String value) {
+  Widget _metaRow(BuildContext context, String label, String value) {
     return Row(
       children: [
         SizedBox(
           width: 64,
           child: Text(
             label,
-            style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
         ),
         Expanded(
@@ -594,7 +598,11 @@ class _ListPane extends StatelessWidget {
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: DunesTypography.sans(fontSize: 12, color: DunesColors.text2),
+            style: DunesTypography.sans(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
+            ),
           ),
         ),
       ],
@@ -705,19 +713,39 @@ class _StatusChip extends StatelessWidget {
     late final Color bg;
     late final Color fg;
     if (st == 'OPEN' || st == 'PENDING') {
-      bg = DunesColors.resolve(context, DunesColors.amberSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.amberSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, const Color(0xFF5D3508));
     } else if (st == 'APPROVED' || st == 'DONE' || st == 'LIVE') {
-      bg = DunesColors.resolve(context, DunesColors.greenSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.greenSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, const Color(0xFF085041));
     } else if (st == 'REJECTED') {
-      bg = DunesColors.resolve(context, DunesColors.coralSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.coralSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, const Color(0xFF993C1D));
     } else if (st == 'DRAFT' || st == 'PENDING_INITIATE') {
-      bg = DunesColors.resolve(context, DunesColors.blueSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.blueSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, DunesColors.blue);
     } else {
-      bg = DunesColors.resolve(context, DunesColors.bgSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.bgSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, DunesColors.text2);
     }
     return Container(

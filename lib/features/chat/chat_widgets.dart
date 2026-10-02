@@ -1034,12 +1034,28 @@ class _WeChatPlusBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = showStop
-        ? DunesColors.resolve(context, const Color(0xFFB65252))
+        ? DunesColors.resolve(
+            context,
+            const Color(0xFFB65252),
+            role: DunesColorRole.surface,
+          )
         : locked
-        ? DunesColors.resolve(context, const Color(0xFFC9BEDD))
+        ? DunesColors.resolve(
+            context,
+            const Color(0xFFC9BEDD),
+            role: DunesColorRole.surface,
+          )
         : (plusOpen
-              ? DunesColors.resolve(context, const Color(0xFF553B96))
-              : DunesColors.resolve(context, const Color(0xFF7E64BD)));
+              ? DunesColors.resolve(
+                  context,
+                  const Color(0xFF553B96),
+                  role: DunesColorRole.surface,
+                )
+              : DunesColors.resolve(
+                  context,
+                  const Color(0xFF7E64BD),
+                  role: DunesColorRole.surface,
+                ));
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1099,8 +1115,16 @@ class _WeChatSendBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = locked
-        ? DunesColors.resolve(context, const Color(0xFFC9BEDD))
-        : DunesColors.resolve(context, const Color(0xFF7E64BD));
+        ? DunesColors.resolve(
+            context,
+            const Color(0xFFC9BEDD),
+            role: DunesColorRole.surface,
+          )
+        : DunesColors.resolve(
+            context,
+            const Color(0xFF7E64BD),
+            role: DunesColorRole.surface,
+          );
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1738,22 +1762,30 @@ class ChatTextBubble extends StatelessWidget {
   /// APP：长按先出选区手柄并默认全选；拖动手柄可截取。复制跟当前选区；「更多」打开宫格。
   final bool preferPartialTextCopy;
 
-  TextSpan _buildMentionTextSpan() {
+  TextSpan _buildMentionTextSpan(BuildContext context) {
     // 对方气泡正文加深一档并略加重，PC/APP 一致，避免发灰难读。
     final baseStyle = DunesTypography.sans(
       fontSize: 13,
       height: 1.5,
       fontWeight: FontWeight.w500,
-      color: mine ? Colors.white : const Color(0xFF111111),
+      color: mine
+          ? Colors.white
+          : DunesColors.resolve(context, const Color(0xFF111111)),
     );
     final mentionStyle = baseStyle.copyWith(
-      color: mine ? Colors.white : const Color(0xFF3B5BDB),
+      color: mine
+          ? Colors.white
+          : DunesColors.resolve(context, const Color(0xFF3B5BDB)),
       fontWeight: FontWeight.w600,
     );
     final linkStyle = baseStyle.copyWith(
-      color: mine ? const Color(0xFFE8DEFF) : const Color(0xFF3B5BDB),
+      color: mine
+          ? const Color(0xFFE8DEFF)
+          : DunesColors.resolve(context, const Color(0xFF3B5BDB)),
       decoration: TextDecoration.underline,
-      decorationColor: mine ? const Color(0xFFE8DEFF) : const Color(0xFF3B5BDB),
+      decorationColor: mine
+          ? const Color(0xFFE8DEFF)
+          : DunesColors.resolve(context, const Color(0xFF3B5BDB)),
     );
     final spans = <InlineSpan>[];
     // URL 优先于 @mention，避免把链接里的 @ 误高亮。
@@ -1857,7 +1889,7 @@ class ChatTextBubble extends StatelessWidget {
             children: [
               if (enableSelection)
                 _ChatSelectableRichText(
-                  textSpan: _buildMentionTextSpan(),
+                  textSpan: _buildMentionTextSpan(context),
                   text: text,
                   selectAllOnLongPress: selectAllOnLongPress,
                   preferPartialTextCopy: preferPartialTextCopy,
@@ -1869,7 +1901,7 @@ class ChatTextBubble extends StatelessWidget {
                   onSelectionRecall: onSelectionRecall,
                 )
               else
-                RichText(text: _buildMentionTextSpan()),
+                RichText(text: _buildMentionTextSpan(context)),
               if (quote != null && !quote!.isEmpty) ...[
                 const SizedBox(height: 6),
                 ChatQuoteBlock(quote: quote!, mine: mine, onTap: onQuoteTap),

@@ -160,6 +160,7 @@ class TaskChatShareCard extends StatelessWidget {
                             runSpacing: 5,
                             children: [
                               _chip(
+                                context,
                                 state,
                                 background: DunesColors.resolve(
                                   context,
@@ -167,8 +168,11 @@ class TaskChatShareCard extends StatelessWidget {
                                 ),
                                 foreground: statusColor,
                               ),
-                              _chip(taskSharePriorityLabel(share.priority)),
-                              _chip(share.isMain ? '主任务' : '子任务'),
+                              _chip(
+                                context,
+                                taskSharePriorityLabel(share.priority),
+                              ),
+                              _chip(context, share.isMain ? '主任务' : '子任务'),
                             ],
                           ),
                         ],
@@ -181,17 +185,23 @@ class TaskChatShareCard extends StatelessWidget {
                           Row(
                             children: [
                               _info(
+                                context,
                                 '负责人',
                                 share.ownerName.isEmpty
                                     ? '未指定'
                                     : share.ownerName,
                               ),
                               _info(
+                                context,
                                 '任务周期',
                                 '${_date(share.startAt)} - ${_date(share.dueAt)}',
                               ),
                               if (share.isMain && share.subtaskCount > 0)
-                                _info('子任务', '${share.subtaskCount} 项'),
+                                _info(
+                                  context,
+                                  '子任务',
+                                  '${share.subtaskCount} 项',
+                                ),
                             ],
                           ),
                           const SizedBox(height: 12),
@@ -305,28 +315,36 @@ class TaskChatShareCard extends StatelessWidget {
     );
   }
 
-  Widget _chip(String text, {Color? background, Color? foreground}) =>
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: background ?? Colors.white.withValues(alpha: .14),
-          borderRadius: BorderRadius.circular(20),
-          border: background == null
-              ? Border.all(color: Colors.white.withValues(alpha: .18))
-              : null,
-        ),
-        child: Text(
-          text,
-          style: TextStyle(
-            fontSize: 9,
-            color: foreground ?? Colors.white,
-            height: 1,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      );
+  Widget _chip(
+    BuildContext context,
+    String text, {
+    Color? background,
+    Color? foreground,
+  }) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: DunesColors.resolveNullable(
+        context,
+        background ?? Colors.white.withValues(alpha: .14),
+        role: DunesColorRole.surface,
+      ),
+      borderRadius: BorderRadius.circular(20),
+      border: background == null
+          ? Border.all(color: Colors.white.withValues(alpha: .18))
+          : null,
+    ),
+    child: Text(
+      text,
+      style: TextStyle(
+        fontSize: 9,
+        color: DunesColors.resolveNullable(context, foreground ?? Colors.white),
+        height: 1,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
 
-  Widget _info(String label, String value) => Expanded(
+  Widget _info(BuildContext context, String label, String value) => Expanded(
     child: Padding(
       padding: const EdgeInsets.only(right: 5),
       child: Column(
@@ -334,16 +352,19 @@ class TaskChatShareCard extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(fontSize: 9, color: Color(0xFFA09DAA)),
+            style: TextStyle(
+              fontSize: 9,
+              color: DunesColors.resolveNullable(context, Color(0xFFA09DAA)),
+            ),
           ),
           const SizedBox(height: 4),
           Text(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
-              color: _ink,
+              color: DunesColors.resolveNullable(context, _ink),
               fontWeight: FontWeight.w600,
             ),
           ),

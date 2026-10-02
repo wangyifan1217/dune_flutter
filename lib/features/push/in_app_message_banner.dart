@@ -166,8 +166,16 @@ class _InAppMessageBannerOverlayState extends State<_InAppMessageBannerOverlay>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              DunesColors.resolve(context, Color(0xFF2F8F7E)),
-              DunesColors.resolve(context, Color(0xFF5EAEDE)),
+              DunesColors.resolve(
+                context,
+                Color(0xFF2F8F7E),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFF5EAEDE),
+                role: DunesColorRole.surface,
+              ),
             ],
           ),
         ),
@@ -188,8 +196,16 @@ class _InAppMessageBannerOverlayState extends State<_InAppMessageBannerOverlay>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              DunesColors.resolve(context, Color(0xFF8C5A91)),
-              DunesColors.resolve(context, Color(0xFFC17B7B)),
+              DunesColors.resolve(
+                context,
+                Color(0xFF8C5A91),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFFC17B7B),
+                role: DunesColorRole.surface,
+              ),
             ],
           ),
         ),

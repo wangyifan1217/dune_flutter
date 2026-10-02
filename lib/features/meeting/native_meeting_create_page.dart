@@ -913,8 +913,16 @@ class _NativeMeetingCreatePageState extends State<NativeMeetingCreatePage>
                     borderRadius: BorderRadius.circular(18),
                     gradient: LinearGradient(
                       colors: [
-                        DunesColors.resolve(context, Color(0xFF7B5CD8)),
-                        DunesColors.resolve(context, Color(0xFF6A4FA0)),
+                        DunesColors.resolve(
+                          context,
+                          Color(0xFF7B5CD8),
+                          role: DunesColorRole.surface,
+                        ),
+                        DunesColors.resolve(
+                          context,
+                          Color(0xFF6A4FA0),
+                          role: DunesColorRole.surface,
+                        ),
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,

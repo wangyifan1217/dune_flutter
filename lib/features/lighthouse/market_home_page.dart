@@ -39,7 +39,9 @@ class MarketHomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Theme(
-      data: DunesTheme.light(),
+      data: Theme.of(context).brightness == Brightness.dark
+          ? Theme.of(context)
+          : DunesTheme.light(),
       child: Scaffold(
         backgroundColor: DunesColors.resolve(
           context,
@@ -193,12 +195,14 @@ class _T {
   static const hairlineStrong = Color(0x1F000000);
 
   static TextStyle monoStyle({
+    BuildContext? context,
     double size = 11,
     Color color = inkMid,
     FontWeight weight = FontWeight.w400,
     double? letterSpacing,
     double? height,
   }) => DunesTypography.mono(
+    context: context,
     fontSize: size,
     color: color,
     fontWeight: weight,
@@ -207,12 +211,14 @@ class _T {
   ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
 
   static TextStyle sansStyle({
+    BuildContext? context,
     double size = 14,
     Color color = ink,
     FontWeight weight = FontWeight.w400,
     double? letterSpacing,
     double? height,
   }) => DunesTypography.sans(
+    context: context,
     fontSize: size,
     color: color,
     fontWeight: weight,
@@ -278,6 +284,7 @@ class _MarketTopBar extends StatelessWidget {
           Text(
             '灯塔',
             style: _T.sansStyle(
+              context: context,
               size: 18,
               weight: FontWeight.w500,
               color: DunesColors.resolve(context, _T.ink),
@@ -299,6 +306,7 @@ class _MarketTopBar extends StatelessWidget {
           Text(
             '市场',
             style: _T.sansStyle(
+              context: context,
               size: 12,
               color: DunesColors.resolve(context, _T.inkMid),
               letterSpacing: 3,
@@ -334,6 +342,7 @@ class _PeriodChip extends StatelessWidget {
       child: Text(
         period,
         style: _T.monoStyle(
+          context: context,
           size: 11,
           color: DunesColors.resolve(context, _T.inkMid),
           letterSpacing: 1,
@@ -473,6 +482,7 @@ class _AlertChip extends StatelessWidget {
                 Text(
                   alert.timeAgo,
                   style: _T.monoStyle(
+                    context: context,
                     size: 10,
                     color: DunesColors.resolve(context, _T.inkFaint),
                     height: 1.0,
@@ -568,6 +578,7 @@ class _ScaleHero extends StatelessWidget {
             Text(
               formatted.value,
               style: _T.monoStyle(
+                context: context,
                 size: 52,
                 weight: FontWeight.w300,
                 color: DunesColors.resolve(context, _T.ink),
@@ -641,7 +652,12 @@ class _ChangePill extends StatelessWidget {
         const SizedBox(width: 4),
         Text(
           '$arrow${pct.abs().toStringAsFixed(1)}%',
-          style: _T.monoStyle(size: 11, color: color, weight: FontWeight.w500),
+          style: _T.monoStyle(
+            context: context,
+            size: 11,
+            color: color,
+            weight: FontWeight.w500,
+          ),
         ),
       ],
     );
@@ -746,6 +762,7 @@ class _CaliberCell extends StatelessWidget {
               Text(
                 formatted.value,
                 style: _T.monoStyle(
+                  context: context,
                   size: 22,
                   weight: FontWeight.w400,
                   color: DunesColors.resolve(context, _T.ink),
@@ -770,6 +787,7 @@ class _CaliberCell extends StatelessWidget {
           Text(
             '毛利率 ${margin.ratePct.toStringAsFixed(2)}%',
             style: _T.monoStyle(
+              context: context,
               size: 11,
               color: DunesColors.resolve(context, _T.inkMid),
               letterSpacing: 0.5,
@@ -816,6 +834,7 @@ class _DeviationCenter extends StatelessWidget {
           Text(
             '$sign${abs.toStringAsFixed(2)}%',
             style: _T.monoStyle(
+              context: context,
               size: 18,
               color: tone.stroke,
               weight: FontWeight.w500,
@@ -977,6 +996,7 @@ class _StructureCard extends StatelessWidget {
                 Text(
                   item.subMetric,
                   style: _T.monoStyle(
+                    context: context,
                     size: 11,
                     color: DunesColors.resolve(context, _T.inkMid),
                     letterSpacing: 0.5,
@@ -989,6 +1009,7 @@ class _StructureCard extends StatelessWidget {
           Text(
             item.metric,
             style: _T.monoStyle(
+              context: context,
               size: 22,
               weight: FontWeight.w400,
               color: item.accentColor,

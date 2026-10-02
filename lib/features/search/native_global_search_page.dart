@@ -634,8 +634,16 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
               borderRadius: BorderRadius.circular(14),
               gradient: LinearGradient(
                 colors: [
-                  DunesColors.resolve(context, Color(0xFFF3ECFB)),
-                  DunesColors.resolve(context, Color(0xFFFFFFFF)),
+                  DunesColors.resolve(
+                    context,
+                    Color(0xFFF3ECFB),
+                    role: DunesColorRole.surface,
+                  ),
+                  DunesColors.resolve(
+                    context,
+                    Color(0xFFFFFFFF),
+                    role: DunesColorRole.surface,
+                  ),
                 ],
               ),
               border: Border.all(

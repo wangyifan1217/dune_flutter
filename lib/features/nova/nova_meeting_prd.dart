@@ -697,8 +697,16 @@ Future<bool> showMeetingPrdConfirmDialog(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    DunesColors.resolve(context, Color(0xFF553B96)),
-                    DunesColors.resolve(context, Color(0xFF7B5CB8)),
+                    DunesColors.resolve(
+                      context,
+                      Color(0xFF553B96),
+                      role: DunesColorRole.surface,
+                    ),
+                    DunesColors.resolve(
+                      context,
+                      Color(0xFF7B5CB8),
+                      role: DunesColorRole.surface,
+                    ),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(12),

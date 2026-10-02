@@ -476,8 +476,16 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            DunesColors.resolve(context, Color(0xFFEFE9FA)),
-                            DunesColors.resolve(context, Color(0xFFF7F4FD)),
+                            DunesColors.resolve(
+                              context,
+                              Color(0xFFEFE9FA),
+                              role: DunesColorRole.surface,
+                            ),
+                            DunesColors.resolve(
+                              context,
+                              Color(0xFFF7F4FD),
+                              role: DunesColorRole.surface,
+                            ),
                             DunesColors.resolve(
                               context,
                               _bgSurface,

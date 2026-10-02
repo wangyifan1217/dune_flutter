@@ -569,8 +569,16 @@ class _ConversationPickerAvatar extends StatelessWidget {
             borderRadius: BorderRadius.circular(radius),
             gradient: LinearGradient(
               colors: [
-                DunesColors.resolve(context, Color(0xFF9079C2)),
-                DunesColors.resolve(context, Color(0xFF6A4FA0)),
+                DunesColors.resolve(
+                  context,
+                  Color(0xFF9079C2),
+                  role: DunesColorRole.surface,
+                ),
+                DunesColors.resolve(
+                  context,
+                  Color(0xFF6A4FA0),
+                  role: DunesColorRole.surface,
+                ),
               ],
             ),
           ),
@@ -588,8 +596,16 @@ class _ConversationPickerAvatar extends StatelessWidget {
           borderRadius: BorderRadius.circular(radius),
           gradient: LinearGradient(
             colors: [
-              DunesColors.resolve(context, Color(0xFFCABCEB)),
-              DunesColors.resolve(context, Color(0xFFA88CD8)),
+              DunesColors.resolve(
+                context,
+                Color(0xFFCABCEB),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFFA88CD8),
+                role: DunesColorRole.surface,
+              ),
             ],
           ),
         ),

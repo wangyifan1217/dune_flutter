@@ -2064,8 +2064,16 @@ class _CreateSealApplicationPageState
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             colors: [
-                              DunesColors.resolve(context, Color(0xFFFFFFFC)),
-                              DunesColors.resolve(context, Color(0xFFF2EFDF)),
+                              DunesColors.resolve(
+                                context,
+                                Color(0xFFFFFFFC),
+                                role: DunesColorRole.surface,
+                              ),
+                              DunesColors.resolve(
+                                context,
+                                Color(0xFFF2EFDF),
+                                role: DunesColorRole.surface,
+                              ),
                             ],
                           ),
                           border: Border.all(

@@ -1687,8 +1687,16 @@ class _NativeReconciliationAssistantPageState
                 borderRadius: BorderRadius.circular(9),
                 gradient: LinearGradient(
                   colors: [
-                    DunesColors.resolve(context, Color(0xFF5B6FC4)),
-                    DunesColors.resolve(context, Color(0xFF7652B8)),
+                    DunesColors.resolve(
+                      context,
+                      Color(0xFF5B6FC4),
+                      role: DunesColorRole.surface,
+                    ),
+                    DunesColors.resolve(
+                      context,
+                      Color(0xFF7652B8),
+                      role: DunesColorRole.surface,
+                    ),
                   ],
                 ),
               ),
@@ -1821,8 +1829,16 @@ class _NativeReconciliationAssistantPageState
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            DunesColors.resolve(context, Color(0xFF2F5D62)),
-            DunesColors.resolve(context, Color(0xFF477E79)),
+            DunesColors.resolve(
+              context,
+              Color(0xFF2F5D62),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFF477E79),
+              role: DunesColorRole.surface,
+            ),
           ],
         ),
         boxShadow: const [
@@ -2613,8 +2629,16 @@ class _ReconciliationAssistantAvatar extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            DunesColors.resolve(context, Color(0xFF5B6FC4)),
-            DunesColors.resolve(context, Color(0xFF7652B8)),
+            DunesColors.resolve(
+              context,
+              Color(0xFF5B6FC4),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFF7652B8),
+              role: DunesColorRole.surface,
+            ),
           ],
         ),
       ),

@@ -510,8 +510,8 @@ class NativeAvatarCircle extends StatelessWidget {
         fit: BoxFit.cover,
         borderRadius: _radius,
         // 与 IM 一致：加载中先出首字，避免空白黄底空等。
-        placeholder: () => _letter(fallbackText),
-        errorBuilder: () => _letter(fallbackText),
+        placeholder: () => _letter(context, fallbackText),
+        errorBuilder: () => _letter(context, fallbackText),
       );
     } else if (avatarPreset.isNotEmpty) {
       final svg = nativeAvatarPresetSvg(avatarPreset);
@@ -525,9 +525,9 @@ class NativeAvatarCircle extends StatelessWidget {
                 fit: BoxFit.cover,
               ),
             )
-          : _letter(fallbackText);
+          : _letter(context, fallbackText);
     } else {
-      inner = _letter(fallbackText);
+      inner = _letter(context, fallbackText);
     }
 
     return Container(
@@ -548,15 +548,26 @@ class NativeAvatarCircle extends StatelessWidget {
     );
   }
 
-  Widget _letter(String text) {
+  Widget _letter(BuildContext context, String text) {
     return Container(
       width: size,
       height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         borderRadius: _radius,
-        gradient: const LinearGradient(
-          colors: [Color(0xFF9377C9), Color(0xFF553B96)],
+        gradient: LinearGradient(
+          colors: [
+            DunesColors.resolve(
+              context,
+              Color(0xFF9377C9),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFF553B96),
+              role: DunesColorRole.surface,
+            ),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -566,7 +577,7 @@ class NativeAvatarCircle extends StatelessWidget {
         style: TextStyle(
           fontSize: size * 0.35,
           fontWeight: FontWeight.w500,
-          color: Colors.white,
+          color: DunesColors.resolveNullable(context, Colors.white),
         ),
       ),
     );

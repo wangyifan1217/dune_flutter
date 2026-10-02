@@ -82,7 +82,9 @@ class _AppReleaseHistoryPageState extends State<AppReleaseHistoryPage> {
   @override
   Widget build(BuildContext context) {
     return Theme(
-      data: DunesTheme.light(),
+      data: Theme.of(context).brightness == Brightness.dark
+          ? Theme.of(context)
+          : DunesTheme.light(),
       child: Scaffold(
         backgroundColor: DunesColors.resolve(
           context,
@@ -231,9 +233,21 @@ class _CurrentVersionCard extends StatelessWidget {
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
           colors: [
-            DunesColors.resolve(context, Color(0xFFF0ECF6)),
-            DunesColors.resolve(context, Color(0xFFE7E2F2)),
-            DunesColors.resolve(context, Color(0xFFD9E4F6)),
+            DunesColors.resolve(
+              context,
+              Color(0xFFF0ECF6),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFFE7E2F2),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFFD9E4F6),
+              role: DunesColorRole.surface,
+            ),
           ],
         ),
       ),

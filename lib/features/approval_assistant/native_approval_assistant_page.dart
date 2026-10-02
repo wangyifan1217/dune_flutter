@@ -1000,8 +1000,16 @@ class ApprovalAssistantAvatar extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            DunesColors.resolve(context, DunesColors.brandPurple),
-            DunesColors.resolve(context, DunesColors.brandPurpleDeep),
+            DunesColors.resolve(
+              context,
+              DunesColors.brandPurple,
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              DunesColors.brandPurpleDeep,
+              role: DunesColorRole.surface,
+            ),
           ],
         ),
       ),

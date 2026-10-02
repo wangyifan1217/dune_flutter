@@ -63,6 +63,7 @@ Future<void> mountPage(
   List<Map<String, dynamic>> notices = const [],
   List<Map<String, dynamic>> Function()? noticesProvider,
   Duration refreshDelay = Duration.zero,
+  ThemeData? theme,
 }) async {
   tester.view.physicalSize = Size(width, 950);
   tester.view.devicePixelRatio = 1;
@@ -124,6 +125,7 @@ Future<void> mountPage(
   addTearDown(client.close);
   await tester.pumpWidget(
     MaterialApp(
+      theme: theme,
       home: NativeLighthousePage(
         session: session,
         navigation: DunesNavigationController(),

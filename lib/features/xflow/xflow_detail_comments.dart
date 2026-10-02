@@ -1271,18 +1271,18 @@ class _CommentAttachments extends StatelessWidget {
           Wrap(
             spacing: 6,
             runSpacing: 6,
-            children: [for (final att in images) _imageThumb(att)],
+            children: [for (final att in images) _imageThumb(context, att)],
           ),
         if (images.isNotEmpty && files.isNotEmpty) const SizedBox(height: 6),
         for (var i = 0; i < files.length; i++) ...[
           if (i > 0) const SizedBox(height: 4),
-          _fileRow(files[i]),
+          _fileRow(context, files[i]),
         ],
       ],
     );
   }
 
-  Widget _imageThumb(ApprovalCommentAttachment att) {
+  Widget _imageThumb(BuildContext context, ApprovalCommentAttachment att) {
     return GestureDetector(
       onTap: () => onOpen(att),
       child: ClipRRect(
@@ -1343,24 +1343,34 @@ class _CommentAttachments extends StatelessWidget {
     );
   }
 
-  Widget _fileRow(ApprovalCommentAttachment att) {
+  Widget _fileRow(BuildContext context, ApprovalCommentAttachment att) {
     final size = _fmtAttachmentSize(att.size);
     return GestureDetector(
       onTap: () => onOpen(att),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
-          color: DunesColors.bgSoft,
+          color: DunesColors.resolveNullable(
+            context,
+            DunesColors.bgSoft,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: DunesColors.borderSoft),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.insert_drive_file_outlined,
               size: 15,
-              color: DunesColors.text3,
+              color: DunesColors.resolveNullable(context, DunesColors.text3),
             ),
             const SizedBox(width: 6),
             Flexible(
@@ -1370,8 +1380,9 @@ class _CommentAttachments extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: DunesTypography.sans(
                   fontSize: 12,
-                  color: const Color(0xFF3B7BB5),
+                  color: DunesColors.resolve(context, const Color(0xFF3B7BB5)),
                   fontWeight: FontWeight.w500,
+                  context: context,
                 ),
               ),
             ),
@@ -1381,7 +1392,8 @@ class _CommentAttachments extends StatelessWidget {
                 size,
                 style: DunesTypography.sans(
                   fontSize: 10.5,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               ),
             ],

@@ -66,8 +66,8 @@ class ImUserAvatar extends StatelessWidget {
     Widget core;
     // 优先使用后端已解析出的直链，避免 objectKey 滞后时仍展示旧头像。
     if (effectiveDirectUrl.isNotEmpty) {
-      final directImageUrl = avatarService != null &&
-              !_looksLikeUrl(effectiveDirectUrl)
+      final directImageUrl =
+          avatarService != null && !_looksLikeUrl(effectiveDirectUrl)
           ? avatarService!.mediaProxyUrl(
               effectiveDirectUrl,
               bucket: 'user-avatars',
@@ -110,12 +110,12 @@ class ImUserAvatar extends StatelessWidget {
       clipBehavior: Clip.none,
       children: [
         SizedBox(width: size, height: size, child: core),
-        if (showOnline) _onlineStatusDot(size),
+        if (showOnline) _onlineStatusDot(context, size),
       ],
     );
   }
 
-  Widget _onlineStatusDot(double avatarSize) {
+  Widget _onlineStatusDot(BuildContext context, double avatarSize) {
     final dot = avatarSize >= 40 ? 11.0 : 9.0;
     final border = avatarSize >= 40 ? 2.0 : 1.5;
     final offset = avatarSize >= 40 ? -2.0 : -1.0;
@@ -126,9 +126,20 @@ class ImUserAvatar extends StatelessWidget {
         width: dot,
         height: dot,
         decoration: BoxDecoration(
-          color: DunesColors.green,
+          color: DunesColors.resolveNullable(
+            context,
+            DunesColors.green,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(99),
-          border: Border.all(color: DunesColors.bgApp, width: border),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.bgApp,
+              role: DunesColorRole.border,
+            ),
+            width: border,
+          ),
         ),
       ),
     );

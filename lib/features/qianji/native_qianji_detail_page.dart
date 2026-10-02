@@ -344,6 +344,7 @@ class _IterationCard extends StatelessWidget {
               if (iteration.requirements.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 _miniHd(
+                  context,
                   Icons.link_rounded,
                   '关联需求池 · ${iteration.requirements.length} 条',
                 ),
@@ -403,6 +404,7 @@ class _IterationCard extends StatelessWidget {
               if (iteration.files.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 _miniHd(
+                  context,
                   Icons.folder_outlined,
                   '开发文件 · ${iteration.files.length} 个',
                 ),
@@ -507,17 +509,22 @@ class _IterationCard extends StatelessWidget {
     );
   }
 
-  Widget _miniHd(IconData icon, String text) {
+  Widget _miniHd(BuildContext context, IconData icon, String text) {
     return Row(
       children: [
-        Icon(icon, size: 14, color: DunesColors.text2),
+        Icon(
+          icon,
+          size: 14,
+          color: DunesColors.resolveNullable(context, DunesColors.text2),
+        ),
         const SizedBox(width: 4),
         Text(
           text,
           style: DunesTypography.sans(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: DunesColors.text2,
+            color: DunesColors.resolve(context, DunesColors.text2),
+            context: context,
           ),
         ),
       ],

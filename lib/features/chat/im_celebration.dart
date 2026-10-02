@@ -29,6 +29,7 @@ class ImEggEffect {
     required this.kind,
     required this.phrase,
     this.customParticles,
+    this.customMotifs,
     this.customWashColor,
     this.customDurationMs,
     this.customParticleCount,
@@ -38,6 +39,7 @@ class ImEggEffect {
   final ImEggEffectKind kind;
   final String phrase;
   final List<String>? customParticles;
+  final List<String>? customMotifs;
   final Color? customWashColor;
   final int? customDurationMs;
   final int? customParticleCount;
@@ -45,30 +47,34 @@ class ImEggEffect {
 
   bool get isBirthday => kind == ImEggEffectKind.birthday;
 
-  Duration get duration => Duration(
-    milliseconds:
-        customDurationMs ??
-        (isBirthday || kind == ImEggEffectKind.nationalDay ? 4800 : 3800),
-  );
+  Duration get duration =>
+      Duration(milliseconds: customDurationMs ?? (isBirthday ? 4800 : 3800));
 
-  List<String> get particles =>
-      customParticles ??
-      switch (kind) {
-        ImEggEffectKind.birthday => const ['🎂', '🍰', '🧁', '🎂', '🍰'],
-        ImEggEffectKind.nationalDay => const ['🇨🇳'],
-        ImEggEffectKind.redEnvelope => const ['🧧', '✨', '🧧', '💰'],
-        ImEggEffectKind.fireworks => const ['🎆', '🎉', '✨', '🎊'],
-        ImEggEffectKind.moonFestival => const ['🌕', '🐇', '🥮'],
-        ImEggEffectKind.snow => const ['❄️', '⭐', '🎄', '❄️'],
-        ImEggEffectKind.gratitude => const ['💜', '✨', '💫', '🫶'],
-        ImEggEffectKind.graduation => const ['🎓'],
-        ImEggEffectKind.welcome => const ['👋'],
-        ImEggEffectKind.recovery => const ['🌱'],
-        ImEggEffectKind.weekend => const ['🌈'],
-        ImEggEffectKind.custom => const ['✨'],
-      };
+  /// The same emoji particle sets used by app_easter_eggs_preview.html.
+  List<String> get glyphs {
+    if (customParticles != null && customParticles!.isNotEmpty) {
+      return customParticles!;
+    }
+    if (customMotifs != null && customMotifs!.isNotEmpty) {
+      return customMotifs!.map(_glyphForMotif).toList(growable: false);
+    }
+    return switch (kind) {
+      ImEggEffectKind.birthday => const ['🎂', '🍰', '🧁', '🎂', '🍰'],
+      ImEggEffectKind.redEnvelope => const ['🧧', '✨', '🧧', '💰'],
+      ImEggEffectKind.fireworks ||
+      ImEggEffectKind.graduation => const ['🎆', '🎉', '✨', '🎊'],
+      ImEggEffectKind.moonFestival => const ['🌕', '🐇', '🥮', '✨'],
+      ImEggEffectKind.snow => const ['❄️', '⭐', '🎄', '❄️'],
+      ImEggEffectKind.gratitude ||
+      ImEggEffectKind.welcome => const ['💜', '✨', '💫', '🫶'],
+      ImEggEffectKind.recovery => const ['🌱', '🌼', '💚', '✨'],
+      ImEggEffectKind.nationalDay => const ['🇨🇳'],
+      ImEggEffectKind.weekend ||
+      ImEggEffectKind.custom => const ['🎉', '✨', '🎊', '💫'],
+    };
+  }
 
-  int get particleCount => customParticleCount ?? (isBirthday ? 56 : 38);
+  int get particleCount => customParticleCount ?? (isBirthday ? 56 : 36);
 
   Color get washColor =>
       customWashColor ??
@@ -87,6 +93,33 @@ class ImEggEffect {
         ImEggEffectKind.custom => const Color(0x167E5CE0),
       };
 }
+
+String _glyphForMotif(String motif) => switch (motif) {
+  'cake' => '🎂',
+  'cakeSlice' || 'pastry' => '🍰',
+  'cupcake' => '🧁',
+  'redPacket' => '🧧',
+  'coin' => '💰',
+  'firework' => '🎆',
+  'confetti' => '🎉',
+  'goldStar' || 'star' => '⭐',
+  'sparkle' => '✨',
+  'moon' => '🌕',
+  'rabbit' => '🐇',
+  'snowflake' => '❄️',
+  'pine' => '🎄',
+  'heart' => '💜',
+  'greenHeart' => '💚',
+  'cap' => '🎓',
+  'sprout' => '🌱',
+  'flower' => '🌼',
+  'rainbow' => '🌈',
+  'flag' => '🇨🇳',
+  'gift' => '🎁',
+  'ribbon' => '💫',
+  'sun' => '☀️',
+  _ => '🎊',
+};
 
 ImEggEffect? matchImEggEffect(String text) {
   final value = text.trim();
@@ -490,16 +523,26 @@ class ImEggSettings {
           final kind = _kindFor(effectKey);
           final profile = _map(_map(_config['effects'])[effectKey]);
           final customParticles = _parseParticles(profile['particles']);
+          final customMotifs = _parseMotifs(profile['motifs']);
           final customColor = _parseColor(profile['washColor']);
-          final duration = _boundedInt(profile['durationMs'], 3800, 1000, 8000);
-          final count = _boundedInt(profile['particleCount'], 38, 8, 120);
+          final duration = _boundedInt(
+            profile['durationMs'],
+            kind == ImEggEffectKind.birthday ? 4800 : 3800,
+            1000,
+            8000,
+          );
+          final count = _boundedInt(
+            profile['particleCount'],
+            kind == ImEggEffectKind.birthday ? 56 : 36,
+            8,
+            120,
+          );
           final motion = _parseMotion(profile['motion']);
           final effect = ImEggEffect(
             kind: kind,
             phrase: phrase,
-            customParticles: profile.isEmpty || customParticles.isEmpty
-                ? null
-                : customParticles,
+            customParticles: customParticles.isEmpty ? null : customParticles,
+            customMotifs: customMotifs.isEmpty ? null : customMotifs,
             customWashColor: profile.isEmpty ? null : customColor,
             customDurationMs: profile.isEmpty ? null : duration,
             customParticleCount: profile.isEmpty ? null : count,
@@ -585,6 +628,49 @@ class ImEggSettings {
           : ImEggEffectKind.gratitude,
   };
 
+  static List<String> _parseMotifs(Object? value) {
+    const allowed = <String>{
+      'cake',
+      'cakeSlice',
+      'cupcake',
+      'gift',
+      'star',
+      'confetti',
+      'flag',
+      'redPacket',
+      'coin',
+      'goldStar',
+      'firework',
+      'moon',
+      'rabbit',
+      'pastry',
+      'snowflake',
+      'pine',
+      'heart',
+      'greenHeart',
+      'ribbon',
+      'sparkle',
+      'cap',
+      'sprout',
+      'flower',
+      'rainbow',
+      'sun',
+    };
+    final source = value is List
+        ? value
+        : value is String
+        ? value.split(RegExp(r'[,\s]+'))
+        : const [];
+    return source
+        .map((item) => item.toString().trim())
+        .map(
+          (item) => allowed.contains(item) ? item : _legacyParticleMotif(item),
+        )
+        .where(allowed.contains)
+        .take(12)
+        .toList(growable: false);
+  }
+
   static List<String> _parseParticles(Object? value) {
     final source = value is List
         ? value
@@ -595,7 +681,32 @@ class ImEggSettings {
         .map((item) => item.toString().trim())
         .where((item) => item.isNotEmpty)
         .take(12)
-        .toList();
+        .toList(growable: false);
+  }
+
+  static String _legacyParticleMotif(String value) {
+    if (value.contains('🎂') || value.contains('🍰') || value.contains('🧁')) {
+      return 'cake';
+    }
+    if (value.contains('🧧')) return 'redPacket';
+    if (value.contains('💰')) return 'coin';
+    if (value.contains('🎆')) return 'firework';
+    if (value.contains('🌕')) return 'moon';
+    if (value.contains('🐇')) return 'rabbit';
+    if (value.contains('🥮')) return 'pastry';
+    if (value.contains('❄')) return 'snowflake';
+    if (value.contains('🎄')) return 'pine';
+    if (value.contains('🎓')) return 'cap';
+    if (value.contains('🌱')) return 'sprout';
+    if (value.contains('🌈')) return 'rainbow';
+    if (value.contains('🌼')) return 'flower';
+    if (value.contains('💜') || value.contains('🫶')) return 'heart';
+    if (value.contains('🎉') || value.contains('🎊')) return 'confetti';
+    if (value.contains('🇨🇳') || value.toUpperCase() == 'CN') return 'flag';
+    if (value.contains('✨') || value.contains('⭐') || value.contains('💫')) {
+      return 'goldStar';
+    }
+    return '';
   }
 
   static int _boundedInt(Object? value, int fallback, int min, int max) =>
@@ -815,11 +926,13 @@ void showImEggEffectOnOverlay(
   entry = OverlayEntry(
     builder: (_) => Positioned.fill(
       child: ImEggParticleField(
-        glyphs: effect.particles,
+        glyphs: effect.glyphs,
         duration: effect.duration,
-        count: ImEggSettings.instance.particleCount(effect.particleCount),
+        count: effect.particleCount,
         seed: seed,
         birthday: effect.isBirthday,
+        blueWash: effect.phrase == '圣诞快乐',
+        washColor: effect.washColor,
         motion: effect.customMotion ?? 'fall',
         onFinished: () {
           if (identical(_activeEggOverlay, entry)) {

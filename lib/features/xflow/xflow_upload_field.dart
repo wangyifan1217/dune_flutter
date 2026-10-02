@@ -398,12 +398,28 @@ class _XflowUploadFieldState extends State<XflowUploadField> {
               end: Alignment.bottomCenter,
               colors: isContract
                   ? [
-                      DunesColors.resolve(context, Color(0xFFF5EBE0)),
-                      DunesColors.resolve(context, Color(0xFFEFE2D2)),
+                      DunesColors.resolve(
+                        context,
+                        Color(0xFFF5EBE0),
+                        role: DunesColorRole.surface,
+                      ),
+                      DunesColors.resolve(
+                        context,
+                        Color(0xFFEFE2D2),
+                        role: DunesColorRole.surface,
+                      ),
                     ]
                   : [
-                      DunesColors.resolve(context, Color(0xFFF8F1E8)),
-                      DunesColors.resolve(context, Color(0xFFF3EBE0)),
+                      DunesColors.resolve(
+                        context,
+                        Color(0xFFF8F1E8),
+                        role: DunesColorRole.surface,
+                      ),
+                      DunesColors.resolve(
+                        context,
+                        Color(0xFFF3EBE0),
+                        role: DunesColorRole.surface,
+                      ),
                     ],
             ),
             borderRadius: BorderRadius.circular(14),
@@ -696,19 +712,31 @@ class _XflowUploadFileRowState extends State<_XflowUploadFileRow> {
       ].where((e) => e.isNotEmpty).join(' · '),
     };
     Color borderColor = DunesColors.resolve(context, DunesColors.borderSoft);
-    Color bg = DunesColors.resolve(context, DunesColors.bgSoft);
+    Color bg = DunesColors.resolve(
+      context,
+      DunesColors.bgSoft,
+      role: DunesColorRole.surface,
+    );
     if (status == 'uploading') {
       borderColor = DunesColors.resolve(
         context,
         DunesColors.accent,
       ).withValues(alpha: 0.25);
-      bg = DunesColors.resolve(context, Colors.white);
+      bg = DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      );
     } else if (status == 'error') {
       borderColor = DunesColors.resolve(
         context,
         DunesColors.coral,
       ).withValues(alpha: 0.35);
-      bg = DunesColors.resolve(context, const Color(0xFFFFF8F7));
+      bg = DunesColors.resolve(
+        context,
+        const Color(0xFFFFF8F7),
+        role: DunesColorRole.surface,
+      );
     }
 
     return Material(

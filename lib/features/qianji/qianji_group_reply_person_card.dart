@@ -157,7 +157,7 @@ class QianjiGroupReplyPersonCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        _countBadge('${person.records.length} 条响应'),
+                        _countBadge(context, '${person.records.length} 条响应'),
                       ],
                     ),
                     if (person.department.isNotEmpty) ...[
@@ -181,26 +181,31 @@ class QianjiGroupReplyPersonCard extends StatelessWidget {
                       runSpacing: 6,
                       children: [
                         _metric(
+                          context,
                           '待回复',
                           person.waitingCount,
                           DunesColors.resolve(context, const Color(0xFFB7791F)),
                         ),
                         _metric(
+                          context,
                           '未读',
                           person.unreadCount,
                           DunesColors.resolve(context, const Color(0xFFCF4C4C)),
                         ),
                         _metric(
+                          context,
                           '已回复',
                           person.repliedCount,
                           DunesColors.resolve(context, const Color(0xFF318268)),
                         ),
                         _metric(
+                          context,
                           '未读超1小时',
                           person.unreadOverOneHourCount,
                           DunesColors.resolve(context, const Color(0xFFCF4C4C)),
                         ),
                         _metric(
+                          context,
                           '已读未回超1小时',
                           person.readUnrepliedOverOneHourCount,
                           DunesColors.resolve(context, const Color(0xFFB7791F)),
@@ -285,33 +290,46 @@ class QianjiGroupReplyPersonCard extends StatelessWidget {
     );
   }
 
-  Widget _countBadge(String label) => Container(
+  Widget _countBadge(BuildContext context, String label) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     decoration: BoxDecoration(
-      color: const Color(0xFFF2EEFC),
+      color: DunesColors.resolveNullable(
+        context,
+        const Color(0xFFF2EEFC),
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(20),
     ),
     child: Text(
       label,
-      style: const TextStyle(
-        color: _purple,
+      style: TextStyle(
+        color: DunesColors.resolveNullable(context, _purple),
         fontSize: 10,
         fontWeight: FontWeight.w700,
       ),
     ),
   );
 
-  Widget _metric(String label, int count, Color color) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: .08),
-      borderRadius: BorderRadius.circular(9),
-    ),
-    child: Text(
-      '$label $count',
-      style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600),
-    ),
-  );
+  Widget _metric(BuildContext context, String label, int count, Color color) =>
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: DunesColors.resolveNullable(
+            context,
+            color.withValues(alpha: .08),
+            role: DunesColorRole.surface,
+          ),
+          borderRadius: BorderRadius.circular(9),
+        ),
+        child: Text(
+          '$label $count',
+          style: TextStyle(
+            fontSize: 10,
+            color: DunesColors.resolveNullable(context, color),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
 }
 
 Future<void> showQianjiGroupReplyPersonDetails({

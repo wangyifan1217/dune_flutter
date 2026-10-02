@@ -152,8 +152,8 @@ class XflowHeroStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (warmStyle) return _warmHero();
-    return _darkHero();
+    if (warmStyle) return _warmHero(context);
+    return _darkHero(context);
   }
 
   (String title, String? subtitle) _splitKicker() {
@@ -169,7 +169,7 @@ class XflowHeroStatCard extends StatelessWidget {
     return (raw.isEmpty ? '汇总' : raw, null);
   }
 
-  Widget _warmHero() {
+  Widget _warmHero(BuildContext context) {
     final urge =
         badgeUrge || (badgeText.contains('待') && !badgeText.startsWith('无'));
     final (title, subtitle) = _splitKicker();
@@ -177,12 +177,29 @@ class XflowHeroStatCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        gradient: const LinearGradient(
-          colors: [Color(0xFFF8F3EB), Color(0xFFEEE8F6)],
+        gradient: LinearGradient(
+          colors: [
+            DunesColors.resolve(
+              context,
+              Color(0xFFF8F3EB),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFFEEE8F6),
+              role: DunesColorRole.surface,
+            ),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        border: Border.all(color: const Color(0xFFE4DDD0)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE4DDD0),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
@@ -197,7 +214,11 @@ class XflowHeroStatCard extends StatelessWidget {
                 height: 120,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFFD9CFF0).withValues(alpha: 0.45),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    const Color(0xFFD9CFF0).withValues(alpha: 0.45),
+                    role: DunesColorRole.surface,
+                  ),
                 ),
               ),
             ),
@@ -209,7 +230,11 @@ class XflowHeroStatCard extends StatelessWidget {
                 height: 100,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFFE8DFC8).withValues(alpha: 0.5),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    const Color(0xFFE8DFC8).withValues(alpha: 0.5),
+                    role: DunesColorRole.surface,
+                  ),
                 ),
               ),
             ),
@@ -225,7 +250,11 @@ class XflowHeroStatCard extends StatelessWidget {
                         width: 3,
                         height: 28,
                         decoration: BoxDecoration(
-                          color: DunesColors.accent,
+                          color: DunesColors.resolveNullable(
+                            context,
+                            DunesColors.accent,
+                            role: DunesColorRole.surface,
+                          ),
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -241,9 +270,13 @@ class XflowHeroStatCard extends StatelessWidget {
                               style: DunesTypography.sans(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
-                                color: DunesColors.text,
+                                color: DunesColors.resolve(
+                                  context,
+                                  DunesColors.text,
+                                ),
                                 height: 1.2,
                                 letterSpacing: -0.2,
+                                context: context,
                               ),
                             ),
                             if (subtitle != null) ...[
@@ -254,8 +287,12 @@ class XflowHeroStatCard extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: DunesTypography.sans(
                                   fontSize: 12,
-                                  color: DunesColors.text3,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    DunesColors.text3,
+                                  ),
                                   height: 1.2,
+                                  context: context,
                                 ),
                               ),
                             ],
@@ -274,10 +311,18 @@ class XflowHeroStatCard extends StatelessWidget {
                         vertical: 14,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.82),
+                        color: DunesColors.resolveNullable(
+                          context,
+                          Colors.white.withValues(alpha: 0.82),
+                          role: DunesColorRole.surface,
+                        ),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.95),
+                          color: DunesColors.resolve(
+                            context,
+                            Colors.white,
+                            role: DunesColorRole.border,
+                          ).withValues(alpha: 0.95),
                         ),
                         boxShadow: [
                           BoxShadow(
@@ -297,7 +342,11 @@ class XflowHeroStatCard extends StatelessWidget {
                                 margin: const EdgeInsets.symmetric(
                                   horizontal: 2,
                                 ),
-                                color: const Color(0xFFE8E4DA),
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  const Color(0xFFE8E4DA),
+                                  role: DunesColorRole.surface,
+                                ),
                               ),
                             Expanded(
                               child: _WarmMetricCell(item: footItems[i]),
@@ -318,7 +367,11 @@ class XflowHeroStatCard extends StatelessWidget {
                             height: 1,
                             fontWeight: FontWeight.w700,
                             letterSpacing: -1,
-                            color: DunesColors.text,
+                            color: DunesColors.resolve(
+                              context,
+                              DunesColors.text,
+                            ),
+                            context: context,
                           ),
                         ),
                         const SizedBox(width: 4),
@@ -329,7 +382,11 @@ class XflowHeroStatCard extends StatelessWidget {
                             style: DunesTypography.sans(
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
-                              color: DunesColors.text3,
+                              color: DunesColors.resolve(
+                                context,
+                                DunesColors.text3,
+                              ),
+                              context: context,
                             ),
                           ),
                         ),
@@ -345,13 +402,13 @@ class XflowHeroStatCard extends StatelessWidget {
     );
   }
 
-  Widget _darkHero() {
+  Widget _darkHero(BuildContext context) {
     final gradientColors = colors.isNotEmpty
         ? colors
-        : const <Color>[
-            Color(0xFF1B3A3F),
-            Color(0xFF2F5D62),
-            Color(0xFF5F8B8F),
+        : <Color>[
+            DunesColors.resolve(context, Color(0xFF1B3A3F)),
+            DunesColors.resolve(context, Color(0xFF2F5D62)),
+            DunesColors.resolve(context, Color(0xFF5F8B8F)),
           ];
     return Container(
       decoration: BoxDecoration(
@@ -373,15 +430,20 @@ class XflowHeroStatCard extends StatelessWidget {
                   kicker,
                   style: DunesTypography.mono(
                     fontSize: 9,
-                    color: Colors.white70,
+                    color: DunesColors.resolve(context, Colors.white70),
                     letterSpacing: 0.06 * 9,
+                    context: context,
                   ),
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
+                  color: DunesColors.resolveNullable(
+                    context,
+                    Colors.white.withValues(alpha: 0.16),
+                    role: DunesColorRole.surface,
+                  ),
                   borderRadius: BorderRadius.circular(99),
                 ),
                 child: Text(
@@ -389,7 +451,8 @@ class XflowHeroStatCard extends StatelessWidget {
                   style: DunesTypography.mono(
                     fontSize: 9,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: DunesColors.resolve(context, Colors.white),
+                    context: context,
                   ),
                 ),
               ),
@@ -402,19 +465,21 @@ class XflowHeroStatCard extends StatelessWidget {
                 TextSpan(
                   text: bigValue,
                   style: DunesTypography.sans(
-                    color: Colors.white,
+                    color: DunesColors.resolve(context, Colors.white),
                     fontSize: 28,
                     height: 1,
                     fontWeight: FontWeight.w500,
                     letterSpacing: -0.8,
+                    context: context,
                   ),
                 ),
                 TextSpan(
                   text: bigUnit,
                   style: DunesTypography.sans(
-                    color: Colors.white70,
+                    color: DunesColors.resolve(context, Colors.white70),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
+                    context: context,
                   ),
                 ),
               ],
@@ -1115,13 +1180,13 @@ class XflowProposalListCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              _compactMetaRow('提案种类', kindLabel),
+              _compactMetaRow(context, '提案种类', kindLabel),
               const SizedBox(height: 4),
-              _compactMetaRow('提案编码', code, mono: true),
+              _compactMetaRow(context, '提案编码', code, mono: true),
               const SizedBox(height: 4),
-              _compactMetaRow('提案类型', typeLabel),
+              _compactMetaRow(context, '提案类型', typeLabel),
               const SizedBox(height: 4),
-              _compactMetaRow('时间', timeText),
+              _compactMetaRow(context, '时间', timeText),
               if (onCopy != null || onDeleteDraft != null) ...[
                 const SizedBox(height: 10),
                 GestureDetector(
@@ -1195,17 +1260,22 @@ class XflowProposalListCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              _compactMetaRow(isProposal ? '提案种类' : '审批种类', kindLabel),
+              _compactMetaRow(context, isProposal ? '提案种类' : '审批种类', kindLabel),
               const SizedBox(height: 4),
-              _compactMetaRow(isProposal ? '提案编码' : '业务编号', code, mono: true),
+              _compactMetaRow(
+                context,
+                isProposal ? '提案编码' : '业务编号',
+                code,
+                mono: true,
+              ),
               const SizedBox(height: 4),
-              _compactMetaRow('提案类型', typeLabel),
+              _compactMetaRow(context, '提案类型', typeLabel),
               if (mode == XflowListCardMode.b1 && submitter.isNotEmpty) ...[
                 const SizedBox(height: 4),
-                _compactMetaRow('提交人', submitter),
+                _compactMetaRow(context, '提交人', submitter),
               ],
               const SizedBox(height: 4),
-              _compactMetaRow('时间', timeText),
+              _compactMetaRow(context, '时间', timeText),
               if (onPrimaryAction != null || onDangerAction != null) ...[
                 const SizedBox(height: 10),
                 Align(
@@ -1273,6 +1343,7 @@ class XflowProposalListCard extends StatelessWidget {
   }
 
   Widget _compactMetaRow(
+    BuildContext context,
     String label,
     String value, {
     bool mono = false,
@@ -1285,7 +1356,11 @@ class XflowProposalListCard extends StatelessWidget {
           width: 62,
           child: Text(
             label,
-            style: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 11,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
         ),
         Expanded(
@@ -1301,11 +1376,19 @@ class XflowProposalListCard extends StatelessWidget {
                       ? DunesTypography.mono(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: DunesColors.text2,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
+                          context: context,
                         )
                       : DunesTypography.sans(
                           fontSize: 11.5,
-                          color: DunesColors.text2,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text2,
+                          ),
+                          context: context,
                         ),
                 ),
         ),
@@ -1337,8 +1420,16 @@ class _CompactListActionButton extends StatelessWidget {
         ? DunesColors.resolve(context, DunesColors.coral)
         : DunesColors.resolve(context, DunesColors.accent);
     final bg = danger
-        ? DunesColors.resolve(context, DunesColors.coralSoft)
-        : DunesColors.resolve(context, DunesColors.accentSoft);
+        ? DunesColors.resolve(
+            context,
+            DunesColors.coralSoft,
+            role: DunesColorRole.surface,
+          )
+        : DunesColors.resolve(
+            context,
+            DunesColors.accentSoft,
+            role: DunesColorRole.surface,
+          );
     return FilledButton.icon(
       onPressed: loading ? null : onPressed,
       icon: loading
@@ -1380,28 +1471,60 @@ class _StatusBadge extends StatelessWidget {
     Color bg;
     Color fg;
     if (st == 'OPEN' || st == 'PENDING') {
-      bg = DunesColors.resolve(context, DunesColors.amberSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.amberSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, const Color(0xFF5D3508));
     } else if (st == 'APPROVED' || st == 'DONE' || st == 'LIVE') {
-      bg = DunesColors.resolve(context, DunesColors.greenSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.greenSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, const Color(0xFF085041));
     } else if (st == 'REJECTED') {
-      bg = DunesColors.resolve(context, DunesColors.coralSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.coralSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, const Color(0xFF993C1D));
     } else if (st == 'DRAFT' || st == 'PENDING_INITIATE') {
-      bg = DunesColors.resolve(context, DunesColors.blueSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.blueSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, DunesColors.blue);
     } else if (st == 'VOIDED') {
-      bg = DunesColors.resolve(context, DunesColors.bgSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.bgSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, DunesColors.text3);
     } else if (st == 'WITHDRAWN' || st == 'CANCELLED') {
-      bg = DunesColors.resolve(context, DunesColors.bgSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.bgSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, DunesColors.text3);
     } else if (st == 'SUPERSEDED') {
-      bg = DunesColors.resolve(context, DunesColors.bgSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.bgSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, DunesColors.text2);
     } else {
-      bg = DunesColors.resolve(context, DunesColors.bgSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.bgSoft,
+        role: DunesColorRole.surface,
+      );
       fg = DunesColors.resolve(context, DunesColors.text2);
     }
     return Container(
@@ -2006,9 +2129,21 @@ class XflowProposalHero extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         gradient: LinearGradient(
           colors: [
-            DunesColors.resolve(context, Color(0xFF7A5E9F)),
-            DunesColors.resolve(context, Color(0xFFB073A7)),
-            DunesColors.resolve(context, Color(0xFFC38D95)),
+            DunesColors.resolve(
+              context,
+              Color(0xFF7A5E9F),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFFB073A7),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFFC38D95),
+              role: DunesColorRole.surface,
+            ),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -2033,8 +2168,8 @@ class XflowProposalHero extends StatelessWidget {
                   context: context,
                 ),
               ),
-              _pill('SALES'),
-              _pill(_statusText(detail.status)),
+              _pill(context, 'SALES'),
+              _pill(context, _statusText(detail.status)),
             ],
           ),
           const SizedBox(height: 7),
@@ -2051,12 +2186,13 @@ class XflowProposalHero extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              Expanded(child: _metaItem('beaconId', detail.beaconId)),
+              Expanded(child: _metaItem(context, 'beaconId', detail.beaconId)),
               const SizedBox(width: 8),
-              Expanded(child: _metaItem('owner', detail.ownerName)),
+              Expanded(child: _metaItem(context, 'owner', detail.ownerName)),
               const SizedBox(width: 8),
               Expanded(
                 child: _metaItem(
+                  context,
                   'amount',
                   detail.amountText.isEmpty ? '—' : detail.amountText,
                 ),
@@ -2068,32 +2204,40 @@ class XflowProposalHero extends StatelessWidget {
     );
   }
 
-  Widget _pill(String text) {
+  Widget _pill(BuildContext context, String text) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: .18),
+        color: DunesColors.resolveNullable(
+          context,
+          Colors.white.withValues(alpha: .18),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(99),
       ),
       child: Text(
         text,
         style: DunesTypography.mono(
-          color: Colors.white,
+          color: DunesColors.resolve(context, Colors.white),
           fontSize: 8.5,
           fontWeight: FontWeight.w700,
+          context: context,
         ),
       ),
     );
   }
 
-  Widget _metaItem(String label, String value) {
+  Widget _metaItem(BuildContext context, String label, String value) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: .65),
+            color: DunesColors.resolveNullable(
+              context,
+              Colors.white.withValues(alpha: .65),
+            ),
             fontSize: 8,
           ),
         ),
@@ -2103,9 +2247,10 @@ class XflowProposalHero extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: DunesTypography.sans(
-            color: Colors.white,
+            color: DunesColors.resolve(context, Colors.white),
             fontSize: 11,
             fontWeight: FontWeight.w500,
+            context: context,
           ),
         ),
       ],

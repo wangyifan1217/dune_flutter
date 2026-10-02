@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:dunes_app/core/theme/dunes_theme.dart';
 
@@ -336,7 +337,16 @@ class _LhPeriodBarState extends State<LhPeriodBar>
                           ripple: _ripple.isAnimating ? _ripple.value : null,
                           rippleX: _rippleX,
                           primary: widget.primary,
-                          pillGradient: widget.pillGradient,
+                          pillGradient: [
+                            for (final color in widget.pillGradient)
+                              DunesColors.resolve(
+                                context,
+                                color,
+                                role: DunesColorRole.surface,
+                              ),
+                          ],
+                          night:
+                              Theme.of(context).brightness == Brightness.dark,
                           pillEdgeColor: widget.pillEdgeColor,
                           pillShadowColor: widget.pillShadowColor,
                           shimmerColor: widget.shimmerColor,
@@ -371,8 +381,8 @@ class _LhPeriodBarState extends State<LhPeriodBar>
     final aux = (t * settle).clamp(0.0, 1.0);
     final style = widget.baseTextStyle.copyWith(
       color: Color.lerp(
-        widget.idleTextColor,
-        widget.selectedTextColor ?? widget.deep,
+        DunesColors.resolve(context, widget.idleTextColor),
+        DunesColors.resolve(context, widget.selectedTextColor ?? widget.deep),
         t,
       ),
       // 选中项到 w700：白胶囊压在淡紫轨道上对比度不高，靠字重把「选的是哪个」说清楚。
@@ -511,6 +521,7 @@ class _LhPeriodFxPainter extends CustomPainter {
     required this.pillEdgeColor,
     required this.pillShadowColor,
     required this.shimmerColor,
+    this.night = false,
   });
 
   final double pillLeft;
@@ -528,6 +539,7 @@ class _LhPeriodFxPainter extends CustomPainter {
   final Color? pillEdgeColor;
   final Color? pillShadowColor;
   final Color shimmerColor;
+  final bool night;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -581,7 +593,7 @@ class _LhPeriodFxPainter extends CustomPainter {
             Offset(rect.left, rect.top),
             Offset(rect.left, rect.bottom),
             [
-              Colors.white.withValues(alpha: 0.75 * o),
+              Colors.white.withValues(alpha: (night ? 0.035 : 0.75) * o),
               Colors.white.withValues(alpha: 0.0),
             ],
             const [0.0, 0.62],
@@ -724,6 +736,8 @@ class _LhPeriodFxPainter extends CustomPainter {
       old.ripple != ripple ||
       old.rippleX != rippleX ||
       old.radius != radius ||
+      old.night != night ||
+      !listEquals(old.pillGradient, pillGradient) ||
       old.primary != primary ||
       old.pillEdgeColor != pillEdgeColor ||
       old.pillShadowColor != pillShadowColor ||

@@ -35,17 +35,17 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 18, 16, 20),
                   children: [
-                    _buildWelcomeCard(),
+                    _buildWelcomeCard(context),
                     const SizedBox(height: 18),
-                    _buildAssistantMessage(),
+                    _buildAssistantMessage(context),
                     const SizedBox(height: 12),
-                    _buildUserMessage(),
+                    _buildUserMessage(context),
                     const SizedBox(height: 12),
-                    _buildDecisionReply(),
+                    _buildDecisionReply(context),
                   ],
                 ),
               ),
-              _buildComposer(),
+              _buildComposer(context),
             ],
           ),
         ),
@@ -130,15 +130,32 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
     );
   }
 
-  Widget _buildWelcomeCard() {
+  Widget _buildWelcomeCard(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFF1EDFF), Color(0xFFFAF9FF)],
+        gradient: LinearGradient(
+          colors: [
+            DunesColors.resolve(
+              context,
+              Color(0xFFF1EDFF),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFFFAF9FF),
+              role: DunesColorRole.surface,
+            ),
+          ],
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2DCFF)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE2DCFF),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -148,7 +165,8 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 17,
               fontWeight: FontWeight.w700,
-              color: const Color(0xFF49338B),
+              color: DunesColors.resolve(context, const Color(0xFF49338B)),
+              context: context,
             ),
           ),
           const SizedBox(height: 6),
@@ -157,7 +175,8 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 13,
               height: 1.5,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
             ),
           ),
           const SizedBox(height: 14),
@@ -175,7 +194,7 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
     );
   }
 
-  Widget _buildAssistantMessage() {
+  Widget _buildAssistantMessage(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -188,7 +207,8 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
               style: DunesTypography.sans(
                 fontSize: 13,
                 height: 1.55,
-                color: DunesColors.text,
+                color: DunesColors.resolve(context, DunesColors.text),
+                context: context,
               ),
             ),
           ),
@@ -197,14 +217,18 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
     );
   }
 
-  Widget _buildUserMessage() {
+  Widget _buildUserMessage(BuildContext context) {
     return Align(
       alignment: Alignment.centerRight,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 360),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: _assistantPurple,
+          color: DunesColors.resolveNullable(
+            context,
+            _assistantPurple,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Text(
@@ -212,14 +236,15 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
           style: DunesTypography.sans(
             fontSize: 13,
             height: 1.45,
-            color: Colors.white,
+            color: DunesColors.resolve(context, Colors.white),
+            context: context,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildDecisionReply() {
+  Widget _buildDecisionReply(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -235,7 +260,11 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: const Color(0xFF5D43AE),
+                    color: DunesColors.resolve(
+                      context,
+                      const Color(0xFF5D43AE),
+                    ),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -244,7 +273,8 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: DunesColors.text,
+                    color: DunesColors.resolve(context, DunesColors.text),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 5),
@@ -255,17 +285,26 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
                   style: DunesTypography.sans(
                     fontSize: 13,
                     height: 1.6,
-                    color: DunesColors.text2,
+                    color: DunesColors.resolve(context, DunesColors.text2),
+                    context: context,
                   ),
                 ),
                 const SizedBox(height: 10),
-                const Divider(height: 1, color: Color(0xFFE7E5EE)),
+                Divider(
+                  height: 1,
+                  color: DunesColors.resolve(
+                    context,
+                    Color(0xFFE7E5EE),
+                    role: DunesColorRole.border,
+                  ),
+                ),
                 const SizedBox(height: 9),
                 Text(
                   '以上为静态预览内容，尚未连接真实会议数据。',
                   style: DunesTypography.sans(
                     fontSize: 11,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
+                    context: context,
                   ),
                 ),
               ],
@@ -276,12 +315,24 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
     );
   }
 
-  Widget _buildComposer() {
+  Widget _buildComposer(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Color(0xFFE8EAED))),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          top: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              Color(0xFFE8EAED),
+              role: DunesColorRole.border,
+            ),
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -291,25 +342,30 @@ class NativeMeetingAssistantPreviewPage extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14),
               alignment: Alignment.centerLeft,
               decoration: BoxDecoration(
-                color: const Color(0xFFF5F6F8),
+                color: DunesColors.resolveNullable(
+                  context,
+                  const Color(0xFFF5F6F8),
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(21),
               ),
               child: Text(
                 '输入你的问题…',
                 style: DunesTypography.sans(
                   fontSize: 13,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
+                  context: context,
                 ),
               ),
             ),
           ),
           const SizedBox(width: 10),
-          const CircleAvatar(
+          CircleAvatar(
             radius: 20,
             backgroundColor: _assistantPurple,
             child: Icon(
               Icons.arrow_upward_rounded,
-              color: Colors.white,
+              color: DunesColors.resolveNullable(context, Colors.white),
               size: 20,
             ),
           ),

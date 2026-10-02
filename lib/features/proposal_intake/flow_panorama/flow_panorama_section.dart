@@ -809,7 +809,11 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
     Widget tab(String text, FlowKind? k) {
       final on = _flow == k;
       final bg = k == null
-          ? DunesColors.resolve(context, const Color(0xFF2E2740))
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFF2E2740),
+              role: DunesColorRole.surface,
+            )
           : kKind[k]!.ink;
       return _Hoverable(
         builder: (hovering) => GestureDetector(
@@ -1279,20 +1283,24 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                             DunesColors.resolve(
                               context,
                               const Color(0xF7564484),
+                              role: DunesColorRole.surface,
                             ),
                             DunesColors.resolve(
                               context,
                               const Color(0xF72D2346),
+                              role: DunesColorRole.surface,
                             ),
                           ]
                         : [
                             DunesColors.resolve(
                               context,
                               const Color(0xF7342B4A),
+                              role: DunesColorRole.surface,
                             ),
                             DunesColors.resolve(
                               context,
                               const Color(0xF7211A31),
+                              role: DunesColorRole.surface,
                             ),
                           ],
                   ),
@@ -1663,10 +1671,12 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                 DunesColors.resolve(
                   context,
                   const Color(0xFF100C18),
+                  role: DunesColorRole.surface,
                 ).withOpacity(0.78),
                 DunesColors.resolve(
                   context,
                   const Color(0xFF100C18),
+                  role: DunesColorRole.surface,
                 ).withOpacity(0),
               ],
             ),
@@ -1740,10 +1750,12 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
                 DunesColors.resolve(
                   context,
                   const Color(0xFF0E0A15),
+                  role: DunesColorRole.surface,
                 ).withOpacity(0.82),
                 DunesColors.resolve(
                   context,
                   const Color(0xFF0E0A15),
+                  role: DunesColorRole.surface,
                 ).withOpacity(0),
               ],
             ),
@@ -1950,17 +1962,41 @@ class _FlowPanoramaSectionState extends State<FlowPanoramaSection>
     Color bg;
     Color border;
     if (st.level == FlowLevel.block) {
-      bg = DunesColors.resolve(context, const Color(0xFFFEF7F7));
-      border = DunesColors.resolve(context, const Color(0xFFF1D2D2));
+      bg = DunesColors.resolve(
+        context,
+        const Color(0xFFFEF7F7),
+        role: DunesColorRole.surface,
+      );
+      border = DunesColors.resolve(
+        context,
+        const Color(0xFFF1D2D2),
+        role: DunesColorRole.border,
+      );
     } else if (st.level == FlowLevel.warn) {
-      bg = DunesColors.resolve(context, const Color(0xFFFEFBF5));
-      border = DunesColors.resolve(context, const Color(0xFFEFDCBB));
+      bg = DunesColors.resolve(
+        context,
+        const Color(0xFFFEFBF5),
+        role: DunesColorRole.surface,
+      );
+      border = DunesColors.resolve(
+        context,
+        const Color(0xFFEFDCBB),
+        role: DunesColorRole.border,
+      );
     } else {
       bg = highlight
-          ? DunesColors.resolve(context, const Color(0xFFF6F2FB))
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFF6F2FB),
+              role: DunesColorRole.surface,
+            )
           : Colors.transparent;
       border = highlight
-          ? DunesColors.resolve(context, const Color(0xFFE4DAEF))
+          ? DunesColors.resolve(
+              context,
+              const Color(0xFFE4DAEF),
+              role: DunesColorRole.border,
+            )
           : Colors.transparent;
     }
 

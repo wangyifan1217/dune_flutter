@@ -12869,7 +12869,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             child: const Text('删除', style: TextStyle(fontSize: 11)),
           )
         : null;
-    final border = DunesColors.resolve(context, ProposalPalette.border);
+    final border = DunesColors.resolve(
+      context,
+      ProposalPalette.border,
+      role: DunesColorRole.border,
+    );
     if (!wide) {
       return Container(
         width: double.infinity,
@@ -14612,8 +14616,16 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ? null
             : LinearGradient(
                 colors: [
-                  DunesColors.resolve(context, ProposalPalette.app),
-                  DunesColors.resolve(context, ProposalPalette.purpleSoft),
+                  DunesColors.resolve(
+                    context,
+                    ProposalPalette.app,
+                    role: DunesColorRole.surface,
+                  ),
+                  DunesColors.resolve(
+                    context,
+                    ProposalPalette.purpleSoft,
+                    role: DunesColorRole.surface,
+                  ),
                 ],
               ),
         border: Border.all(

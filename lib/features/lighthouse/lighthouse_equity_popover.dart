@@ -372,7 +372,7 @@ class _EquityPopover extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _header(),
+            _header(context),
             Container(
               height: 0.7,
               color: DunesColors.resolveNullable(
@@ -381,7 +381,7 @@ class _EquityPopover extends StatelessWidget {
                 role: DunesColorRole.surface,
               ),
             ),
-            if (transactionProfit != null) _transactionStrip(),
+            if (transactionProfit != null) _transactionStrip(context),
             Flexible(
               child: links.isEmpty
                   ? Padding(
@@ -409,10 +409,13 @@ class _EquityPopover extends StatelessWidget {
                         color: _line,
                       ),
                       itemBuilder: (context, index) =>
-                          _projectRow(links[index]),
+                          _projectRow(context, links[index]),
                     ),
             ),
-            if (links.isNotEmpty) ...[_profitTotal(), _scopeNote()],
+            if (links.isNotEmpty) ...[
+              _profitTotal(context),
+              _scopeNote(context),
+            ],
           ],
         ),
       ),
@@ -457,7 +460,7 @@ class _EquityPopover extends StatelessWidget {
     );
   }
 
-  Widget _header() => Padding(
+  Widget _header(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
     child: Row(
       children: [
@@ -465,10 +468,18 @@ class _EquityPopover extends StatelessWidget {
           width: 24,
           height: 24,
           decoration: BoxDecoration(
-            color: _blue.withAlpha(24),
+            color: DunesColors.resolveNullable(
+              context,
+              _blue.withAlpha(24),
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(7),
           ),
-          child: const Icon(Icons.link_rounded, size: 14, color: _blue),
+          child: Icon(
+            Icons.link_rounded,
+            size: 14,
+            color: DunesColors.resolveNullable(context, _blue),
+          ),
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -482,8 +493,9 @@ class _EquityPopover extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: LhTypography.sans(
                   size: 13,
-                  color: LhColors.ink,
+                  color: DunesColors.resolve(context, LhColors.ink),
                   weight: FontWeight.w700,
+                  context: context,
                 ),
               ),
               if (periodLabel.isNotEmpty)
@@ -491,7 +503,11 @@ class _EquityPopover extends StatelessWidget {
                   periodLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: LhTypography.sans(size: 9, color: LhColors.mute),
+                  style: LhTypography.sans(
+                    size: 9,
+                    color: DunesColors.resolve(context, LhColors.mute),
+                    context: context,
+                  ),
                 ),
             ],
           ),
@@ -499,15 +515,20 @@ class _EquityPopover extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
           decoration: BoxDecoration(
-            color: LhColors.purpleSoft,
+            color: DunesColors.resolveNullable(
+              context,
+              LhColors.purpleSoft,
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(9),
           ),
           child: Text(
             '${links.length}项',
             style: LhTypography.mono(
               size: 9,
-              color: LhColors.purple,
+              color: DunesColors.resolve(context, LhColors.purple),
               weight: FontWeight.w700,
+              context: context,
             ),
           ),
         ),
@@ -517,23 +538,27 @@ class _EquityPopover extends StatelessWidget {
           constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
           tooltip: '关闭',
           onPressed: onClose,
-          icon: const Icon(
+          icon: Icon(
             Icons.close_rounded,
             size: 16,
-            color: LhColors.mute2,
+            color: DunesColors.resolveNullable(context, LhColors.mute2),
           ),
         ),
       ],
     ),
   );
 
-  Widget _transactionStrip() {
+  Widget _transactionStrip(BuildContext context) {
     final value = transactionProfit!;
     return Container(
       margin: const EdgeInsets.fromLTRB(10, 9, 10, 0),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF4F8FC),
+        color: DunesColors.resolveNullable(
+          context,
+          const Color(0xFFF4F8FC),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(9),
         border: Border.all(color: _blue.withAlpha(22), width: 0.7),
       ),
@@ -542,7 +567,11 @@ class _EquityPopover extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
             decoration: BoxDecoration(
-              color: _blue.withAlpha(18),
+              color: DunesColors.resolveNullable(
+                context,
+                _blue.withAlpha(18),
+                role: DunesColorRole.surface,
+              ),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
@@ -551,21 +580,30 @@ class _EquityPopover extends StatelessWidget {
                 size: 9,
                 color: _blue,
                 weight: FontWeight.w700,
+                context: context,
               ),
             ),
           ),
           const SizedBox(width: 8),
-          Text('交易利润', style: LhTypography.sans(size: 9, color: LhColors.ink2)),
+          Text(
+            '交易利润',
+            style: LhTypography.sans(
+              size: 9,
+              color: DunesColors.resolve(context, LhColors.ink2),
+              context: context,
+            ),
+          ),
           const Spacer(),
           Text(
             _signedMoney(value),
             style: LhTypography.number(
               size: 11.5,
               color: value < 0
-                  ? LhColors.pos
+                  ? DunesColors.resolve(context, LhColors.pos)
                   : value > 0
-                  ? LhColors.neg
-                  : LhColors.mute2,
+                  ? DunesColors.resolve(context, LhColors.neg)
+                  : DunesColors.resolve(context, LhColors.mute2),
+              context: context,
             ),
           ),
         ],
@@ -574,7 +612,7 @@ class _EquityPopover extends StatelessWidget {
   }
 
   /// 一行 = 一个权益落点。金额只来自标签一的同期间项目，不拿来抵扣原行。
-  Widget _projectRow(LhEquityLink link) {
+  Widget _projectRow(BuildContext context, LhEquityLink link) {
     return InkWell(
       borderRadius: BorderRadius.circular(9),
       hoverColor: _blue.withAlpha(12),
@@ -594,8 +632,9 @@ class _EquityPopover extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: LhTypography.sans(
                       size: 12.5,
-                      color: LhColors.ink,
+                      color: DunesColors.resolve(context, LhColors.ink),
                       weight: FontWeight.w700,
+                      context: context,
                     ),
                   ),
                   if (link.product.isNotEmpty ||
@@ -611,7 +650,11 @@ class _EquityPopover extends StatelessWidget {
                                 vertical: 2.5,
                               ),
                               decoration: BoxDecoration(
-                                color: LhColors.purpleSoft,
+                                color: DunesColors.resolveNullable(
+                                  context,
+                                  LhColors.purpleSoft,
+                                  role: DunesColorRole.surface,
+                                ),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
@@ -620,8 +663,12 @@ class _EquityPopover extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: LhTypography.sans(
                                   size: 9.5,
-                                  color: LhColors.purple,
+                                  color: DunesColors.resolve(
+                                    context,
+                                    LhColors.purple,
+                                  ),
                                   weight: FontWeight.w700,
+                                  context: context,
                                 ),
                               ),
                             ),
@@ -635,8 +682,12 @@ class _EquityPopover extends StatelessWidget {
                             link.channel,
                             style: LhTypography.sans(
                               size: 9,
-                              color: LhColors.mute,
+                              color: DunesColors.resolve(
+                                context,
+                                LhColors.mute,
+                              ),
                               weight: FontWeight.w600,
+                              context: context,
                             ),
                           ),
                       ],
@@ -652,41 +703,55 @@ class _EquityPopover extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _amountLine('收入', _incomeMoney(link.revenue), LhColors.ink2),
+                  _amountLine(
+                    context,
+                    '收入',
+                    _incomeMoney(link.revenue),
+                    DunesColors.resolve(context, LhColors.ink2),
+                  ),
                   const SizedBox(height: 3),
                   _amountLine(
+                    context,
                     '利润',
                     _signedMoney(link.profit),
                     link.profit < 0
-                        ? LhColors.pos
+                        ? DunesColors.resolve(context, LhColors.pos)
                         : link.profit > 0
-                        ? LhColors.neg
-                        : LhColors.mute2,
+                        ? DunesColors.resolve(context, LhColors.neg)
+                        : DunesColors.resolve(context, LhColors.mute2),
                     underlineLabel: true,
                   ),
                 ],
               ),
             ),
             const SizedBox(width: 2),
-            const Icon(Icons.chevron_right_rounded, size: 16, color: _blue),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 16,
+              color: DunesColors.resolveNullable(context, _blue),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _profitTotal() {
+  Widget _profitTotal(BuildContext context) {
     final total = links.fold<double>(0, (sum, link) => sum + link.profit);
     final color = total < 0
-        ? LhColors.pos
+        ? DunesColors.resolve(context, LhColors.pos)
         : total > 0
-        ? LhColors.neg
-        : LhColors.mute2;
+        ? DunesColors.resolve(context, LhColors.neg)
+        : DunesColors.resolve(context, LhColors.mute2);
     return Container(
       margin: const EdgeInsets.fromLTRB(10, 7, 10, 0),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: LhColors.purpleSoft.withAlpha(120),
+        color: DunesColors.resolveNullable(
+          context,
+          LhColors.purpleSoft.withAlpha(120),
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(9),
       ),
       child: Row(
@@ -695,29 +760,39 @@ class _EquityPopover extends StatelessWidget {
             '候选权益利润合计',
             style: LhTypography.sans(
               size: 10,
-              color: LhColors.ink2,
+              color: DunesColors.resolve(context, LhColors.ink2),
               weight: FontWeight.w600,
+              context: context,
             ),
           ),
           const Spacer(),
           Text(
             _signedMoney(total),
-            style: LhTypography.number(size: 12, color: color),
+            style: LhTypography.number(
+              size: 12,
+              color: color,
+              context: context,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _scopeNote() => Padding(
+  Widget _scopeNote(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(16, 5, 16, 10),
     child: Text(
       '同省权益线索 · 合计不与标签二交易利润相加 · 点击项目直达详情',
-      style: LhTypography.sans(size: 9, color: LhColors.mute2),
+      style: LhTypography.sans(
+        size: 9,
+        color: DunesColors.resolve(context, LhColors.mute2),
+        context: context,
+      ),
     ),
   );
 
   Widget _amountLine(
+    BuildContext context,
     String label,
     String amount,
     Color color, {
@@ -728,15 +803,23 @@ class _EquityPopover extends StatelessWidget {
       !underlineLabel
           ? Text(
               label,
-              style: LhTypography.sans(size: 9.5, color: LhColors.mute2),
+              style: LhTypography.sans(
+                size: 9.5,
+                color: DunesColors.resolve(context, LhColors.mute2),
+                context: context,
+              ),
             )
           : LhEquityLinkedLabel(
               child: Text(
                 label,
                 style: LhTypography.sans(
                   size: 9.5,
-                  color: LhEquityLinkedLabel.color,
+                  color: DunesColors.resolve(
+                    context,
+                    LhEquityLinkedLabel.color,
+                  ),
                   weight: FontWeight.w600,
+                  context: context,
                 ),
               ),
             ),
@@ -748,7 +831,11 @@ class _EquityPopover extends StatelessWidget {
           child: Text(
             amount,
             maxLines: 1,
-            style: LhTypography.number(size: 11.5, color: color),
+            style: LhTypography.number(
+              size: 11.5,
+              color: color,
+              context: context,
+            ),
           ),
         ),
       ),

@@ -50,21 +50,25 @@ class NativeQianjiProjectTasksPage extends StatelessWidget {
                   Row(
                     children: [
                       _sum(
+                        context,
                         '${all.length}',
                         '全部',
                         DunesColors.resolve(context, DunesColors.text3),
                       ),
                       _sum(
+                        context,
                         '$running',
                         '进行中',
                         DunesColors.resolve(context, QianjiPerfTheme.purple),
                       ),
                       _sum(
+                        context,
                         '$done',
                         '已完成',
                         DunesColors.resolve(context, DunesColors.green),
                       ),
                       _sum(
+                        context,
                         '$pending',
                         '待开始',
                         DunesColors.resolve(context, DunesColors.amber),
@@ -73,6 +77,7 @@ class NativeQianjiProjectTasksPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 14),
                   _hd(
+                    context,
                     '我的任务',
                     '${detail.myTasks.length} 项 · ${detail.myTasks.where((t) => t.status == QianjiTaskStatus.running).length} 进行中',
                   ),
@@ -88,7 +93,7 @@ class NativeQianjiProjectTasksPage extends StatelessWidget {
                     const SizedBox(height: 8),
                   ],
                   const SizedBox(height: 8),
-                  _hd('其他任务', '${detail.otherTasks.length} 项'),
+                  _hd(context, '其他任务', '${detail.otherTasks.length} 项'),
                   const SizedBox(height: 6),
                   for (final t in detail.otherTasks) ...[
                     _TaskCard(task: t, onTap: () => onOpenTask(t)),
@@ -105,7 +110,7 @@ class NativeQianjiProjectTasksPage extends StatelessWidget {
     );
   }
 
-  Widget _hd(String title, String count) {
+  Widget _hd(BuildContext context, String title, String count) {
     return Row(
       children: [
         Text(
@@ -113,27 +118,42 @@ class NativeQianjiProjectTasksPage extends StatelessWidget {
           style: DunesTypography.sans(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: DunesColors.text,
+            color: DunesColors.resolve(context, DunesColors.text),
+            context: context,
           ),
         ),
         const Spacer(),
         Text(
           count,
-          style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+          style: DunesTypography.sans(
+            fontSize: 12,
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
         ),
       ],
     );
   }
 
-  Widget _sum(String n, String l, Color c) {
+  Widget _sum(BuildContext context, String n, String l, Color c) {
     return Expanded(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 3),
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: DunesColors.resolveNullable(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: DunesColors.borderSoft),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.borderSoft,
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: Column(
           children: [
@@ -143,6 +163,7 @@ class NativeQianjiProjectTasksPage extends StatelessWidget {
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
                 color: c,
+                context: context,
               ),
             ),
             const SizedBox(height: 2),
@@ -150,7 +171,8 @@ class NativeQianjiProjectTasksPage extends StatelessWidget {
               l,
               style: DunesTypography.sans(
                 fontSize: 10,
-                color: DunesColors.text3,
+                color: DunesColors.resolve(context, DunesColors.text3),
+                context: context,
               ),
             ),
           ],
@@ -176,8 +198,16 @@ class _Banner extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            DunesColors.resolve(context, Color(0xFF1D9E75)),
-            DunesColors.resolve(context, Color(0xFF56C9A0)),
+            DunesColors.resolve(
+              context,
+              Color(0xFF1D9E75),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFF56C9A0),
+              role: DunesColorRole.surface,
+            ),
           ],
         ),
       ),
@@ -264,14 +294,17 @@ class _TaskCard extends StatelessWidget {
       QianjiTaskStatus.running => DunesColors.resolve(
         context,
         QianjiPerfTheme.purpleSoft,
+        role: DunesColorRole.surface,
       ),
       QianjiTaskStatus.done => DunesColors.resolve(
         context,
         DunesColors.greenSoft,
+        role: DunesColorRole.surface,
       ),
       QianjiTaskStatus.pending => DunesColors.resolve(
         context,
         DunesColors.bgSoft,
+        role: DunesColorRole.surface,
       ),
     };
     final statusFg = switch (task.status) {

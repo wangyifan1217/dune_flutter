@@ -1474,10 +1474,12 @@ class _NativeTaskHomePaneState extends State<NativeTaskHomePane> {
                           DunesColors.resolve(
                             context,
                             kTaskPurple,
+                            role: DunesColorRole.surface,
                           ).withValues(alpha: 0.18),
                           DunesColors.resolve(
                             context,
                             kTaskPurple,
+                            role: DunesColorRole.surface,
                           ).withValues(alpha: 0.06),
                         ],
                       ),

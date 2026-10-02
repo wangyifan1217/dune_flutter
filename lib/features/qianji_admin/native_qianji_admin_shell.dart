@@ -1252,10 +1252,26 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
             borderRadius: BorderRadius.circular(22),
             gradient: LinearGradient(
               colors: [
-                DunesColors.resolve(context, Color(0xFF140E24)),
-                DunesColors.resolve(context, Color(0xFF1B132F)),
-                DunesColors.resolve(context, Color(0xFF281946)),
-                DunesColors.resolve(context, Color(0xFF19102C)),
+                DunesColors.resolve(
+                  context,
+                  Color(0xFF140E24),
+                  role: DunesColorRole.surface,
+                ),
+                DunesColors.resolve(
+                  context,
+                  Color(0xFF1B132F),
+                  role: DunesColorRole.surface,
+                ),
+                DunesColors.resolve(
+                  context,
+                  Color(0xFF281946),
+                  role: DunesColorRole.surface,
+                ),
+                DunesColors.resolve(
+                  context,
+                  Color(0xFF19102C),
+                  role: DunesColorRole.surface,
+                ),
               ],
               stops: [0.0, 0.35, 0.75, 1.0],
               begin: Alignment.topLeft,
@@ -1288,10 +1304,12 @@ class _NativeQianjiAdminShellState extends State<NativeQianjiAdminShell> {
                         DunesColors.resolve(
                           context,
                           const Color(0xFF8855DF),
+                          role: DunesColorRole.surface,
                         ).withValues(alpha: .24),
                         DunesColors.resolve(
                           context,
                           const Color(0xFF8855DF),
+                          role: DunesColorRole.surface,
                         ).withValues(alpha: 0),
                       ],
                     ),
@@ -2287,10 +2305,12 @@ class _ProductsAdminPaneState extends State<_ProductsAdminPane> {
                       DunesColors.resolve(
                         context,
                         _themePurple,
+                        role: DunesColorRole.surface,
                       ).withValues(alpha: 0.18),
                       DunesColors.resolve(
                         context,
                         _themePurple,
+                        role: DunesColorRole.surface,
                       ).withValues(alpha: 0.06),
                     ],
                   ),

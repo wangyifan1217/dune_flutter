@@ -758,8 +758,16 @@ class _ChatKpiScoreSummaryCardState extends State<ChatKpiScoreSummaryCard> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            DunesColors.resolve(context, Color(0xFFF8F5FD)),
-            DunesColors.resolve(context, DunesColors.brandPurpleSoft),
+            DunesColors.resolve(
+              context,
+              Color(0xFFF8F5FD),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              DunesColors.brandPurpleSoft,
+              role: DunesColorRole.surface,
+            ),
           ],
         ),
         borderRadius: BorderRadius.circular(11),

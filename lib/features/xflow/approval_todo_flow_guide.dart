@@ -66,23 +66,23 @@ class ApprovalTodoFlowGuide extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
       children: [
-        _loopGroup('付款 + 回票（行政/业务采购、合同付款、推广费、预付款、贷款付息还款）', [
+        _loopGroup(context, '付款 + 回票（行政/业务采购、合同付款、推广费、预付款、贷款付息还款）', [
           ['终审通过', '付款', '已付款', '先票后款：核验发票'],
           ['核验失败', '不重审', '发起人「补传发票」', '核验人再核验'],
           ['先款后票：补传发票 → 核验　·　到期未回票催办 → 无法收回'],
         ]),
-        _loopGroup('仅付款（保证金、税费、招待费、差旅；携程差旅跳过付款）', [
+        _loopGroup(context, '仅付款（保证金、税费、招待费、差旅；携程差旅跳过付款）', [
           ['终审通过', '付款', '已付款'],
         ]),
-        _loopGroup('用印（合同）', [
+        _loopGroup(context, '用印（合同）', [
           ['终审通过', '盖章 · 朱虹旭', '填写快递单号', '确认签回', '确认归档'],
         ]),
-        _loopGroup('客诉', [
+        _loopGroup(context, '客诉', [
           ['退券：作废券 → 付款 → 已付款 → 月度复核'],
           ['赔付：付款 → 已付款 → 月度复核'],
           ['补发：下发券码 → 月度复核'],
         ]),
-        _loopGroup('一次性 / 到期', [
+        _loopGroup(context, '一次性 / 到期', [
           ['开票 · 收据跟催 · 礼品备货 · 数据导出'],
           ['预付款到期还款 · 设备到期退还 · 开户归还证照'],
         ]),
@@ -100,7 +100,11 @@ class ApprovalTodoFlowGuide extends StatelessWidget {
     );
   }
 
-  Widget _loopGroup(String title, List<List<String>> loops) {
+  Widget _loopGroup(
+    BuildContext context,
+    String title,
+    List<List<String>> loops,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
@@ -111,7 +115,8 @@ class ApprovalTodoFlowGuide extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: DunesColors.accentDeep,
+              color: DunesColors.resolve(context, DunesColors.accentDeep),
+              context: context,
             ),
           ),
           const SizedBox(height: 8),
@@ -124,13 +129,17 @@ class ApprovalTodoFlowGuide extends StatelessWidget {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   for (var i = 0; i < loop.length; i++) ...[
-                    _loopChip(loop[i], highlight: i == 0),
+                    _loopChip(context, loop[i], highlight: i == 0),
                     if (i < loop.length - 1)
                       Text(
                         '→',
                         style: DunesTypography.sans(
                           fontSize: 12,
-                          color: DunesColors.text3,
+                          color: DunesColors.resolve(
+                            context,
+                            DunesColors.text3,
+                          ),
+                          context: context,
                         ),
                       ),
                   ],
@@ -142,19 +151,41 @@ class ApprovalTodoFlowGuide extends StatelessWidget {
     );
   }
 
-  Widget _loopChip(String text, {bool highlight = false}) {
+  Widget _loopChip(
+    BuildContext context,
+    String text, {
+    bool highlight = false,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: highlight ? DunesColors.greenSoft : Colors.white,
+        color: DunesColors.resolveNullable(
+          context,
+          highlight ? DunesColors.greenSoft : Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: highlight ? DunesColors.green : DunesColors.border,
+          color: highlight
+              ? DunesColors.resolve(
+                  context,
+                  DunesColors.green,
+                  role: DunesColorRole.border,
+                )
+              : DunesColors.resolve(
+                  context,
+                  DunesColors.border,
+                  role: DunesColorRole.border,
+                ),
         ),
       ),
       child: Text(
         text,
-        style: DunesTypography.sans(fontSize: 12, color: DunesColors.text),
+        style: DunesTypography.sans(
+          fontSize: 12,
+          color: DunesColors.resolve(context, DunesColors.text),
+          context: context,
+        ),
       ),
     );
   }

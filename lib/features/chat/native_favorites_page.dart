@@ -603,7 +603,7 @@ class _FavoriteCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-            _buildContent(),
+            _buildContent(context),
             const SizedBox(height: 6),
             Row(
               children: [
@@ -687,11 +687,11 @@ class _FavoriteCard extends StatelessWidget {
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(BuildContext context) {
     switch (kind) {
       case 'IMAGE':
         if (item.payload == null) {
-          return _selectableBodyText(item.previewText);
+          return _selectableBodyText(context, item.previewText);
         }
         return Align(
           alignment: Alignment.centerLeft,
@@ -705,7 +705,7 @@ class _FavoriteCard extends StatelessWidget {
         );
       case 'VIDEO':
         if (item.payload == null) {
-          return _selectableBodyText(item.previewText);
+          return _selectableBodyText(context, item.previewText);
         }
         return Align(
           alignment: Alignment.centerLeft,
@@ -742,12 +742,19 @@ class _FavoriteCard extends StatelessWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: DunesColors.accentSoft,
+                color: DunesColors.resolveNullable(
+                  context,
+                  DunesColors.accentSoft,
+                  role: DunesColorRole.surface,
+                ),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.mic_none_rounded,
-                color: DunesColors.accentDeep,
+                color: DunesColors.resolveNullable(
+                  context,
+                  DunesColors.accentDeep,
+                ),
                 size: 20,
               ),
             ),
@@ -756,24 +763,27 @@ class _FavoriteCard extends StatelessWidget {
               label,
               style: DunesTypography.sans(
                 fontSize: 15,
-                color: const Color(0xFF1C1C1C),
+                color: DunesColors.resolve(context, const Color(0xFF1C1C1C)),
                 fontWeight: FontWeight.w500,
+                context: context,
               ),
             ),
           ],
         );
       default:
         return _selectableBodyText(
+          context,
           item.bodyText.trim().isNotEmpty ? item.bodyText : item.previewText,
         );
     }
   }
 
-  Widget _selectableBodyText(String text) {
+  Widget _selectableBodyText(BuildContext context, String text) {
     final style = DunesTypography.sans(
       fontSize: 15,
       height: 1.45,
-      color: const Color(0xFF1C1C1C),
+      color: DunesColors.resolve(context, const Color(0xFF1C1C1C)),
+      context: context,
     );
     // PC：拖拽选区 + 右键复制；APP：长按选区 + 系统复制菜单。
     return SelectableText(

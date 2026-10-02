@@ -65,7 +65,7 @@ class TaskGoalTable extends StatelessWidget {
                 ),
                 DataCell(Text(formatTaskYmd(task.startAt?.toLocal()))),
                 DataCell(Text(formatTaskYmd(task.dueAt?.toLocal()))),
-                DataCell(_actionCell(task)),
+                DataCell(_actionCell(context, task)),
               ],
             ),
         ],
@@ -73,9 +73,9 @@ class TaskGoalTable extends StatelessWidget {
     );
   }
 
-  Widget _actionCell(TaskItem task) {
+  Widget _actionCell(BuildContext context, TaskItem task) {
     final share = onShare;
-    if (share == null) return _completeCell(task);
+    if (share == null) return _completeCell(context, task);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -85,26 +85,34 @@ class TaskGoalTable extends StatelessWidget {
           constraints: const BoxConstraints.tightFor(width: 38, height: 38),
           padding: EdgeInsets.zero,
           onPressed: () => share(task),
-          icon: const Icon(
+          icon: Icon(
             Icons.ios_share_rounded,
             size: 18,
-            color: Color(0xFF7054D8),
+            color: DunesColors.resolveNullable(context, Color(0xFF7054D8)),
           ),
         ),
-        _completeCell(task),
+        _completeCell(context, task),
       ],
     );
   }
 
-  Widget _completeCell(TaskItem task) {
+  Widget _completeCell(BuildContext context, TaskItem task) {
     if (task.status == 'completed') {
-      return const Text('已完成', style: TextStyle(color: DunesColors.text3));
+      return Text(
+        '已完成',
+        style: TextStyle(
+          color: DunesColors.resolveNullable(context, DunesColors.text3),
+        ),
+      );
     }
     final hint = completeHint(task);
     if (!canComplete(task)) {
       return Text(
         hint ?? '—',
-        style: const TextStyle(fontSize: 12, color: DunesColors.text3),
+        style: TextStyle(
+          fontSize: 12,
+          color: DunesColors.resolveNullable(context, DunesColors.text3),
+        ),
       );
     }
     return TextButton(

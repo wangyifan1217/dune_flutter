@@ -63,11 +63,27 @@ class LighthousePill extends StatelessWidget {
         ? DunesColors.resolve(context, DunesColors.text)
         : DunesColors.resolve(context, DunesColors.text2);
     final bg = active
-        ? DunesColors.resolve(context, DunesColors.bgCard)
-        : DunesColors.resolve(context, DunesColors.bgApp);
+        ? DunesColors.resolve(
+            context,
+            DunesColors.bgCard,
+            role: DunesColorRole.surface,
+          )
+        : DunesColors.resolve(
+            context,
+            DunesColors.bgApp,
+            role: DunesColorRole.surface,
+          );
     final border = active
-        ? DunesColors.resolve(context, DunesColors.text2)
-        : DunesColors.resolve(context, DunesColors.borderSoft);
+        ? DunesColors.resolve(
+            context,
+            DunesColors.text2,
+            role: DunesColorRole.border,
+          )
+        : DunesColors.resolve(
+            context,
+            DunesColors.borderSoft,
+            role: DunesColorRole.border,
+          );
     return InkWell(
       borderRadius: BorderRadius.circular(10),
       onTap: onTap,

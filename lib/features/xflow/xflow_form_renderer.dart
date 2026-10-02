@@ -459,10 +459,15 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            DunesColors.resolve(context, DunesColors.bgSoft),
             DunesColors.resolve(
               context,
               DunesColors.bgSoft,
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              DunesColors.bgSoft,
+              role: DunesColorRole.surface,
             ).withValues(alpha: 0),
           ],
           stops: const [0, 0.8],

@@ -157,8 +157,16 @@ class KpiAssistantAvatar extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            DunesColors.resolve(context, DunesColors.brandPurple),
-            DunesColors.resolve(context, DunesColors.brandPurpleDeep),
+            DunesColors.resolve(
+              context,
+              DunesColors.brandPurple,
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              DunesColors.brandPurpleDeep,
+              role: DunesColorRole.surface,
+            ),
           ],
         ),
       ),
@@ -491,13 +499,25 @@ class _KpiStatusPill extends StatelessWidget {
     final Color bg;
     if (data.isAcked) {
       fg = DunesColors.resolve(context, DunesColors.green);
-      bg = DunesColors.resolve(context, DunesColors.greenSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.greenSoft,
+        role: DunesColorRole.surface,
+      );
     } else if (data.isUpdated) {
       fg = DunesColors.resolve(context, DunesColors.blue);
-      bg = DunesColors.resolve(context, DunesColors.blueSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.blueSoft,
+        role: DunesColorRole.surface,
+      );
     } else {
       fg = DunesColors.resolve(context, DunesColors.amber);
-      bg = DunesColors.resolve(context, DunesColors.amberSoft);
+      bg = DunesColors.resolve(
+        context,
+        DunesColors.amberSoft,
+        role: DunesColorRole.surface,
+      );
     }
     return Container(
       height: 20,
@@ -607,8 +627,16 @@ class _KpiScorePanel extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            DunesColors.resolve(context, Color(0xFFF8F5FD)),
-            DunesColors.resolve(context, DunesColors.brandPurpleSoft),
+            DunesColors.resolve(
+              context,
+              Color(0xFFF8F5FD),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              DunesColors.brandPurpleSoft,
+              role: DunesColorRole.surface,
+            ),
           ],
         ),
         borderRadius: BorderRadius.circular(11),

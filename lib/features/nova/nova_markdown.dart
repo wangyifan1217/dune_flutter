@@ -25,10 +25,10 @@ class NovaMarkdownBody extends StatelessWidget {
   /// 全文档预览（知识库 / Nova 附件 MD）：弱化链接样式，避免满屏下划线。
   final bool documentPreview;
 
-  static TextStyle _documentPreviewStyle() => const TextStyle(
+  static TextStyle _documentPreviewStyle(BuildContext context) => TextStyle(
     fontFamily: 'Noto Sans SC',
     fontSize: 13,
-    color: DunesColors.text,
+    color: DunesColors.resolve(context, DunesColors.text),
     height: 1.65,
     decoration: TextDecoration.none,
   );
@@ -55,7 +55,7 @@ class NovaMarkdownBody extends StatelessWidget {
 
     // 全文档预览：纯文本 + 中文字体，避免 Geist 缺字黄线、链接下划线。
     if (documentPreview) {
-      return SelectableText(raw, style: _documentPreviewStyle());
+      return SelectableText(raw, style: _documentPreviewStyle(context));
     }
 
     final shownNames = <String>{};
@@ -739,7 +739,7 @@ class _NovaMarkdownInline extends StatelessWidget {
   final Widget Function(NovaDeliverableItem item)? onImage;
   final Widget Function(String label, String url)? onFileLink;
 
-  TextStyle _baseStyle() => DunesTypography.sans(
+  TextStyle _baseStyle(BuildContext context) => DunesTypography.sans(
     fontSize: headingLevel == 1
         ? 20
         : headingLevel == 2
@@ -748,14 +748,15 @@ class _NovaMarkdownInline extends StatelessWidget {
         ? 16
         : 15,
     fontWeight: headingLevel > 0 ? FontWeight.w700 : FontWeight.w400,
-    color: DunesColors.text,
+    color: DunesColors.resolve(context, DunesColors.text),
     height: headingLevel > 0 ? 1.4 : 1.6,
+    context: context,
   );
 
   @override
   Widget build(BuildContext context) {
     if (documentPreview) {
-      return Text(text, style: _baseStyle());
+      return Text(text, style: _baseStyle(context));
     }
     if (onImage != null &&
         RegExp(r'!\[[^\]]*\]\(https?:', caseSensitive: false).hasMatch(text)) {
@@ -763,7 +764,7 @@ class _NovaMarkdownInline extends StatelessWidget {
     }
     final spans = <InlineSpan>[];
     _parseInline(text, spans, context);
-    final span = TextSpan(style: _baseStyle(), children: spans);
+    final span = TextSpan(style: _baseStyle(context), children: spans);
     return SelectableText.rich(span);
   }
 
@@ -818,12 +819,12 @@ class _NovaMarkdownInline extends StatelessWidget {
     );
   }
 
-  TextStyle _linkTextStyle() {
+  TextStyle _linkTextStyle(BuildContext context) {
     if (documentPreview) {
-      return const TextStyle(color: DunesColors.accent);
+      return TextStyle(color: DunesColors.resolve(context, DunesColors.accent));
     }
-    return const TextStyle(
-      color: DunesColors.accentDeep,
+    return TextStyle(
+      color: DunesColors.resolve(context, DunesColors.accentDeep),
       decoration: TextDecoration.underline,
     );
   }
@@ -898,7 +899,7 @@ class _NovaMarkdownInline extends StatelessWidget {
           out.add(
             TextSpan(
               text: url,
-              style: _linkTextStyle(),
+              style: _linkTextStyle(context),
               recognizer: TapGestureRecognizer()
                 ..onTap = () => launchUrl(Uri.parse(url)),
             ),
@@ -916,7 +917,7 @@ class _NovaMarkdownInline extends StatelessWidget {
           out.add(
             TextSpan(
               text: label,
-              style: _linkTextStyle(),
+              style: _linkTextStyle(context),
               recognizer: TapGestureRecognizer()
                 ..onTap = () => launchUrl(Uri.parse(url)),
             ),

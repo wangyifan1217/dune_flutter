@@ -109,10 +109,15 @@ class _XflowCategoryTab extends StatelessWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      DunesColors.resolve(context, XflowApprovalPalette.accent),
+                      DunesColors.resolve(
+                        context,
+                        XflowApprovalPalette.accent,
+                        role: DunesColorRole.surface,
+                      ),
                       DunesColors.resolve(
                         context,
                         XflowApprovalPalette.accentDeep,
+                        role: DunesColorRole.surface,
                       ),
                     ],
                   )

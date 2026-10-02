@@ -196,8 +196,16 @@ class AiSummaryConversationAvatar extends StatelessWidget {
           borderRadius: BorderRadius.circular(radius),
           gradient: LinearGradient(
             colors: [
-              DunesColors.resolve(context, Color(0xFFCABCEB)),
-              DunesColors.resolve(context, Color(0xFFA88CD8)),
+              DunesColors.resolve(
+                context,
+                Color(0xFFCABCEB),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFFA88CD8),
+                role: DunesColorRole.surface,
+              ),
             ],
           ),
         ),

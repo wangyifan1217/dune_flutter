@@ -486,17 +486,21 @@ class QianjiPerfFilterChips extends StatelessWidget {
         children: [
           for (var i = 0; i < options.length; i++) ...[
             if (i > 0) const SizedBox(width: 6),
-            _chip(options[i].$1, options[i].$2),
+            _chip(context, options[i].$1, options[i].$2),
           ],
         ],
       ),
     );
   }
 
-  Widget _chip(QianjiPerfFilter value, String label) {
+  Widget _chip(BuildContext context, QianjiPerfFilter value, String label) {
     final on = selected == value;
     return Material(
-      color: on ? QianjiPerfTheme.purple : Colors.white,
+      color: DunesColors.resolveNullable(
+        context,
+        on ? QianjiPerfTheme.purple : Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: () => onSelected(value),
@@ -506,7 +510,17 @@ class QianjiPerfFilterChips extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: on ? QianjiPerfTheme.purple : DunesColors.borderSoft,
+              color: on
+                  ? DunesColors.resolve(
+                      context,
+                      QianjiPerfTheme.purple,
+                      role: DunesColorRole.border,
+                    )
+                  : DunesColors.resolve(
+                      context,
+                      DunesColors.borderSoft,
+                      role: DunesColorRole.border,
+                    ),
             ),
           ),
           child: Text(
@@ -514,7 +528,10 @@ class QianjiPerfFilterChips extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 12,
               fontWeight: on ? FontWeight.w600 : FontWeight.w500,
-              color: on ? Colors.white : DunesColors.text2,
+              color: on
+                  ? DunesColors.resolve(context, Colors.white)
+                  : DunesColors.resolve(context, DunesColors.text2),
+              context: context,
             ),
           ),
         ),

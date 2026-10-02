@@ -1,3 +1,4 @@
+import 'package:dunes_app/core/theme/dunes_theme.dart';
 import 'package:flutter/material.dart';
 
 /// NOVA 的双眼标记，供消息页入口和主导航共用。
@@ -17,16 +18,23 @@ class NovaEyes extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _eye(),
+        _eye(context),
         SizedBox(width: eyeSize / 2),
-        _eye(),
+        _eye(context),
       ],
     );
   }
 
-  Widget _eye() => Container(
+  Widget _eye(BuildContext context) => Container(
     width: eyeSize,
     height: eyeSize,
-    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    decoration: BoxDecoration(
+      color: DunesColors.resolveNullable(
+        context,
+        color,
+        role: DunesColorRole.surface,
+      ),
+      shape: BoxShape.circle,
+    ),
   );
 }

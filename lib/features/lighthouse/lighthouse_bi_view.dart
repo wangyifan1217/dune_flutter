@@ -402,11 +402,13 @@ TextPainter _tp(
 }
 
 TextStyle _mono({
+  BuildContext? context,
   double size = 9,
   Color color = LhColors.mute2,
   FontWeight weight = FontWeight.w600,
   double spacing = 0.2,
 }) => LhTypography.mono(
+  context: context,
   size: size,
   color: color,
   weight: weight,
@@ -415,11 +417,13 @@ TextStyle _mono({
 );
 
 TextStyle _sans({
+  BuildContext? context,
   double size = 11,
   Color color = LhColors.ink,
   FontWeight weight = FontWeight.w600,
   double spacing = 0,
 }) => LhTypography.sans(
+  context: context,
   size: size,
   color: color,
   weight: weight,
@@ -913,6 +917,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             child: Text(
               'ANALYTICS',
               style: _mono(
+                context: context,
                 size: 8.5,
                 color: DunesColors.resolve(context, LhColors.mute2),
                 spacing: 1.5,
@@ -989,6 +994,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: _mono(
+                context: context,
                 size: 9.5,
                 color: DunesColors.resolve(context, LhBiPlum.deep),
                 spacing: 0.2,
@@ -1160,7 +1166,10 @@ class _LhBiViewPageState extends State<LhBiViewPage>
           Center(
             child: Padding(
               padding: const EdgeInsets.only(right: 8, left: 2),
-              child: Text(label, style: _mono(size: 9, spacing: 0.6)),
+              child: Text(
+                label,
+                style: _mono(context: context, size: 9, spacing: 0.6),
+              ),
             ),
           ),
           ...chips,
@@ -1209,6 +1218,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             Text(
               widget.dimLabel(dim),
               style: _sans(
+                context: context,
                 size: 12.5,
                 color: on
                     ? DunesColors.resolve(context, LhBiPlum.deep)
@@ -1286,6 +1296,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                     child: Text(
                       c.label,
                       style: _sans(
+                        context: context,
                         size: 11.5,
                         color: c.key == breakKey
                             ? DunesColors.resolve(context, LhBiPlum.deep)
@@ -1346,6 +1357,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
         child: Text(
           label,
           style: _sans(
+            context: context,
             size: 11,
             color: on
                 ? DunesColors.resolve(context, LhBiPlum.deep)
@@ -1417,6 +1429,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: _sans(
+                    context: context,
                     size: lighthouseHeroMastheadLabelFontSize,
                     color: DunesColors.resolve(context, LhColors.ink),
                     weight: FontWeight.w600,
@@ -1444,6 +1457,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                   child: Text(
                     parts.unit,
                     style: _sans(
+                      context: context,
                       size: 11,
                       color: DunesColors.resolve(context, LhColors.mute),
                       weight: FontWeight.w500,
@@ -1459,6 +1473,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             // 同一个数不在两处出现。
             '共 ${items.length} 项 · ${widget.periodLabel}',
             style: _mono(
+              context: context,
               size: 9.5,
               color: DunesColors.resolve(context, LhColors.mute),
               spacing: 0.1,
@@ -1581,6 +1596,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: _sans(
+              context: context,
               size: lighthouseHeroMetricLabelFontSize,
               color: DunesColors.resolve(context, LhColors.mute),
               weight: FontWeight.w500,
@@ -1593,6 +1609,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: _sans(
+                context: context,
                 size: lighthouseHeroMetricValueFontSize - 1,
                 color:
                     headlineColor ?? DunesColors.resolve(context, LhColors.ink),
@@ -1624,6 +1641,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                     child: Text(
                       headline.unit,
                       style: _sans(
+                        context: context,
                         size: 8,
                         color: DunesColors.resolve(context, LhColors.mute),
                         weight: FontWeight.w500,
@@ -1739,6 +1757,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: _sans(
+                      context: context,
                       size: 12.5,
                       color: DunesColors.resolve(context, LhColors.ink),
                       weight: FontWeight.w700,
@@ -1752,7 +1771,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.right,
-                    style: _mono(size: 9, spacing: 0.1),
+                    style: _mono(context: context, size: 9, spacing: 0.1),
                   ),
                 ),
               ],
@@ -1791,6 +1810,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               child: Text(
                 insight,
                 style: _mono(
+                  context: context,
                   size: 9.5,
                   color: LhBiSection.title(sectionKey),
                   weight: FontWeight.w500,
@@ -1910,6 +1930,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                     : '已锁定「$_drillName」· 再点一次解除',
                 textAlign: TextAlign.center,
                 style: _mono(
+                  context: context,
                   size: 8.5,
                   color: DunesColors.resolve(context, LhColors.mute2),
                   spacing: 0.2,
@@ -1930,6 +1951,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                 child: Text(
                   '另有 ${lossItems.length} 项亏损 ${lhBiMoney(lossSum)}，已计入圆心合计',
                   style: _mono(
+                    context: context,
                     size: 9,
                     color: DunesColors.resolve(context, LhColors.pos),
                     spacing: 0.1,
@@ -2112,12 +2134,22 @@ class _LhBiViewPageState extends State<LhBiViewPage>
         children: [
           Text(
             rep.healthLabel,
-            style: _sans(size: 9.5, color: accent, weight: FontWeight.w700),
+            style: _sans(
+              context: context,
+              size: 9.5,
+              color: accent,
+              weight: FontWeight.w700,
+            ),
           ),
           const SizedBox(width: 4),
           Text(
             '${rep.healthScore}',
-            style: _mono(size: 9.5, color: accent, spacing: 0),
+            style: _mono(
+              context: context,
+              size: 9.5,
+              color: accent,
+              spacing: 0,
+            ),
           ),
         ],
       ),
@@ -2133,6 +2165,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               ? '正在生成${_reportGrainGuess}…'
               : '还没有${_reportGrainGuess}，点右下角生成。',
           style: _mono(
+            context: context,
             size: 9.5,
             color: DunesColors.resolve(context, LhColors.mute2),
             spacing: 0.1,
@@ -2146,6 +2179,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
         child: Text(
           '这一档没有可报的内容。',
           style: _mono(
+            context: context,
             size: 9.5,
             color: DunesColors.resolve(context, LhColors.mute2),
             spacing: 0.1,
@@ -2225,6 +2259,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: _mono(
+              context: context,
               size: 8.5,
               color: DunesColors.resolve(context, LhColors.mute2),
               spacing: 0.1,
@@ -2331,6 +2366,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
           child: Text(
             '正在取${b.label}明细…',
             style: _mono(
+              context: context,
               size: 9.5,
               color: DunesColors.resolve(context, LhColors.mute2),
             ),
@@ -2344,6 +2380,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
           '「$name」在当前区间没有${b.label}拆分数据。\n'
           '后端 detail 未下发该维度时这里就是空的，不做估算。',
           style: _mono(
+            context: context,
             size: 9.5,
             color: DunesColors.resolve(context, LhColors.mute2),
             spacing: 0.1,
@@ -2411,6 +2448,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: _sans(
+                    context: context,
                     size: 11,
                     color: DunesColors.resolve(context, LhBiPlum.deep),
                     weight: FontWeight.w700,
@@ -2421,6 +2459,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               Text(
                 _metric.label,
                 style: _mono(
+                  context: context,
                   size: 8.5,
                   color: DunesColors.resolve(context, LhColors.mute2),
                 ),
@@ -2449,6 +2488,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               child: Text(
                 '共 ${rows.length} 个${b.label}，按 ${_metric.label} 取前 ${shown.length} 个',
                 style: _mono(
+                  context: context,
                   size: 8.5,
                   color: DunesColors.resolve(context, LhColors.mute2),
                 ),
@@ -2521,6 +2561,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: _mono(
+          context: context,
           size: size,
           color: color ?? DunesColors.resolve(context, LhColors.ink),
           spacing: 0,
@@ -2558,6 +2599,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
   Widget _legendHeader() {
     final windows = _showsWindowIncrements;
     TextStyle headStyle() => _mono(
+      context: context,
       size: 8,
       color: DunesColors.resolve(context, LhColors.mute2),
       spacing: 0,
@@ -2616,6 +2658,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: _mono(
+                    context: context,
                     size: 9.5,
                     color: DunesColors.resolve(context, LhColors.mute),
                     spacing: 0.1,
@@ -2683,6 +2726,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: _sans(
+                  context: context,
                   size: 11,
                   color: DunesColors.resolve(context, LhColors.ink2),
                   weight: FontWeight.w500,
@@ -2817,6 +2861,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
         Text(
           label,
           style: _mono(
+            context: context,
             size: 8.5,
             color: DunesColors.resolve(context, LhBiFlow.mute),
             spacing: 0.8,
@@ -2870,6 +2915,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               Text(
                 '净TA · 资金流',
                 style: _sans(
+                  context: context,
                   size: lighthouseHeroMastheadLabelFontSize,
                   color: DunesColors.resolve(context, Colors.white),
                   weight: FontWeight.w600,
@@ -2879,6 +2925,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
               Text(
                 widget.rangeLabel,
                 style: _mono(
+                  context: context,
                   size: 9,
                   color: DunesColors.resolve(context, LhBiFlow.mute),
                   spacing: 0.4,
@@ -2905,6 +2952,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                   child: Text(
                     parts.unit,
                     style: _sans(
+                      context: context,
                       size: 11,
                       color: DunesColors.resolve(context, LhBiFlow.mute),
                       weight: FontWeight.w500,
@@ -2917,7 +2965,12 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Text(
                   net >= 0 ? '净流入' : '净流出',
-                  style: _mono(size: 9.5, color: netColor, spacing: 0.6),
+                  style: _mono(
+                    context: context,
+                    size: 9.5,
+                    color: netColor,
+                    spacing: 0.6,
+                  ),
                 ),
               ),
             ],
@@ -2988,6 +3041,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             '净留存率＝净额 ÷ 资金总流动（${lhBiMoney(gross)}）'
             '，衡量这段时间流过的钱最后留下多少。',
             style: _mono(
+              context: context,
               size: 8.5,
               color: DunesColors.resolve(context, LhBiFlow.mute),
               spacing: 0.1,
@@ -3245,6 +3299,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                       Text(
                         title,
                         style: _sans(
+                          context: context,
                           size: 12.5,
                           color: DunesColors.resolve(context, LhColors.ink),
                           weight: FontWeight.w700,
@@ -3254,6 +3309,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                       Text(
                         subtitle,
                         style: _mono(
+                          context: context,
                           size: 8.5,
                           color: DunesColors.resolve(context, LhColors.mute2),
                         ),
@@ -3280,6 +3336,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                 child: Text(
                   insight,
                   style: _sans(
+                    context: context,
                     size: 10.5,
                     color: DunesColors.resolve(context, LhColors.ink2),
                     weight: FontWeight.w500,
@@ -3355,14 +3412,19 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             ),
             child: Row(
               children: [
-                SizedBox(width: 22, child: Text('#', style: _mono(size: 9))),
-                Expanded(child: Text('名称', style: _mono(size: 9))),
+                SizedBox(
+                  width: 22,
+                  child: Text('#', style: _mono(context: context, size: 9)),
+                ),
+                Expanded(
+                  child: Text('名称', style: _mono(context: context, size: 9)),
+                ),
                 SizedBox(
                   width: 64,
                   child: Text(
                     _metric.label,
                     textAlign: TextAlign.right,
-                    style: _mono(size: 9),
+                    style: _mono(context: context, size: 9),
                   ),
                 ),
                 SizedBox(
@@ -3370,7 +3432,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                   child: Text(
                     '占比',
                     textAlign: TextAlign.right,
-                    style: _mono(size: 9),
+                    style: _mono(context: context, size: 9),
                   ),
                 ),
                 SizedBox(
@@ -3378,7 +3440,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                   child: Text(
                     '净利',
                     textAlign: TextAlign.right,
-                    style: _mono(size: 9),
+                    style: _mono(context: context, size: 9),
                   ),
                 ),
               ],
@@ -3408,6 +3470,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                     child: Text(
                       '${i + 1}',
                       style: _mono(
+                        context: context,
                         size: 10,
                         color: i < 3
                             ? DunesColors.resolve(context, LhBiPlum.primary)
@@ -3423,6 +3486,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: _sans(
+                        context: context,
                         size: 11,
                         color: DunesColors.resolve(context, LhColors.ink),
                         weight: FontWeight.w500,
@@ -3435,6 +3499,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                       lhBiValue(rows[i].value, isRate: _metric.isRate),
                       textAlign: TextAlign.right,
                       style: _mono(
+                        context: context,
                         size: 10,
                         color: DunesColors.resolve(context, LhColors.ink),
                         spacing: 0,
@@ -3449,6 +3514,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                           : '—',
                       textAlign: TextAlign.right,
                       style: _mono(
+                        context: context,
                         size: 10,
                         color: DunesColors.resolve(context, LhColors.mute),
                         spacing: 0,
@@ -3461,6 +3527,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                       lhBiMoney(rows[i].profit),
                       textAlign: TextAlign.right,
                       style: _mono(
+                        context: context,
                         size: 10,
                         color: rows[i].profit < 0
                             ? DunesColors.resolve(context, LhColors.neg)
@@ -3484,6 +3551,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
     child: Text(
       text,
       style: _mono(
+        context: context,
         size: 10,
         color: DunesColors.resolve(context, LhColors.mute2),
       ),
@@ -3513,6 +3581,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
         '当前区间下没有可分析的数据。\n换个区间或维度再看。',
         textAlign: TextAlign.center,
         style: _mono(
+          context: context,
           size: 11,
           color: DunesColors.resolve(context, LhColors.mute2),
           spacing: 0.2,
@@ -3544,6 +3613,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
         '数据同步中…',
         textAlign: TextAlign.center,
         style: _mono(
+          context: context,
           size: 11,
           color: DunesColors.resolve(context, LhColors.mute2),
           spacing: 0.2,
@@ -3561,6 +3631,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
           : '口径与列表一致：${widget.periodLabel} · ${widget.rangeLabel}。'
                 '构成环按正值拆分，圆心与合计同口径（含亏损）。比率指标不参与加总。',
       style: _mono(
+        context: context,
         size: 8.5,
         color: DunesColors.resolve(context, LhColors.mute2),
         spacing: 0.1,

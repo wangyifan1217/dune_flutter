@@ -58,12 +58,18 @@ class LighthouseForecastReportSheet extends StatelessWidget {
       ? (report.summary.forecast >= 0 ? LhColors.neg : LhColors.pos)
       : const Color(0xFF51418E);
 
-  TextStyle _text([
+  TextStyle _text(
+    BuildContext context, [
     double size = 12,
     Color color = LhColors.ink,
     FontWeight weight = FontWeight.w500,
-  ]) =>
-      LhTypography.sans(size: size, color: color, weight: weight, height: 1.5);
+  ]) => LhTypography.sans(
+    size: size,
+    color: color,
+    weight: weight,
+    height: 1.5,
+    context: context,
+  );
 
   @override
   Widget build(BuildContext context) => DraggableScrollableSheet(
@@ -96,17 +102,23 @@ class LighthouseForecastReportSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          _header(),
-          _section('本月判断', '预测是估计，不是承诺，也不改动已发生金额。', _conclusion()),
-          _section('累计走势', '实线为已发生；虚线与浅色区间来自逐日模拟。', _cumChart()),
-          _section('预测原理', '已发生固定，只对剩余日期建模。', _principles()),
-          _section('模型对照', '动态日模型与原算法在相同历史月份比较 WAPE。', _methodTable()),
-          _section('月内各时点回测', '每个时点重新拟合；不预设越晚一定越准。', _checkpointChart()),
+          _header(ctx),
+          _section(ctx, '本月判断', '预测是估计，不是承诺，也不改动已发生金额。', _conclusion(ctx)),
+          _section(ctx, '累计走势', '实线为已发生；虚线与浅色区间来自逐日模拟。', _cumChart(ctx)),
+          _section(ctx, '预测原理', '已发生固定，只对剩余日期建模。', _principles(ctx)),
+          _section(ctx, '模型对照', '动态日模型与原算法在相同历史月份比较 WAPE。', _methodTable(ctx)),
+          _section(
+            ctx,
+            '月内各时点回测',
+            '每个时点重新拟合；不预设越晚一定越准。',
+            _checkpointChart(ctx),
+          ),
           if (report.rows.isNotEmpty)
-            _section('逐月回测', '退回同一月内进度，仅用截止日及以前的数据。', _backtestTable()),
-          _section('学到的日节奏', '星期与月底效应联合估计，避免重复放大。', _params()),
+            _section(ctx, '逐月回测', '退回同一月内进度，仅用截止日及以前的数据。', _backtestTable(ctx)),
+          _section(ctx, '学到的日节奏', '星期与月底效应联合估计，避免重复放大。', _params(ctx)),
           if (ordinalLoader != null)
             _section(
+              ctx,
               '结构预测 · 产品 / 供给 / 渠道',
               '判断各实体比上月的涨跌概率；不是主金额预测的替代。',
               LighthouseProductOrdinalSection(
@@ -116,13 +128,13 @@ class LighthouseForecastReportSheet extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 24),
-          _footnote(),
+          _footnote(ctx),
         ],
       ),
     ),
   );
 
-  Widget _header() {
+  Widget _header(BuildContext context) {
     final s = report.summary;
     final prev = s.prevMonthTotal;
     final vs = prev == null || prev.abs() < 1e-9
@@ -136,34 +148,51 @@ class LighthouseForecastReportSheet extends StatelessWidget {
             Expanded(
               child: Text(
                 '$metricLabel · 月末预测',
-                style: _text(17, LhColors.ink, FontWeight.w700),
+                style: _text(
+                  context,
+                  17,
+                  DunesColors.resolve(context, LhColors.ink),
+                  FontWeight.w700,
+                ),
               ),
             ),
-            _tag('预测', accent),
+            _tag(context, '预测', accent),
           ],
         ),
         const SizedBox(height: 5),
         Text(
           '${s.month.year}年${s.month.month}月 · 截至${s.cutoffDay}日 · T+1',
-          style: _text(11, _muted),
+          style: _text(context, 11, _muted),
         ),
         const SizedBox(height: 16),
         Text(
           _money(s.forecast),
-          style: LhTypography.number(size: 34, color: _ink),
+          style: LhTypography.number(size: 34, color: _ink, context: context),
         ),
         const SizedBox(height: 4),
         Text(
           '80% 近似预测区间  ${_money(s.lo)} — ${_money(s.hi)}',
-          style: _text(12, _muted),
+          style: _text(context, 12, _muted),
         ),
         const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.symmetric(vertical: 14),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             border: Border(
-              top: BorderSide(color: _line),
-              bottom: BorderSide(color: _line),
+              top: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  _line,
+                  role: DunesColorRole.border,
+                ),
+              ),
+              bottom: BorderSide(
+                color: DunesColors.resolve(
+                  context,
+                  _line,
+                  role: DunesColorRole.border,
+                ),
+              ),
             ),
           ),
           child: Row(
@@ -171,6 +200,7 @@ class LighthouseForecastReportSheet extends StatelessWidget {
             children: [
               Expanded(
                 child: _stat(
+                  context,
                   '超上月概率',
                   lighthouseForecastProbabilityLabel(s.beatPrevProb),
                   '同一分布的模拟占比',
@@ -179,6 +209,7 @@ class LighthouseForecastReportSheet extends StatelessWidget {
               const SizedBox(width: 16),
               Expanded(
                 child: _stat(
+                  context,
                   '较上月预计',
                   vs == null ? '—' : '${vs >= 0 ? '+' : '−'}${_pct(vs.abs())}',
                   prev == null ? '上月数据不完整' : '上月全月 ${_money(prev)}',
@@ -192,48 +223,74 @@ class LighthouseForecastReportSheet extends StatelessWidget {
           spacing: 8,
           runSpacing: 6,
           children: [
-            _tag('采用：${s.modelLabel}', accent),
-            _tag('${s.backtestMonths} 个有效回测月', _muted),
+            _tag(context, '采用：${s.modelLabel}', accent),
+            _tag(context, '${s.backtestMonths} 个有效回测月', _muted),
           ],
         ),
       ],
     );
   }
 
-  Widget _tag(String label, Color color) => Container(
+  Widget _tag(BuildContext context, String label, Color color) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
     decoration: BoxDecoration(
-      color: color.withAlpha(15),
+      color: DunesColors.resolveNullable(
+        context,
+        color.withAlpha(15),
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(5),
     ),
-    child: Text(label, style: _text(10, color, FontWeight.w600)),
+    child: Text(label, style: _text(context, 10, color, FontWeight.w600)),
   );
 
-  Widget _stat(String label, String value, String note) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(label, style: _text(11, _muted)),
-      const SizedBox(height: 3),
-      Text(value, style: _text(18, LhColors.ink, FontWeight.w700)),
-      Text(note, style: _text(10, _muted)),
-    ],
-  );
+  Widget _stat(BuildContext context, String label, String value, String note) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: _text(context, 11, _muted)),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            style: _text(
+              context,
+              18,
+              DunesColors.resolve(context, LhColors.ink),
+              FontWeight.w700,
+            ),
+          ),
+          Text(note, style: _text(context, 10, _muted)),
+        ],
+      );
 
-  Widget _section(String title, String note, Widget child) => Padding(
+  Widget _section(
+    BuildContext context,
+    String title,
+    String note,
+    Widget child,
+  ) => Padding(
     padding: const EdgeInsets.only(top: 26),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(title, style: _text(14, LhColors.ink, FontWeight.w700)),
+        Text(
+          title,
+          style: _text(
+            context,
+            14,
+            DunesColors.resolve(context, LhColors.ink),
+            FontWeight.w700,
+          ),
+        ),
         const SizedBox(height: 3),
-        Text(note, style: _text(11, _muted)),
+        Text(note, style: _text(context, 11, _muted)),
         const SizedBox(height: 12),
         child,
       ],
     ),
   );
 
-  Widget _conclusion() {
+  Widget _conclusion(BuildContext context) {
     final s = report.summary;
     final days = s.totalDays - s.cutoffDay;
     final remaining = s.forecast - s.actual;
@@ -242,7 +299,7 @@ class LighthouseForecastReportSheet extends StatelessWidget {
       children: [
         Text(
           '已发生 ${_money(s.actual)}；剩余 $days 天预计净贡献 ${_money(remaining)}。',
-          style: _text(),
+          style: _text(context),
         ),
         const SizedBox(height: 8),
         Text(
@@ -251,17 +308,20 @@ class LighthouseForecastReportSheet extends StatelessWidget {
               : s.dynamicMape == null
               ? '有效回测不足，主金额暂用原算法，动态模型区间仅作参考。'
               : '动态日模型回测 WAPE ${_pct(s.dynamicMape)}，高于原算法 ${_pct(s.linearMape)}，主金额暂用原算法。',
-          style: _text(12, _muted),
+          style: _text(context, 12, _muted),
         ),
         if (s.trial) ...[
           const SizedBox(height: 8),
-          Text('独立月份较少：概率与区间是模型估计，不代表经过验证的覆盖率。', style: _text(11, _muted)),
+          Text(
+            '独立月份较少：概率与区间是模型估计，不代表经过验证的覆盖率。',
+            style: _text(context, 11, _muted),
+          ),
         ],
       ],
     );
   }
 
-  Widget _principles() {
+  Widget _principles(BuildContext context) {
     final s = report.summary;
     final rows = <(String, String)>[
       ('月末总额 = 已发生 + 剩余每日金额之和', '本月已发生不重新预测；把每个未来日期的金额加总。'),
@@ -287,7 +347,11 @@ class LighthouseForecastReportSheet extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
       decoration: BoxDecoration(
-        color: _wash,
+        color: DunesColors.resolveNullable(
+          context,
+          _wash,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -298,8 +362,15 @@ class LighthouseForecastReportSheet extends StatelessWidget {
               decoration: BoxDecoration(
                 border: i == rows.length - 1
                     ? null
-                    : const Border(
-                        bottom: BorderSide(color: _line, width: 0.7),
+                    : Border(
+                        bottom: BorderSide(
+                          color: DunesColors.resolve(
+                            context,
+                            _line,
+                            role: DunesColorRole.border,
+                          ),
+                          width: 0.7,
+                        ),
                       ),
               ),
               child: Column(
@@ -307,10 +378,15 @@ class LighthouseForecastReportSheet extends StatelessWidget {
                 children: [
                   Text(
                     rows[i].$1,
-                    style: _text(12, LhColors.ink, FontWeight.w600),
+                    style: _text(
+                      context,
+                      12,
+                      DunesColors.resolve(context, LhColors.ink),
+                      FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 5),
-                  Text(rows[i].$2, style: _text(11, _muted)),
+                  Text(rows[i].$2, style: _text(context, 11, _muted)),
                 ],
               ),
             ),
@@ -319,7 +395,7 @@ class LighthouseForecastReportSheet extends StatelessWidget {
     );
   }
 
-  Widget _cumChart() => Column(
+  Widget _cumChart(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       SizedBox(
@@ -334,16 +410,16 @@ class LighthouseForecastReportSheet extends StatelessWidget {
         spacing: 14,
         runSpacing: 5,
         children: [
-          _tag('— 已发生', _ink),
-          _tag('··· 预测', _ink),
-          _tag('80% 近似区间', accent),
-          _tag('— 上月同期', _muted),
+          _tag(context, '— 已发生', _ink),
+          _tag(context, '··· 预测', _ink),
+          _tag(context, '80% 近似区间', accent),
+          _tag(context, '— 上月同期', _muted),
         ],
       ),
     ],
   );
 
-  Widget _methodTable() {
+  Widget _methodTable(BuildContext context) {
     final s = report.summary;
     final common = report.rows
         .where((r) => r.pace != null && r.daily != null)
@@ -405,13 +481,16 @@ class LighthouseForecastReportSheet extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(flex: 5, child: Text('方法', style: _text(11, _muted))),
+            Expanded(
+              flex: 5,
+              child: Text('方法', style: _text(context, 11, _muted)),
+            ),
             Expanded(
               flex: 3,
               child: Text(
                 '月末金额',
                 textAlign: TextAlign.right,
-                style: _text(11, _muted),
+                style: _text(context, 11, _muted),
               ),
             ),
             Expanded(
@@ -419,7 +498,7 @@ class LighthouseForecastReportSheet extends StatelessWidget {
               child: Text(
                 'WAPE',
                 textAlign: TextAlign.right,
-                style: _text(11, _muted),
+                style: _text(context, 11, _muted),
               ),
             ),
           ],
@@ -428,8 +507,17 @@ class LighthouseForecastReportSheet extends StatelessWidget {
         for (final r in methods)
           Container(
             padding: const EdgeInsets.symmetric(vertical: 12),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: _line, width: 0.7)),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    _line,
+                    role: DunesColorRole.border,
+                  ),
+                  width: 0.7,
+                ),
+              ),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -442,12 +530,15 @@ class LighthouseForecastReportSheet extends StatelessWidget {
                       Text(
                         '${r.name}${r.used ? ' · 采用' : ''}',
                         style: _text(
+                          context,
                           12,
-                          r.used ? accent : LhColors.ink,
+                          r.used
+                              ? accent
+                              : DunesColors.resolve(context, LhColors.ink),
                           FontWeight.w600,
                         ),
                       ),
-                      Text(r.sub, style: _text(10, _muted)),
+                      Text(r.sub, style: _text(context, 10, _muted)),
                     ],
                   ),
                 ),
@@ -457,7 +548,12 @@ class LighthouseForecastReportSheet extends StatelessWidget {
                   child: Text(
                     r.value == null ? '—' : _money(r.value!),
                     textAlign: TextAlign.right,
-                    style: _text(12, LhColors.ink, FontWeight.w600),
+                    style: _text(
+                      context,
+                      12,
+                      DunesColors.resolve(context, LhColors.ink),
+                      FontWeight.w600,
+                    ),
                   ),
                 ),
                 Expanded(
@@ -467,9 +563,14 @@ class LighthouseForecastReportSheet extends StatelessWidget {
                     children: [
                       Text(
                         _pct(r.error),
-                        style: _text(12, LhColors.ink, FontWeight.w600),
+                        style: _text(
+                          context,
+                          12,
+                          DunesColors.resolve(context, LhColors.ink),
+                          FontWeight.w600,
+                        ),
                       ),
-                      Text('${r.months} 月', style: _text(10, _muted)),
+                      Text('${r.months} 月', style: _text(context, 10, _muted)),
                     ],
                   ),
                 ),
@@ -480,13 +581,13 @@ class LighthouseForecastReportSheet extends StatelessWidget {
         Text(
           'M1、M2、组合仅作对照；回测折数不同，不能直接跨行排名。'
           '组合当前权重 M1 ${_pct(report.weightPace, digits: 0)} / M2 ${_pct(report.weightDaily, digits: 0)}。',
-          style: _text(10, _muted),
+          style: _text(context, 10, _muted),
         ),
       ],
     );
   }
 
-  Widget _checkpointChart() => SizedBox(
+  Widget _checkpointChart(BuildContext context) => SizedBox(
     height: 160,
     child: CustomPaint(
       size: Size.infinite,
@@ -498,17 +599,22 @@ class LighthouseForecastReportSheet extends StatelessWidget {
     ),
   );
 
-  Widget _backtestTable() {
+  Widget _backtestTable(BuildContext context) {
     Widget cell(double? value, double truth) => Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         Text(
           value == null ? '—' : _money(value),
-          style: _text(11, LhColors.ink, FontWeight.w600),
+          style: _text(
+            context,
+            11,
+            DunesColors.resolve(context, LhColors.ink),
+            FontWeight.w600,
+          ),
         ),
         Text(
           _signedPct(LighthouseBacktestRow.err(value, truth)),
-          style: _text(10, _muted),
+          style: _text(context, 10, _muted),
         ),
       ],
     );
@@ -516,26 +622,26 @@ class LighthouseForecastReportSheet extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(child: Text('月份 / 截止', style: _text(10, _muted))),
+            Expanded(child: Text('月份 / 截止', style: _text(context, 10, _muted))),
             Expanded(
               child: Text(
                 '实际',
                 textAlign: TextAlign.right,
-                style: _text(10, _muted),
+                style: _text(context, 10, _muted),
               ),
             ),
             Expanded(
               child: Text(
                 '原算法',
                 textAlign: TextAlign.right,
-                style: _text(10, _muted),
+                style: _text(context, 10, _muted),
               ),
             ),
             Expanded(
               child: Text(
                 '动态模型',
                 textAlign: TextAlign.right,
-                style: _text(10, _muted),
+                style: _text(context, 10, _muted),
               ),
             ),
           ],
@@ -543,8 +649,17 @@ class LighthouseForecastReportSheet extends StatelessWidget {
         for (final r in report.rows)
           Container(
             padding: const EdgeInsets.symmetric(vertical: 12),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: _line, width: 0.7)),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: DunesColors.resolve(
+                    context,
+                    _line,
+                    role: DunesColorRole.border,
+                  ),
+                  width: 0.7,
+                ),
+              ),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -555,9 +670,12 @@ class LighthouseForecastReportSheet extends StatelessWidget {
                     children: [
                       Text(
                         '${r.month.year % 100}年${r.month.month}月',
-                        style: _text(11),
+                        style: _text(context, 11),
                       ),
-                      Text('第 ${r.asOfDay} 天', style: _text(10, _muted)),
+                      Text(
+                        '第 ${r.asOfDay} 天',
+                        style: _text(context, 10, _muted),
+                      ),
                     ],
                   ),
                 ),
@@ -565,7 +683,12 @@ class LighthouseForecastReportSheet extends StatelessWidget {
                   child: Text(
                     _money(r.truth),
                     textAlign: TextAlign.right,
-                    style: _text(11, LhColors.ink, FontWeight.w600),
+                    style: _text(
+                      context,
+                      11,
+                      DunesColors.resolve(context, LhColors.ink),
+                      FontWeight.w600,
+                    ),
                   ),
                 ),
                 Expanded(child: cell(r.linear, r.truth)),
@@ -577,7 +700,7 @@ class LighthouseForecastReportSheet extends StatelessWidget {
     );
   }
 
-  Widget _params() {
+  Widget _params(BuildContext context) {
     final s = report.summary;
     final wf = report.weekdayFactors;
     const names = ['一', '二', '三', '四', '五', '六', '日'];
@@ -586,7 +709,7 @@ class LighthouseForecastReportSheet extends StatelessWidget {
       children: [
         Text(
           s.signed ? '星期额外贡献（金额）' : '星期系数（相对基础日水平）',
-          style: _text(11, _muted),
+          style: _text(context, 11, _muted),
         ),
         const SizedBox(height: 10),
         Row(
@@ -595,11 +718,16 @@ class LighthouseForecastReportSheet extends StatelessWidget {
               Expanded(
                 child: Column(
                   children: [
-                    Text('周${names[i]}', style: _text(10, _muted)),
+                    Text('周${names[i]}', style: _text(context, 10, _muted)),
                     const SizedBox(height: 5),
                     Text(
                       s.signed ? _money(wf[i]) : '×${wf[i].toStringAsFixed(2)}',
-                      style: _text(10, LhColors.ink, FontWeight.w600),
+                      style: _text(
+                        context,
+                        10,
+                        DunesColors.resolve(context, LhColors.ink),
+                        FontWeight.w600,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -609,6 +737,7 @@ class LighthouseForecastReportSheet extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         _parameter(
+          context,
           '月末三天',
           s.signed
               ? _money(report.monthEndFactor)
@@ -616,22 +745,47 @@ class LighthouseForecastReportSheet extends StatelessWidget {
           '在星期效应之外',
         ),
         _parameter(
+          context,
           '最后一天额外效应',
           s.signed
               ? _money(s.dynamic.lastDayFactor)
               : '×${s.dynamic.lastDayFactor.toStringAsFixed(2)}',
           '在月末三天效应之外',
         ),
-        _parameter('当前基础日水平', _money(report.dailyLevel), '去掉星期、月底后的潜在水平'),
-        _parameter('训练观测', '${s.dynamic.observations} 天', '最多使用近 240 个自然日'),
+        _parameter(
+          context,
+          '当前基础日水平',
+          _money(report.dailyLevel),
+          '去掉星期、月底后的潜在水平',
+        ),
+        _parameter(
+          context,
+          '训练观测',
+          '${s.dynamic.observations} 天',
+          '最多使用近 240 个自然日',
+        ),
       ],
     );
   }
 
-  Widget _parameter(String label, String value, String note) => Container(
+  Widget _parameter(
+    BuildContext context,
+    String label,
+    String value,
+    String note,
+  ) => Container(
     padding: const EdgeInsets.symmetric(vertical: 10),
-    decoration: const BoxDecoration(
-      border: Border(bottom: BorderSide(color: _line, width: 0.7)),
+    decoration: BoxDecoration(
+      border: Border(
+        bottom: BorderSide(
+          color: DunesColors.resolve(
+            context,
+            _line,
+            role: DunesColorRole.border,
+          ),
+          width: 0.7,
+        ),
+      ),
     ),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -640,18 +794,26 @@ class LighthouseForecastReportSheet extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: _text(12)),
-              Text(note, style: _text(10, _muted)),
+              Text(label, style: _text(context, 12)),
+              Text(note, style: _text(context, 10, _muted)),
             ],
           ),
         ),
         const SizedBox(width: 12),
-        Text(value, style: _text(12, LhColors.ink, FontWeight.w600)),
+        Text(
+          value,
+          style: _text(
+            context,
+            12,
+            DunesColors.resolve(context, LhColors.ink),
+            FontWeight.w600,
+          ),
+        ),
       ],
     ),
   );
 
-  Widget _footnote() => Text(
+  Widget _footnote(BuildContext context) => Text(
     '计算与数据口径\n'
     '只使用不晚于昨天的可用日数据。当前月缺失日期时暂停模型，历史缺失不填零。'
     '接口尚未提供完整性水位，“有数”不保证已完成业务对账。\n'
@@ -660,7 +822,7 @@ class LighthouseForecastReportSheet extends StatelessWidget {
     '原算法保底时，正金额缩放剩余模拟金额，有符号金额按未来进度平移；'
     '展示为 80% 近似预测区间，不能理解为保证 80% 命中。模型按历史回测选择，未来仍可能失准。\n'
     '预测仅对当前月的金额指标生效；比率、历史月份与原有财务确认流程不变。',
-    style: _text(11, _muted),
+    style: _text(context, 11, _muted),
   );
 }
 

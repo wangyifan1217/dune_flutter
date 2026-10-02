@@ -719,7 +719,7 @@ class _ImageMediaRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final payload = message.payload;
-    Widget thumb = _thumbPlaceholder();
+    Widget thumb = _thumbPlaceholder(context);
     if (payload != null) {
       final publicUrl = ConversationService.mediaPublicImageUrl(payload);
       if (publicUrl != null && publicUrl.isNotEmpty) {
@@ -738,7 +738,7 @@ class _ImageMediaRow extends StatelessWidget {
           future: loadBytes(),
           builder: (_, snap) {
             if (!snap.hasData) {
-              return _thumbPlaceholder(loading: !snap.hasError);
+              return _thumbPlaceholder(context, loading: !snap.hasError);
             }
             return ClipRRect(
               borderRadius: BorderRadius.circular(8),
@@ -815,27 +815,31 @@ class _ImageMediaRow extends StatelessWidget {
     );
   }
 
-  Widget _thumbPlaceholder({bool loading = false}) {
+  Widget _thumbPlaceholder(BuildContext context, {bool loading = false}) {
     return Container(
       width: 36,
       height: 36,
       decoration: BoxDecoration(
-        color: DunesColors.bgSoft,
+        color: DunesColors.resolveNullable(
+          context,
+          DunesColors.bgSoft,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Center(
         child: loading
-            ? const SizedBox(
+            ? SizedBox(
                 width: 16,
                 height: 16,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: DunesColors.text3,
+                  color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               )
-            : const Icon(
+            : Icon(
                 Icons.image_outlined,
-                color: DunesColors.text3,
+                color: DunesColors.resolveNullable(context, DunesColors.text3),
                 size: 16,
               ),
       ),

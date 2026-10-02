@@ -202,7 +202,9 @@ class _AppSoftwareUpdatePageState extends State<AppSoftwareUpdatePage> {
         : '最新版本';
 
     return Theme(
-      data: DunesTheme.light(),
+      data: Theme.of(context).brightness == Brightness.dark
+          ? Theme.of(context)
+          : DunesTheme.light(),
       child: AppSoftwareUpdateScaffold(
         title: widget.title,
         canPop: _canPop,

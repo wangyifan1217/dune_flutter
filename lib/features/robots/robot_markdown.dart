@@ -6,64 +6,84 @@ import 'package:url_launcher/url_launcher.dart';
 import 'robot_models.dart';
 import 'package:dunes_app/core/theme/dunes_theme.dart';
 
-MarkdownStyleSheet? _cachedStyle;
-MarkdownStyleSheet? _cachedCompactStyle;
+final _cachedStyles = <(bool, Brightness), MarkdownStyleSheet>{};
 
-MarkdownStyleSheet _robotMdStyle({required bool compact}) {
-  final cached = compact ? _cachedCompactStyle : _cachedStyle;
+MarkdownStyleSheet _robotMdStyle(
+  BuildContext context, {
+  required bool compact,
+}) {
+  final key = (compact, Theme.of(context).brightness);
+  final cached = _cachedStyles[key];
   if (cached != null) return cached;
 
   final baseSize = compact ? 12.0 : 13.0;
   final tableSize = compact ? 11.0 : 12.0;
   final sheet = MarkdownStyleSheet(
-    p: TextStyle(fontSize: baseSize, height: 1.55, color: RobotTheme.text2),
+    p: TextStyle(
+      fontSize: baseSize,
+      height: 1.55,
+      color: DunesColors.resolveNullable(context, RobotTheme.text2),
+    ),
     h1: TextStyle(
       fontSize: compact ? 15 : 17,
       fontWeight: FontWeight.w700,
-      color: RobotTheme.text,
+      color: DunesColors.resolve(context, RobotTheme.text),
       height: 1.35,
     ),
     h2: TextStyle(
       fontSize: compact ? 14 : 15,
       fontWeight: FontWeight.w700,
-      color: RobotTheme.text,
+      color: DunesColors.resolve(context, RobotTheme.text),
       height: 1.35,
     ),
     h3: TextStyle(
       fontSize: compact ? 13 : 14,
       fontWeight: FontWeight.w700,
-      color: RobotTheme.text,
+      color: DunesColors.resolve(context, RobotTheme.text),
       height: 1.35,
     ),
-    strong: const TextStyle(
+    strong: TextStyle(
       fontWeight: FontWeight.w700,
-      color: RobotTheme.text,
+      color: DunesColors.resolve(context, RobotTheme.text),
     ),
-    em: const TextStyle(fontStyle: FontStyle.italic),
+    em: TextStyle(fontStyle: FontStyle.italic),
     code: TextStyle(
       fontSize: baseSize - 1,
-      color: RobotTheme.text,
-      backgroundColor: const Color(0xFFF0F1F4),
+      color: DunesColors.resolve(context, RobotTheme.text),
+      backgroundColor: DunesColors.resolve(
+        context,
+        const Color(0xFFF0F1F4),
+        role: DunesColorRole.surface,
+      ),
     ),
     codeblockDecoration: BoxDecoration(
-      color: const Color(0xFFF0F1F4),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF0F1F4),
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(8),
     ),
     listBullet: TextStyle(
       fontSize: baseSize,
-      color: RobotTheme.text3,
+      color: DunesColors.resolve(context, RobotTheme.text3),
       height: 1.55,
     ),
     blockquote: TextStyle(
       fontSize: baseSize,
-      color: RobotTheme.text3,
+      color: DunesColors.resolve(context, RobotTheme.text3),
       height: 1.5,
     ),
-    blockquoteDecoration: const BoxDecoration(
-      border: Border(left: BorderSide(color: RobotTheme.purple, width: 3)),
+    blockquoteDecoration: BoxDecoration(
+      border: Border(
+        left: BorderSide(
+          color: DunesColors.resolve(context, RobotTheme.purple),
+          width: 3,
+        ),
+      ),
     ),
-    a: const TextStyle(
-      color: RobotTheme.purpleDeep,
+    a: TextStyle(
+      color: DunesColors.resolve(context, RobotTheme.purpleDeep),
       decoration: TextDecoration.underline,
     ),
     // 按内容确定列宽；flutter_markdown 会为超出气泡宽度的表格提供横向滚动，
@@ -72,23 +92,22 @@ MarkdownStyleSheet _robotMdStyle({required bool compact}) {
     tableHead: TextStyle(
       fontSize: tableSize,
       fontWeight: FontWeight.w700,
-      color: RobotTheme.text,
+      color: DunesColors.resolve(context, RobotTheme.text),
       height: 1.35,
     ),
     tableBody: TextStyle(
       fontSize: tableSize,
-      color: RobotTheme.text2,
+      color: DunesColors.resolve(context, RobotTheme.text2),
       height: 1.35,
     ),
-    tableBorder: TableBorder.all(color: const Color(0xFFE6E6EA), width: 0.5),
+    tableBorder: TableBorder.all(
+      color: DunesColors.resolve(context, const Color(0xFFE6E6EA)),
+      width: 0.5,
+    ),
     tableCellsPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
     tableHeadAlign: TextAlign.center,
   );
-  if (compact) {
-    _cachedCompactStyle = sheet;
-  } else {
-    _cachedStyle = sheet;
-  }
+  _cachedStyles[key] = sheet;
   return sheet;
 }
 
@@ -124,7 +143,7 @@ class RobotMarkdown extends StatelessWidget {
         selectable: selectable && !compact,
         softLineBreak: true,
         fitContent: fit,
-        styleSheet: _robotMdStyle(compact: compact),
+        styleSheet: _robotMdStyle(context, compact: compact),
         sizedImageBuilder: (config) => _RobotMdImage(
           uri: config.uri,
           alt: config.alt,

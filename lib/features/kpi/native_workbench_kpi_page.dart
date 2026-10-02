@@ -1209,7 +1209,7 @@ class _KpiMonthStepper extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _arrow(Icons.chevron_left_rounded, '上一月', onPrev),
+          _arrow(context, Icons.chevron_left_rounded, '上一月', onPrev),
           InkWell(
             key: const Key('kpi-month-pick'),
             onTap: onPick,
@@ -1241,13 +1241,18 @@ class _KpiMonthStepper extends StatelessWidget {
               ),
             ),
           ),
-          _arrow(Icons.chevron_right_rounded, '下一月', onNext),
+          _arrow(context, Icons.chevron_right_rounded, '下一月', onNext),
         ],
       ),
     );
   }
 
-  Widget _arrow(IconData icon, String tip, VoidCallback? onTap) {
+  Widget _arrow(
+    BuildContext context,
+    IconData icon,
+    String tip,
+    VoidCallback? onTap,
+  ) {
     return Tooltip(
       message: tip,
       child: InkWell(
@@ -1259,7 +1264,10 @@ class _KpiMonthStepper extends StatelessWidget {
           child: Icon(
             icon,
             size: 20,
-            color: onTap == null ? DunesColors.border : DunesColors.text2,
+            color: DunesColors.resolveNullable(
+              context,
+              onTap == null ? DunesColors.border : DunesColors.text2,
+            ),
           ),
         ),
       ),
@@ -1581,18 +1589,24 @@ class _KpiSectorTabs extends StatelessWidget {
         mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
         children: [
           for (final option in options)
-            expand ? Expanded(child: _segment(option)) : _segment(option),
+            expand
+                ? Expanded(child: _segment(context, option))
+                : _segment(context, option),
         ],
       ),
     );
   }
 
-  Widget _segment(MapEntry<String, String> option) {
+  Widget _segment(BuildContext context, MapEntry<String, String> option) {
     final selected = value == option.key;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 160),
       decoration: BoxDecoration(
-        color: selected ? Colors.white : Colors.transparent,
+        color: DunesColors.resolveNullable(
+          context,
+          selected ? Colors.white : Colors.transparent,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(8),
         boxShadow: selected
             ? const [
@@ -1623,7 +1637,10 @@ class _KpiSectorTabs extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  color: selected ? DunesColors.text : DunesColors.text2,
+                  color: DunesColors.resolveNullable(
+                    context,
+                    selected ? DunesColors.text : DunesColors.text2,
+                  ),
                 ),
               ),
             ),
@@ -1652,16 +1669,24 @@ class _KpiGroupFilter extends StatelessWidget {
       spacing: 6,
       runSpacing: 6,
       children: [
-        _pill(id: '', label: '全部'),
-        for (final option in options) _pill(id: option, label: option),
+        _pill(context, id: '', label: '全部'),
+        for (final option in options) _pill(context, id: option, label: option),
       ],
     );
   }
 
-  Widget _pill({required String id, required String label}) {
+  Widget _pill(
+    BuildContext context, {
+    required String id,
+    required String label,
+  }) {
     final selected = value == id;
     return Material(
-      color: selected ? DunesColors.brandPurple : const Color(0xFFECE7F4),
+      color: DunesColors.resolveNullable(
+        context,
+        selected ? DunesColors.brandPurple : const Color(0xFFECE7F4),
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         key: Key(id.isEmpty ? 'kpi-group-all' : 'kpi-group-$id'),
@@ -1674,7 +1699,10 @@ class _KpiGroupFilter extends StatelessWidget {
             style: TextStyle(
               fontSize: 12.5,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-              color: selected ? Colors.white : DunesColors.text2,
+              color: DunesColors.resolveNullable(
+                context,
+                selected ? Colors.white : DunesColors.text2,
+              ),
             ),
           ),
         ),
@@ -1987,13 +2015,13 @@ class _KpiProjectScale extends StatelessWidget {
       children: [
         for (var i = 0; i < kpiProjectTiers.length; i++) ...[
           if (i > 0) const SizedBox(width: 3),
-          Expanded(child: _tier(kpiProjectTiers[i])),
+          Expanded(child: _tier(context, kpiProjectTiers[i])),
         ],
       ],
     );
   }
 
-  Widget _tier(KpiProjectTier tier) {
+  Widget _tier(BuildContext context, KpiProjectTier tier) {
     final on = (tier.coefficient - active).abs() < 0.001;
     final color = _kpiProjectTierColor(tier.coefficient);
     return Column(
@@ -2001,7 +2029,11 @@ class _KpiProjectScale extends StatelessWidget {
         Container(
           height: 4,
           decoration: BoxDecoration(
-            color: on ? color : const Color(0xFFEDE9F3),
+            color: DunesColors.resolveNullable(
+              context,
+              on ? color : const Color(0xFFEDE9F3),
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(2),
           ),
         ),
@@ -2011,7 +2043,10 @@ class _KpiProjectScale extends StatelessWidget {
           style: TextStyle(
             fontSize: 11,
             fontWeight: on ? FontWeight.w700 : FontWeight.w500,
-            color: on ? color : DunesColors.text3,
+            color: DunesColors.resolveNullable(
+              context,
+              on ? color : DunesColors.text3,
+            ),
             fontFeatures: _tabular,
           ),
         ),
@@ -2019,7 +2054,10 @@ class _KpiProjectScale extends StatelessWidget {
           tier.range,
           style: TextStyle(
             fontSize: 10,
-            color: on ? color : const Color(0xFFBDB8C6),
+            color: DunesColors.resolveNullable(
+              context,
+              on ? color : const Color(0xFFBDB8C6),
+            ),
             fontFeatures: _tabular,
           ),
         ),

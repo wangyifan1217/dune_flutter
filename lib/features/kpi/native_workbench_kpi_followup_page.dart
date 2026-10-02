@@ -1633,7 +1633,7 @@ class _MonthStepper extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _arrow(Icons.chevron_left_rounded, onPrev),
+          _arrow(context, Icons.chevron_left_rounded, onPrev),
           InkWell(
             key: const Key('kpi-followup-month-pick'),
             onTap: onPick,
@@ -1651,13 +1651,13 @@ class _MonthStepper extends StatelessWidget {
               ),
             ),
           ),
-          _arrow(Icons.chevron_right_rounded, onNext),
+          _arrow(context, Icons.chevron_right_rounded, onNext),
         ],
       ),
     );
   }
 
-  Widget _arrow(IconData icon, VoidCallback? onTap) {
+  Widget _arrow(BuildContext context, IconData icon, VoidCallback? onTap) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(6),
@@ -1667,7 +1667,10 @@ class _MonthStepper extends StatelessWidget {
         child: Icon(
           icon,
           size: 20,
-          color: onTap == null ? DunesColors.border : DunesColors.text2,
+          color: DunesColors.resolveNullable(
+            context,
+            onTap == null ? DunesColors.border : DunesColors.text2,
+          ),
         ),
       ),
     );

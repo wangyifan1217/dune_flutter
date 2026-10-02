@@ -1636,8 +1636,16 @@ class _HeroCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         gradient: LinearGradient(
           colors: [
-            DunesColors.resolve(context, Color(0xFF5F3E82)),
-            DunesColors.resolve(context, Color(0xFF8965B5)),
+            DunesColors.resolve(
+              context,
+              Color(0xFF5F3E82),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFF8965B5),
+              role: DunesColorRole.surface,
+            ),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -2448,33 +2456,53 @@ class _SigPills extends StatelessWidget {
     return Wrap(
       spacing: 6,
       runSpacing: 6,
-      children: [for (final item in items) _sigChip(item.$1, item.$2)],
+      children: [for (final item in items) _sigChip(context, item.$1, item.$2)],
     );
   }
 
-  Widget _sigChip(_Sig sig, String name) {
+  Widget _sigChip(BuildContext context, _Sig sig, String name) {
     final Color bg;
     final Color fg;
     switch (sig.level) {
       case _SigLevel.good:
-        bg = DunesColors.greenSoft;
-        fg = DunesColors.green;
+        bg = DunesColors.resolve(
+          context,
+          DunesColors.greenSoft,
+          role: DunesColorRole.surface,
+        );
+        fg = DunesColors.resolve(context, DunesColors.green);
       case _SigLevel.mid:
-        bg = const Color(0xFFF4E8D2);
-        fg = DunesColors.amber;
+        bg = DunesColors.resolve(
+          context,
+          const Color(0xFFF4E8D2),
+          role: DunesColorRole.surface,
+        );
+        fg = DunesColors.resolve(context, DunesColors.amber);
       case _SigLevel.weak:
-        bg = DunesColors.coralSoft;
-        fg = DunesColors.coral;
+        bg = DunesColors.resolve(
+          context,
+          DunesColors.coralSoft,
+          role: DunesColorRole.surface,
+        );
+        fg = DunesColors.resolve(context, DunesColors.coral);
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: bg,
+        color: DunesColors.resolveNullable(
+          context,
+          bg,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(99),
       ),
       child: Text(
         '$name${sig.label}',
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: fg),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: DunesColors.resolveNullable(context, fg),
+        ),
       ),
     );
   }

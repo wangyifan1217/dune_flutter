@@ -616,18 +616,28 @@ class _NativeQianjiDailyReportSupervisePageState
                   : DunesColors.resolve(context, const Color(0xFFD97706));
               final background = expected == 0
                   ? (selected
-                        ? DunesColors.resolve(context, const Color(0xFFEFE9FF))
-                        : DunesColors.resolve(context, const Color(0xFFF9F8FB)))
+                        ? DunesColors.resolve(
+                            context,
+                            const Color(0xFFEFE9FF),
+                            role: DunesColorRole.surface,
+                          )
+                        : DunesColors.resolve(
+                            context,
+                            const Color(0xFFF9F8FB),
+                            role: DunesColorRole.surface,
+                          ))
                   : Color.alphaBlend(
                       color.withValues(alpha: complete ? 0.13 : 0.09),
                       selected
                           ? DunesColors.resolve(
                               context,
                               const Color(0xFFEFE9FF),
+                              role: DunesColorRole.surface,
                             )
                           : DunesColors.resolve(
                               context,
                               const Color(0xFFF9F8FB),
+                              role: DunesColorRole.surface,
                             ),
                     );
               final noDueLabel = counts['leave']! > 0

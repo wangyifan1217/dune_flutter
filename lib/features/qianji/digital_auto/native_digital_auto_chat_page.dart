@@ -530,8 +530,16 @@ class _NativeDigitalAutoChatPageState extends State<NativeDigitalAutoChatPage>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            DunesColors.resolve(context, Color(0xFFF1EDFF)),
-            DunesColors.resolve(context, Color(0xFFFAF9FF)),
+            DunesColors.resolve(
+              context,
+              Color(0xFFF1EDFF),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFFFAF9FF),
+              role: DunesColorRole.surface,
+            ),
           ],
         ),
         borderRadius: BorderRadius.circular(16),

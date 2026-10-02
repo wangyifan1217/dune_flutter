@@ -242,19 +242,23 @@ class _Segment extends StatelessWidget {
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: [_segBtn('场景', 0), _segBtn('角色', 1)],
+        children: [_segBtn(context, '场景', 0), _segBtn(context, '角色', 1)],
       ),
     );
   }
 
-  Widget _segBtn(String label, int index) {
+  Widget _segBtn(BuildContext context, String label, int index) {
     final active = tab == index;
     return GestureDetector(
       onTap: () => onChanged(index),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: active ? Colors.white : Colors.transparent,
+          color: DunesColors.resolveNullable(
+            context,
+            active ? Colors.white : Colors.transparent,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(8),
           boxShadow: active
               ? [
@@ -270,7 +274,10 @@ class _Segment extends StatelessWidget {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: active ? RobotTheme.purple : RobotTheme.text3,
+            color: DunesColors.resolveNullable(
+              context,
+              active ? RobotTheme.purple : RobotTheme.text3,
+            ),
           ),
         ),
       ),

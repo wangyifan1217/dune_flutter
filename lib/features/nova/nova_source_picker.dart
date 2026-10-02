@@ -768,7 +768,7 @@ class _NovaSourcePickerScaffold extends StatelessWidget {
             ),
           ),
         ),
-        Expanded(child: _buildBody()),
+        Expanded(child: _buildBody(context)),
         if (onOpenLibrary != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -784,7 +784,7 @@ class _NovaSourcePickerScaffold extends StatelessWidget {
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(BuildContext context) {
     if (loading) {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
@@ -798,7 +798,10 @@ class _NovaSourcePickerScaffold extends StatelessWidget {
               Text(
                 error!,
                 textAlign: TextAlign.center,
-                style: DunesTypography.sans(color: DunesColors.text2),
+                style: DunesTypography.sans(
+                  color: DunesColors.resolve(context, DunesColors.text2),
+                  context: context,
+                ),
               ),
               const SizedBox(height: 12),
               TextButton(onPressed: onRetry, child: const Text('重试')),
@@ -811,7 +814,10 @@ class _NovaSourcePickerScaffold extends StatelessWidget {
       return Center(
         child: Text(
           emptyText,
-          style: DunesTypography.sans(color: DunesColors.text3),
+          style: DunesTypography.sans(
+            color: DunesColors.resolve(context, DunesColors.text3),
+            context: context,
+          ),
         ),
       );
     }

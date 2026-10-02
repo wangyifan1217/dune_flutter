@@ -11563,17 +11563,27 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
                         end: Alignment.bottomRight,
                         colors: _selectedCount > 0
                             ? [
-                                DunesColors.resolve(context, Color(0xFF7E64BD)),
-                                DunesColors.resolve(context, Color(0xFF553B96)),
+                                DunesColors.resolve(
+                                  context,
+                                  Color(0xFF7E64BD),
+                                  role: DunesColorRole.surface,
+                                ),
+                                DunesColors.resolve(
+                                  context,
+                                  Color(0xFF553B96),
+                                  role: DunesColorRole.surface,
+                                ),
                               ]
                             : [
                                 DunesColors.resolve(
                                   context,
                                   DunesColors.text3,
+                                  role: DunesColorRole.surface,
                                 ).withValues(alpha: 0.35),
                                 DunesColors.resolve(
                                   context,
                                   DunesColors.text3,
+                                  role: DunesColorRole.surface,
                                 ).withValues(alpha: 0.35),
                               ],
                       ),
@@ -11627,8 +11637,16 @@ class _AtMentionSheetState extends State<_AtMentionSheet> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              DunesColors.resolve(context, Color(0xFFE85D4C)),
-              DunesColors.resolve(context, Color(0xFFF07A5A)),
+              DunesColors.resolve(
+                context,
+                Color(0xFFE85D4C),
+                role: DunesColorRole.surface,
+              ),
+              DunesColors.resolve(
+                context,
+                Color(0xFFF07A5A),
+                role: DunesColorRole.surface,
+              ),
             ],
           ),
         ),
@@ -11792,8 +11810,16 @@ class _AtMentionCheck extends StatelessWidget {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  DunesColors.resolve(context, Color(0xFF553B96)),
-                  DunesColors.resolve(context, Color(0xFF7B5CB8)),
+                  DunesColors.resolve(
+                    context,
+                    Color(0xFF553B96),
+                    role: DunesColorRole.surface,
+                  ),
+                  DunesColors.resolve(
+                    context,
+                    Color(0xFF7B5CB8),
+                    role: DunesColorRole.surface,
+                  ),
                 ],
               )
             : null,

@@ -282,9 +282,21 @@ class _HeroCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            DunesColors.resolve(context, Color(0xFFF7F4FC)),
-            DunesColors.resolve(context, Color(0xFFE8E6F6)),
-            DunesColors.resolve(context, Color(0xFFD9E4F6)),
+            DunesColors.resolve(
+              context,
+              Color(0xFFF7F4FC),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFFE8E6F6),
+              role: DunesColorRole.surface,
+            ),
+            DunesColors.resolve(
+              context,
+              Color(0xFFD9E4F6),
+              role: DunesColorRole.surface,
+            ),
           ],
         ),
       ),

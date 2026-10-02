@@ -103,9 +103,21 @@ class _WorkProfileChatShareCardState extends State<WorkProfileChatShareCard> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                DunesColors.resolve(context, Color(0xFF34264D)),
-                DunesColors.resolve(context, Color(0xFF67489A)),
-                DunesColors.resolve(context, Color(0xFF8B69C5)),
+                DunesColors.resolve(
+                  context,
+                  Color(0xFF34264D),
+                  role: DunesColorRole.surface,
+                ),
+                DunesColors.resolve(
+                  context,
+                  Color(0xFF67489A),
+                  role: DunesColorRole.surface,
+                ),
+                DunesColors.resolve(
+                  context,
+                  Color(0xFF8B69C5),
+                  role: DunesColorRole.surface,
+                ),
               ],
             ),
             borderRadius: BorderRadius.circular(20),

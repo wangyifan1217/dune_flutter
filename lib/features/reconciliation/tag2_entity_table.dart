@@ -91,21 +91,25 @@ class Tag2EntityTable extends StatelessWidget {
       dataHeader: Row(
         children: [
           for (var c = 0; c < _kIdLabels.length; c++)
-            _head(_kIdLabels[c], _kIdWidths[c]),
-          for (final col in amounts) _head(col.label, _kAmountW),
-          _head('审核记录', _kAuditW),
+            _head(context, _kIdLabels[c], _kIdWidths[c]),
+          for (final col in amounts) _head(context, col.label, _kAmountW),
+          _head(context, '审核记录', _kAuditW),
         ],
       ),
-      trailingHeader: _actionHeader(child: _head('操作', _kActionW)),
+      trailingHeader: _actionHeader(
+        context,
+        child: _head(context, '操作', _kActionW),
+      ),
       rowCount: rows.length,
       rowHeight: (i) => heights[i],
       dataRowBuilder: (context, i) =>
-          _dataRow(rows[i], amounts, heights[i], bands[i]),
+          _dataRow(context, rows[i], amounts, heights[i], bands[i]),
       trailingRowBuilder: (context, i) => _bandBox(
+        context,
         band: bands[i],
         height: heights[i],
         action: true,
-        child: SizedBox(width: _kActionW, child: _actionCell(rows[i])),
+        child: SizedBox(width: _kActionW, child: _actionCell(context, rows[i])),
       ),
     );
     return LayoutBuilder(
@@ -163,6 +167,7 @@ class Tag2EntityTable extends StatelessWidget {
   }
 
   Widget _dataRow(
+    BuildContext context,
     Tag2EntityRow row,
     List<_AmountCol> amounts,
     double height,
@@ -176,6 +181,7 @@ class Tag2EntityTable extends StatelessWidget {
       row.supplierName,
     ];
     return _bandBox(
+      context,
       band: band,
       height: height,
       child: Row(
@@ -183,8 +189,10 @@ class Tag2EntityTable extends StatelessWidget {
           for (var c = 0; c < values.length; c++)
             c == 0
                 ? _mark(
+                    context,
                     band,
                     _cell(
+                      context,
                       values[c],
                       _kIdWidths[c],
                       contentHeight,
@@ -192,19 +200,26 @@ class Tag2EntityTable extends StatelessWidget {
                     ),
                   )
                 : _cell(
+                    context,
                     values[c],
                     _kIdWidths[c],
                     contentHeight,
                     bold: row.isTotal,
                   ),
-          for (final col in amounts) _amountCell(row, col, contentHeight),
-          _auditCell(row, contentHeight),
+          for (final col in amounts)
+            _amountCell(context, row, col, contentHeight),
+          _auditCell(context, row, contentHeight),
         ],
       ),
     );
   }
 
-  Widget _amountCell(Tag2EntityRow row, _AmountCol col, double height) {
+  Widget _amountCell(
+    BuildContext context,
+    Tag2EntityRow row,
+    _AmountCol col,
+    double height,
+  ) {
     Tag2EntityAmount? picked;
     for (final item in row.amounts) {
       if (item.key == col.key) {
@@ -217,6 +232,7 @@ class Tag2EntityTable extends StatelessWidget {
     if (amount != null && amount.drill && !row.isTotal) {
       final hit = amount;
       return _tappable(
+        context,
         text.isEmpty ? '-' : text,
         _kAmountW,
         height,
@@ -227,6 +243,7 @@ class Tag2EntityTable extends StatelessWidget {
       );
     }
     return _tappable(
+      context,
       text.isEmpty ? '-' : text,
       _kAmountW,
       height,
@@ -330,7 +347,7 @@ class Tag2EntityTable extends StatelessWidget {
     return painter.height;
   }
 
-  Widget _auditCell(Tag2EntityRow row, double height) {
+  Widget _auditCell(BuildContext context, Tag2EntityRow row, double height) {
     final lanes = _lanes(row);
     return SizedBox(
       width: _kAuditW,
@@ -344,7 +361,7 @@ class Tag2EntityTable extends StatelessWidget {
           children: [
             for (var i = 0; i < lanes.length; i++) ...[
               if (i > 0) const SizedBox(height: 8),
-              _auditLane(lanes[i]),
+              _auditLane(context, lanes[i]),
             ],
           ],
         ),
@@ -352,14 +369,16 @@ class Tag2EntityTable extends StatelessWidget {
     );
   }
 
-  Widget _auditLane(Tag3DailyAuditLane lane) {
-    final color = lane.done ? DunesColors.green : DunesColors.amber;
+  Widget _auditLane(BuildContext context, Tag3DailyAuditLane lane) {
+    final color = lane.done
+        ? DunesColors.resolve(context, DunesColors.green)
+        : DunesColors.resolve(context, DunesColors.amber);
     return Row(
       children: [
         Icon(
           lane.done ? Icons.check_circle : Icons.schedule,
           size: 16,
-          color: color,
+          color: DunesColors.resolveNullable(context, color),
         ),
         const SizedBox(width: 6),
         Expanded(
@@ -370,7 +389,10 @@ class Tag2EntityTable extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: lane.done ? DunesColors.green : DunesColors.text,
+              color: lane.done
+                  ? DunesColors.resolve(context, DunesColors.green)
+                  : DunesColors.resolve(context, DunesColors.text),
+              context: context,
             ),
           ),
         ),
@@ -378,7 +400,7 @@ class Tag2EntityTable extends StatelessWidget {
     );
   }
 
-  Widget _actionCell(Tag2EntityRow row) {
+  Widget _actionCell(BuildContext context, Tag2EntityRow row) {
     if (row.isTotal) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -386,7 +408,11 @@ class Tag2EntityTable extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: Text(
             '合计',
-            style: DunesTypography.sans(fontSize: 12, color: DunesColors.text3),
+            style: DunesTypography.sans(
+              fontSize: 12,
+              color: DunesColors.resolve(context, DunesColors.text3),
+              context: context,
+            ),
           ),
         ),
       );
@@ -400,7 +426,7 @@ class Tag2EntityTable extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           if (history.isNotEmpty) ...[
-            _commentEntry(row, history),
+            _commentEntry(context, row, history),
             const SizedBox(height: 6),
           ],
           Row(
@@ -408,6 +434,7 @@ class Tag2EntityTable extends StatelessWidget {
               if (row.showComment)
                 Expanded(
                   child: _chip(
+                    context,
                     label: '意见',
                     filled: false,
                     enabled: !busy,
@@ -418,6 +445,7 @@ class Tag2EntityTable extends StatelessWidget {
               if (row.showConfirm)
                 Expanded(
                   child: _chip(
+                    context,
                     label: busy ? '提交中' : '确认',
                     filled: true,
                     enabled: !busy,
@@ -432,7 +460,8 @@ class Tag2EntityTable extends StatelessWidget {
                     style: DunesTypography.sans(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: DunesColors.green,
+                      color: DunesColors.resolve(context, DunesColors.green),
+                      context: context,
                     ),
                   ),
                 ),
@@ -445,7 +474,10 @@ class Tag2EntityTable extends StatelessWidget {
               child: TextButton(
                 onPressed: busy ? null : () => onReject?.call(row),
                 style: TextButton.styleFrom(
-                  foregroundColor: DunesColors.coral,
+                  foregroundColor: DunesColors.resolve(
+                    context,
+                    DunesColors.coral,
+                  ),
                   padding: EdgeInsets.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
@@ -458,7 +490,11 @@ class Tag2EntityTable extends StatelessWidget {
     );
   }
 
-  Widget _commentEntry(Tag2EntityRow row, List<Tag3DailyComment> history) {
+  Widget _commentEntry(
+    BuildContext context,
+    Tag2EntityRow row,
+    List<Tag3DailyComment> history,
+  ) {
     final ordered = [...history]
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     final latest = ordered.last;
@@ -486,35 +522,47 @@ class Tag2EntityTable extends StatelessWidget {
                   fontSize: 11.5,
                   height: 1.25,
                   fontWeight: FontWeight.w600,
-                  color: DunesColors.accent,
+                  color: DunesColors.resolve(context, DunesColors.accent),
+                  context: context,
                 ),
               ),
             ),
-            Icon(Icons.chevron_right, size: 14, color: DunesColors.accent),
+            Icon(
+              Icons.chevron_right,
+              size: 14,
+              color: DunesColors.resolveNullable(context, DunesColors.accent),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _chip({
+  Widget _chip(
+    BuildContext context, {
     required String label,
     required bool filled,
     required bool enabled,
     required VoidCallback onTap,
   }) {
-    final color = enabled ? DunesColors.accent : DunesColors.text3;
+    final color = enabled
+        ? DunesColors.resolve(context, DunesColors.accent)
+        : DunesColors.resolve(context, DunesColors.text3);
     return InkWell(
       onTap: enabled ? onTap : null,
       borderRadius: BorderRadius.circular(8),
       child: Ink(
         height: 34,
         decoration: BoxDecoration(
-          color: filled
-              ? (enabled
-                    ? DunesColors.accent
-                    : DunesColors.accent.withValues(alpha: 0.35))
-              : Colors.white,
+          color: DunesColors.resolveNullable(
+            context,
+            filled
+                ? (enabled
+                      ? DunesColors.accent
+                      : DunesColors.accent.withValues(alpha: 0.35))
+                : Colors.white,
+            role: DunesColorRole.surface,
+          ),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: color),
         ),
@@ -524,7 +572,10 @@ class Tag2EntityTable extends StatelessWidget {
             style: DunesTypography.sans(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: filled ? Colors.white : color,
+              color: filled
+                  ? DunesColors.resolve(context, Colors.white)
+                  : color,
+              context: context,
             ),
           ),
         ),
@@ -532,7 +583,7 @@ class Tag2EntityTable extends StatelessWidget {
     );
   }
 
-  Widget _head(String text, double width) {
+  Widget _head(BuildContext context, String text, double width) {
     return SizedBox(
       width: width,
       height: _kHeaderH,
@@ -548,7 +599,8 @@ class Tag2EntityTable extends StatelessWidget {
               fontSize: 12,
               height: 1.3,
               fontWeight: FontWeight.w600,
-              color: DunesColors.text2,
+              color: DunesColors.resolve(context, DunesColors.text2),
+              context: context,
             ),
           ),
         ),
@@ -557,6 +609,7 @@ class Tag2EntityTable extends StatelessWidget {
   }
 
   Widget _cell(
+    BuildContext context,
     String text,
     double width,
     double height, {
@@ -580,7 +633,8 @@ class Tag2EntityTable extends StatelessWidget {
               fontSize: 13,
               height: 1.35,
               fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
-              color: DunesColors.text,
+              color: DunesColors.resolve(context, DunesColors.text),
+              context: context,
             ),
           ),
         ),
@@ -589,6 +643,7 @@ class Tag2EntityTable extends StatelessWidget {
   }
 
   Widget _tappable(
+    BuildContext context,
     String text,
     double width,
     double height, {
@@ -598,6 +653,7 @@ class Tag2EntityTable extends StatelessWidget {
     int maxLines = 2,
   }) {
     final child = _cell(
+      context,
       text,
       width,
       height,
@@ -611,26 +667,36 @@ class Tag2EntityTable extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: DefaultTextStyle.merge(
-        style: const TextStyle(
-          color: DunesColors.accent,
+        style: TextStyle(
+          color: DunesColors.resolveNullable(context, DunesColors.accent),
           decoration: TextDecoration.underline,
-          decorationColor: DunesColors.accent,
+          decorationColor: DunesColors.resolve(context, DunesColors.accent),
         ),
         child: child,
       ),
     );
   }
 
-  Widget _mark(_Band band, Widget child) {
+  Widget _mark(BuildContext context, _Band band, Widget child) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        border: Border(left: BorderSide(color: band.accent, width: 3)),
+        border: Border(
+          left: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              band.accent,
+              role: DunesColorRole.border,
+            ),
+            width: 3,
+          ),
+        ),
       ),
       child: child,
     );
   }
 
-  Widget _bandBox({
+  Widget _bandBox(
+    BuildContext context, {
     required _Band band,
     required double height,
     required Widget child,
@@ -641,14 +707,37 @@ class Tag2EntityTable extends StatelessWidget {
       padding: EdgeInsets.only(bottom: gap),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: band.fill,
+          color: DunesColors.resolveNullable(
+            context,
+            band.fill,
+            role: DunesColorRole.surface,
+          ),
           border: Border(
             left: action
-                ? const BorderSide(color: Color(0xFFD9D4CC), width: 0.5)
+                ? BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      Color(0xFFD9D4CC),
+                      role: DunesColorRole.border,
+                    ),
+                    width: 0.5,
+                  )
                 : BorderSide.none,
-            top: band.start ? const BorderSide(color: _kEdge) : BorderSide.none,
+            top: band.start
+                ? BorderSide(
+                    color: DunesColors.resolve(
+                      context,
+                      _kEdge,
+                      role: DunesColorRole.border,
+                    ),
+                  )
+                : BorderSide.none,
             bottom: BorderSide(
-              color: band.end ? _kEdge : const Color(0x80E6E1D6),
+              color: DunesColors.resolve(
+                context,
+                band.end ? _kEdge : const Color(0x80E6E1D6),
+                role: DunesColorRole.border,
+              ),
             ),
           ),
         ),
@@ -661,11 +750,24 @@ class Tag2EntityTable extends StatelessWidget {
     );
   }
 
-  Widget _actionHeader({required Widget child}) {
+  Widget _actionHeader(BuildContext context, {required Widget child}) {
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: Color(0xFFF5F6F8),
-        border: Border(left: BorderSide(color: DunesColors.border, width: 0.5)),
+      decoration: BoxDecoration(
+        color: DunesColors.resolveNullable(
+          context,
+          Color(0xFFF5F6F8),
+          role: DunesColorRole.surface,
+        ),
+        border: Border(
+          left: BorderSide(
+            color: DunesColors.resolve(
+              context,
+              DunesColors.border,
+              role: DunesColorRole.border,
+            ),
+            width: 0.5,
+          ),
+        ),
       ),
       child: child,
     );

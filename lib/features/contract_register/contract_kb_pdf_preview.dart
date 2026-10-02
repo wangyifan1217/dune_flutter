@@ -27,7 +27,10 @@ Future<void> showContractKbPdfPreview({
       builder: (ctx) {
         final size = MediaQuery.sizeOf(ctx);
         return Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 28),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 40,
+            vertical: 28,
+          ),
           backgroundColor: Colors.transparent,
           child: ConstrainedBox(
             constraints: BoxConstraints(
@@ -47,9 +50,9 @@ Future<void> showContractKbPdfPreview({
       },
     );
   }
-  return Navigator.of(context).push<void>(
-    MaterialPageRoute<void>(builder: (_) => page),
-  );
+  return Navigator.of(
+    context,
+  ).push<void>(MaterialPageRoute<void>(builder: (_) => page));
 }
 
 class ContractKbPdfPreviewPage extends StatelessWidget {
@@ -66,8 +69,8 @@ class ContractKbPdfPreviewPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final valid = bytes.length >= 5 &&
-        String.fromCharCodes(bytes.take(5)) == '%PDF-';
+    final valid =
+        bytes.length >= 5 && String.fromCharCodes(bytes.take(5)) == '%PDF-';
     final viewer = valid
         ? DunesPdfView(bytes: bytes, padding: 10)
         : Center(
@@ -80,6 +83,7 @@ class ContractKbPdfPreviewPage extends StatelessWidget {
                 ),
                 textAlign: TextAlign.center,
                 style: DunesTypography.sans(
+                  context: context,
                   fontSize: 14,
                   color: DunesColors.text2,
                 ),
@@ -87,9 +91,17 @@ class ContractKbPdfPreviewPage extends StatelessWidget {
             ),
           );
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         title: Text(
           fileName,
           maxLines: 1,

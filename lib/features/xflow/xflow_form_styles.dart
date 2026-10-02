@@ -212,54 +212,67 @@ class XfDynCellLabel extends StatelessWidget {
 }
 
 /// matrix 单元格内无边框输入 `.xf-matrix-table input`
-InputDecoration xfMatrixCellDecoration({String? hint}) {
-  return InputDecoration(
-    hintText: hint,
-    isDense: true,
-    isCollapsed: true,
-    filled: false,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
-    hintStyle: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
-    border: InputBorder.none,
-    enabledBorder: InputBorder.none,
-    focusedBorder: InputBorder.none,
+InputDecoration xfMatrixCellDecoration({
+  required BuildContext context,
+  String? hint,
+}) {
+  return DunesColors.inputDecoration(
+    context,
+    InputDecoration(
+      hintText: hint,
+      isDense: true,
+      isCollapsed: true,
+      filled: false,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+      hintStyle: DunesTypography.sans(fontSize: 11, color: DunesColors.text3),
+      border: InputBorder.none,
+      enabledBorder: InputBorder.none,
+      focusedBorder: InputBorder.none,
+    ),
   );
 }
 
 /// dynamicList 单元格输入 `.fld-in.xf-dyn-in`（与 index.html `.fld-in` 一致）
-InputDecoration xfDynCellDecoration({String? hint}) {
-  return InputDecoration(
-    hintText: hint,
-    isDense: true,
-    filled: true,
-    fillColor: Colors.white,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-    hintStyle: DunesTypography.sans(
-      fontSize: 12.5,
-      color: DunesColors.text3,
-      letterSpacing: -0.005 * 12.5,
-    ),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(9),
-      borderSide: const BorderSide(color: DunesColors.border),
-    ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(9),
-      borderSide: const BorderSide(color: DunesColors.border),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(9),
-      borderSide: const BorderSide(color: DunesColors.accent),
-    ),
-    focusedErrorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(9),
-      borderSide: const BorderSide(color: DunesColors.coral),
+InputDecoration xfDynCellDecoration({
+  required BuildContext context,
+  String? hint,
+}) {
+  return DunesColors.inputDecoration(
+    context,
+    InputDecoration(
+      hintText: hint,
+      isDense: true,
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+      hintStyle: DunesTypography.sans(
+        fontSize: 12.5,
+        color: DunesColors.text3,
+        letterSpacing: -0.005 * 12.5,
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(9),
+        borderSide: const BorderSide(color: DunesColors.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(9),
+        borderSide: const BorderSide(color: DunesColors.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(9),
+        borderSide: const BorderSide(color: DunesColors.accent),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(9),
+        borderSide: const BorderSide(color: DunesColors.coral),
+      ),
     ),
   );
 }
 
-TextStyle xfDynInputTextStyle() {
+TextStyle xfDynInputTextStyle({required BuildContext context}) {
   return DunesTypography.sans(
+    context: context,
     fontSize: 12.5,
     color: DunesColors.text,
     letterSpacing: -0.005 * 12.5,
@@ -381,41 +394,47 @@ class XfFieldLabel extends StatelessWidget {
 }
 
 InputDecoration xfInputDecoration({
+  required BuildContext context,
   String? hint,
   bool readonly = false,
   bool mono = false,
 }) {
-  return InputDecoration(
-    hintText: hint,
-    isDense: true,
-    filled: true,
-    fillColor: readonly ? const Color(0xFFF5F3FA) : const Color(0xFFFBFCFB),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-    hintStyle: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text3),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: XfProposalUi.line),
-    ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: XfProposalUi.line),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: Color(0xFFB4A5E8), width: 1.3),
+  return DunesColors.inputDecoration(
+    context,
+    InputDecoration(
+      hintText: hint,
+      isDense: true,
+      filled: true,
+      fillColor: readonly ? const Color(0xFFF5F3FA) : const Color(0xFFFBFCFB),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      hintStyle: DunesTypography.sans(fontSize: 12.5, color: DunesColors.text3),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: XfProposalUi.line),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: XfProposalUi.line),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFB4A5E8), width: 1.3),
+      ),
     ),
   );
 }
 
-TextStyle xfInputTextStyle({bool mono = false}) {
+TextStyle xfInputTextStyle({required BuildContext context, bool mono = false}) {
   if (mono) {
     return DunesTypography.mono(
+      context: context,
       fontSize: 12,
       color: DunesColors.text,
       letterSpacing: 0,
     );
   }
   return DunesTypography.sans(
+    context: context,
     fontSize: 12.5,
     color: DunesColors.text,
     letterSpacing: -0.005 * 12.5,
@@ -429,6 +448,7 @@ const BoxConstraints xfCompactSuffixConstraints = BoxConstraints(
 );
 
 Widget xfSearchSuffixIcon({
+  required BuildContext context,
   required bool loading,
   required bool hasText,
   required bool readonly,
@@ -446,7 +466,11 @@ Widget xfSearchSuffixIcon({
   }
   if (hasText && !readonly && onClear != null) {
     return IconButton(
-      icon: const Icon(Icons.close_rounded, size: 18, color: DunesColors.text3),
+      icon: Icon(
+        Icons.close_rounded,
+        size: 18,
+        color: DunesColors.resolve(context, DunesColors.text3),
+      ),
       onPressed: onClear,
       tooltip: '清除',
       padding: EdgeInsets.zero,
@@ -454,18 +478,27 @@ Widget xfSearchSuffixIcon({
       constraints: xfCompactSuffixConstraints,
     );
   }
-  return const Padding(
-    padding: EdgeInsets.only(right: 8),
-    child: Icon(Icons.search, size: 18, color: DunesColors.text3),
+  return Padding(
+    padding: const EdgeInsets.only(right: 8),
+    child: Icon(
+      Icons.search,
+      size: 18,
+      color: DunesColors.resolve(context, DunesColors.text3),
+    ),
   );
 }
 
 InputDecoration xfSearchPickerDecoration({
+  required BuildContext context,
   required String? hint,
   Widget? suffixIcon,
   bool readonly = false,
 }) {
-  return xfInputDecoration(hint: hint, readonly: readonly).copyWith(
+  return xfInputDecoration(
+    context: context,
+    hint: hint,
+    readonly: readonly,
+  ).copyWith(
     isDense: true,
     contentPadding: const EdgeInsets.fromLTRB(11, 9, 8, 9),
     suffixIconConstraints: suffixIcon == null

@@ -317,7 +317,12 @@ class ProposalSectionTitle extends StatelessWidget {
         final caption = Text(
           description,
           textAlign: stacked ? TextAlign.left : TextAlign.right,
-          style: kProposalCaptionStyle,
+          style: kProposalCaptionStyle.copyWith(
+            color: DunesColors.resolveNullable(
+              context,
+              kProposalCaptionStyle.color,
+            ),
+          ),
         );
         if (stacked) {
           return Column(
@@ -974,6 +979,7 @@ class _ProposalCenterToastState extends State<_ProposalCenterToast> {
 }
 
 InputDecoration proposalInputDecoration({
+  BuildContext? context,
   String? hint,
   bool readOnly = false,
   ProposalFieldTone tone = ProposalFieldTone.fill,
@@ -985,31 +991,34 @@ InputDecoration proposalInputDecoration({
     ProposalFieldTone.fill =>
       readOnly ? ProposalPalette.app : ProposalPalette.card,
   };
-  return InputDecoration(
-    hintText: hint,
-    hintMaxLines: 1,
-    hintStyle: const TextStyle(
-      fontSize: 12,
-      height: 1.2,
-      color: ProposalPalette.text3,
+  return DunesColors.inputDecoration(
+    context,
+    InputDecoration(
+      hintText: hint,
+      hintMaxLines: 1,
+      hintStyle: const TextStyle(
+        fontSize: 12,
+        height: 1.2,
+        color: ProposalPalette.text3,
+      ),
+      filled: true,
+      fillColor: fillColor,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: ProposalPalette.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: ProposalPalette.purpleLine),
+      ),
+      disabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: ProposalPalette.borderSoft),
+      ),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
     ),
-    filled: true,
-    fillColor: fillColor,
-    isDense: true,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: ProposalPalette.border),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: ProposalPalette.purpleLine),
-    ),
-    disabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: ProposalPalette.borderSoft),
-    ),
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
   );
 }
 

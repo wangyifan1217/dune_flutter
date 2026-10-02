@@ -1149,14 +1149,18 @@ class _NativeProposalIntakePageState extends State<NativeProposalIntakePage> {
       onSubmitted: (_) => unawaited(_load(resetScroll: true)),
       onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
       style: const TextStyle(fontSize: 13, height: 1.2),
-      decoration: proposalInputDecoration(hint: '搜索提案编号或名称').copyWith(
-        prefixIcon: const Icon(Icons.search, size: 16),
-        prefixIconConstraints: const BoxConstraints(
-          minWidth: 32,
-          minHeight: 32,
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      ),
+      decoration: proposalInputDecoration(context: context, hint: '搜索提案编号或名称')
+          .copyWith(
+            prefixIcon: const Icon(Icons.search, size: 16),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 32,
+              minHeight: 32,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 8,
+            ),
+          ),
     );
     final refresh = OutlinedButton.icon(
       onPressed: _loading ? null : _load,
@@ -4081,7 +4085,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           controller: controller,
           autofocus: true,
           onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-          decoration: proposalInputDecoration(),
+          decoration: proposalInputDecoration(context: context),
         ),
         actions: [
           TextButton(
@@ -4114,7 +4118,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           controller: controller,
           autofocus: true,
           onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-          decoration: proposalInputDecoration(),
+          decoration: proposalInputDecoration(context: context),
         ),
         actions: [
           TextButton(
@@ -8167,6 +8171,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             ? _writeRevenue(owner, value)
             : _writeProductFinanceValue(owner, key, value, rebuild: false),
         decoration: proposalInputDecoration(
+          context: context,
           hint: revenueEditable ? '默认按结算测算，可改' : null,
         ),
       );
@@ -8357,7 +8362,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
-                  decoration: proposalInputDecoration(hint: '$name 金额（万元）'),
+                  decoration: proposalInputDecoration(
+                    context: context,
+                    hint: '$name 金额（万元）',
+                  ),
                   onChanged: (value) {
                     final nextAmounts = Map<String, double>.from(amounts);
                     final amount = double.tryParse(value);
@@ -10335,7 +10343,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               onTapOutside: (_) =>
                   FocusManager.instance.primaryFocus?.unfocus(),
-              decoration: proposalInputDecoration(hint: '新增数量'),
+              decoration: proposalInputDecoration(
+                context: context,
+                hint: '新增数量',
+              ),
             ),
           ],
         ),
@@ -12108,7 +12119,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
               onTapOutside: (_) =>
                   FocusManager.instance.primaryFocus?.unfocus(),
               onChanged: onChanged,
-              decoration: proposalInputDecoration(hint: hint, tone: tone),
+              decoration: proposalInputDecoration(
+                context: context,
+                hint: hint,
+                tone: tone,
+              ),
             ),
     );
     return multiline ? _FullWidthField(child: field) : field;
@@ -12222,7 +12237,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           controller: controller,
           autofocus: true,
           onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-          decoration: proposalInputDecoration(),
+          decoration: proposalInputDecoration(context: context),
         ),
         actions: [
           TextButton(
@@ -13229,6 +13244,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       initialValue: value,
                       enabled: false,
                       decoration: proposalInputDecoration(
+                        context: context,
                         hint: hint ?? '已选另一项，此项不可填',
                         readOnly: true,
                       ),
@@ -13243,7 +13259,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                 onTapOutside: (_) =>
                     FocusManager.instance.primaryFocus?.unfocus(),
                 onChanged: (next) => onChanged(write(next.trim())),
-                decoration: proposalInputDecoration(hint: hint),
+                decoration: proposalInputDecoration(
+                  context: context,
+                  hint: hint,
+                ),
               ),
       );
     }
@@ -13757,6 +13776,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                         child: InputDecorator(
                           decoration:
                               proposalInputDecoration(
+                                context: context,
                                 hint: _uploadingProductFile
                                     ? '上传中…'
                                     : '点击选择文件，最多 5 个',
@@ -14367,7 +14387,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             : () => unawaited(_openContractSourceFile(prefix, file)),
         borderRadius: BorderRadius.circular(8),
         child: InputDecorator(
-          decoration: proposalInputDecoration(readOnly: true),
+          decoration: proposalInputDecoration(context: context, readOnly: true),
           child: Row(
             children: [
               Icon(
@@ -14440,6 +14460,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
             child: InputDecorator(
               decoration:
                   proposalInputDecoration(
+                    context: context,
                     hint: uploading ? '上传中…' : '选择 PDF / Word 文件',
                     readOnly: !enabled,
                   ).copyWith(
@@ -14469,7 +14490,10 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
           )
         : files.isEmpty
         ? InputDecorator(
-            decoration: proposalInputDecoration(readOnly: true),
+            decoration: proposalInputDecoration(
+              context: context,
+              readOnly: true,
+            ),
             child: Text(
               canFetchSigned ? '点击「查看合同」预览合同归集中的源文件' : '还没有合同源文件',
               style: TextStyle(
@@ -15564,6 +15588,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
         child: InputDecorator(
           decoration:
               proposalInputDecoration(
+                context: context,
                 hint: hint,
                 readOnly: !enabled,
                 tone: tone,
@@ -15690,6 +15715,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   )
                 : null,
             decoration: proposalInputDecoration(
+              context: context,
               hint: hint,
               readOnly: !enabled,
               tone: tone,
@@ -15784,7 +15810,11 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                   );
                 }
               : null,
-          decoration: proposalInputDecoration(readOnly: !enabled, tone: tone),
+          decoration: proposalInputDecoration(
+            context: context,
+            readOnly: !enabled,
+            tone: tone,
+          ),
         ),
       ),
     );
@@ -16556,6 +16586,7 @@ class _ProposalIntakeFormState extends State<ProposalIntakeForm> {
                       )
                     : null,
                 decoration: proposalInputDecoration(
+                  context: context,
                   hint: estimated ? '测算（万元）' : '预计（万元）',
                   readOnly: !enabled,
                   tone: tone,
@@ -17991,7 +18022,10 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
                     ),
                     onTapOutside: (_) =>
                         FocusManager.instance.primaryFocus?.unfocus(),
-                    decoration: proposalInputDecoration(hint: '门槛'),
+                    decoration: proposalInputDecoration(
+                      context: context,
+                      hint: '门槛',
+                    ),
                   ),
                 ),
                 Padding(
@@ -18016,7 +18050,10 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
                     ),
                     onTapOutside: (_) =>
                         FocusManager.instance.primaryFocus?.unfocus(),
-                    decoration: proposalInputDecoration(hint: '优惠'),
+                    decoration: proposalInputDecoration(
+                      context: context,
+                      hint: '优惠',
+                    ),
                   ),
                 ),
               ],
@@ -18050,7 +18087,7 @@ class _SkuProductEditorDialogState extends State<_SkuProductEditorDialog> {
               keyboardType: keyboardType,
               onTapOutside: (_) =>
                   FocusManager.instance.primaryFocus?.unfocus(),
-              decoration: proposalInputDecoration(hint: hint),
+              decoration: proposalInputDecoration(context: context, hint: hint),
             ),
     );
   }

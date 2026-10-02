@@ -40,8 +40,10 @@ Future<void> showChatPdfPreview({
       builder: (ctx) {
         final size = MediaQuery.sizeOf(ctx);
         return Dialog(
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 40, vertical: 28),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 40,
+            vertical: 28,
+          ),
           backgroundColor: Colors.transparent,
           child: ConstrainedBox(
             constraints: BoxConstraints(
@@ -61,9 +63,9 @@ Future<void> showChatPdfPreview({
       },
     );
   }
-  return Navigator.of(context).push<void>(
-    MaterialPageRoute<void>(builder: (_) => page),
-  );
+  return Navigator.of(
+    context,
+  ).push<void>(MaterialPageRoute<void>(builder: (_) => page));
 }
 
 bool chatPayloadIsPdf(Map<String, dynamic>? payload, String fileName) {
@@ -86,10 +88,13 @@ class ChatPdfPreviewPage extends StatefulWidget {
   final ConversationService service;
   final Map<String, dynamic>? payload;
   final String fileName;
+
   /// 非空时提供「存入我的知识库」（IM 普通附件 / 知识库转发文档）。
   final AuthSession? saveToKbSession;
+
   /// 非空时提供「存入微盘」。
   final AuthSession? saveToDriveSession;
+
   /// 知识库等场景可直接传入已下载字节，跳过会话附件拉取。
   final Uint8List? initialBytes;
 
@@ -164,8 +169,7 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
       if (!mounted) return;
       // 拷贝一份，避免外部 buffer 被回收后渲染灰屏。
       final bytes = Uint8List.fromList(raw);
-      if (bytes.length < 5 ||
-          String.fromCharCodes(bytes.take(5)) != '%PDF-') {
+      if (bytes.length < 5 || String.fromCharCodes(bytes.take(5)) != '%PDF-') {
         throw Exception('文件不是有效的 PDF');
       }
       setState(() {
@@ -198,8 +202,7 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
       final bytes = await _loadPdfBytes();
       if (bytes.isEmpty) throw Exception('文件内容为空');
       if (!mounted) return;
-      final mimeType =
-          (widget.payload?['mimeType'] ?? '').toString().trim();
+      final mimeType = (widget.payload?['mimeType'] ?? '').toString().trim();
       final ok = await uploadBytesToDriveLocation(
         context: context,
         session: session,
@@ -213,9 +216,7 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorText(e, fallback: '存入微盘失败，请稍后重试')),
-        ),
+        SnackBar(content: Text(friendlyErrorText(e, fallback: '存入微盘失败，请稍后重试'))),
       );
     } finally {
       if (mounted) setState(() => _savingToDrive = false);
@@ -229,15 +230,13 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
       final bytes = await _loadPdfBytes();
       await file_dl.saveBytesAsFile(bytes, widget.fileName);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已保存 ${widget.fileName}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('已保存 ${widget.fileName}')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorText(e, fallback: '下载失败')),
-        ),
+        SnackBar(content: Text(friendlyErrorText(e, fallback: '下载失败'))),
       );
     } finally {
       if (mounted) setState(() => _downloading = false);
@@ -258,7 +257,11 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
         title: const Text('存入我的知识库'),
         content: Text(
           '将把「$title」存入你的知识库，上传后可检索引用。\n\n是否继续？',
-          style: DunesTypography.sans(fontSize: 14, height: 1.55),
+          style: DunesTypography.sans(
+            context: context,
+            fontSize: 14,
+            height: 1.55,
+          ),
         ),
         actions: [
           TextButton(
@@ -286,9 +289,9 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
       );
       KbDocumentCoordinator.instance.notifyChanged();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已存入你的知识库，正在后台解析入库')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已存入你的知识库，正在后台解析入库')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -307,9 +310,17 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
     final canSaveToDrive = widget.saveToDriveSession != null;
     final actionBusy = _downloading || _savingToKb || _savingToDrive;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         title: Text(
           widget.fileName,
           maxLines: 1,
@@ -373,19 +384,23 @@ class _ChatPdfPreviewPageState extends State<ChatPdfPreviewPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.picture_as_pdf_outlined,
-                  size: 48, color: DunesColors.text3),
+              const Icon(
+                Icons.picture_as_pdf_outlined,
+                size: 48,
+                color: DunesColors.text3,
+              ),
               const SizedBox(height: 12),
               Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: DunesTypography.sans(fontSize: 14, color: DunesColors.text2),
+                style: DunesTypography.sans(
+                  context: context,
+                  fontSize: 14,
+                  color: DunesColors.text2,
+                ),
               ),
               const SizedBox(height: 16),
-              FilledButton(
-                onPressed: _loadPdf,
-                child: const Text('重试'),
-              ),
+              FilledButton(onPressed: _loadPdf, child: const Text('重试')),
             ],
           ),
         ),

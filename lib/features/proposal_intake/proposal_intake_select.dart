@@ -485,6 +485,7 @@ class _ProposalSelectFieldState<T> extends State<ProposalSelectField<T>> {
       ),
       decoration:
           proposalInputDecoration(
+            context: context,
             hint: widget.hint,
             readOnly: !_enabled,
           ).copyWith(

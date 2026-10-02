@@ -238,7 +238,13 @@ class _FlowLaneSectionState extends State<FlowLaneSection> {
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _kBorder),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _kBorder,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(

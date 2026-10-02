@@ -221,26 +221,31 @@ class _TravelIssuesPageState extends State<TravelIssuesPage> {
                 child: Row(
                   children: [
                     _chip(
+                      context,
                       '本周',
                       _preset == _IssueRangePreset.week,
                       () => _setPreset(_IssueRangePreset.week),
                     ),
                     _chip(
+                      context,
                       '近7天',
                       _preset == _IssueRangePreset.d7,
                       () => _setPreset(_IssueRangePreset.d7),
                     ),
                     _chip(
+                      context,
                       '近30天',
                       _preset == _IssueRangePreset.d30,
                       () => _setPreset(_IssueRangePreset.d30),
                     ),
                     _chip(
+                      context,
                       '全部',
                       _preset == _IssueRangePreset.all,
                       () => _setPreset(_IssueRangePreset.all),
                     ),
                     _chip(
+                      context,
                       '自定义',
                       _preset == _IssueRangePreset.custom,
                       () => _setPreset(_IssueRangePreset.custom),
@@ -312,19 +317,25 @@ class _TravelIssuesPageState extends State<TravelIssuesPage> {
               child: Row(
                 children: [
                   Expanded(
-                    child: _menu('问题类型', _typeLabel, _typeOptions, (value) {
+                    child: _menu(context, '问题类型', _typeLabel, _typeOptions, (
+                      value,
+                    ) {
                       setState(() => _type = value);
                       unawaited(_load());
                     }),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: _menu('复核状态', _reviewFilterLabel, _statusOptions, (
-                      value,
-                    ) {
-                      setState(() => _status = value);
-                      unawaited(_load());
-                    }),
+                    child: _menu(
+                      context,
+                      '复核状态',
+                      _reviewFilterLabel,
+                      _statusOptions,
+                      (value) {
+                        setState(() => _status = value);
+                        unawaited(_load());
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -335,12 +346,12 @@ class _TravelIssuesPageState extends State<TravelIssuesPage> {
                 child: HorizontalDragScrollView(
                   child: Row(
                     children: [
-                      _chip('全部部门', _department.isEmpty, () {
+                      _chip(context, '全部部门', _department.isEmpty, () {
                         setState(() => _department = '');
                         unawaited(_load());
                       }),
                       for (final name in departments)
-                        _chip(name, _department == name, () {
+                        _chip(context, name, _department == name, () {
                           setState(() => _department = name);
                           unawaited(_load());
                         }),
@@ -618,10 +629,10 @@ class _TravelIssueDetailPageState extends State<TravelIssueDetailPage> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _pill(_severityLabel(_issue)),
-              _pill(_statusLabel(_issue.reviewStatus)),
-              if (_issue.location.isNotEmpty) _pill(_issue.location),
-              _pill('涉及 ${_money(_issue.amountFen)}'),
+              _pill(context, _severityLabel(_issue)),
+              _pill(context, _statusLabel(_issue.reviewStatus)),
+              if (_issue.location.isNotEmpty) _pill(context, _issue.location),
+              _pill(context, '涉及 ${_money(_issue.amountFen)}'),
             ],
           ),
           const SizedBox(height: 14),
@@ -847,7 +858,7 @@ class _IssueSummaryCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  _pill(_severityLabel(issue)),
+                  _pill(context, _severityLabel(issue)),
                   Icon(
                     Icons.chevron_right_rounded,
                     color: DunesColors.resolveNullable(
@@ -1009,11 +1020,20 @@ class _OrderCard extends StatelessWidget {
   }
 }
 
-Widget _chip(String label, bool selected, VoidCallback onTap) {
+Widget _chip(
+  BuildContext context,
+  String label,
+  bool selected,
+  VoidCallback onTap,
+) {
   return Padding(
     padding: const EdgeInsets.only(right: 8),
     child: Material(
-      color: selected ? const Color(0xFFF0EEF7) : Colors.white,
+      color: DunesColors.resolve(
+        context,
+        selected ? const Color(0xFFF0EEF7) : Colors.white,
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -1023,7 +1043,11 @@ Widget _chip(String label, bool selected, VoidCallback onTap) {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected ? _issuePurple : const Color(0xFFE8EAED),
+              color: DunesColors.resolve(
+                context,
+                selected ? _issuePurple : const Color(0xFFE8EAED),
+                role: DunesColorRole.border,
+              ),
             ),
           ),
           child: Text(
@@ -1031,7 +1055,10 @@ Widget _chip(String label, bool selected, VoidCallback onTap) {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: selected ? _issuePurple : const Color(0xFF5C5566),
+              color: DunesColors.resolve(
+                context,
+                selected ? _issuePurple : const Color(0xFF5C5566),
+              ),
             ),
           ),
         ),
@@ -1040,25 +1067,30 @@ Widget _chip(String label, bool selected, VoidCallback onTap) {
   );
 }
 
-Widget _pill(String text) {
+Widget _pill(BuildContext context, String text) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     decoration: BoxDecoration(
-      color: const Color(0xFFF2EDFC),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF2EDFC),
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(999),
     ),
     child: Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w700,
-        color: Color(0xFF5B3FA0),
+        color: DunesColors.resolve(context, const Color(0xFF5B3FA0)),
       ),
     ),
   );
 }
 
 Widget _menu(
+  BuildContext context,
   String label,
   String value,
   List<({String value, String label})> options,
@@ -1074,9 +1106,19 @@ Widget _menu(
       height: 42,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: DunesColors.resolve(
+          context,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE8EAED)),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            const Color(0xFFE8EAED),
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Row(
         children: [
@@ -1087,9 +1129,9 @@ Widget _menu(
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10,
-                    color: DunesColors.text3,
+                    color: DunesColors.resolve(context, DunesColors.text3),
                   ),
                 ),
                 Text(
@@ -1104,10 +1146,10 @@ Widget _menu(
               ],
             ),
           ),
-          const Icon(
+          Icon(
             Icons.keyboard_arrow_down_rounded,
             size: 18,
-            color: DunesColors.text3,
+            color: DunesColors.resolve(context, DunesColors.text3),
           ),
         ],
       ),

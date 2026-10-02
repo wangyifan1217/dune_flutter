@@ -1117,7 +1117,13 @@ class _NativeQianjiCashFlowBoardPageState
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _cardBorder),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _cardBorder,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1219,7 +1225,13 @@ class _NativeQianjiCashFlowBoardPageState
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _cardBorder),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _cardBorder,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1375,7 +1387,13 @@ class _NativeQianjiCashFlowBoardPageState
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _cardBorder),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _cardBorder,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1455,7 +1473,13 @@ class _NativeQianjiCashFlowBoardPageState
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _cardBorder),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _cardBorder,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1558,7 +1582,13 @@ class _NativeQianjiCashFlowBoardPageState
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _cardBorder),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _cardBorder,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         children: [
@@ -1776,7 +1806,13 @@ class _NativeQianjiCashFlowBoardPageState
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _cardBorder),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _cardBorder,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         children: [
@@ -1876,7 +1912,13 @@ class _NativeQianjiCashFlowBoardPageState
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _cardBorder),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _cardBorder,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         children: [
@@ -1948,7 +1990,13 @@ class _NativeQianjiCashFlowBoardPageState
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _cardBorder),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _cardBorder,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Text(
         text,
@@ -2433,7 +2481,13 @@ class _FlowPanel extends StatelessWidget {
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _cardBorder),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _cardBorder,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3037,7 +3091,11 @@ class _ListTools extends StatelessWidget {
           onSurface: DunesColors.resolve(context, DunesColors.text),
         ),
         popupMenuTheme: PopupMenuThemeData(
-          color: DunesColors.resolve(context, Colors.white),
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           surfaceTintColor: Colors.transparent,
           shadowColor: const Color(0x28000000),
           elevation: 8,
@@ -3111,7 +3169,13 @@ class _ListTools extends StatelessWidget {
               role: DunesColorRole.surface,
             ),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: _cardBorder),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                _cardBorder,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -3422,7 +3486,14 @@ class _AlertAccountsSheetState extends State<_AlertAccountsSheet> {
                 ],
               ),
             ),
-            const Divider(height: 1, color: _cardBorder),
+            Divider(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                _cardBorder,
+                role: DunesColorRole.border,
+              ),
+            ),
             Expanded(
               child: widget.alerts.isEmpty
                   ? Center(
@@ -3459,8 +3530,14 @@ class _AlertAccountsSheetState extends State<_AlertAccountsSheet> {
                           ScrollViewKeyboardDismissBehavior.onDrag,
                       padding: const EdgeInsets.fromLTRB(8, 4, 8, 16),
                       itemCount: rows.length,
-                      separatorBuilder: (_, _) =>
-                          const Divider(height: 1, color: _cardBorder),
+                      separatorBuilder: (_, _) => Divider(
+                        height: 1,
+                        color: DunesColors.resolve(
+                          context,
+                          _cardBorder,
+                          role: DunesColorRole.border,
+                        ),
+                      ),
                       itemBuilder: (context, i) {
                         final a = rows[i];
                         return _AlertAccountTile(
@@ -3592,7 +3669,13 @@ class _DonutCard extends StatelessWidget {
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _cardBorder),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _cardBorder,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         children: [
@@ -3611,6 +3694,32 @@ class _DonutCard extends StatelessWidget {
   }
 }
 
+typedef _CashChartColors = ({
+  Color grid,
+  Color surface,
+  Color axis,
+  Color ring,
+  Color positive,
+  Color negative,
+});
+
+_CashChartColors _cashChartColors(BuildContext context) => (
+  grid: DunesColors.resolve(context, _cardBorder, role: DunesColorRole.border),
+  surface: DunesColors.resolve(
+    context,
+    Colors.white,
+    role: DunesColorRole.surface,
+  ),
+  axis: DunesColors.resolve(context, DunesColors.text3),
+  ring: DunesColors.resolve(
+    context,
+    const Color(0xFFF0F1F3),
+    role: DunesColorRole.surface,
+  ),
+  positive: DunesColors.resolve(context, DunesColors.green),
+  negative: DunesColors.resolve(context, DunesColors.coral),
+);
+
 class _DonutChart extends StatelessWidget {
   const _DonutChart({required this.items, required this.color});
   final List<_FlowSlice> items;
@@ -3619,16 +3728,26 @@ class _DonutChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      painter: _DonutPainter(items: items, base: color),
+      painter: _DonutPainter(
+        items: items,
+        base: color,
+        colors: _cashChartColors(context),
+      ),
       child: const SizedBox.expand(),
     );
   }
 }
 
 class _DonutPainter extends CustomPainter {
-  _DonutPainter({required this.items, required this.base});
+  _DonutPainter({
+    required this.items,
+    required this.base,
+    required this.colors,
+  });
   final List<_FlowSlice> items;
   final Color base;
+
+  final _CashChartColors colors;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -3643,7 +3762,7 @@ class _DonutPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = stroke
-        ..color = const Color(0xFFF0F1F3),
+        ..color = colors.ring,
     );
     var start = -math.pi / 2;
     for (var i = 0; i < items.length; i++) {
@@ -3665,7 +3784,7 @@ class _DonutPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DonutPainter old) =>
-      old.items != items || old.base != base;
+      old.colors != colors || old.items != items || old.base != base;
 }
 
 class _LineChart extends StatelessWidget {
@@ -3694,6 +3813,7 @@ class _LineChart extends StatelessWidget {
           onHorizontalDragUpdate: (d) => _hit(d.localPosition, size),
           child: CustomPaint(
             painter: _LinePainter(
+              colors: _cashChartColors(context),
               values: values,
               labels: labels,
               color: color,
@@ -3721,6 +3841,7 @@ class _LineChart extends StatelessWidget {
 
 class _LinePainter extends CustomPainter {
   _LinePainter({
+    required this.colors,
     required this.values,
     required this.labels,
     required this.color,
@@ -3735,6 +3856,8 @@ class _LinePainter extends CustomPainter {
   static const _padR = 10.0;
   static const _padT = 10.0;
   static const _padB = 22.0;
+
+  final _CashChartColors colors;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -3768,11 +3891,12 @@ class _LinePainter extends CustomPainter {
         Offset(plot.left, y),
         Offset(plot.right, y),
         Paint()
-          ..color = const Color(0xFFE8EAED)
+          ..color = colors.grid
           ..strokeWidth = t == ticks ? 1.1 : 0.8,
       );
       final v = maxV - span * t / ticks;
       _paintAxisText(
+        colors.axis,
         canvas,
         _fmtWan(v),
         Offset(plot.left - 6, y - 6),
@@ -3811,6 +3935,7 @@ class _LinePainter extends CustomPainter {
     final labelStep = math.max(1, (values.length / 6).ceil());
     for (var i = 0; i < values.length; i += labelStep) {
       _paintAxisText(
+        colors.axis,
         canvas,
         labels[i],
         Offset(pts[i].dx, plot.bottom + 6),
@@ -3828,14 +3953,18 @@ class _LinePainter extends CustomPainter {
           ..color = color.withValues(alpha: 0.22)
           ..strokeWidth = 1,
       );
-      canvas.drawCircle(p, 5, Paint()..color = Colors.white);
+      canvas.drawCircle(p, 5, Paint()..color = colors.surface);
       canvas.drawCircle(p, 3.5, Paint()..color = color);
     }
   }
 
   @override
   bool shouldRepaint(covariant _LinePainter old) =>
-      old.values != values || old.hoverIndex != hoverIndex;
+      old.colors != colors ||
+      old.color != color ||
+      old.labels != labels ||
+      old.values != values ||
+      old.hoverIndex != hoverIndex;
 }
 
 class _GroupedBarChart extends StatelessWidget {
@@ -3864,6 +3993,7 @@ class _GroupedBarChart extends StatelessWidget {
           onHorizontalDragUpdate: (d) => _hit(d.localPosition, size),
           child: CustomPaint(
             painter: _BarPainter(
+              colors: _cashChartColors(context),
               inflows: inflows,
               outflows: outflows,
               labels: labels,
@@ -3891,6 +4021,7 @@ class _GroupedBarChart extends StatelessWidget {
 
 class _BarPainter extends CustomPainter {
   _BarPainter({
+    required this.colors,
     required this.inflows,
     required this.outflows,
     required this.labels,
@@ -3905,6 +4036,8 @@ class _BarPainter extends CustomPainter {
   static const _padR = 12.0;
   static const _padT = 14.0;
   static const _padB = 22.0;
+
+  final _CashChartColors colors;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -3926,11 +4059,12 @@ class _BarPainter extends CustomPainter {
         Offset(plot.left, y),
         Offset(plot.right, y),
         Paint()
-          ..color = const Color(0xFFE8EAED)
+          ..color = colors.grid
           ..strokeWidth = t == ticks ? 1.1 : 0.8,
       );
       final v = maxV * (1 - t / ticks);
       _paintAxisText(
+        colors.axis,
         canvas,
         _fmtWan(v),
         Offset(plot.left - 6, y - 6),
@@ -3948,13 +4082,13 @@ class _BarPainter extends CustomPainter {
       _drawBar(
         canvas,
         Rect.fromLTWH(cx - barW - 2.5, plot.bottom - inH, barW, inH),
-        DunesColors.green,
+        colors.positive,
         highlight,
       );
       _drawBar(
         canvas,
         Rect.fromLTWH(cx + 2.5, plot.bottom - outH, barW, outH),
-        DunesColors.coral,
+        colors.negative,
         highlight,
       );
     }
@@ -3963,6 +4097,7 @@ class _BarPainter extends CustomPainter {
     for (var i = 0; i < inflows.length; i += labelStep) {
       final cx = plot.left + slot * i + slot / 2;
       _paintAxisText(
+        colors.axis,
         canvas,
         labels[i],
         Offset(cx, plot.bottom + 6),
@@ -3981,6 +4116,8 @@ class _BarPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _BarPainter old) =>
+      old.colors != colors ||
+      old.labels != labels ||
       old.inflows != inflows ||
       old.outflows != outflows ||
       old.hoverIndex != hoverIndex;
@@ -4001,6 +4138,7 @@ Path _smoothPath(List<Offset> pts) {
 }
 
 void _paintAxisText(
+  Color color,
   Canvas canvas,
   String text,
   Offset offset, {
@@ -4009,10 +4147,10 @@ void _paintAxisText(
   final tp = TextPainter(
     text: TextSpan(
       text: text,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 10,
         height: 1,
-        color: DunesColors.text3,
+        color: color,
         fontWeight: FontWeight.w500,
       ),
     ),
@@ -4023,6 +4161,7 @@ void _paintAxisText(
   if (align == TextAlign.right) dx -= tp.width;
   if (align == TextAlign.center) dx -= tp.width / 2;
   tp.paint(canvas, Offset(dx, offset.dy));
+  tp.dispose();
 }
 
 String _fmtWan(double wan, {bool signed = false}) {
@@ -4385,6 +4524,7 @@ class _TrackChart extends StatelessWidget {
           onHorizontalDragUpdate: (d) => _hit(d.localPosition, size),
           child: CustomPaint(
             painter: _TrackPainter(
+              colors: _cashChartColors(context),
               values: values,
               labels: labels,
               hoverIndex: hoverIndex,
@@ -4411,6 +4551,7 @@ class _TrackChart extends StatelessWidget {
 
 class _TrackPainter extends CustomPainter {
   _TrackPainter({
+    required this.colors,
     required this.values,
     required this.labels,
     required this.hoverIndex,
@@ -4424,6 +4565,8 @@ class _TrackPainter extends CustomPainter {
   static const _padR = 16.0;
   static const _padT = 18.0;
   static const _padB = 28.0;
+
+  final _CashChartColors colors;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -4455,10 +4598,11 @@ class _TrackPainter extends CustomPainter {
         Offset(plot.left, y),
         Offset(plot.right, y),
         Paint()
-          ..color = const Color(0xFFE8EAED)
+          ..color = colors.grid
           ..strokeWidth = 0.8,
       );
       _paintAxisText(
+        colors.axis,
         canvas,
         _fmtWan(maxV - span * t / 4),
         Offset(plot.left - 6, y - 6),
@@ -4468,7 +4612,7 @@ class _TrackPainter extends CustomPainter {
 
     final pts = [for (var i = 0; i < values.length; i++) pt(i)];
     final falling = values.last < values.first;
-    final color = falling ? DunesColors.coral : DunesColors.green;
+    final color = falling ? colors.negative : colors.positive;
     final line = _smoothPath(pts);
 
     canvas.drawPath(
@@ -4491,7 +4635,7 @@ class _TrackPainter extends CustomPainter {
     );
 
     for (final p in pts) {
-      canvas.drawCircle(p, 2.2, Paint()..color = Colors.white);
+      canvas.drawCircle(p, 2.2, Paint()..color = colors.surface);
       canvas.drawCircle(
         p,
         2.2,
@@ -4504,25 +4648,27 @@ class _TrackPainter extends CustomPainter {
 
     final start = pts.first;
     final end = pts.last;
-    canvas.drawCircle(start, 6, Paint()..color = Colors.white);
+    canvas.drawCircle(start, 6, Paint()..color = colors.surface);
     canvas.drawCircle(
       start,
       6,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2
-        ..color = DunesColors.text2,
+        ..color = colors.axis,
     );
     canvas.drawCircle(end, 7, Paint()..color = color);
-    canvas.drawCircle(end, 3, Paint()..color = Colors.white);
+    canvas.drawCircle(end, 3, Paint()..color = colors.surface);
 
     _paintAxisText(
+      colors.axis,
       canvas,
       '起',
       Offset(start.dx, start.dy - 16),
       align: TextAlign.center,
     );
     _paintAxisText(
+      colors.axis,
       canvas,
       '止',
       Offset(end.dx, end.dy - 18),
@@ -4532,6 +4678,7 @@ class _TrackPainter extends CustomPainter {
     final labelStep = math.max(1, (values.length / 6).ceil());
     for (var i = 0; i < values.length; i += labelStep) {
       _paintAxisText(
+        colors.axis,
         canvas,
         labels[i],
         Offset(pts[i].dx, plot.bottom + 8),
@@ -4549,14 +4696,17 @@ class _TrackPainter extends CustomPainter {
           ..color = color.withValues(alpha: 0.25)
           ..strokeWidth = 1,
       );
-      canvas.drawCircle(p, 5, Paint()..color = Colors.white);
+      canvas.drawCircle(p, 5, Paint()..color = colors.surface);
       canvas.drawCircle(p, 5, Paint()..color = color);
     }
   }
 
   @override
   bool shouldRepaint(covariant _TrackPainter old) =>
-      old.values != values || old.hoverIndex != hoverIndex;
+      old.colors != colors ||
+      old.labels != labels ||
+      old.values != values ||
+      old.hoverIndex != hoverIndex;
 }
 
 class _AlertAccountTile extends StatelessWidget {

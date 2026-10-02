@@ -1062,9 +1062,19 @@ class ChatInboxSearchBar extends StatelessWidget {
                           context: context,
                         ),
                         textInputAction: TextInputAction.search,
+                        cursorColor: DunesColors.resolve(
+                          context,
+                          DunesColors.brandPurple,
+                        ),
+                        textAlignVertical: TextAlignVertical.center,
                         decoration: InputDecoration(
                           isDense: true,
                           border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          errorBorder: InputBorder.none,
+                          focusedErrorBorder: InputBorder.none,
+                          filled: false,
                           hintText: hint,
                           hintStyle: DunesTypography.sans(
                             fontSize: 13,

@@ -759,30 +759,37 @@ class _TaskEditorState extends State<_TaskEditor> {
   }
 }
 
-InputDecoration _kpiAdjustInputDecoration({String? hint, String? suffix}) {
+InputDecoration _kpiAdjustInputDecoration({
+  required BuildContext context,
+  String? hint,
+  String? suffix,
+}) {
   const radius = BorderRadius.all(Radius.circular(16));
   const idle = BorderSide(color: Color(0xFFE2E8F0));
-  return InputDecoration(
-    isDense: true,
-    filled: true,
-    fillColor: Colors.white,
-    hintText: hint,
-    hintStyle: const TextStyle(fontSize: 13, color: DunesColors.text3),
-    suffixText: suffix,
-    suffixStyle: const TextStyle(fontSize: 12, color: DunesColors.text3),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-    border: const OutlineInputBorder(borderRadius: radius, borderSide: idle),
-    enabledBorder: const OutlineInputBorder(
-      borderRadius: radius,
-      borderSide: idle,
-    ),
-    disabledBorder: const OutlineInputBorder(
-      borderRadius: radius,
-      borderSide: BorderSide(color: Color(0xFFEEF1F4)),
-    ),
-    focusedBorder: const OutlineInputBorder(
-      borderRadius: radius,
-      borderSide: BorderSide(color: _accent, width: 1.4),
+  return DunesColors.inputDecoration(
+    context,
+    InputDecoration(
+      isDense: true,
+      filled: true,
+      fillColor: Colors.white,
+      hintText: hint,
+      hintStyle: const TextStyle(fontSize: 13, color: DunesColors.text3),
+      suffixText: suffix,
+      suffixStyle: const TextStyle(fontSize: 12, color: DunesColors.text3),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      border: const OutlineInputBorder(borderRadius: radius, borderSide: idle),
+      enabledBorder: const OutlineInputBorder(
+        borderRadius: radius,
+        borderSide: idle,
+      ),
+      disabledBorder: const OutlineInputBorder(
+        borderRadius: radius,
+        borderSide: BorderSide(color: Color(0xFFEEF1F4)),
+      ),
+      focusedBorder: const OutlineInputBorder(
+        borderRadius: radius,
+        borderSide: BorderSide(color: _accent, width: 1.4),
+      ),
     ),
   );
 }
@@ -933,7 +940,11 @@ class _KpiAdjustField extends StatelessWidget {
                 ? DunesColors.resolve(context, DunesColors.text)
                 : DunesColors.resolve(context, DunesColors.text3),
           ),
-          decoration: _kpiAdjustInputDecoration(hint: hint, suffix: suffix),
+          decoration: _kpiAdjustInputDecoration(
+            context: context,
+            hint: hint,
+            suffix: suffix,
+          ),
         ),
       ],
     );
@@ -1311,6 +1322,7 @@ class _RubricItemEditor extends StatelessWidget {
                         : DunesColors.resolve(context, DunesColors.text3),
                   ),
                   decoration: _kpiAdjustInputDecoration(
+                    context: context,
                     hint: _rangeHint,
                     suffix: '分',
                   ),

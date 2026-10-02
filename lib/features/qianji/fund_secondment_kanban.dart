@@ -41,7 +41,13 @@ class FundSecondmentKanban extends StatelessWidget {
             role: DunesColorRole.surface,
           ),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _cardBorder),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              _cardBorder,
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -210,7 +216,7 @@ class FundSecondmentKanban extends StatelessWidget {
           .toList(growable: false),
     );
     final lenderRows = useNet
-        ? netting!.netLenders
+        ? netting.netLenders
               .map(
                 (item) => _BreakdownRow(
                   label: item.subject,
@@ -246,14 +252,14 @@ class FundSecondmentKanban extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [routes, const SizedBox(height: 12), lenders],
           );
-    if (!useNet || netting!.bridgeNote.isEmpty) return columns;
+    if (!useNet || netting.bridgeNote.isEmpty) return columns;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         columns,
         const SizedBox(height: 8),
         Text(
-          netting!.bridgeNote,
+          netting.bridgeNote,
           style: TextStyle(
             fontSize: 11,
             height: 1.4,
@@ -486,13 +492,17 @@ class _BreakdownRow extends StatelessWidget {
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: _nameStyle,
+            style: _nameStyle.copyWith(
+              color: DunesColors.resolve(context, DunesColors.text),
+            ),
           )
         : Text(
             label ?? '',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: _nameStyle,
+            style: _nameStyle.copyWith(
+              color: DunesColors.resolve(context, DunesColors.text),
+            ),
           );
     final mark = tag;
     return Padding(

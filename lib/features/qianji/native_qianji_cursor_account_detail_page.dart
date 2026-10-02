@@ -206,15 +206,42 @@ class _NativeQianjiCursorAccountDetailPageState
               ),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Row(
+            child: Row(
               children: [
-                Expanded(flex: 3, child: Text('日期', style: _headStyle)),
-                Expanded(flex: 4, child: Text('模型', style: _headStyle)),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    '日期',
+                    style: _headStyle.copyWith(
+                      color: DunesColors.resolveNullable(
+                        context,
+                        _headStyle.color,
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 4,
+                  child: Text(
+                    '模型',
+                    style: _headStyle.copyWith(
+                      color: DunesColors.resolveNullable(
+                        context,
+                        _headStyle.color,
+                      ),
+                    ),
+                  ),
+                ),
                 Expanded(
                   flex: 3,
                   child: Text(
                     '消费(\$)',
-                    style: _headStyle,
+                    style: _headStyle.copyWith(
+                      color: DunesColors.resolveNullable(
+                        context,
+                        _headStyle.color,
+                      ),
+                    ),
                     textAlign: TextAlign.right,
                   ),
                 ),
@@ -222,7 +249,12 @@ class _NativeQianjiCursorAccountDetailPageState
                   flex: 2,
                   child: Text(
                     'Tokens',
-                    style: _headStyle,
+                    style: _headStyle.copyWith(
+                      color: DunesColors.resolveNullable(
+                        context,
+                        _headStyle.color,
+                      ),
+                    ),
                     textAlign: TextAlign.right,
                   ),
                 ),

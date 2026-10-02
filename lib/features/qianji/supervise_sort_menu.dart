@@ -71,7 +71,11 @@ class SuperviseSortMenu extends StatelessWidget {
           onSurface: DunesColors.resolve(context, DunesColors.text),
         ),
         popupMenuTheme: PopupMenuThemeData(
-          color: DunesColors.resolve(context, Colors.white),
+          color: DunesColors.resolve(
+            context,
+            Colors.white,
+            role: DunesColorRole.surface,
+          ),
           surfaceTintColor: Colors.transparent,
           shadowColor: const Color(0x28000000),
           elevation: 8,
@@ -145,7 +149,13 @@ class SuperviseSortMenu extends StatelessWidget {
               role: DunesColorRole.surface,
             ),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: _cardBorder),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                _cardBorder,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

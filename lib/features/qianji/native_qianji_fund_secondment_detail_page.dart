@@ -278,7 +278,7 @@ class _NativeQianjiFundSecondmentDetailPageState
               icon: const Icon(Icons.assignment_outlined, size: 18),
               label: const Text('查看相关审批'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: _themePurple,
+                foregroundColor: DunesColors.resolve(context, _themePurple),
                 side: BorderSide(
                   color: DunesColors.resolve(
                     context,
@@ -319,13 +319,22 @@ class _NativeQianjiFundSecondmentDetailPageState
               ),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Row(
+            child: Row(
               children: [
-                Expanded(child: Text('日期', style: _headStyle)),
+                Expanded(
+                  child: Text(
+                    '日期',
+                    style: _headStyle.copyWith(
+                      color: DunesColors.resolve(context, _themePurple),
+                    ),
+                  ),
+                ),
                 Expanded(
                   child: Text(
                     '还款金额（万）',
-                    style: _headStyle,
+                    style: _headStyle.copyWith(
+                      color: DunesColors.resolve(context, _themePurple),
+                    ),
                     textAlign: TextAlign.right,
                   ),
                 ),

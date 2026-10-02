@@ -1204,7 +1204,13 @@ class _KpiMonthStepper extends StatelessWidget {
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _line),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _line,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1317,7 +1323,13 @@ class _KpiControlPanel extends StatelessWidget {
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _line),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _line,
+            role: DunesColorRole.border,
+          ),
+        ),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0D2B1A4F),
@@ -1791,7 +1803,13 @@ class _KpiRosterPane extends StatelessWidget {
               role: DunesColorRole.surface,
             ),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: _line),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                _line,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           clipBehavior: Clip.antiAlias,
           child: people.isEmpty
@@ -2412,7 +2430,9 @@ class _KpiTableRow extends StatelessWidget {
                   deptName.isEmpty ? '—' : deptName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: _cell,
+                  style: _cell.copyWith(
+                    color: DunesColors.resolveNullable(context, _cell.color),
+                  ),
                 ),
               ),
               Expanded(
@@ -2434,7 +2454,9 @@ class _KpiTableRow extends StatelessWidget {
                   post.isEmpty ? '—' : post,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: _cell,
+                  style: _cell.copyWith(
+                    color: DunesColors.resolveNullable(context, _cell.color),
+                  ),
                 ),
               ),
               Expanded(
@@ -2494,7 +2516,10 @@ class _KpiTableRow extends StatelessWidget {
                       ? '—'
                       : formatKpiCoefficient(grade.coefficient),
                   textAlign: TextAlign.right,
-                  style: _cell.copyWith(fontFeatures: _tabular),
+                  style: _cell.copyWith(
+                    color: DunesColors.resolveNullable(context, _cell.color),
+                    fontFeatures: _tabular,
+                  ),
                 ),
               ),
               const SizedBox(width: 24),
@@ -2502,7 +2527,15 @@ class _KpiTableRow extends StatelessWidget {
                 flex: 8,
                 child: person.isRubric && !person.isPending && !person.isSkipped
                     ? _kpiAckText(person)
-                    : const Text('—', style: _cell),
+                    : Text(
+                        '—',
+                        style: _cell.copyWith(
+                          color: DunesColors.resolveNullable(
+                            context,
+                            _cell.color,
+                          ),
+                        ),
+                      ),
               ),
             ],
           ),

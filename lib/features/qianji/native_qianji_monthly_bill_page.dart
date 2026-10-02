@@ -166,7 +166,11 @@ class _NativeQianjiMonthlyBillPageState
     final kpi = _side == 'payable' ? board.payable : board.receivable;
     final payable = _side == 'payable';
     return Scaffold(
-      backgroundColor: _pageBg,
+      backgroundColor: DunesColors.resolve(
+        context,
+        _pageBg,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -366,7 +370,13 @@ class _NativeQianjiMonthlyBillPageState
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _cardBorder),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _cardBorder,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -519,7 +529,13 @@ class _NativeQianjiMonthlyBillPageState
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _cardBorder),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _cardBorder,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -576,7 +592,13 @@ class _NativeQianjiMonthlyBillPageState
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _cardBorder),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _cardBorder,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -753,7 +775,13 @@ class _NativeQianjiMonthlyBillPageState
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _cardBorder),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _cardBorder,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Text(
         '这一筛选项下没有账单。',
@@ -991,7 +1019,13 @@ class _BillCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _cardBorder),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                _cardBorder,
+                role: DunesColorRole.border,
+              ),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

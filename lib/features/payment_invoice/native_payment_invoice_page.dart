@@ -663,7 +663,13 @@ class _NativePaymentInvoicePageState extends State<NativePaymentInvoicePage> {
             role: DunesColorRole.surface,
           ),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _line),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              _line,
+              role: DunesColorRole.border,
+            ),
+          ),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),

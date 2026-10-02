@@ -499,7 +499,12 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
     bool readonly = false,
     bool mono = false,
   }) {
-    return xfInputDecoration(hint: hint, readonly: readonly, mono: mono);
+    return xfInputDecoration(
+      context: context,
+      hint: hint,
+      readonly: readonly,
+      mono: mono,
+    );
   }
 
   Widget _selectField(XflowField field, {bool inRow = false}) {
@@ -611,8 +616,8 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         maxLines: maxLines,
         readOnly: field.readonly,
         style: field.type == 'money' || field.type == 'number'
-            ? xfInputTextStyle(mono: true)
-            : xfInputTextStyle(),
+            ? xfInputTextStyle(context: context, mono: true)
+            : xfInputTextStyle(context: context),
         decoration: _inputDecoration(
           hint: field.placeholder,
           readonly: field.readonly,
@@ -648,7 +653,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: xfInputTextStyle().copyWith(
+                style: xfInputTextStyle(context: context).copyWith(
                   color: date == null
                       ? DunesColors.resolve(context, DunesColors.text3)
                       : (readonly
@@ -1156,7 +1161,10 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         color: DunesColors.resolve(context, DunesColors.text),
         context: context,
       ),
-      decoration: xfMatrixCellDecoration(hint: col['placeholder']?.toString()),
+      decoration: xfMatrixCellDecoration(
+        context: context,
+        hint: col['placeholder']?.toString(),
+      ),
       onTapOutside: _dismissKeyboardOnTapOutside,
       onChanged: (v) {
         rows[ri][colKey] = v;
@@ -1349,7 +1357,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
             hint: col.placeholder,
             readonly: col.readonly,
           ),
-          style: xfInputTextStyle(),
+          style: xfInputTextStyle(context: context),
           onChanged: (value) => patch({col.key: value}),
         ),
       );
@@ -1369,8 +1377,8 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
         maxLines: col.type == 'textarea' ? 5 : 1,
         readOnly: col.readonly,
         style: col.type == 'money' || col.type == 'number'
-            ? xfInputTextStyle(mono: true)
-            : xfInputTextStyle(),
+            ? xfInputTextStyle(context: context, mono: true)
+            : xfInputTextStyle(context: context),
         decoration: _inputDecoration(
           hint: col.placeholder,
           readonly: col.readonly,
@@ -1556,8 +1564,14 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
 
     final value = rows[ri][colKey]?.toString() ?? '';
     final decoration = matrix
-        ? xfMatrixCellDecoration(hint: col['placeholder']?.toString())
-        : xfDynCellDecoration(hint: col['placeholder']?.toString());
+        ? xfMatrixCellDecoration(
+            context: context,
+            hint: col['placeholder']?.toString(),
+          )
+        : xfDynCellDecoration(
+            context: context,
+            hint: col['placeholder']?.toString(),
+          );
 
     if (colField.type == 'date') {
       final picker = _dynamicDatePicker(
@@ -1571,7 +1585,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                 color: DunesColors.resolve(context, DunesColors.text),
                 context: context,
               )
-            : xfDynInputTextStyle(),
+            : xfDynInputTextStyle(context: context),
         onChanged: setVal,
       );
       if (matrix) return picker;
@@ -1598,7 +1612,7 @@ class _XflowFormRendererState extends State<XflowFormRenderer> {
                     color: DunesColors.resolve(context, DunesColors.text),
                     context: context,
                   )
-                : xfDynInputTextStyle(),
+                : xfDynInputTextStyle(context: context),
             onTapOutside: _dismissKeyboardOnTapOutside,
             onChanged: setVal,
           );
@@ -2153,7 +2167,7 @@ class _XflowSelectPickerState extends State<_XflowSelectPicker> {
             minLines: 1,
             maxLines: _expanded ? 1 : 4,
             enableInteractiveSelection: !widget.readonly,
-            style: xfInputTextStyle(),
+            style: xfInputTextStyle(context: context),
             onTap: widget.readonly ? null : () => _openMenu(),
             onChanged: widget.readonly
                 ? null
@@ -2162,6 +2176,7 @@ class _XflowSelectPickerState extends State<_XflowSelectPicker> {
                   },
             decoration:
                 xfInputDecoration(
+                  context: context,
                   hint: widget.placeholder,
                   readonly: widget.readonly,
                 ).copyWith(
@@ -2437,11 +2452,13 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
               );
             },
             decoration: xfSearchPickerDecoration(
+              context: context,
               hint: widget.placeholder,
               readonly: widget.readonly,
               suffixIcon: widget.readonly
                   ? null
                   : xfSearchSuffixIcon(
+                      context: context,
                       loading: _loading,
                       hasText: hasText,
                       readonly: widget.readonly,
@@ -2450,7 +2467,7 @@ class _XflowUserPickerState extends State<_XflowUserPicker> {
             ),
             minLines: 1,
             maxLines: _results.isEmpty ? 4 : 1,
-            style: xfInputTextStyle(),
+            style: xfInputTextStyle(context: context),
             onTap: widget.readonly
                 ? null
                 : () {
@@ -2832,8 +2849,10 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
             focusNode: _focus,
             readOnly: widget.readonly,
             decoration: xfSearchPickerDecoration(
+              context: context,
               hint: widget.placeholder,
               suffixIcon: xfSearchSuffixIcon(
+                context: context,
                 loading: _loading,
                 hasText: hasText,
                 readonly: widget.readonly,
@@ -2842,7 +2861,7 @@ class _XflowProposalPickerState extends State<_XflowProposalPicker> {
             ),
             minLines: 1,
             maxLines: _results.isEmpty ? 4 : 1,
-            style: xfInputTextStyle(),
+            style: xfInputTextStyle(context: context),
             onTap: widget.readonly
                 ? null
                 : () {
@@ -3191,8 +3210,10 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
               );
             },
             decoration: xfSearchPickerDecoration(
+              context: context,
               hint: widget.placeholder,
               suffixIcon: xfSearchSuffixIcon(
+                context: context,
                 loading: _loading,
                 hasText: hasText,
                 readonly: widget.readonly,
@@ -3201,7 +3222,7 @@ class _XflowRemoteSearchPickerState extends State<_XflowRemoteSearchPicker> {
             ),
             minLines: 1,
             maxLines: _results.isEmpty ? 4 : 1,
-            style: xfInputTextStyle(),
+            style: xfInputTextStyle(context: context),
             onTap: widget.readonly
                 ? null
                 : () {
@@ -3270,9 +3291,9 @@ class _XflowTagInputState extends State<_XflowTagInput> {
   Widget build(BuildContext context) {
     return TextField(
       controller: _controller,
-      style: xfInputTextStyle(),
+      style: xfInputTextStyle(context: context),
       textInputAction: TextInputAction.done,
-      decoration: xfInputDecoration(hint: widget.hint),
+      decoration: xfInputDecoration(context: context, hint: widget.hint),
       onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
       onSubmitted: _submit,
       onChanged: (text) {

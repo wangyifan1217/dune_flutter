@@ -4,6 +4,65 @@ enum DunesColorRole { foreground, surface, border }
 
 /// 与 index.html :root CSS 变量一一对应的设计令牌。
 abstract final class DunesColors {
+  /// Canvas painters receive the theme brightness when their widget builds.
+  static Color forBrightness(
+    Brightness brightness,
+    Color light, {
+    DunesColorRole role = DunesColorRole.foreground,
+  }) => brightness == Brightness.dark ? _resolveNight(light, role) : light;
+
+  /// Resolve shared form decorations without changing their layout or shape.
+  static InputDecoration inputDecoration(
+    BuildContext? context,
+    InputDecoration decoration,
+  ) {
+    if (context == null) return decoration;
+    TextStyle? text(TextStyle? style) => style?.copyWith(
+      color: resolveNullable(context, style.color),
+      backgroundColor: resolveNullable(
+        context,
+        style.backgroundColor,
+        role: DunesColorRole.surface,
+      ),
+    );
+    InputBorder? border(InputBorder? value, {bool focused = false}) {
+      if (value == null || value == InputBorder.none) return value;
+      final side = value.borderSide.copyWith(
+        color: resolve(
+          context,
+          value.borderSide.color,
+          role: focused ? DunesColorRole.foreground : DunesColorRole.border,
+        ),
+      );
+      if (value is OutlineInputBorder) return value.copyWith(borderSide: side);
+      if (value is UnderlineInputBorder) {
+        return value.copyWith(borderSide: side);
+      }
+      return value;
+    }
+
+    return decoration.copyWith(
+      fillColor: resolveNullable(
+        context,
+        decoration.fillColor,
+        role: DunesColorRole.surface,
+      ),
+      hintStyle: text(decoration.hintStyle),
+      labelStyle: text(decoration.labelStyle),
+      floatingLabelStyle: text(decoration.floatingLabelStyle),
+      helperStyle: text(decoration.helperStyle),
+      errorStyle: text(decoration.errorStyle),
+      prefixStyle: text(decoration.prefixStyle),
+      suffixStyle: text(decoration.suffixStyle),
+      border: border(decoration.border),
+      enabledBorder: border(decoration.enabledBorder),
+      disabledBorder: border(decoration.disabledBorder),
+      errorBorder: border(decoration.errorBorder),
+      focusedBorder: border(decoration.focusedBorder, focused: true),
+      focusedErrorBorder: border(decoration.focusedErrorBorder, focused: true),
+    );
+  }
+
   static const bgPage = Color(0xFFF4F1EA);
   static const bgApp = Color(0xFFFBFAF6);
   static const bgSoft = Color(0xFFF2EFE7);

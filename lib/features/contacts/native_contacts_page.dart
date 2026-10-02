@@ -1405,8 +1405,14 @@ class _BulkSelectBar extends StatelessWidget {
   final VoidCallback onSelectAll;
   final VoidCallback onClearAll;
 
-  ButtonStyle get _outlineStyle => OutlinedButton.styleFrom(
-    side: const BorderSide(color: Color(0xFFE0E1E6)),
+  ButtonStyle _outlineStyle(BuildContext context) => OutlinedButton.styleFrom(
+    side: BorderSide(
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFE0E1E6),
+        role: DunesColorRole.border,
+      ),
+    ),
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
   );
@@ -1425,7 +1431,7 @@ class _BulkSelectBar extends StatelessWidget {
           children: [
             OutlinedButton(
               onPressed: onSelectAll,
-              style: _outlineStyle,
+              style: _outlineStyle(context),
               child: Text(
                 '全选',
                 style: DunesTypography.sans(
@@ -1438,7 +1444,7 @@ class _BulkSelectBar extends StatelessWidget {
             const SizedBox(width: 8),
             OutlinedButton(
               onPressed: onClearAll,
-              style: _outlineStyle,
+              style: _outlineStyle(context),
               child: Text(
                 '清空已选',
                 style: DunesTypography.sans(
@@ -1451,7 +1457,7 @@ class _BulkSelectBar extends StatelessWidget {
             const SizedBox(width: 8),
             OutlinedButton(
               onPressed: onShowList,
-              style: _outlineStyle,
+              style: _outlineStyle(context),
               child: Text(
                 '列表显示',
                 style: DunesTypography.sans(

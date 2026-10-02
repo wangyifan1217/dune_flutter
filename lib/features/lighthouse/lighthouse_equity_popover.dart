@@ -356,7 +356,14 @@ class _EquityPopover extends StatelessWidget {
             LhColors.paper,
             role: DunesColorRole.surface,
           ),
-          border: Border.all(color: _line, width: 0.8),
+          border: Border.all(
+            color: DunesColors.resolve(
+              context,
+              _line,
+              role: DunesColorRole.border,
+            ),
+            width: 0.8,
+          ),
           borderRadius: BorderRadius.circular(14),
           boxShadow: const [
             BoxShadow(
@@ -450,7 +457,14 @@ class _EquityPopover extends StatelessWidget {
                   LhColors.paper,
                   role: DunesColorRole.surface,
                 ),
-                border: Border.all(color: _line, width: 0.8),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    _line,
+                    role: DunesColorRole.border,
+                  ),
+                  width: 0.8,
+                ),
               ),
             ),
           ),

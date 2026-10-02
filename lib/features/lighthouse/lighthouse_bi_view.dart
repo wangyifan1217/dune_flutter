@@ -403,6 +403,7 @@ TextPainter _tp(
 
 TextStyle _mono({
   BuildContext? context,
+  Brightness? brightness,
   double size = 9,
   Color color = LhColors.mute2,
   FontWeight weight = FontWeight.w600,
@@ -410,7 +411,9 @@ TextStyle _mono({
 }) => LhTypography.mono(
   context: context,
   size: size,
-  color: color,
+  color: brightness == null
+      ? color
+      : DunesColors.forBrightness(brightness, color),
   weight: weight,
   letterSpacing: spacing,
   height: 1.0,
@@ -418,6 +421,7 @@ TextStyle _mono({
 
 TextStyle _sans({
   BuildContext? context,
+  Brightness? brightness,
   double size = 11,
   Color color = LhColors.ink,
   FontWeight weight = FontWeight.w600,
@@ -425,7 +429,9 @@ TextStyle _sans({
 }) => LhTypography.sans(
   context: context,
   size: size,
-  color: color,
+  color: brightness == null
+      ? color
+      : DunesColors.forBrightness(brightness, color),
   weight: weight,
   letterSpacing: spacing,
   height: 1.1,
@@ -1903,6 +1909,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
                     animation: _anim,
                     builder: (_, _) => CustomPaint(
                       painter: _DonutPainter(
+                        brightness: Theme.of(context).brightness,
                         slices: slices,
                         total: ringTotal,
                         progress: Curves.easeOutCubic.transform(_anim.value),
@@ -2394,6 +2401,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
           animation: _anim,
           builder: (_, _) => CustomPaint(
             painter: _RankBarPainter(
+              brightness: Theme.of(context).brightness,
               items: shown,
               maxAbs: maxAbs,
               isRate: _metric.isRate,
@@ -3106,6 +3114,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             animation: _anim,
             builder: (_, _) => CustomPaint(
               painter: _WaterfallPainter(
+                brightness: Theme.of(context).brightness,
                 steps: steps,
                 lo: lo,
                 hi: hi,
@@ -3162,6 +3171,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             animation: _anim,
             builder: (_, _) => CustomPaint(
               painter: _DivergingPainter(
+                brightness: Theme.of(context).brightness,
                 items: items,
                 maxAbs: maxAbs,
                 progress: Curves.easeOutCubic.transform(_anim.value),
@@ -3217,6 +3227,7 @@ class _LhBiViewPageState extends State<LhBiViewPage>
             animation: _anim,
             builder: (_, _) => CustomPaint(
               painter: _FlowTrendPainter(
+                brightness: Theme.of(context).brightness,
                 values: values,
                 cumulative: cumulative,
                 labels: host?.labels ?? const <String>[],
@@ -3690,6 +3701,7 @@ Color _shade(Color c, double t) {
 ///     本来就该是标注区，图表书上管这叫 leader line，不是装饰。
 class _DonutPainter extends CustomPainter {
   _DonutPainter({
+    required this.brightness,
     required this.slices,
     required this.total,
     required this.progress,
@@ -3709,6 +3721,8 @@ class _DonutPainter extends CustomPainter {
 
   /// 侧壁厚度。再厚就开始像玩具，再薄就看不出是个立体的东西。
   static const double _depth = 7;
+
+  final Brightness brightness;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -3870,7 +3884,11 @@ class _DonutPainter extends CustomPainter {
         center + d * tickR,
         center + d * (tickR + (major ? 5.5 : 2.5)),
         Paint()
-          ..color = major ? LhBiPlum.line : LhBiPlum.line.withValues(alpha: 0.6)
+          ..color = DunesColors.forBrightness(
+            brightness,
+            LhBiPlum.line,
+            role: DunesColorRole.border,
+          ).withValues(alpha: major ? 1 : .6)
           ..strokeWidth = major ? 1.1 : 0.7,
       );
     }
@@ -3883,15 +3901,32 @@ class _DonutPainter extends CustomPainter {
 
     // ⑧ 圆心读数：先垫一层底，引线不能穿过来压住数字。
     final hole = (r - stroke / 2).clamp(16.0, 42.0);
-    canvas.drawCircle(center, hole, Paint()..color = Colors.white);
-    final label = _tp(centerLabel, _mono(size: 9, spacing: 0.6));
+    canvas.drawCircle(
+      center,
+      hole,
+      Paint()
+        ..color = DunesColors.forBrightness(
+          brightness,
+          Colors.white,
+          role: DunesColorRole.surface,
+        ),
+    );
+    final label = _tp(
+      centerLabel,
+      _mono(brightness: brightness, size: 9, spacing: 0.6),
+    );
     final valueTp = _tp(
       centerParts.text,
       LhTypography.number(size: 21, color: LhBiPlum.heroNum),
     );
     final unitTp = _tp(
       centerParts.unit,
-      _sans(size: 9, color: LhColors.mute, weight: FontWeight.w500),
+      _sans(
+        brightness: brightness,
+        size: 9,
+        color: LhColors.mute,
+        weight: FontWeight.w500,
+      ),
     );
     final wide =
         valueTp.width + (centerParts.unit.isEmpty ? 0 : unitTp.width + 2);
@@ -4001,6 +4036,7 @@ class _DonutPainter extends CustomPainter {
     final nameTp = _tp(
       s.name,
       _sans(
+        brightness: brightness,
         size: 9.5,
         color: LhColors.ink.withValues(alpha: alpha),
         weight: FontWeight.w700,
@@ -4009,7 +4045,11 @@ class _DonutPainter extends CustomPainter {
     );
     final pctTp = _tp(
       lhBiPct(pct),
-      _mono(size: 9, color: LhColors.mute.withValues(alpha: alpha)),
+      _mono(
+        brightness: brightness,
+        size: 9,
+        color: LhColors.mute.withValues(alpha: alpha),
+      ),
     );
     final nx = right ? xEnd + 6 : xEnd - 6 - nameTp.width;
     final px = right ? xEnd + 6 : xEnd - 6 - pctTp.width;
@@ -4019,6 +4059,7 @@ class _DonutPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DonutPainter old) =>
+      old.brightness != brightness ||
       old.progress != progress ||
       old.total != total ||
       old.slices.length != slices.length ||
@@ -4030,6 +4071,7 @@ class _DonutPainter extends CustomPainter {
 /// 数值直标在右侧固定列，不压柱子，永远不会被裁。
 class _RankBarPainter extends CustomPainter {
   _RankBarPainter({
+    required this.brightness,
     required this.items,
     required this.maxAbs,
     required this.isRate,
@@ -4049,6 +4091,8 @@ class _RankBarPainter extends CustomPainter {
   /// 已展开省份拆分的那一行：底色点亮，其余不变。
   final String? selected;
 
+  final Brightness brightness;
+
   @override
   void paint(Canvas canvas, Size size) {
     if (items.isEmpty || maxAbs <= 0) return;
@@ -4067,7 +4111,11 @@ class _RankBarPainter extends CustomPainter {
 
     // 竖向发丝网格：用灯塔的紫 hairline，与全页线色一致
     final gridPaint = Paint()
-      ..color = LhBiPlum.line
+      ..color = DunesColors.forBrightness(
+        brightness,
+        LhBiPlum.line,
+        role: DunesColorRole.border,
+      )
       ..strokeWidth = 0.5;
     for (var i = 1; i <= 4; i++) {
       final x = plotLeft + plotW * i / 4;
@@ -4091,6 +4139,7 @@ class _RankBarPainter extends CustomPainter {
       final rank = _tp(
         '${i + 1}',
         _mono(
+          brightness: brightness,
           size: 10,
           color: isTop3 ? LhBiPlum.primary : LhColors.mute2,
           weight: isTop3 ? FontWeight.w700 : FontWeight.w500,
@@ -4103,6 +4152,7 @@ class _RankBarPainter extends CustomPainter {
       final name = _tp(
         it.name,
         _sans(
+          brightness: brightness,
           size: 10.5,
           color: LhColors.ink2,
           weight: isTop3 ? FontWeight.w600 : FontWeight.w500,
@@ -4114,7 +4164,12 @@ class _RankBarPainter extends CustomPainter {
         name.paint(canvas, Offset(rankW, cy - name.height + 1));
         final grp = _tp(
           it.group,
-          _mono(size: 8, color: LhColors.mute2, spacing: 0.1),
+          _mono(
+            brightness: brightness,
+            size: 8,
+            color: LhColors.mute2,
+            spacing: 0.1,
+          ),
           maxWidth: nameW,
         );
         grp.paint(canvas, Offset(rankW, cy + 2));
@@ -4141,6 +4196,7 @@ class _RankBarPainter extends CustomPainter {
       final val = _tp(
         lhBiValue(it.value, isRate: isRate),
         _mono(
+          brightness: brightness,
           size: 10,
           color: neg ? LhColors.neg : LhColors.ink,
           weight: isTop3 ? FontWeight.w700 : FontWeight.w600,
@@ -4164,7 +4220,10 @@ class _RankBarPainter extends CustomPainter {
     for (var i = 0; i <= 2; i++) {
       final v = maxAbs * i / 2;
       final x = plotLeft + plotW * i / 2;
-      final t = _tp(lhBiTick(v, isRate: isRate), _mono(size: 8.5, spacing: 0));
+      final t = _tp(
+        lhBiTick(v, isRate: isRate),
+        _mono(brightness: brightness, size: 8.5, spacing: 0),
+      );
       t.paint(
         canvas,
         Offset((x - t.width / 2).clamp(0.0, size.width - t.width), bottom + 5),
@@ -4174,6 +4233,7 @@ class _RankBarPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RankBarPainter old) =>
+      old.brightness != brightness ||
       old.progress != progress ||
       old.maxAbs != maxAbs ||
       old.selected != selected ||
@@ -4185,6 +4245,7 @@ class _RankBarPainter extends CustomPainter {
 /// 双极取「紫 ↔ 珊瑚」而不是绿红 —— 绿在这个 App 里是「跌 / 现金流」的语义色。
 class _DivergingPainter extends CustomPainter {
   _DivergingPainter({
+    required this.brightness,
     required this.items,
     required this.maxAbs,
     required this.progress,
@@ -4203,6 +4264,8 @@ class _DivergingPainter extends CustomPainter {
   final Color loss;
   final String gainLabel;
   final String lossLabel;
+
+  final Brightness brightness;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -4226,7 +4289,11 @@ class _DivergingPainter extends CustomPainter {
       Offset(zeroX, 0),
       Offset(zeroX, bottom),
       Paint()
-        ..color = LhColors.line
+        ..color = DunesColors.forBrightness(
+          brightness,
+          LhColors.line,
+          role: DunesColorRole.border,
+        )
         ..strokeWidth = 0.9,
     );
 
@@ -4239,7 +4306,12 @@ class _DivergingPainter extends CustomPainter {
 
       final name = _tp(
         it.name,
-        _sans(size: 10.5, color: LhColors.ink2, weight: FontWeight.w500),
+        _sans(
+          brightness: brightness,
+          size: 10.5,
+          color: LhColors.ink2,
+          weight: FontWeight.w500,
+        ),
         maxWidth: nameW,
       );
       name.paint(canvas, Offset(0, cy - name.height / 2));
@@ -4262,16 +4334,28 @@ class _DivergingPainter extends CustomPainter {
 
       final val = _tp(
         lhBiMoney(it.profit),
-        _mono(size: 10, color: color, weight: FontWeight.w700, spacing: 0),
+        _mono(
+          brightness: brightness,
+          size: 10,
+          color: color,
+          weight: FontWeight.w700,
+          spacing: 0,
+        ),
         maxWidth: valueW,
       );
       val.paint(canvas, Offset(size.width - val.width, cy - val.height / 2));
     }
 
     // 轴脚注：负极 ← 0 → 正极
-    final left = _tp(lossLabel, _mono(size: 8.5, color: loss, spacing: 0.3));
-    final mid = _tp('0', _mono(size: 8.5, spacing: 0));
-    final right = _tp(gainLabel, _mono(size: 8.5, color: gain, spacing: 0.3));
+    final left = _tp(
+      lossLabel,
+      _mono(brightness: brightness, size: 8.5, color: loss, spacing: 0.3),
+    );
+    final mid = _tp('0', _mono(brightness: brightness, size: 8.5, spacing: 0));
+    final right = _tp(
+      gainLabel,
+      _mono(brightness: brightness, size: 8.5, color: gain, spacing: 0.3),
+    );
     final baseY = bottom + 5;
     left.paint(canvas, Offset(plotLeft, baseY));
     mid.paint(canvas, Offset(zeroX - mid.width / 2, baseY));
@@ -4280,6 +4364,7 @@ class _DivergingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DivergingPainter old) =>
+      old.brightness != brightness ||
       old.progress != progress ||
       old.maxAbs != maxAbs ||
       old.items.length != items.length;
@@ -4356,6 +4441,7 @@ class _WaterfallStep {
 /// 瀑布图看不懂，多半就是缺了这根线。
 class _WaterfallPainter extends CustomPainter {
   _WaterfallPainter({
+    required this.brightness,
     required this.steps,
     required this.lo,
     required this.hi,
@@ -4370,6 +4456,8 @@ class _WaterfallPainter extends CustomPainter {
   static const double rowH = 30;
   static const double nameW = 60;
   static const double valueW = 60;
+
+  final Brightness brightness;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -4388,7 +4476,11 @@ class _WaterfallPainter extends CustomPainter {
       Offset(zeroX, 0),
       Offset(zeroX, bottom),
       Paint()
-        ..color = LhColors.line
+        ..color = DunesColors.forBrightness(
+          brightness,
+          LhColors.line,
+          role: DunesColorRole.border,
+        )
         ..strokeWidth = 0.9,
     );
 
@@ -4401,6 +4493,7 @@ class _WaterfallPainter extends CustomPainter {
       final name = _tp(
         s.name,
         _sans(
+          brightness: brightness,
           size: 10.5,
           color: s.isTotal ? LhColors.ink : LhColors.ink2,
           weight: s.isTotal ? FontWeight.w700 : FontWeight.w500,
@@ -4455,6 +4548,7 @@ class _WaterfallPainter extends CustomPainter {
       final val = _tp(
         '${s.value >= 0 ? '+' : '−'}${lhBiMoney(s.value.abs())}',
         _mono(
+          brightness: brightness,
           size: 10,
           color: s.isTotal ? LhColors.ink : color,
           weight: FontWeight.w700,
@@ -4468,6 +4562,7 @@ class _WaterfallPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _WaterfallPainter old) =>
+      old.brightness != brightness ||
       old.progress != progress ||
       old.lo != lo ||
       old.hi != hi ||
@@ -4480,6 +4575,7 @@ class _WaterfallPainter extends CustomPainter {
 /// 累计线会把每期柱压成一条贴底的线，等于白画。
 class _FlowTrendPainter extends CustomPainter {
   _FlowTrendPainter({
+    required this.brightness,
     required this.values,
     required this.cumulative,
     required this.labels,
@@ -4490,6 +4586,8 @@ class _FlowTrendPainter extends CustomPainter {
   final List<double> cumulative;
   final List<String> labels;
   final double progress;
+
+  final Brightness brightness;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -4523,7 +4621,11 @@ class _FlowTrendPainter extends CustomPainter {
       Offset(leftPad, zeroY),
       Offset(size.width - rightPad, zeroY),
       Paint()
-        ..color = LhColors.line
+        ..color = DunesColors.forBrightness(
+          brightness,
+          LhColors.line,
+          role: DunesColorRole.border,
+        )
         ..strokeWidth = 0.8,
     );
 
@@ -4564,12 +4666,22 @@ class _FlowTrendPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.4
-        ..color = LhColors.paper,
+        ..color = DunesColors.forBrightness(
+          brightness,
+          LhColors.paper,
+          role: DunesColorRole.surface,
+        ),
     );
 
     final cumTag = _tp(
       '累计 ${lhBiMoney(cumulative[shown - 1])}',
-      _mono(size: 9, color: lineColor, weight: FontWeight.w700, spacing: 0.2),
+      _mono(
+        brightness: brightness,
+        size: 9,
+        color: lineColor,
+        weight: FontWeight.w700,
+        spacing: 0.2,
+      ),
     );
     cumTag.paint(
       canvas,
@@ -4580,7 +4692,12 @@ class _FlowTrendPainter extends CustomPainter {
     );
     final cumKicker = _tp(
       '累计净额',
-      _mono(size: 8.5, color: LhColors.mute2, spacing: 0.6),
+      _mono(
+        brightness: brightness,
+        size: 8.5,
+        color: LhColors.mute2,
+        spacing: 0.6,
+      ),
     );
     cumKicker.paint(canvas, Offset(leftPad, 0));
 
@@ -4595,7 +4712,11 @@ class _FlowTrendPainter extends CustomPainter {
       Offset(leftPad, midY),
       Offset(size.width - rightPad, midY),
       Paint()
-        ..color = LhColors.line
+        ..color = DunesColors.forBrightness(
+          brightness,
+          LhColors.line,
+          role: DunesColorRole.border,
+        )
         ..strokeWidth = 0.8,
     );
 
@@ -4618,7 +4739,12 @@ class _FlowTrendPainter extends CustomPainter {
     }
     final barKicker = _tp(
       '每期净额',
-      _mono(size: 8.5, color: LhColors.mute2, spacing: 0.6),
+      _mono(
+        brightness: brightness,
+        size: 8.5,
+        color: LhColors.mute2,
+        spacing: 0.6,
+      ),
     );
     barKicker.paint(canvas, Offset(leftPad, botTop - 11));
 
@@ -4631,7 +4757,10 @@ class _FlowTrendPainter extends CustomPainter {
     final axisY = size.height - 11;
     final ticks = <int>{0, (n - 1) ~/ 2, n - 1};
     for (final i in ticks) {
-      final t = _tp(labelAt(i), _mono(size: 8.5, spacing: 0.1));
+      final t = _tp(
+        labelAt(i),
+        _mono(brightness: brightness, size: 8.5, spacing: 0.1),
+      );
       var tx = leftPad + i * step - t.width / 2;
       // 窄屏下标签可能比画布还宽，clamp 的上界必须先兜到 0，否则会断言失败。
       tx = tx.clamp(0.0, math.max(0.0, size.width - t.width));
@@ -4641,6 +4770,7 @@ class _FlowTrendPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _FlowTrendPainter old) =>
+      old.brightness != brightness ||
       old.progress != progress ||
       old.values.length != values.length ||
       old.cumulative.length != cumulative.length;

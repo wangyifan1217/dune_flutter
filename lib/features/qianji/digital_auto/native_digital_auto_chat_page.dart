@@ -1187,7 +1187,7 @@ class _AssistantBubble extends StatelessWidget {
                     data: text,
                     selectable: !busy,
                     softLineBreak: true,
-                    styleSheet: _digitalAutoMdStyle(),
+                    styleSheet: _digitalAutoMdStyle(context),
                     onTapLink: (label, href, title) {
                       final raw = (href ?? '').trim();
                       if (raw.isEmpty) return;
@@ -1284,78 +1284,113 @@ class _ActionChip extends StatelessWidget {
   }
 }
 
-MarkdownStyleSheet _digitalAutoMdStyle() {
+MarkdownStyleSheet _digitalAutoMdStyle(BuildContext context) {
   return MarkdownStyleSheet(
     p: DunesTypography.sans(
+      context: context,
       fontSize: 13,
       height: 1.55,
       color: DunesColors.text,
     ),
     h1: DunesTypography.sans(
+      context: context,
       fontSize: 16,
       fontWeight: FontWeight.w700,
       color: DunesColors.text,
       height: 1.35,
     ),
     h2: DunesTypography.sans(
+      context: context,
       fontSize: 15,
       fontWeight: FontWeight.w700,
       color: DunesColors.text,
       height: 1.35,
     ),
     h3: DunesTypography.sans(
+      context: context,
       fontSize: 14,
       fontWeight: FontWeight.w700,
       color: DunesColors.text,
       height: 1.35,
     ),
     strong: DunesTypography.sans(
+      context: context,
       fontSize: 13,
       fontWeight: FontWeight.w700,
       color: DunesColors.text,
     ),
     em: DunesTypography.sans(
+      context: context,
       fontSize: 13,
       color: DunesColors.text,
     ).copyWith(fontStyle: FontStyle.italic),
-    code: DunesTypography.sans(
-      fontSize: 12,
-      color: DunesColors.text,
-    ).copyWith(backgroundColor: const Color(0xFFF0F1F4)),
+    code:
+        DunesTypography.sans(
+          context: context,
+          fontSize: 12,
+          color: DunesColors.text,
+        ).copyWith(
+          backgroundColor: DunesColors.resolve(
+            context,
+            const Color(0xFFF0F1F4),
+            role: DunesColorRole.surface,
+          ),
+        ),
     codeblockDecoration: BoxDecoration(
-      color: const Color(0xFFF0F1F4),
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFF0F1F4),
+        role: DunesColorRole.surface,
+      ),
       borderRadius: BorderRadius.circular(8),
     ),
     listBullet: DunesTypography.sans(
+      context: context,
       fontSize: 13,
       height: 1.55,
       color: DunesColors.text3,
     ),
     blockquote: DunesTypography.sans(
+      context: context,
       fontSize: 13,
       height: 1.5,
       color: DunesColors.text3,
     ),
-    blockquoteDecoration: const BoxDecoration(
-      border: Border(left: BorderSide(color: _assistantPurple, width: 3)),
+    blockquoteDecoration: BoxDecoration(
+      border: Border(
+        left: BorderSide(
+          color: DunesColors.resolve(context, _assistantPurple),
+          width: 3,
+        ),
+      ),
     ),
     a: DunesTypography.sans(
+      context: context,
       fontSize: 13,
       color: const Color(0xFF5D43AE),
     ).copyWith(decoration: TextDecoration.underline),
     tableColumnWidth: const IntrinsicColumnWidth(),
     tableHead: DunesTypography.sans(
+      context: context,
       fontSize: 12,
       fontWeight: FontWeight.w700,
       color: DunesColors.text,
       height: 1.35,
     ),
     tableBody: DunesTypography.sans(
+      context: context,
       fontSize: 12,
       color: DunesColors.text2,
       height: 1.35,
     ),
-    tableBorder: TableBorder.all(color: const Color(0xFFE6E6EA), width: 0.5),
+    tableBorder: TableBorder.all(
+      color: DunesColors.resolve(
+        context,
+        const Color(0xFFE6E6EA),
+        role: DunesColorRole.border,
+      ),
+      width: 0.5,
+    ),
     tableCellsPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
     tableHeadAlign: TextAlign.center,
   );

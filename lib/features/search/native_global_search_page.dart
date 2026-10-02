@@ -368,7 +368,11 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
     final q = _controller.text.trim();
     final drilling = q.isEmpty && _tab != GlobalSearchCategory.all;
     return Scaffold(
-      backgroundColor: _pageBg,
+      backgroundColor: DunesColors.resolve(
+        context,
+        _pageBg,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -421,7 +425,11 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                           DunesColors.brandPurple,
                           role: DunesColorRole.border,
                         ).withValues(alpha: 0.45)
-                      : _line,
+                      : DunesColors.resolve(
+                          context,
+                          _line,
+                          role: DunesColorRole.border,
+                        ),
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -447,6 +455,11 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                       controller: _controller,
                       focusNode: _focus,
                       autofocus: true,
+                      cursorColor: DunesColors.resolve(
+                        context,
+                        DunesColors.brandPurple,
+                      ),
+                      textAlignVertical: TextAlignVertical.center,
                       textInputAction: TextInputAction.search,
                       onChanged: (v) {
                         setState(() {});
@@ -461,6 +474,11 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                       decoration: InputDecoration(
                         isDense: true,
                         border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        errorBorder: InputBorder.none,
+                        focusedErrorBorder: InputBorder.none,
+                        filled: false,
                         hintText: '搜索联系人、群聊、聊天记录与办公事项',
                         hintStyle: DunesTypography.sans(
                           fontSize: 14,
@@ -1082,7 +1100,11 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                     DunesColors.brandPurpleLine,
                     role: DunesColorRole.border,
                   )
-                : _line,
+                : DunesColors.resolve(
+                    context,
+                    _line,
+                    role: DunesColorRole.border,
+                  ),
           ),
         ),
         child: Text(
@@ -1150,7 +1172,13 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _line),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _line,
+            role: DunesColorRole.border,
+          ),
+        ),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF6E49C8).withValues(alpha: 0.04),
@@ -1165,7 +1193,16 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
           for (var i = 0; i < tiles.length; i++) ...[
             tiles[i],
             if (i != tiles.length - 1)
-              const Divider(height: 1, thickness: 1, color: _line, indent: 58),
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: DunesColors.resolve(
+                  context,
+                  _line,
+                  role: DunesColorRole.border,
+                ),
+                indent: 58,
+              ),
           ],
         ],
       ),
@@ -1203,7 +1240,7 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
                 ],
               ),
             ),
-            if (trailing != null) trailing,
+            ?trailing,
             if (trailing == null && trailingText.isNotEmpty)
               Container(
                 margin: const EdgeInsets.only(left: 8),
@@ -1359,71 +1396,151 @@ class _NativeGlobalSearchPageState extends State<NativeGlobalSearchPage> {
     final (colors, icon) = switch (c) {
       _ when c.isReconciliationAssistant => (
         [
-          DunesColors.resolve(context, Color(0xFF5B6FC4)),
-          DunesColors.resolve(context, Color(0xFF7652B8)),
+          DunesColors.resolve(
+            context,
+            Color(0xFF5B6FC4),
+            role: DunesColorRole.surface,
+          ),
+          DunesColors.resolve(
+            context,
+            Color(0xFF7652B8),
+            role: DunesColorRole.surface,
+          ),
         ],
         Icons.sync_alt_rounded,
       ),
       _ when c.isTaskAssistant => (
         [
-          DunesColors.resolve(context, Color(0xFF2F8F7E)),
-          DunesColors.resolve(context, Color(0xFF5EAEDE)),
+          DunesColors.resolve(
+            context,
+            Color(0xFF2F8F7E),
+            role: DunesColorRole.surface,
+          ),
+          DunesColors.resolve(
+            context,
+            Color(0xFF5EAEDE),
+            role: DunesColorRole.surface,
+          ),
         ],
         Icons.assignment_turned_in_outlined,
       ),
       _ when c.isApprovalAssistant => (
         [
-          DunesColors.resolve(context, DunesColors.brandPurple),
-          DunesColors.resolve(context, DunesColors.brandPurpleDeep),
+          DunesColors.resolve(
+            context,
+            DunesColors.brandPurple,
+            role: DunesColorRole.surface,
+          ),
+          DunesColors.resolve(
+            context,
+            DunesColors.brandPurpleDeep,
+            role: DunesColorRole.surface,
+          ),
         ],
         Icons.fact_check_outlined,
       ),
       _ when c.isKpiAssistant => (
         [
-          DunesColors.resolve(context, Color(0xFF8C5A91)),
-          DunesColors.resolve(context, Color(0xFFC17B7B)),
+          DunesColors.resolve(
+            context,
+            Color(0xFF8C5A91),
+            role: DunesColorRole.surface,
+          ),
+          DunesColors.resolve(
+            context,
+            Color(0xFFC17B7B),
+            role: DunesColorRole.surface,
+          ),
         ],
         Icons.insights_outlined,
       ),
       _ when c.isDriveAssistant => (
         [
-          DunesColors.resolve(context, Color(0xFF3B82F6)),
-          DunesColors.resolve(context, Color(0xFF2563EB)),
+          DunesColors.resolve(
+            context,
+            Color(0xFF3B82F6),
+            role: DunesColorRole.surface,
+          ),
+          DunesColors.resolve(
+            context,
+            Color(0xFF2563EB),
+            role: DunesColorRole.surface,
+          ),
         ],
         Icons.cloud_outlined,
       ),
       _ when c.isXrxsAssistant => (
         [
-          DunesColors.resolve(context, Color(0xFF0F766E)),
-          DunesColors.resolve(context, Color(0xFF0D9488)),
+          DunesColors.resolve(
+            context,
+            Color(0xFF0F766E),
+            role: DunesColorRole.surface,
+          ),
+          DunesColors.resolve(
+            context,
+            Color(0xFF0D9488),
+            role: DunesColorRole.surface,
+          ),
         ],
         Icons.badge_outlined,
       ),
       _ when c.isWeeklySummary => (
         [
-          DunesColors.resolve(context, Color(0xFFC4A574)),
-          DunesColors.resolve(context, Color(0xFF8B6A3F)),
+          DunesColors.resolve(
+            context,
+            Color(0xFFC4A574),
+            role: DunesColorRole.surface,
+          ),
+          DunesColors.resolve(
+            context,
+            Color(0xFF8B6A3F),
+            role: DunesColorRole.surface,
+          ),
         ],
         Icons.auto_stories_outlined,
       ),
       _ when c.isAdministrativeNotice => (
         [
-          DunesColors.resolve(context, Color(0xFF3D7A8C)),
-          DunesColors.resolve(context, Color(0xFF5DA7A2)),
+          DunesColors.resolve(
+            context,
+            Color(0xFF3D7A8C),
+            role: DunesColorRole.surface,
+          ),
+          DunesColors.resolve(
+            context,
+            Color(0xFF5DA7A2),
+            role: DunesColorRole.surface,
+          ),
         ],
         Icons.campaign_outlined,
       ),
       _ when c.isSelfMemo => (
         [
-          DunesColors.resolve(context, Color(0xFF7B5CD8)),
-          DunesColors.resolve(context, Color(0xFF5B3FB0)),
+          DunesColors.resolve(
+            context,
+            Color(0xFF7B5CD8),
+            role: DunesColorRole.surface,
+          ),
+          DunesColors.resolve(
+            context,
+            Color(0xFF5B3FB0),
+            role: DunesColorRole.surface,
+          ),
         ],
         Icons.folder_copy_outlined,
       ),
       _ => (
         [
-          DunesColors.resolve(context, Color(0xFFB8A4E8)),
-          DunesColors.resolve(context, Color(0xFF7B5CD8)),
+          DunesColors.resolve(
+            context,
+            Color(0xFFB8A4E8),
+            role: DunesColorRole.surface,
+          ),
+          DunesColors.resolve(
+            context,
+            Color(0xFF7B5CD8),
+            role: DunesColorRole.surface,
+          ),
         ],
         Icons.smart_toy_outlined,
       ),

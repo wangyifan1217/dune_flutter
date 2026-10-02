@@ -205,7 +205,11 @@ String _fmtAmount(double v) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /// v3.7: 编辑室返回键 (mono ‹ + sans '返回')
-Widget buildBackButton({required VoidCallback onTap, String label = '返回'}) {
+Widget buildBackButton({
+  required BuildContext context,
+  required VoidCallback onTap,
+  String label = '返回',
+}) {
   return GestureDetector(
     behavior: HitTestBehavior.opaque,
     onTap: onTap,
@@ -217,6 +221,7 @@ Widget buildBackButton({required VoidCallback onTap, String label = '返回'}) {
           Text(
             '‹',
             style: LhTypography.mono(
+              context: context,
               size: 15,
               color: LhColors.mute,
               weight: FontWeight.w600,
@@ -227,6 +232,7 @@ Widget buildBackButton({required VoidCallback onTap, String label = '返回'}) {
           Text(
             label,
             style: LhTypography.sans(
+              context: context,
               size: 10.5,
               color: LhColors.mute,
               weight: FontWeight.w600,
@@ -239,15 +245,38 @@ Widget buildBackButton({required VoidCallback onTap, String label = '返回'}) {
 }
 
 /// v3.7 warm cream 3-stop 卡装饰 (near-white 纸感)
-BoxDecoration paperCardDecoration({bool isExpanded = false}) => BoxDecoration(
-  gradient: const LinearGradient(
+BoxDecoration paperCardDecoration({
+  required BuildContext context,
+  bool isExpanded = false,
+}) => BoxDecoration(
+  gradient: LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [Color(0xFFFFFFFC), Color(0xFFFAF8F0), Color(0xFFF2EFDF)],
+    colors: [
+      DunesColors.resolve(
+        context,
+        const Color(0xFFFFFFFC),
+        role: DunesColorRole.surface,
+      ),
+      DunesColors.resolve(
+        context,
+        const Color(0xFFFAF8F0),
+        role: DunesColorRole.surface,
+      ),
+      DunesColors.resolve(
+        context,
+        const Color(0xFFF2EFDF),
+        role: DunesColorRole.surface,
+      ),
+    ],
     stops: [0.0, 0.6, 1.0],
   ),
   border: Border.all(
-    color: isExpanded ? LhColors.ink2.withAlpha(50) : const Color(0xFFDDD5C0),
+    color: DunesColors.resolve(
+      context,
+      isExpanded ? LhColors.ink2.withAlpha(50) : const Color(0xFFDDD5C0),
+      role: DunesColorRole.border,
+    ),
     width: 1,
   ),
   borderRadius: BorderRadius.circular(7),
@@ -261,32 +290,68 @@ BoxDecoration paperCardDecoration({bool isExpanded = false}) => BoxDecoration(
 );
 
 /// hero panel 装饰 (warm cream 3-stop, 供 masthead)
-BoxDecoration heroPanelDecoration() => BoxDecoration(
-  gradient: const LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [Color(0xFFFFFDF7), Color(0xFFF8F0DA), Color(0xFFEFE4C6)],
-    stops: [0.0, 0.6, 1.0],
-  ),
-  border: Border.all(color: const Color(0xFFDDD5C0), width: 1),
-  borderRadius: BorderRadius.circular(10),
-  boxShadow: const [
-    BoxShadow(color: Color(0x0F0A0A0F), blurRadius: 4, offset: Offset(0, 1)),
-  ],
-);
+BoxDecoration heroPanelDecoration({required BuildContext context}) =>
+    BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          DunesColors.resolve(
+            context,
+            const Color(0xFFFFFDF7),
+            role: DunesColorRole.surface,
+          ),
+          DunesColors.resolve(
+            context,
+            const Color(0xFFF8F0DA),
+            role: DunesColorRole.surface,
+          ),
+          DunesColors.resolve(
+            context,
+            const Color(0xFFEFE4C6),
+            role: DunesColorRole.surface,
+          ),
+        ],
+        stops: [0.0, 0.6, 1.0],
+      ),
+      border: Border.all(
+        color: DunesColors.resolve(
+          context,
+          const Color(0xFFDDD5C0),
+          role: DunesColorRole.border,
+        ),
+        width: 1,
+      ),
+      borderRadius: BorderRadius.circular(10),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x0F0A0A0F),
+          blurRadius: 4,
+          offset: Offset(0, 1),
+        ),
+      ],
+    );
 
 /// 状态胶囊 (无 fill, hairline 边框 + 语义色文字)
-Widget buildStatusChip(SealStatus s) {
+Widget buildStatusChip(BuildContext context, SealStatus s) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
     decoration: BoxDecoration(
-      color: s.tint.withAlpha(12),
-      border: Border.all(color: s.tint.withAlpha(70), width: 0.8),
+      color: DunesColors.resolve(context, s.tint).withAlpha(12),
+      border: Border.all(
+        color: DunesColors.resolve(
+          context,
+          s.tint,
+          role: DunesColorRole.border,
+        ).withAlpha(70),
+        width: 0.8,
+      ),
       borderRadius: BorderRadius.circular(3),
     ),
     child: Text(
       s.label,
       style: LhTypography.sans(
+        context: context,
         size: 8.5,
         color: s.tint,
         weight: FontWeight.w700,
@@ -516,7 +581,10 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          buildBackButton(onTap: () => Navigator.of(context).pop()),
+          buildBackButton(
+            context: context,
+            onTap: () => Navigator.of(context).pop(),
+          ),
           const SizedBox(width: 12),
           Container(
             width: 1,
@@ -769,7 +837,7 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
           },
           child: Container(
             padding: const EdgeInsets.fromLTRB(9, 8, 9, 8),
-            decoration: paperCardDecoration(),
+            decoration: paperCardDecoration(context: context),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -836,7 +904,7 @@ class _ContractSealingPageState extends State<ContractSealingPage> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 5),
-                      buildStatusChip(a.status),
+                      buildStatusChip(context, a.status),
                     ],
                   ),
                 ),
@@ -1036,7 +1104,10 @@ class _SealApplicationDetailPageState
     padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
     child: Row(
       children: [
-        buildBackButton(onTap: () => Navigator.of(context).pop(_app)),
+        buildBackButton(
+          context: context,
+          onTap: () => Navigator.of(context).pop(_app),
+        ),
         const Spacer(),
         Text(
           '用印详情 · L2',
@@ -1055,7 +1126,7 @@ class _SealApplicationDetailPageState
   Widget _buildMasthead(SealApplication a) => Container(
     width: double.infinity,
     padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-    decoration: heroPanelDecoration(),
+    decoration: heroPanelDecoration(context: context),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1072,7 +1143,7 @@ class _SealApplicationDetailPageState
               ),
             ),
             const SizedBox(width: 8),
-            buildStatusChip(a.status),
+            buildStatusChip(context, a.status),
           ],
         ),
         const SizedBox(height: 10),
@@ -1199,7 +1270,7 @@ class _SealApplicationDetailPageState
   Widget _buildFieldsCard(SealApplication a) => Container(
     width: double.infinity,
     padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-    decoration: paperCardDecoration(),
+    decoration: paperCardDecoration(context: context),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1270,7 +1341,7 @@ class _SealApplicationDetailPageState
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-      decoration: paperCardDecoration(),
+      decoration: paperCardDecoration(context: context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: List.generate(a.approvals.length, (i) {
@@ -1430,7 +1501,7 @@ class _SealApplicationDetailPageState
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(14),
-        decoration: paperCardDecoration(),
+        decoration: paperCardDecoration(context: context),
         child: Text(
           '无附件',
           style: LhTypography.sans(
@@ -1445,7 +1516,7 @@ class _SealApplicationDetailPageState
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-      decoration: paperCardDecoration(),
+      decoration: paperCardDecoration(context: context),
       child: Column(
         children: a.attachments
             .map(
@@ -1654,7 +1725,7 @@ class _SealApplicationDetailPageState
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
-            decoration: paperCardDecoration(),
+            decoration: paperCardDecoration(context: context),
             child: Text(
               a.canBorrow ? '暂无借阅记录  ·  tap 发起借阅生成带水印的电子件' : '合同尚未通过审批,暂不可借阅',
               style: LhTypography.sans(
@@ -1669,7 +1740,7 @@ class _SealApplicationDetailPageState
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-            decoration: paperCardDecoration(),
+            decoration: paperCardDecoration(context: context),
             child: Column(
               children: List.generate(a.borrowRecords.length, (i) {
                 final r = a.borrowRecords[i];
@@ -1887,7 +1958,10 @@ class _CreateSealApplicationPageState
                 padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
                 child: Row(
                   children: [
-                    buildBackButton(onTap: () => Navigator.of(context).pop()),
+                    buildBackButton(
+                      context: context,
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
                     const Spacer(),
                     Text(
                       '新建申请',
@@ -1911,7 +1985,7 @@ class _CreateSealApplicationPageState
                       // Auto-generated id preview
                       Container(
                         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                        decoration: heroPanelDecoration(),
+                        decoration: heroPanelDecoration(context: context),
                         child: Row(
                           children: [
                             Column(
@@ -1969,7 +2043,7 @@ class _CreateSealApplicationPageState
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                        decoration: paperCardDecoration(),
+                        decoration: paperCardDecoration(context: context),
                         child: Column(
                           children: [
                             _inputField('乙方 *', _partyBCtrl, '合同对方名称'),
@@ -2012,7 +2086,7 @@ class _CreateSealApplicationPageState
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                        decoration: paperCardDecoration(),
+                        decoration: paperCardDecoration(context: context),
                         child: Row(
                           children: [
                             Expanded(
@@ -2050,7 +2124,7 @@ class _CreateSealApplicationPageState
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                        decoration: paperCardDecoration(),
+                        decoration: paperCardDecoration(context: context),
                         child: _inputField('姓名', _ownerCtrl, '业务侧对接人'),
                       ),
                       const SizedBox(height: 20),
@@ -2603,7 +2677,10 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                 padding: const EdgeInsets.fromLTRB(16, 6, 8, 10),
                 child: Row(
                   children: [
-                    buildBackButton(onTap: () => Navigator.of(context).pop()),
+                    buildBackButton(
+                      context: context,
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
                     const SizedBox(width: 12),
                     Container(
                       width: 1,
@@ -2670,7 +2747,7 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(14),
-                        decoration: paperCardDecoration(),
+                        decoration: paperCardDecoration(context: context),
                         child: Text(
                           '暂无借阅记录  ·  下方选择合同发起带水印电子件',
                           style: LhTypography.sans(
@@ -2685,7 +2762,7 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-                        decoration: paperCardDecoration(),
+                        decoration: paperCardDecoration(context: context),
                         child: Column(
                           children: List.generate(records.length, (i) {
                             final item = records[i];
@@ -2866,7 +2943,7 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                                 12,
                                 12,
                               ),
-                              decoration: paperCardDecoration(),
+                              decoration: paperCardDecoration(context: context),
                               child: Row(
                                 children: [
                                   Expanded(
@@ -2918,7 +2995,7 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
                                       ],
                                     ),
                                   ),
-                                  buildStatusChip(a.status),
+                                  buildStatusChip(context, a.status),
                                   const SizedBox(width: 6),
                                   Icon(
                                     Icons.add,
@@ -2959,6 +3036,7 @@ class _ContractBorrowPageState extends State<ContractBorrowPage> {
 // ═══════════════════════════════════════════════════════════════════════════
 
 Widget _buildLhEntryCard({
+  required BuildContext context,
   required IconData icon,
   required String title,
   required String subtitle,
@@ -2974,18 +3052,25 @@ Widget _buildLhEntryCard({
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-          decoration: paperCardDecoration(),
+          decoration: paperCardDecoration(context: context),
           child: Row(
             children: [
               Container(
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: LhColors.copper.withAlpha(18),
+                  color: DunesColors.resolve(
+                    context,
+                    LhColors.copper,
+                  ).withAlpha(18),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 alignment: Alignment.center,
-                child: Icon(icon, size: 18, color: LhColors.copper),
+                child: Icon(
+                  icon,
+                  size: 18,
+                  color: DunesColors.resolve(context, LhColors.copper),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -2996,6 +3081,7 @@ Widget _buildLhEntryCard({
                     Text(
                       title,
                       style: LhTypography.sans(
+                        context: context,
                         size: 13,
                         color: LhColors.ink,
                         weight: FontWeight.w700,
@@ -3006,6 +3092,7 @@ Widget _buildLhEntryCard({
                     Text(
                       subtitle,
                       style: LhTypography.sans(
+                        context: context,
                         size: 9.5,
                         color: LhColors.mute,
                         weight: FontWeight.w500,
@@ -3018,6 +3105,7 @@ Widget _buildLhEntryCard({
                 Text(
                   trailingBadge,
                   style: LhTypography.mono(
+                    context: context,
                     size: 9.5,
                     color: LhColors.copper,
                     weight: FontWeight.w700,
@@ -3026,7 +3114,11 @@ Widget _buildLhEntryCard({
                 ),
                 const SizedBox(width: 6),
               ],
-              Icon(Icons.chevron_right, size: 16, color: LhColors.mute2),
+              Icon(
+                Icons.chevron_right,
+                size: 16,
+                color: DunesColors.resolve(context, LhColors.mute2),
+              ),
             ],
           ),
         ),
@@ -3042,6 +3134,7 @@ class ContractSealingEntryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _buildLhEntryCard(
+      context: context,
       icon: Icons.assignment_outlined,
       title: '合同用印',
       subtitle: '检索 · 用印审批 · 追踪归档',
@@ -3063,6 +3156,7 @@ class ContractBorrowEntryCard extends StatelessWidget {
         ? activeCount
         : contractSealingActiveBorrowCount();
     return _buildLhEntryCard(
+      context: context,
       icon: Icons.menu_book_outlined,
       title: '合同借阅',
       subtitle: '水印电子件 · 有效期管控 · 审计追溯',
@@ -3176,7 +3270,10 @@ class _SearchPageState extends State<_SearchPage> {
                 padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
                 child: Row(
                   children: [
-                    buildBackButton(onTap: () => Navigator.of(context).pop()),
+                    buildBackButton(
+                      context: context,
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Container(
@@ -3566,7 +3663,7 @@ class _SearchPageState extends State<_SearchPage> {
           const SizedBox(height: 20),
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: paperCardDecoration(),
+            decoration: paperCardDecoration(context: context),
             child: Row(
               children: [
                 Icon(
@@ -3697,7 +3794,7 @@ class _SearchPageState extends State<_SearchPage> {
           },
           child: Container(
             padding: const EdgeInsets.fromLTRB(9, 8, 9, 8),
-            decoration: paperCardDecoration(),
+            decoration: paperCardDecoration(context: context),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -3714,7 +3811,7 @@ class _SearchPageState extends State<_SearchPage> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    buildStatusChip(a.status),
+                    buildStatusChip(context, a.status),
                     const Spacer(),
                     Text(
                       a.amount == null ? '' : '${_fmtAmount(a.amount!)} 元',
@@ -3844,7 +3941,10 @@ class _BorrowPageState extends State<_BorrowPage> {
                 padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
                 child: Row(
                   children: [
-                    buildBackButton(onTap: () => Navigator.of(context).pop()),
+                    buildBackButton(
+                      context: context,
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
                     const Spacer(),
                     Text(
                       '发起借阅',
@@ -3869,7 +3969,7 @@ class _BorrowPageState extends State<_BorrowPage> {
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                        decoration: heroPanelDecoration(),
+                        decoration: heroPanelDecoration(context: context),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -3959,7 +4059,7 @@ class _BorrowPageState extends State<_BorrowPage> {
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                        decoration: paperCardDecoration(),
+                        decoration: paperCardDecoration(context: context),
                         child: Column(
                           children: [
                             _inputField(
@@ -3981,7 +4081,7 @@ class _BorrowPageState extends State<_BorrowPage> {
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-                        decoration: paperCardDecoration(),
+                        decoration: paperCardDecoration(context: context),
                         child: Row(
                           children: _mediums.map((m) {
                             final on = _medium == m;
@@ -4063,7 +4163,7 @@ class _BorrowPageState extends State<_BorrowPage> {
                         const SizedBox(height: 8),
                         Container(
                           padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                          decoration: paperCardDecoration(),
+                          decoration: paperCardDecoration(context: context),
                           child: Wrap(
                             spacing: 6,
                             runSpacing: 4,

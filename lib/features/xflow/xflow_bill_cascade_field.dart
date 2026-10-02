@@ -35,7 +35,7 @@ class XflowBillCascadeField extends StatelessWidget {
         if (selected.isEmpty && readonly)
           Text(
             '未关联',
-            style: xfInputTextStyle().copyWith(
+            style: xfInputTextStyle(context: context).copyWith(
               color: DunesColors.resolve(context, DunesColors.text3),
               fontSize: 12,
             ),
@@ -320,7 +320,7 @@ class _BillCascadeSheetState extends State<_BillCascadeSheet> {
               ),
               Text(
                 '已选 ${_picked.length} 笔',
-                style: xfInputTextStyle().copyWith(
+                style: xfInputTextStyle(context: context).copyWith(
                   color: DunesColors.resolve(context, DunesColors.text3),
                 ),
               ),
@@ -381,9 +381,12 @@ class _BillCascadeSheetState extends State<_BillCascadeSheet> {
                 child: xfFixedHeightControl(
                   child: TextField(
                     controller: _queryCtrl,
-                    style: xfInputTextStyle(),
-                    decoration: xfInputDecoration(hint: '我方主体、对方主体、周期或账单号')
-                        .copyWith(
+                    style: xfInputTextStyle(context: context),
+                    decoration:
+                        xfInputDecoration(
+                          context: context,
+                          hint: '我方主体、对方主体、周期或账单号',
+                        ).copyWith(
                           suffixIcon: IconButton(
                             tooltip: '搜索',
                             onPressed: _search,
@@ -406,7 +409,7 @@ class _BillCascadeSheetState extends State<_BillCascadeSheet> {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
                     _error!,
-                    style: xfInputTextStyle().copyWith(
+                    style: xfInputTextStyle(context: context).copyWith(
                       color: DunesColors.resolve(context, DunesColors.coral),
                     ),
                   ),
@@ -427,7 +430,7 @@ class _BillCascadeSheetState extends State<_BillCascadeSheet> {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
                     '请先选类型',
-                    style: xfInputTextStyle().copyWith(
+                    style: xfInputTextStyle(context: context).copyWith(
                       color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
@@ -437,7 +440,7 @@ class _BillCascadeSheetState extends State<_BillCascadeSheet> {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
                     '没有匹配的账单',
-                    style: xfInputTextStyle().copyWith(
+                    style: xfInputTextStyle(context: context).copyWith(
                       color: DunesColors.resolve(context, DunesColors.text3),
                     ),
                   ),
@@ -739,9 +742,10 @@ class _BillInlineSelectState extends State<_BillInlineSelect> {
             minLines: 1,
             maxLines: 4,
             enableInteractiveSelection: false,
-            style: xfInputTextStyle(),
+            style: xfInputTextStyle(context: context),
             decoration:
                 xfInputDecoration(
+                  context: context,
                   hint: widget.hint,
                   readonly: !widget.enabled,
                 ).copyWith(
@@ -813,7 +817,7 @@ class _BillInlineMonth extends StatelessWidget {
   Widget build(BuildContext context) {
     final control = xfFixedHeightControl(
       child: InputDecorator(
-        decoration: xfInputDecoration(),
+        decoration: xfInputDecoration(context: context),
         child: Row(
           children: [
             Expanded(
@@ -821,7 +825,7 @@ class _BillInlineMonth extends StatelessWidget {
                 xflowBillFormatYm(value),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: xfInputTextStyle(),
+                style: xfInputTextStyle(context: context),
               ),
             ),
             Icon(

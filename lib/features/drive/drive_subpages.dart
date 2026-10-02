@@ -590,7 +590,11 @@ class _DriveTextFormPageState extends State<DriveTextFormPage> {
   Widget build(BuildContext context) {
     final canSubmit = widget.allowEmpty || _controller.text.trim().isNotEmpty;
     return Scaffold(
-      backgroundColor: _driveSheetBg,
+      backgroundColor: DunesColors.resolve(
+        context,
+        _driveSheetBg,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -1422,7 +1426,11 @@ class _DriveMoveCopyPageState extends State<DriveMoveCopyPage> {
     );
 
     return Scaffold(
-      backgroundColor: _driveSheetBg,
+      backgroundColor: DunesColors.resolve(
+        context,
+        _driveSheetBg,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -1804,7 +1812,11 @@ class _DriveFolderPickerPageState extends State<DriveFolderPickerPage> {
         : widget.fileName.trim();
 
     return Scaffold(
-      backgroundColor: _driveSheetBg,
+      backgroundColor: DunesColors.resolve(
+        context,
+        _driveSheetBg,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -2064,7 +2076,11 @@ class _DriveShareCreatePageState extends State<DriveShareCreatePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _driveSheetBg,
+      backgroundColor: DunesColors.resolve(
+        context,
+        _driveSheetBg,
+        role: DunesColorRole.surface,
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -2231,7 +2247,11 @@ class DriveShareResultPage extends StatelessWidget {
     final text = resolveDriveShareUrl(link, apiBase: apiBase);
     final expiry = formatDriveShareExpiry(link.expiresAt);
     return Scaffold(
-      backgroundColor: _driveSheetBg,
+      backgroundColor: DunesColors.resolve(
+        context,
+        _driveSheetBg,
+        role: DunesColorRole.surface,
+      ),
       appBar: AppBar(
         backgroundColor: DunesColors.resolve(
           context,

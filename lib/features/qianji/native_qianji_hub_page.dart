@@ -298,7 +298,11 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
       if (widget.onOpenCashFlow != null)
         _AlipayAssetRow(
           icon: Icons.account_balance_rounded,
-          iconBgColor: DunesColors.resolve(context, const Color(0xFFE8F5E9)),
+          iconBgColor: DunesColors.resolve(
+            context,
+            const Color(0xFFE8F5E9),
+            role: DunesColorRole.surface,
+          ),
           iconColor: DunesColors.resolve(context, const Color(0xFF2E7D32)),
           title: '资金流向',
           subtitle: '公司账户 · 由大到小',
@@ -308,7 +312,11 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
       if (widget.onOpenMonthlyBill != null)
         _AlipayAssetRow(
           icon: Icons.receipt_long_rounded,
-          iconBgColor: DunesColors.resolve(context, const Color(0xFFEDE7F6)),
+          iconBgColor: DunesColors.resolve(
+            context,
+            const Color(0xFFEDE7F6),
+            role: DunesColorRole.surface,
+          ),
           iconColor: _themePurple,
           title: '月结',
           subtitle: '应收 · 应付',
@@ -318,7 +326,11 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
       if (widget.onOpenFundSecondment != null)
         _AlipayAssetRow(
           icon: Icons.account_balance_wallet_rounded,
-          iconBgColor: DunesColors.resolve(context, const Color(0xFFFFF3E0)),
+          iconBgColor: DunesColors.resolve(
+            context,
+            const Color(0xFFFFF3E0),
+            role: DunesColorRole.surface,
+          ),
           iconColor: DunesColors.resolve(context, const Color(0xFFE65100)),
           title: '资金借调',
           subtitle: '已通过借款单',
@@ -328,7 +340,11 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
       if (widget.onOpenTravel != null)
         _AlipayAssetRow(
           icon: Icons.flight_takeoff_rounded,
-          iconBgColor: DunesColors.resolve(context, const Color(0xFFE0F7FA)),
+          iconBgColor: DunesColors.resolve(
+            context,
+            const Color(0xFFE0F7FA),
+            role: DunesColorRole.surface,
+          ),
           iconColor: DunesColors.resolve(context, const Color(0xFF00838F)),
           title: '差旅管理',
           subtitle: '出行成本 · 地图',
@@ -589,7 +605,13 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _cardBorder),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _cardBorder,
+            role: DunesColorRole.border,
+          ),
+        ),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF331E54).withValues(alpha: 0.04),
@@ -726,7 +748,13 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _cardBorder),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _cardBorder,
+            role: DunesColorRole.border,
+          ),
+        ),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF331E54).withValues(alpha: 0.04),
@@ -1030,7 +1058,13 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                             role: DunesColorRole.surface,
                           ),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: _cardBorder),
+                          border: Border.all(
+                            color: DunesColors.resolve(
+                              context,
+                              _cardBorder,
+                              role: DunesColorRole.border,
+                            ),
+                          ),
                           boxShadow: [
                             BoxShadow(
                               color: const Color(
@@ -1065,7 +1099,13 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                   role: DunesColorRole.surface,
                 ),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: _cardBorder),
+                border: Border.all(
+                  color: DunesColors.resolve(
+                    context,
+                    _cardBorder,
+                    role: DunesColorRole.border,
+                  ),
+                ),
                 boxShadow: [
                   BoxShadow(
                     color: const Color(0xFF331E54).withValues(alpha: 0.04),
@@ -1131,7 +1171,13 @@ class _NativeQianjiHubPageState extends State<NativeQianjiHubPage> {
                     role: DunesColorRole.surface,
                   ),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: _cardBorder),
+                  border: Border.all(
+                    color: DunesColors.resolve(
+                      context,
+                      _cardBorder,
+                      role: DunesColorRole.border,
+                    ),
+                  ),
                 ),
                 child: Icon(
                   Icons.lock_outline_rounded,
@@ -1405,7 +1451,13 @@ class _DigitalEmployeeCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(10, 9, 10, 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: _cardBorder),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                _cardBorder,
+                role: DunesColorRole.border,
+              ),
+            ),
             boxShadow: [
               BoxShadow(
                 color: const Color(0xFF331E54).withValues(alpha: 0.03),

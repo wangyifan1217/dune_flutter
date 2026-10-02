@@ -348,7 +348,13 @@ class _NativeWorkbenchKpiFollowupPageState
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _line),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _line,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -511,7 +517,14 @@ class _NativeWorkbenchKpiFollowupPageState
             hint: showDone ? '处理结果可追溯' : '请核验后填写处理结论',
           ),
           for (var i = 0; i < rows.length; i++) ...[
-            const Divider(height: 1, color: _line),
+            Divider(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                _line,
+                role: DunesColorRole.border,
+              ),
+            ),
             _AppealRow(
               appeal: rows[i],
               closing: _closingAppealId == rows[i].id,
@@ -611,11 +624,25 @@ class _NativeWorkbenchKpiFollowupPageState
             hint: pending.isEmpty ? '都评完了' : '${pending.length} 位还没评完',
           ),
           for (final leader in pending) ...[
-            const Divider(height: 1, color: _line),
+            Divider(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                _line,
+                role: DunesColorRole.border,
+              ),
+            ),
             _LeaderRow(leader: leader),
           ],
           if (done.isNotEmpty) ...[
-            const Divider(height: 1, color: _line),
+            Divider(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                _line,
+                role: DunesColorRole.border,
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
               child: Wrap(
@@ -669,7 +696,14 @@ class _NativeWorkbenchKpiFollowupPageState
         children: [
           _CardHeader(title: '各组打分进度', count: rows.length),
           for (final row in rows) ...[
-            const Divider(height: 1, color: _line),
+            Divider(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                _line,
+                role: DunesColorRole.border,
+              ),
+            ),
             _GroupRow(
               group: row.group,
               sectorLabel:
@@ -840,7 +874,14 @@ class _NativeWorkbenchKpiFollowupPageState
               ),
             ),
           for (var i = 0; i < entry.value.length; i++) ...[
-            const Divider(height: 1, color: _line),
+            Divider(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                _line,
+                role: DunesColorRole.border,
+              ),
+            ),
             _MemberRow(
               person: entry.value[i],
               hideDept: grouped,
@@ -1628,7 +1669,13 @@ class _MonthStepper extends StatelessWidget {
           role: DunesColorRole.surface,
         ),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _line),
+        border: Border.all(
+          color: DunesColors.resolve(
+            context,
+            _line,
+            role: DunesColorRole.border,
+          ),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

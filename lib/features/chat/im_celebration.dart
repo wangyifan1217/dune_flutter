@@ -494,9 +494,19 @@ class ImEggSettings {
         content: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
           decoration: BoxDecoration(
-            color: const Color(0xFFF9F6FF),
+            color: DunesColors.resolve(
+              context,
+              const Color(0xFFF9F6FF),
+              role: DunesColorRole.surface,
+            ),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE8DFFA)),
+            border: Border.all(
+              color: DunesColors.resolve(
+                context,
+                const Color(0xFFE8DFFA),
+                role: DunesColorRole.border,
+              ),
+            ),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x1A49316D),
@@ -505,14 +515,17 @@ class ImEggSettings {
               ),
             ],
           ),
-          child: const Row(
+          child: Row(
             children: [
-              Icon(Icons.wb_sunny_rounded, color: Color(0xFF8063D8)),
-              SizedBox(width: 10),
+              Icon(
+                Icons.wb_sunny_rounded,
+                color: DunesColors.resolve(context, const Color(0xFF8063D8)),
+              ),
+              const SizedBox(width: 10),
               Text(
                 '早上好，今天也从容一点',
                 style: TextStyle(
-                  color: Color(0xFF49316D),
+                  color: DunesColors.resolve(context, const Color(0xFF49316D)),
                   fontWeight: FontWeight.w600,
                 ),
               ),

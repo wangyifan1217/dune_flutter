@@ -317,7 +317,14 @@ class _CashFlowAiSheetState extends State<CashFlowAiSheet> {
                 ],
               ),
             ),
-            const Divider(height: 1, color: _cardBorder),
+            Divider(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                _cardBorder,
+                role: DunesColorRole.border,
+              ),
+            ),
             Expanded(
               child: ListView(
                 controller: _scroll,
@@ -341,7 +348,14 @@ class _CashFlowAiSheetState extends State<CashFlowAiSheet> {
                 ],
               ),
             ),
-            const Divider(height: 1, color: _cardBorder),
+            Divider(
+              height: 1,
+              color: DunesColors.resolve(
+                context,
+                _cardBorder,
+                role: DunesColorRole.border,
+              ),
+            ),
             SafeArea(
               top: false,
               child: Padding(
@@ -636,7 +650,7 @@ class _MessageBubble extends StatelessWidget {
                           data: message.text,
                           selectable: true,
                           softLineBreak: true,
-                          styleSheet: _cashFlowMdStyle(),
+                          styleSheet: _cashFlowMdStyle(context),
                         ),
                         Align(
                           alignment: Alignment.centerRight,
@@ -649,7 +663,10 @@ class _MessageBubble extends StatelessWidget {
                               showDunesToast(context, '已复制');
                             },
                             style: TextButton.styleFrom(
-                              foregroundColor: _themePurple,
+                              foregroundColor: DunesColors.resolve(
+                                context,
+                                _themePurple,
+                              ),
                               visualDensity: VisualDensity.compact,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
@@ -678,44 +695,92 @@ class _MessageBubble extends StatelessWidget {
   }
 }
 
-MarkdownStyleSheet _cashFlowMdStyle() {
+MarkdownStyleSheet _cashFlowMdStyle(BuildContext context) {
+  final bodyStyle = DunesTypography.sans(
+    fontSize: 13,
+    height: 1.55,
+    color: DunesColors.resolve(context, DunesColors.text),
+    context: context,
+  );
+  final borderColor = DunesColors.resolve(
+    context,
+    _cardBorder,
+    role: DunesColorRole.border,
+  );
+  final codeBackground = DunesColors.resolve(
+    context,
+    const Color(0xFFF0F1F4),
+    role: DunesColorRole.surface,
+  );
   return MarkdownStyleSheet(
+    a: bodyStyle.copyWith(color: DunesColors.resolve(context, _themePurple)),
+    tableHead: bodyStyle.copyWith(fontWeight: FontWeight.w700),
+    tableBody: bodyStyle,
+    tableBorder: TableBorder.all(color: borderColor),
+    blockquote: bodyStyle.copyWith(
+      color: DunesColors.resolve(context, DunesColors.text2),
+    ),
+    blockquoteDecoration: BoxDecoration(
+      color: codeBackground,
+      border: Border(left: BorderSide(color: borderColor, width: 3)),
+    ),
+    codeblockDecoration: BoxDecoration(
+      color: codeBackground,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    horizontalRuleDecoration: BoxDecoration(
+      border: Border(top: BorderSide(color: borderColor)),
+    ),
     p: DunesTypography.sans(
       fontSize: 13,
       height: 1.55,
-      color: DunesColors.text,
+      color: DunesColors.resolve(context, DunesColors.text),
+      context: context,
     ),
     h1: DunesTypography.sans(
       fontSize: 16,
       fontWeight: FontWeight.w700,
-      color: DunesColors.text,
+      color: DunesColors.resolve(context, DunesColors.text),
+      context: context,
       height: 1.35,
     ),
     h2: DunesTypography.sans(
       fontSize: 15,
       fontWeight: FontWeight.w700,
-      color: DunesColors.text,
+      color: DunesColors.resolve(context, DunesColors.text),
+      context: context,
       height: 1.35,
     ),
     h3: DunesTypography.sans(
       fontSize: 14,
       fontWeight: FontWeight.w700,
-      color: DunesColors.text,
+      color: DunesColors.resolve(context, DunesColors.text),
+      context: context,
       height: 1.35,
     ),
     strong: DunesTypography.sans(
       fontSize: 13,
       fontWeight: FontWeight.w700,
-      color: DunesColors.text,
+      color: DunesColors.resolve(context, DunesColors.text),
+      context: context,
     ),
     listBullet: DunesTypography.sans(
       fontSize: 13,
       height: 1.55,
-      color: DunesColors.text3,
+      color: DunesColors.resolve(context, DunesColors.text3),
+      context: context,
     ),
-    code: DunesTypography.sans(
-      fontSize: 12,
-      color: DunesColors.text,
-    ).copyWith(backgroundColor: const Color(0xFFF0F1F4)),
+    code:
+        DunesTypography.sans(
+          fontSize: 12,
+          color: DunesColors.resolve(context, DunesColors.text),
+          context: context,
+        ).copyWith(
+          backgroundColor: DunesColors.resolve(
+            context,
+            const Color(0xFFF0F1F4),
+            role: DunesColorRole.surface,
+          ),
+        ),
   );
 }

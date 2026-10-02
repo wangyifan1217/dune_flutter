@@ -1,9 +1,11 @@
 import 'dart:io';
+import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:dunes_app/core/theme/dunes_theme.dart';
 import 'package:dunes_app/features/chat/im_celebration.dart';
 import 'package:dunes_app/features/chat/im_egg_visuals.dart';
+import 'package:dunes_app/features/chat/im_egg_artwork.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -30,6 +32,7 @@ Future<void> _capture(WidgetTester tester, String name) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
+    await Future.wait(imEggArtworkSpecs.keys.map(ImEggArtwork.load));
     if (Platform.environment['DUNES_CAPTURE_PREVIEWS'] == '1') {
       for (final (name, asset) in const [
         ('MaterialIcons', 'fonts/MaterialIcons-Regular.otf'),
@@ -101,6 +104,14 @@ void main() {
       await _capture(tester, 'im_birthday_rain');
       await tester.tap(find.text('页面可点'));
       expect(taps, 1);
+      showImEggEffect(
+        context,
+        const ImEggEffect(kind: ImEggEffectKind.redEnvelope, phrase: '恭喜发财'),
+        seed: 72,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1100));
+      await _capture(tester, 'im_red_envelope_rain');
       showImEggEffect(
         context,
         const ImEggEffect(kind: ImEggEffectKind.nationalDay, phrase: '国庆快乐'),
@@ -214,9 +225,12 @@ void main() {
         ),
       ),
     );
+    // Asset loading completes before the static display's 1.8s timer begins.
+    await tester.pump();
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(tester.binding.transientCallbackCount, 0);
-    await tester.pump(const Duration(milliseconds: 1600));
+    await tester.pump(const Duration(milliseconds: 1900));
     expect(finished, 1);
     await tester.pump(const Duration(seconds: 5));
     expect(finished, 1);
@@ -273,5 +287,60 @@ void main() {
     await tester.pumpAndSettle();
     expect(await settings.maybeShowHolidayWelcome(context, 901), isFalse);
     expect(find.byType(AppHolidayWelcome), findsNothing);
+    for (var replay = 0; replay < 2; replay++) {
+      final greeting = settings.holidayGreetings.single;
+      showAppHolidayWelcome(
+        context,
+        greeting['name']!,
+        message: greeting['message']!,
+        icon: greeting['icon']!,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(AppHolidayWelcome), findsOneWidget);
+      await tester.tap(find.text('收下祝福'));
+      await tester.pumpAndSettle();
+    }
+    expect(await settings.maybeShowHolidayWelcome(context, 901), isFalse);
+  });
+
+  test(
+    'manual greeting catalogue and theme guide retain server configuration',
+    () {
+      final settings = ImEggSettings.fromConfiguration({
+        'theme': {'dayStart': '08:30', 'nightStart': '20:15'},
+        'holidays': {
+          'dates': [
+            {
+              'date': '10-01',
+              'name': '国庆',
+              'greeting': '假期快乐',
+              'message': '平安顺遂',
+            },
+          ],
+        },
+      });
+      expect(settings.holidayGreetings.single['greeting'], '假期快乐');
+      expect(settings.holidayFor(DateTime(2026, 11, 1)), isNull);
+      expect(settings.holidayGreetings, hasLength(1));
+      expect(settings.themeGuide, contains('08:30'));
+      expect(settings.themeGuide, contains('20:15'));
+      final system = ImEggSettings.fromConfiguration({
+        'theme': {'followSystem': true},
+      });
+      expect(system.themeGuide, contains('跟随手机系统'));
+    },
+  );
+
+  test('APP and HTML use identical bundled artwork manifest', () {
+    final manifest =
+        jsonDecode(
+              File('assets/images/im_eggs/manifest.json').readAsStringSync(),
+            )
+            as Map;
+    for (final entry in imEggArtworkSpecs.entries) {
+      expect(entry.value.$1, endsWith(manifest[entry.key]['file'] as String));
+      expect(entry.value.$2, manifest[entry.key]['width']);
+      expect(File(entry.value.$1).existsSync(), isTrue);
+    }
   });
 }

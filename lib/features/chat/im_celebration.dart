@@ -217,7 +217,10 @@ class ImEggSettings {
       _map(_map(_config['scenes'])['taskCompletion'])['enabled'] == true;
   bool get seasonalMascotEnabled => _map(_config['mascot'])['enabled'] != false;
   bool get manualThemeOverrideEnabled =>
+      _map(_config['theme'])['enabled'] != false &&
       _map(_config['theme'])['manualOverride'] != false;
+  String get automaticThemeLabel =>
+      _map(_config['theme'])['followSystem'] == true ? '自动（跟随系统）' : '自动（按时段切换）';
   String get seasonalDecoration {
     if (!seasonalMascotEnabled) return '';
     final now = DateTime.now();
@@ -245,17 +248,18 @@ class ImEggSettings {
     }
     final dayStart = _parseHourMinute(theme['dayStart']) ?? 7 * 60;
     final nightStart = _parseHourMinute(theme['nightStart']) ?? 19 * 60;
-    final minute = DateTime.now().hour * 60 + DateTime.now().minute;
+    final now = theme['timezone'] == 'Asia/Shanghai'
+        ? DateTime.now().toUtc().add(const Duration(hours: 8))
+        : DateTime.now();
+    final minute = now.hour * 60 + now.minute;
     return dayStart < nightStart
         ? minute < dayStart || minute >= nightStart
         : minute >= nightStart && minute < dayStart;
   }
 
-  Map<String, String>? holidayFor(DateTime date) {
+  /// Manual browsing is available after the automatic first-visit greeting.
+  List<Map<String, String>> get holidayGreetings {
     final holidays = _map(_config['holidays']);
-    if (_config['enabled'] == false || holidays['enabled'] == false) {
-      return null;
-    }
     final defaults = <Map<String, String>>[
       {
         'date': '01-01',
@@ -384,7 +388,19 @@ class ImEggSettings {
             };
           }).toList()
         : defaults;
-    for (final record in records) {
+    return records
+        .where(
+          (record) =>
+              record['name']?.isNotEmpty == true &&
+              RegExp(r'^\d{2}-\d{2}$').hasMatch(record['date'] ?? ''),
+        )
+        .toList(growable: false);
+  }
+
+  Map<String, String>? holidayFor(DateTime date) {
+    final holidays = _map(_config['holidays']);
+    if (!enabled || holidays['enabled'] == false) return null;
+    for (final record in holidayGreetings) {
       final startDate = record['date'] ?? '';
       final endDate = record['endDate'] ?? startDate;
       if (!RegExp(r'^\d{2}-\d{2}$').hasMatch(startDate) ||
@@ -434,6 +450,23 @@ class ImEggSettings {
       icon: holiday['icon'] ?? '✨',
     );
     return true;
+  }
+
+  String get themeGuide {
+    final theme = _map(_config['theme']);
+    if (theme['enabled'] == false) {
+      return '当前管理员已关闭日夜主题，APP 保持日间显示。开启后，可在「我的 → 设置 → 日夜主题」选择自动、日间或夜间。';
+    }
+    final day = (theme['dayStart'] ?? '07:00').toString();
+    final night = (theme['nightStart'] ?? '19:00').toString();
+    final timeZone = theme['timezone'] == 'Asia/Shanghai' ? '北京时间' : '手机本地时间';
+    final schedule = theme['followSystem'] == true
+        ? '自动模式跟随手机系统的深色 / 浅色外观。'
+        : '自动模式按$timeZone切换：$day 进入日间，$night 进入夜间。';
+    return '进入「我的 → 设置 → 日夜主题」，选择自动、日间或夜间。\n\n'
+        '$schedule\n\n'
+        '选择日间或夜间后会一直保持该模式；想恢复自动切换，再选择「自动」。'
+        '${manualThemeOverrideEnabled ? '' : '\n\n当前管理员已关闭手动切换，可使用自动模式。'}';
   }
 
   Future<void> maybeShowDailyWelcome(BuildContext context, int userId) async {
@@ -535,7 +568,7 @@ class ImEggSettings {
             profile['particleCount'],
             kind == ImEggEffectKind.birthday ? 56 : 36,
             8,
-            120,
+            56,
           );
           final motion = _parseMotion(profile['motion']);
           final effect = ImEggEffect(
@@ -933,6 +966,7 @@ void showImEggEffectOnOverlay(
         birthday: effect.isBirthday,
         blueWash: effect.phrase == '圣诞快乐',
         washColor: effect.washColor,
+        useCustomWash: effect.customWashColor != null,
         motion: effect.customMotion ?? 'fall',
         onFinished: () {
           if (identical(_activeEggOverlay, entry)) {

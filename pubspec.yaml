@@ -93,6 +93,7 @@ flutter:
     enable-swift-package-manager: false
   uses-material-design: true
   assets:
+    - assets/images/im_eggs/
     - assets/images/app_logo.png
     - assets/images/ai_tab_avatar.png
     - assets/images/ai_tab_avatar_icon.png

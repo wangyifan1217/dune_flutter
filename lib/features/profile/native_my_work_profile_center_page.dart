@@ -802,147 +802,196 @@ class _NativeMyWorkProfileCenterPageState
       backgroundColor: Colors.transparent,
       builder: (ctx) => SafeArea(
         top: false,
-        child: Container(
-          decoration: BoxDecoration(
-            color: DunesColors.resolve(
-              ctx,
-              Colors.white,
-              role: DunesColorRole.surface,
-            ),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(ctx).height * .88,
           ),
-          padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: DunesColors.resolve(
-                      ctx,
-                      DunesColors.borderSoft,
-                      role: DunesColorRole.surface,
-                    ),
-                    borderRadius: BorderRadius.circular(99),
-                  ),
+          child: SingleChildScrollView(
+            child: Container(
+              decoration: BoxDecoration(
+                color: DunesColors.resolve(
+                  ctx,
+                  Colors.white,
+                  role: DunesColorRole.surface,
                 ),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
-              const SizedBox(height: 16),
-              Row(
+              padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: BoxDecoration(
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: DunesColors.resolve(
+                          ctx,
+                          DunesColors.borderSoft,
+                          role: DunesColorRole.surface,
+                        ),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: DunesColors.resolve(
+                            ctx,
+                            const Color(0xFF7045B2),
+                            role: DunesColorRole.surface,
+                          ).withValues(alpha: .12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          Icons.settings_rounded,
+                          size: 20,
+                          color: DunesColors.resolveNullable(
+                            ctx,
+                            Color(0xFF7045B2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '系统设置与管理',
+                        style: DunesTypography.sans(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: DunesColors.resolve(
+                            ctx,
+                            const Color(0xFF2C1E3F),
+                          ),
+                          context: ctx,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        icon: Icon(
+                          Icons.close_rounded,
+                          size: 20,
+                          color: DunesColors.resolveNullable(
+                            ctx,
+                            Color(0xFF8A7A9E),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _buildSettingTile(
+                    icon: Icons.format_size_rounded,
+                    iconColor: DunesColors.resolve(
+                      ctx,
+                      const Color(0xFF7045B2),
+                    ),
+                    title: '字号调节',
+                    subtitle:
+                        '当前：${AppTextScaleController.labels[AppTextScaleController.instance.presetIndex]}',
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _openTextScalePicker();
+                    },
+                  ),
+                  if (!isDesktopCommOnly) ...[
+                    _buildSettingTile(
+                      icon: Icons.dark_mode_outlined,
+                      iconColor: DunesColors.resolve(
+                        ctx,
+                        const Color(0xFF6552B8),
+                      ),
+                      title: '日夜主题',
+                      subtitle: '自动切换，或固定为日间 / 夜间',
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        _openEggThemePicker();
+                      },
+                    ),
+                    _buildSettingTile(
+                      icon: Icons.celebration_outlined,
+                      iconColor: DunesColors.resolve(
+                        ctx,
+                        const Color(0xFFBB7B27),
+                      ),
+                      title: '节日祝福',
+                      subtitle: '随时重看节日欢迎与祝福',
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        _openHolidayGreetings();
+                      },
+                    ),
+                    _buildSettingTile(
+                      icon: Icons.help_outline_rounded,
+                      iconColor: DunesColors.resolve(
+                        ctx,
+                        const Color(0xFF6552B8),
+                      ),
+                      title: '日夜显示使用指引',
+                      subtitle: '了解自动时段与手动切换',
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        _openEggThemeGuide();
+                      },
+                    ),
+                  ],
+                  _buildSettingTile(
+                    icon: Icons.history_rounded,
+                    iconColor: DunesColors.resolve(
+                      ctx,
+                      const Color(0xFF3880FF),
+                    ),
+                    title: '发版历史与更新记录',
+                    subtitle:
+                        '${AppUpdateService.platformDisplayName()} 版本历史与公告',
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _openReleaseHistory();
+                    },
+                  ),
+                  _buildSettingTile(
+                    icon: Icons.cleaning_services_rounded,
+                    iconColor: DunesColors.resolve(
+                      ctx,
+                      const Color(0xFF10B981),
+                    ),
+                    title: '清理本地缓存',
+                    subtitle: '清理工作画像与本地离线数据缓存',
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      invalidateMyPageProfile(widget.session.userId);
+                      showDunesToast(context, '本地缓存已清理');
+                    },
+                  ),
+                  if (widget.onLogout != null) ...[
+                    Divider(
+                      height: 20,
                       color: DunesColors.resolve(
                         ctx,
-                        const Color(0xFF7045B2),
-                        role: DunesColorRole.surface,
-                      ).withValues(alpha: .12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      Icons.settings_rounded,
-                      size: 20,
-                      color: DunesColors.resolveNullable(
-                        ctx,
-                        Color(0xFF7045B2),
+                        Color(0xFFEFE8F5),
+                        role: DunesColorRole.border,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    '系统设置与管理',
-                    style: DunesTypography.sans(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      color: DunesColors.resolve(ctx, const Color(0xFF2C1E3F)),
-                      context: ctx,
+                    _buildSettingTile(
+                      icon: Icons.logout_rounded,
+                      iconColor: DunesColors.resolve(ctx, DunesColors.coral),
+                      title: '退出登录',
+                      subtitle: '退出当前登录账号',
+                      isDanger: true,
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        _confirmLogout();
+                      },
                     ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    icon: Icon(
-                      Icons.close_rounded,
-                      size: 20,
-                      color: DunesColors.resolveNullable(
-                        ctx,
-                        Color(0xFF8A7A9E),
-                      ),
-                    ),
-                  ),
+                  ],
                 ],
               ),
-              const SizedBox(height: 12),
-              _buildSettingTile(
-                icon: Icons.format_size_rounded,
-                iconColor: DunesColors.resolve(ctx, const Color(0xFF7045B2)),
-                title: '字号调节',
-                subtitle:
-                    '当前：${AppTextScaleController.labels[AppTextScaleController.instance.presetIndex]}',
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  _openTextScalePicker();
-                },
-              ),
-              if (!isDesktopCommOnly) ...[
-                _buildSettingTile(
-                  icon: Icons.dark_mode_outlined,
-                  iconColor: DunesColors.resolve(ctx, const Color(0xFF6552B8)),
-                  title: '日夜主题',
-                  subtitle: '自动切换，或临时选择日间 / 夜间',
-                  onTap: () {
-                    Navigator.of(ctx).pop();
-                    _openEggThemePicker();
-                  },
-                ),
-              ],
-              _buildSettingTile(
-                icon: Icons.history_rounded,
-                iconColor: DunesColors.resolve(ctx, const Color(0xFF3880FF)),
-                title: '发版历史与更新记录',
-                subtitle: '${AppUpdateService.platformDisplayName()} 版本历史与公告',
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  _openReleaseHistory();
-                },
-              ),
-              _buildSettingTile(
-                icon: Icons.cleaning_services_rounded,
-                iconColor: DunesColors.resolve(ctx, const Color(0xFF10B981)),
-                title: '清理本地缓存',
-                subtitle: '清理工作画像与本地离线数据缓存',
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  invalidateMyPageProfile(widget.session.userId);
-                  showDunesToast(context, '本地缓存已清理');
-                },
-              ),
-              if (widget.onLogout != null) ...[
-                Divider(
-                  height: 20,
-                  color: DunesColors.resolve(
-                    ctx,
-                    Color(0xFFEFE8F5),
-                    role: DunesColorRole.border,
-                  ),
-                ),
-                _buildSettingTile(
-                  icon: Icons.logout_rounded,
-                  iconColor: DunesColors.resolve(ctx, DunesColors.coral),
-                  title: '退出登录',
-                  subtitle: '退出当前登录账号',
-                  isDanger: true,
-                  onTap: () {
-                    Navigator.of(ctx).pop();
-                    _confirmLogout();
-                  },
-                ),
-              ],
-            ],
+            ),
           ),
         ),
       ),
@@ -953,7 +1002,11 @@ class _NativeMyWorkProfileCenterPageState
     final controller = AppEggThemeController.instance;
     final canOverride = ImEggSettings.instance.manualThemeOverrideEnabled;
     final options = <(String, String, IconData)>[
-      ('auto', '跟随自动时段', Icons.auto_mode_rounded),
+      (
+        'auto',
+        ImEggSettings.instance.automaticThemeLabel,
+        Icons.auto_mode_rounded,
+      ),
       if (canOverride) ...[
         ('day', '日间模式', Icons.light_mode_rounded),
         ('night', '夜间模式', Icons.dark_mode_rounded),
@@ -981,7 +1034,7 @@ class _NativeMyWorkProfileCenterPageState
               const SizedBox(height: 8),
               Text(
                 canOverride
-                    ? '仅影响 iOS / Android APP。自动模式按管理员设置的本地时段切换。'
+                    ? '自动模式可按时段切换或跟随系统；日间、夜间模式会保持你的选择。'
                     : '仅影响 iOS / Android APP；手动切换由管理员关闭。',
                 style: DunesTypography.sans(
                   fontSize: 12,
@@ -1020,6 +1073,124 @@ class _NativeMyWorkProfileCenterPageState
                     },
                   ),
                 ),
+              TextButton.icon(
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  _openEggThemeGuide();
+                },
+                icon: const Icon(Icons.help_outline_rounded, size: 17),
+                label: const Text('如何设置日夜显示'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openHolidayGreetings() {
+    final settings = ImEggSettings.instance;
+    final current = settings.holidayFor(DateTime.now());
+    final greetings = [...settings.holidayGreetings];
+    greetings.sort((a, b) {
+      final aCurrent = a['date'] == current?['date'];
+      final bCurrent = b['date'] == current?['date'];
+      if (aCurrent != bCurrent) return aCurrent ? -1 : 1;
+      return (a['date'] ?? '').compareTo(b['date'] ?? '');
+    });
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * .7,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '节日祝福',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(height: 6),
+                    Text('点选节日即可重看祝福，看过也可以再次打开。'),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: greetings.isEmpty
+                    ? const Center(child: Text('暂无可展示的节日祝福'))
+                    : ListView.builder(
+                        itemCount: greetings.length,
+                        itemBuilder: (ctx, index) {
+                          final greeting = greetings[index];
+                          final today = greeting['date'] == current?['date'];
+                          return ListTile(
+                            leading: const Icon(Icons.celebration_outlined),
+                            title: Text(
+                              '${greeting['name']}${today ? ' · 当前节日' : ''}',
+                            ),
+                            subtitle: Text(greeting['message'] ?? ''),
+                            trailing: const Icon(Icons.chevron_right_rounded),
+                            onTap: () {
+                              Navigator.of(sheetContext).pop();
+                              showAppHolidayWelcome(
+                                context,
+                                greeting['greeting'] ??
+                                    greeting['name'] ??
+                                    '节日快乐',
+                                message: greeting['message'] ?? '',
+                                icon: greeting['icon'] ?? '✨',
+                              );
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openEggThemeGuide() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '日夜显示使用指引',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                ImEggSettings.instance.themeGuide,
+                style: const TextStyle(fontSize: 14, height: 1.7),
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  _openEggThemePicker();
+                },
+                child: const Text('去设置日夜主题'),
+              ),
             ],
           ),
         ),
@@ -1324,6 +1495,9 @@ class _NativeMyWorkProfileCenterPageState
 
   /// 右上角更多菜单（整合字号调节、扫一扫等功能）
   Widget _buildMoreMenu() {
+    final menuTextStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+      color: Theme.of(context).colorScheme.onSurface,
+    );
     return PopupMenuButton<String>(
       tooltip: '更多功能',
       position: PopupMenuPosition.under,
@@ -1333,7 +1507,12 @@ class _NativeMyWorkProfileCenterPageState
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       elevation: 12,
-      color: DunesColors.resolve(context, Colors.white),
+      color: DunesColors.resolve(
+        context,
+        Colors.white,
+        role: DunesColorRole.surface,
+      ),
+      surfaceTintColor: Colors.transparent,
       onSelected: (action) {
         switch (action) {
           case 'workbench':
@@ -1370,7 +1549,7 @@ class _NativeMyWorkProfileCenterPageState
                   color: DunesColors.resolveNullable(ctx, Color(0xFF6366F1)),
                 ),
                 SizedBox(width: 10),
-                Text('打开工作台'),
+                Text('打开工作台', style: menuTextStyle),
               ],
             ),
           ),
@@ -1385,7 +1564,7 @@ class _NativeMyWorkProfileCenterPageState
                   color: DunesColors.resolveNullable(ctx, Color(0xFF7045B2)),
                 ),
                 SizedBox(width: 10),
-                Text('扫一扫'),
+                Text('扫一扫', style: menuTextStyle),
               ],
             ),
           ),
@@ -1399,7 +1578,7 @@ class _NativeMyWorkProfileCenterPageState
                 color: DunesColors.resolveNullable(ctx, Color(0xFF6B5882)),
               ),
               SizedBox(width: 10),
-              Text('字号调节'),
+              Text('字号调节', style: menuTextStyle),
             ],
           ),
         ),
@@ -1413,7 +1592,7 @@ class _NativeMyWorkProfileCenterPageState
                 color: DunesColors.resolveNullable(ctx, Color(0xFF6B5882)),
               ),
               SizedBox(width: 10),
-              Text('刷新画像与事项'),
+              Text('刷新画像与事项', style: menuTextStyle),
             ],
           ),
         ),
@@ -1427,7 +1606,7 @@ class _NativeMyWorkProfileCenterPageState
                 color: DunesColors.resolveNullable(ctx, Color(0xFF6B5882)),
               ),
               SizedBox(width: 10),
-              Text('清理缓存'),
+              Text('清理缓存', style: menuTextStyle),
             ],
           ),
         ),

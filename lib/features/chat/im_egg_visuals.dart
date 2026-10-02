@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dunes_app/core/theme/dunes_theme.dart';
+import 'im_egg_artwork.dart';
 
 /// One isolated canvas for the effect. Glyphs are cached before animation ticks.
 class ImEggParticleField extends StatefulWidget {
@@ -15,6 +17,7 @@ class ImEggParticleField extends StatefulWidget {
     required this.count,
     required this.onFinished,
     this.washColor = const Color(0x00000000),
+    this.useCustomWash = false,
     this.seed = 0,
     this.motion = 'fall',
     this.birthday = false,
@@ -32,6 +35,7 @@ class ImEggParticleField extends StatefulWidget {
   final bool birthday;
   final bool blueWash;
   final Color washColor;
+  final bool useCustomWash;
   final VoidCallback onFinished;
 
   @override
@@ -43,6 +47,8 @@ class _ImEggParticleFieldState extends State<ImEggParticleField>
   late final AnimationController _animation;
   late final List<_Particle> _particles;
   final Map<String, TextPainter> _glyphPainters = <String, TextPainter>{};
+  final Map<String, ui.Image> _sprites = {};
+  bool _artworkReady = false;
   Timer? _staticTimer;
   bool _reducedMotion = false;
   bool _finished = false;
@@ -51,10 +57,13 @@ class _ImEggParticleFieldState extends State<ImEggParticleField>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _animation = AnimationController(vsync: this, duration: widget.duration)
-      ..addStatusListener((status) {
-        if (status == AnimationStatus.completed) _finish();
-      });
+    _animation =
+        AnimationController(
+          vsync: this,
+          duration: widget.duration + const Duration(milliseconds: 180),
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.completed) _finish();
+        });
     final random = math.Random(
       widget.seed == 0 ? DateTime.now().microsecondsSinceEpoch : widget.seed,
     );
@@ -109,6 +118,29 @@ class _ImEggParticleFieldState extends State<ImEggParticleField>
         )..layout(),
       );
     }
+    for (final glyph in usableGlyphs.toSet()) {
+      final image = ImEggArtwork.cached(glyph);
+      if (image != null) _sprites[glyph] = image;
+    }
+    _artworkReady = usableGlyphs.every(
+      (glyph) =>
+          !imEggArtworkSpecs.containsKey(glyph) || _sprites.containsKey(glyph),
+    );
+    if (!_artworkReady) unawaited(_loadArtwork(usableGlyphs));
+  }
+
+  Future<void> _loadArtwork(List<String> glyphs) async {
+    final entries = await Future.wait(
+      glyphs.toSet().map(
+        (glyph) async => (glyph, await ImEggArtwork.load(glyph)),
+      ),
+    );
+    if (!mounted) return;
+    for (final (glyph, image) in entries) {
+      if (image != null) _sprites[glyph] = image;
+    }
+    setState(() => _artworkReady = true);
+    _startAnimation();
   }
 
   @override
@@ -116,9 +148,14 @@ class _ImEggParticleFieldState extends State<ImEggParticleField>
     super.didChangeDependencies();
     final reduced = MediaQuery.disableAnimationsOf(context);
     _reducedMotion = reduced;
-    if (reduced) {
+    _startAnimation();
+  }
+
+  void _startAnimation() {
+    if (!_artworkReady || _finished) return;
+    if (_reducedMotion) {
       _animation.stop();
-      _staticTimer ??= Timer(const Duration(milliseconds: 1500), _finish);
+      _staticTimer ??= Timer(const Duration(milliseconds: 1800), _finish);
     } else if (!_animation.isAnimating && !_finished) {
       _staticTimer?.cancel();
       _staticTimer = null;
@@ -161,7 +198,9 @@ class _ImEggParticleFieldState extends State<ImEggParticleField>
             animation: _animation,
             particles: _particles,
             glyphPainters: _glyphPainters,
+            sprites: Map.unmodifiable(_sprites),
             washColor: widget.washColor,
+            useCustomWash: widget.useCustomWash,
             duration: widget.duration,
             motion: widget.motion,
             reducedMotion: _reducedMotion,
@@ -194,7 +233,9 @@ class _ParticlePainter extends CustomPainter {
     required this.animation,
     required this.particles,
     required this.glyphPainters,
+    required this.sprites,
     required this.washColor,
+    required this.useCustomWash,
     required this.duration,
     required this.motion,
     required this.reducedMotion,
@@ -204,7 +245,9 @@ class _ParticlePainter extends CustomPainter {
   final Animation<double> animation;
   final List<_Particle> particles;
   final Map<String, TextPainter> glyphPainters;
+  final Map<String, ui.Image> sprites;
   final Color washColor;
+  final bool useCustomWash;
   final Duration duration;
   final String motion;
   final bool reducedMotion;
@@ -213,15 +256,18 @@ class _ParticlePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final fraction = (180 / duration.inMilliseconds).clamp(0.0, .5);
+    final elapsed = animation.value * (duration.inMilliseconds + 180) / 1000;
+    final effectSeconds = duration.inMilliseconds / 1000;
+    const fadeCurve = Cubic(.25, .1, .25, 1);
     var overlayOpacity = reducedMotion
         ? 1.0
-        : (animation.value / fraction).clamp(0.0, 1.0);
-    if (!reducedMotion && animation.value > 1 - fraction) {
-      overlayOpacity = math.min(
-        overlayOpacity,
-        ((1 - animation.value) / fraction).clamp(0.0, 1.0),
-      );
+        : fadeCurve.transform((elapsed / .18).clamp(0.0, 1.0));
+    if (!reducedMotion && elapsed > effectSeconds) {
+      overlayOpacity =
+          1 -
+          fadeCurve.transform(
+            ((elapsed - effectSeconds) / .18).clamp(0.0, 1.0),
+          );
     }
     canvas.saveLayer(
       Offset.zero & size,
@@ -229,8 +275,7 @@ class _ParticlePainter extends CustomPainter {
     );
     canvas.save();
     canvas.clipRect(Offset.zero & size);
-    _drawWash(canvas, size);
-    final elapsed = animation.value * duration.inMilliseconds / 1000;
+    _drawWash(canvas, size, elapsed);
     final visible = reducedMotion ? particles.take(8) : particles;
     for (final particle in visible) {
       final rawProgress = reducedMotion
@@ -242,6 +287,12 @@ class _ParticlePainter extends CustomPainter {
       final progress = reducedMotion
           ? rawProgress
           : const Cubic(.35, .05, .65, .95).transform(rawProgress);
+      // CSS easing applies to each property's keyframe interval separately.
+      const curve = Cubic(.35, .05, .65, .95);
+      final first = curve.transform((rawProgress / .52).clamp(0.0, 1.0));
+      final second = curve.transform(
+        ((rawProgress - .52) / .48).clamp(0.0, 1.0),
+      );
       final (x, y, rotation, scale, opacity) = reducedMotion
           ? (
               size.width * particle.x,
@@ -252,23 +303,24 @@ class _ParticlePainter extends CustomPainter {
             )
           : motion == 'fall'
           ? (
-              size.width * particle.x + particle.drift * progress,
-              progress < .52
-                  ? _lerp(-78, -54 + size.height * .48, progress / .52)
+              size.width * particle.x + particle.drift * first,
+              rawProgress < .52
+                  ? _lerp(-78, -54 + size.height * .48, first)
                   : _lerp(
                       -54 + size.height * .48,
                       -54 + size.height * 1.08,
-                      (progress - .52) / .48,
+                      second,
                     ),
-              progress < .52
-                  ? _lerp(-22, 165, progress / .52) * math.pi / 180
-                  : _lerp(165, 350, (progress - .52) / .48) * math.pi / 180,
-              progress < .52
-                  ? _lerp(.78, 1, progress / .52)
-                  : _lerp(1, .9, (progress - .52) / .48),
-              progress < .09
-                  ? progress / .09
-                  : ((1 - progress) / .91).clamp(0.0, 1.0),
+              rawProgress < .52
+                  ? _lerp(-22, 165, first) * math.pi / 180
+                  : _lerp(165, 350, second) * math.pi / 180,
+              rawProgress < .52 ? _lerp(.78, 1, first) : _lerp(1, .9, second),
+              rawProgress < .09
+                  ? curve.transform((rawProgress / .09).clamp(0.0, 1.0))
+                  : 1 -
+                        curve.transform(
+                          ((rawProgress - .09) / .91).clamp(0.0, 1.0),
+                        ),
             )
           : switch (motion) {
               'float' => (
@@ -321,7 +373,12 @@ class _ParticlePainter extends CustomPainter {
               ),
             };
       canvas.save();
-      canvas.translate(x, y);
+      final sprite = sprites[particle.glyph];
+      final spec = imEggArtworkSpecs[particle.glyph];
+      final layoutWidth = spec == null
+          ? particle.size
+          : spec.$2 / 128 * particle.size;
+      canvas.translate(x + layoutWidth / 2, y + particle.size / 2);
       if (!reducedMotion) {
         canvas.rotate(rotation);
         canvas.scale(scale, scale);
@@ -330,16 +387,58 @@ class _ParticlePainter extends CustomPainter {
         Rect.fromCircle(center: Offset.zero, radius: particle.size * 1.5),
         Paint()..color = Colors.white.withValues(alpha: opacity),
       );
-      final glyphPainter =
-          glyphPainters[_glyphPainterKey(
-            particle.glyph,
-            particle.size.roundToDouble(),
-          )];
-      if (glyphPainter != null) {
-        glyphPainter.paint(
-          canvas,
-          Offset(-glyphPainter.width / 2, -glyphPainter.height / 2),
+      if (sprite != null && spec != null) {
+        final pixelScale = particle.size / 128;
+        final target = Rect.fromLTWH(
+          -(spec.$2 / 2 + 32) * pixelScale,
+          -96 * pixelScale,
+          sprite.width * pixelScale,
+          sprite.height * pixelScale,
         );
+        final source = Rect.fromLTWH(
+          0,
+          0,
+          sprite.width.toDouble(),
+          sprite.height.toDouble(),
+        );
+        canvas.drawImageRect(
+          sprite,
+          source,
+          target.shift(const Offset(0, 4)),
+          Paint()
+            ..colorFilter = const ColorFilter.mode(
+              Color(0x3575413C),
+              BlendMode.srcIn,
+            )
+            ..imageFilter = ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+        );
+        canvas.drawImageRect(
+          sprite,
+          source,
+          target,
+          Paint()..filterQuality = FilterQuality.high,
+        );
+      } else if (_isChinaFlag(particle.glyph)) {
+        paintChinaFlag(
+          canvas,
+          Rect.fromCenter(
+            center: Offset.zero,
+            width: particle.size * 1.35,
+            height: particle.size * .9,
+          ),
+        );
+      } else if (spec == null) {
+        final glyphPainter =
+            glyphPainters[_glyphPainterKey(
+              particle.glyph,
+              particle.size.roundToDouble(),
+            )];
+        if (glyphPainter != null) {
+          glyphPainter.paint(
+            canvas,
+            Offset(-glyphPainter.width / 2, -glyphPainter.height / 2),
+          );
+        }
       }
       canvas.restore();
       canvas.restore();
@@ -348,49 +447,70 @@ class _ParticlePainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _drawWash(Canvas canvas, Size size) {
+  void _drawWash(Canvas canvas, Size size, double elapsed) {
     final rect = Offset.zero & size;
-    final Gradient gradient = birthday
-        ? const LinearGradient(
+    final washProgress = reducedMotion
+        ? 1.0
+        : const Cubic(0, 0, .58, 1).transform((elapsed / .45).clamp(0.0, 1.0));
+    canvas.saveLayer(
+      rect,
+      Paint()..color = Colors.white.withValues(alpha: washProgress),
+    );
+    canvas.translate(size.width / 2, size.height / 2);
+    canvas.scale(.9 + washProgress * .1);
+    canvas.translate(-size.width / 2, -size.height / 2);
+    if (useCustomWash) {
+      canvas.drawRect(rect, Paint()..color = washColor);
+    } else if (birthday) {
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..shader = const LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [Color(0x0AFFF8EE), Color(0x0AF8E3F2)],
-          )
-        : blueWash
-        ? const RadialGradient(
-            center: Alignment(0, -.04),
-            radius: .78,
-            colors: [Color(0xEDEEF9FF), Color(0xCCDCEEFF), Color(0xBCD9D7FF)],
-            stops: [0, .35, 1],
-          )
-        : const RadialGradient(
-            center: Alignment(0, -.06),
-            radius: .82,
-            colors: [
-              Color(0xEBFFF8DD),
-              Color(0xA3FFF1D5),
-              Color(0xADF0DDFF),
-              Color(0xB8EBE5FF),
-            ],
-            stops: [0, .27, .69, 1],
-          );
-    final shader = gradient.createShader(rect);
-    canvas.drawRect(rect, Paint()..shader = shader);
-    // Configured wash tint adds a small brand tint while preserving the preview wash.
-    final tintOpacity = ((washColor.toARGB32() >> 24) & 0xff) / 255 * .18;
-    if (!birthday && !blueWash && tintOpacity > 0) {
+          ).createShader(rect),
+      );
+    } else {
+      final center = Offset(
+        size.width * .5,
+        size.height * (blueWash ? .48 : .47),
+      );
+      final radius = math.sqrt(
+        size.width * size.width * .25 + math.pow(size.height - center.dy, 2),
+      );
       canvas.drawRect(
         rect,
-        Paint()..color = washColor.withValues(alpha: tintOpacity),
+        Paint()
+          ..shader = ui.Gradient.radial(
+            center,
+            radius,
+            blueWash
+                ? const [
+                    Color(0xEDEEF9FF),
+                    Color(0xCCDCEEFF),
+                    Color(0xBCD9D7FF),
+                  ]
+                : const [
+                    Color(0xEBFFF8DD),
+                    Color(0xA3FFF1D5),
+                    Color(0xADF0DDFF),
+                    Color(0xB8EBE5FF),
+                  ],
+            blueWash ? const [0, .35, 1] : const [0, .27, .69, 1],
+          ),
       );
     }
+    canvas.restore();
   }
 
   @override
   bool shouldRepaint(covariant _ParticlePainter old) =>
       old.reducedMotion != reducedMotion ||
       old.washColor != washColor ||
+      old.useCustomWash != useCustomWash ||
       old.glyphPainters != glyphPainters ||
+      old.sprites != sprites ||
       old.duration != duration ||
       old.birthday != birthday ||
       old.blueWash != blueWash ||
@@ -480,6 +600,27 @@ class HolidayGlyph extends StatelessWidget {
       ? CustomPaint(
           size: Size(size * 1.4, size * .94),
           painter: const _FlagPainter(),
+        )
+      : imEggArtworkSpecs.containsKey(icon)
+      ? SizedBox(
+          width: imEggArtworkSpecs[icon]!.$2 / 128 * size,
+          height: size,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                left: -size / 4,
+                top: -size / 4,
+                child: Image.asset(
+                  imEggArtworkSpecs[icon]!.$1,
+                  width: (imEggArtworkSpecs[icon]!.$2 + 64) / 128 * size,
+                  height: size * 1.5,
+                  excludeFromSemantics: true,
+                  filterQuality: FilterQuality.high,
+                ),
+              ),
+            ],
+          ),
         )
       : Text(
           icon,
